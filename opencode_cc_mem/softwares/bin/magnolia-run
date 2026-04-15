@@ -1,0 +1,48 @@
+#!/bin/bash
+# magnolia-run — wraps any command and logs it to the project memory store.
+# Usage: magnolia-run <command...>
+#
+# This wrapper logs bash executions to project_dir/.magnolia/sessions/
+# without requiring an MCP server. Safe for HPC compute nodes.
+
+# Capture the full command string
+COMMAND="$*"
+
+# Detect project directory:
+# Walk up from current directory looking for .magnolia/
+PROJECT_DIR=""
+CURDIR="$(pwd)"
+while [ "$CURDIR" != "/" ]; do
+    if [ -d "$CURDIR/.magnolia" ]; then
+        PROJECT_DIR="$CURDIR"
+        break
+    fi
+    CURDIR="$(dirname "$CURDIR")"
+done
+
+# If no .magnolia found, use current directory (memory store will be created)
+if [ -z "$PROJECT_DIR" ]; then
+    PROJECT_DIR="$(pwd)"
+fi
+
+# Run the actual command
+eval "$COMMAND"
+EXIT_CODE=$?
+
+# Build result summary based on exit code
+if [ $EXIT_CODE -eq 0 ]; then
+    RESULT="Command completed successfully"
+else
+    RESULT="Command failed with exit code $EXIT_CODE"
+fi
+
+# Log to project memory (suppress errors so wrapper never breaks the original command)
+magnolia-memory log-bash \
+    --project-dir "$PROJECT_DIR" \
+    --command "$COMMAND" \
+    --exit "$EXIT_CODE" \
+    --working-dir "$(pwd)" \
+    --result-summary "$RESULT" \
+    2>/dev/null
+
+exit $EXIT_CODE
