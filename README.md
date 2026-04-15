@@ -67,6 +67,17 @@ You can also add your own annotations — just tell Magnolia:
 
 These become permanent entries alongside the auto-generated ones.
 
+Commands that run through `magnolia-run` are automatically logged to the session log, so even bash-driven scientific workflows are captured for later review.
+
+#### Self-reflex: automatic memory consolidation
+Magnolia can also review its own notes while you are away. A small script called `magnolia-selfreflex` compacts old session logs, distills new learnings, and syncs any results sent back from HPC jobs. It is designed to run on a schedule — for example, every morning at 11 AM via cron:
+
+```cron
+0 11 * * * /path/to/softwares/bin/magnolia-selfreflex /path/to/projects/my_project
+```
+
+This keeps the notebook tidy and ensures that hard-won lessons do not get lost in long chat sessions.
+
 ### 3. The Tools
 Scientific programs like **HADDOCK3**, **BoltzGen**, and **GROMACS** live in a `softwares/` folder. Magnolia knows how to call them, but it installs them in isolated "fenced yards" so they don't interfere with each other. You don't need to memorize command lines.
 
