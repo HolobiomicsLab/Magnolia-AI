@@ -25,9 +25,23 @@ venv/
 # Reference files
 old_files/
 
-# OpenCode CC mem — local project workspaces and vendored software/cache
+# OpenCode CC mem — local project workspaces
 opencode_cc_mem/projects/
-opencode_cc_mem/softwares/
+
+# Software environments and caches (heavy, local-only)
+opencode_cc_mem/softwares/*/.venv/
+opencode_cc_mem/softwares/*/env/
+opencode_cc_mem/softwares/*/cache/
+opencode_cc_mem/softwares/*/lib/
+opencode_cc_mem/softwares/*/*.tar.gz
+opencode_cc_mem/softwares/*/*.zip
+opencode_cc_mem/softwares/*/*.sif
+
+# Track only Magnolia infrastructure scripts under softwares
+!opencode_cc_mem/softwares/bin/
+opencode_cc_mem/softwares/bin/*
+!opencode_cc_mem/softwares/bin/magnolia-*
 
 # v1 
 opencode_3_tier_mem/
+
