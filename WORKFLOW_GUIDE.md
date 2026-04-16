@@ -154,6 +154,8 @@ Below is a realistic conversation between a researcher and Magnolia. The **struc
 4. **Ask "why?"** If the assistant recommends something, ask for its reasoning. It often reveals useful context you hadn't considered.
 5. **Use the notebook.** Ask *"What did we learn from the last run?"* or *"Has this error happened before?"*
 6. **Build habits together.** The first session may feel slow as you establish folder structures and rules. After that, the assistant works faster because it remembers.
+7. **Manage the pace.** Different LLMs behave differently — some wait patiently, others jump into action at the first sign of a task. If you're still explaining your project and don't want calculations to start yet, say so: *"Don't run anything yet, I'm still giving you context."* or *"Wait for my go-ahead before starting any runs."*
+8. **Codify what you learn into rules.** After a few runs with a new tool — especially one you haven't used before — ask Magnolia to write a rule file capturing the correct workflow, common pitfalls, and the fixes that worked. For example: *"We've now run BoltzGen three times and hit several errors. Write a rule file in `rules/` so future sessions get it right the first time."* This is how individual debugging sessions turn into lasting institutional knowledge.
 
 ---
 
