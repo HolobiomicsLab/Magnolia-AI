@@ -1,20 +1,20 @@
 # Project Magnolia
 
-**A quick-learning intern for computational chemistry**
+**A quick-learning research assistant for computational chemistry**
 
-Project Magnolia is like hiring a very bright research intern who reads fast, runs experiments, writes detailed lab notes — and never forgets what you taught them. You work with Magnolia by chatting in plain English, giving it tasks, correcting it when needed, and building up a shared body of knowledge over time.
+Project Magnolia is like having a research assistant who reads fast, runs experiments, writes detailed lab notes — and never forgets what you taught them. You work with Magnolia by chatting in plain English, giving it tasks, correcting it when needed, and building up a shared body of knowledge over time.
 
 ---
 
 ## What is Magnolia, really?
 
-Think of Magnolia as an **intern**, not a magic box.
+Think of Magnolia as a **research assistant**, not a magic box.
 
 - It can **install and run** scientific software (docking, design, simulation)
 - It can **read your old results** and summarize what happened
 - It can **design new experiments** based on what it learned
 - It **takes notes automatically** in a project notebook so you don't have to remember every detail
-- But like any intern, it works best when you give it **clear instructions**, point it to the right files, and **correct it** when it goes off track
+- But like any research assistant, it works best when you give it **clear instructions**, point it to the right files, and **correct it** when it goes off track
 
 The more you work with it, the better it gets — because it remembers your project's history.
 
@@ -37,7 +37,7 @@ You chat with Magnolia using a program like **OpenCode**. Just type what you wan
 
 > *"I want to dock this peptide onto my target protein and find the best binding pose. The files are in `projects/my_project/raw_input/`."*
 
-> *"Design me 10 new peptides that might bind more tightly, but start with the the motif since that worked best before."*
+> *"Design me 10 new peptides that might bind more tightly, but start with the motif that worked best before."*
 
 > *"What did we learn from the last run? And did we ever try pocket 2?"*
 
@@ -47,7 +47,7 @@ Magnolia will figure out the steps, run the software, and report back. If it mis
 
 ## Key ideas (explained simply)
 
-### 1. The Intern
+### 1. The Research Assistant
 Magnolia is the AI agent — the part you chat with. It reads your requests, looks up what it knows, decides which tool to use, and reports back. It is fast and eager, but it needs you to point it to the right folders and tell it what matters.
 
 ### 2. The Lab Notebook (Memory System)
@@ -57,7 +57,7 @@ Every project has its own notebook at `projects/<name>/.magnolia/`. Magnolia wri
 - Errors you hit and how they were fixed
 - Rules that worked (for example: *"p2rank pocket restraints are better than manual restraints for this protein"*)
 
-Because the notebook lives inside your project folder, you can move the project to another computer and the intern still knows everything.
+Because the notebook lives inside your project folder, you can move the project to another computer and the assistant still knows everything.
 
 The notebook is also **browseable in Obsidian** — entries are stored as Markdown files with wikilinks, tags, and cross-references. You can open `.magnolia/` as an Obsidian vault to visually explore your project's knowledge base using the graph view, backlinks, and search.
 
@@ -87,20 +87,20 @@ Scientific programs like **HADDOCK3**, **BoltzGen**, and **GROMACS** live in a `
 
 ```
 project_magnolia/
-├── opencode_cc_mem/          # The "brain" and training of the intern
-│   ├── rules/                # Lab protocols the intern follows
+├── opencode_cc_mem/          # The "brain" and training of the assistant
+│   ├── rules/                # Lab protocols the assistant follows
 │   ├── mcp-servers/          # Connectors for memory and tools
 │   └── projects/             # Your actual science projects
 │       └── my_project/   # Example project
 │           ├── raw_input/    # Your PDB files and sequences
 │           ├── runs/         # Results from experiments
-│           └── .magnolia/    # The intern's notebook for this project
+│           └── .magnolia/    # The assistant's notebook for this project
 ├── softwares/                # Scientific software
 │   ├── bin/                  # Shortcuts to run tools
 │   ├── boltzgen/             # AI design tool
 │   └── manifest.yaml         # List of installed tools
 ├── README.md                 # This file
-└── WORKFLOW_GUIDE.md         # How to supervise the intern effectively
+└── WORKFLOW_GUIDE.md         # How to supervise the assistant effectively
 ```
 
 **You mainly work inside `opencode_cc_mem/projects/<your_project_name>/`.** Everything else is managed by Magnolia.
@@ -206,7 +206,7 @@ Then open `projects/my_project/.magnolia/` as an Obsidian vault. You'll see:
 
 ## Quick tips
 
-- **Be specific.** The intern is smart, but it can't read your mind. Point it to files, mention prior runs, and say what you want changed.
+- **Be specific.** The assistant is smart, but it can't read your mind. Point it to files, mention prior runs, and say what you want changed.
 - **Correct it.** If Magnolia is about to do something wrong, say *"Wait — do it this way instead."* Good collaboration means steering.
 - **Check the notebook.** Ask *"What did we learn from the last run?"* or look in `projects/<name>/.magnolia/entries/`.
 - **Let it install tools.** Magnolia will install software into `softwares/` automatically when needed.

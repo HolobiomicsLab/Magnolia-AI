@@ -41,6 +41,40 @@ def cmd_log_bash(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_log_job(args: argparse.Namespace) -> int:
+    project_dir = args.project_dir or "."
+    local_dir = ensure_project_store(project_dir)
+    sessions_dir = local_dir / "sessions"
+
+    ts = datetime.now(timezone.utc).isoformat()
+    fname = datetime.now(timezone.utc).strftime("%Y-%m-%d.jsonl")
+    path = sessions_dir / fname
+
+    entry = {
+        "timestamp": ts,
+        "event_type": "job_submission",
+        "command": args.command,
+        "working_dir": args.working_dir or str(Path.cwd()),
+        "scheduler": args.scheduler,
+        "job_id": args.job_id or "",
+        "ncores": args.ncores,
+        "memory": args.memory,
+        "time_limit": args.time_limit,
+        "partition": args.partition or "",
+        "job_name": args.job_name or "",
+        "tags": args.tags or [],
+    }
+
+    if args.result_summary:
+        entry["result_summary"] = args.result_summary
+
+    with open(path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    print(f"Logged job submission to {path}")
+    return 0
+
+
 def cmd_log_event(args: argparse.Namespace) -> int:
     """Log an arbitrary event (for HPC jobs, etc.)."""
     project_dir = args.project_dir or "."
@@ -168,6 +202,26 @@ def main() -> int:
     p_bash.add_argument("--error", default="")
     p_bash.add_argument("--tags", nargs="*", default=[])
     p_bash.set_defaults(func=cmd_log_bash)
+
+    # log-job
+    p_job = subparsers.add_parser(
+        "log-job", help="Log a job submission with resource details"
+    )
+    p_job.add_argument("--project-dir", default=".")
+    p_job.add_argument("--command", required=True, help="Full command submitted")
+    p_job.add_argument("--working-dir", default=str(Path.cwd()))
+    p_job.add_argument("--scheduler", default="local", help="slurm, pbs, or local")
+    p_job.add_argument("--job-id", default="", help="Job ID returned by scheduler")
+    p_job.add_argument("--job-name", default="", help="Human-readable job name")
+    p_job.add_argument("--ncores", type=int, default=0, help="Number of CPU cores")
+    p_job.add_argument("--memory", default="", help="Memory allocation (e.g. 32GB)")
+    p_job.add_argument(
+        "--time-limit", default="", help="Wall time limit (e.g. 24:00:00)"
+    )
+    p_job.add_argument("--partition", default="", help="Scheduler partition/queue")
+    p_job.add_argument("--result-summary", default="")
+    p_job.add_argument("--tags", nargs="*", default=[])
+    p_job.set_defaults(func=cmd_log_job)
 
     # log-event
     p_event = subparsers.add_parser("log-event", help="Log an arbitrary event")
