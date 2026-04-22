@@ -98,16 +98,19 @@ def memory_get_context(
     task_description: str,
     project_dir: str | None = None,
     token_budget: int = 8000,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """Multi-stage context assembly pipeline. Retrieves relevant entries from
     all three tiers (session, project, skill) with token budget management.
-    Applies semantic scoring to select the most relevant project-tier entries."""
+    Applies semantic scoring to select the most relevant project-tier entries.
+    Optionally pass conversation_history to improve tool-diversity filtering."""
     pd = _resolve_project_store(project_dir)
     result = assemble_context(
         task_description=task_description,
         project_dir=pd,
         skills_dir=str(SKILLS_DIR),
         token_budget=token_budget,
+        conversation_history=conversation_history,
     )
     return json.dumps(
         {
@@ -284,8 +287,9 @@ def post_run_assess(
         pd,
         run_id=run_id,
         tool=tool,
-        status="success" if exit_code == 0 else "failed",
+        status=assessment.get("overall", "pass" if exit_code == 0 else "failed"),
         metrics=assessment.get("metrics", {}),
+        quality_flags=assessment.get("quality_flags", []),
         errors_solved=[],
     )
     sess_m = _get_session_mgr(pd)

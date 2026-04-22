@@ -56,8 +56,9 @@ def cmd_assess(args: argparse.Namespace) -> int:
             str(local_dir),
             run_id=run_id,
             tool=tool,
-            status="success" if exit_code == 0 else "failed",
+            status=assessment.get("overall", "pass" if exit_code == 0 else "failed"),
             metrics=assessment.get("metrics", {}),
+            quality_flags=assessment.get("quality_flags", []),
         )
     except Exception as e:
         print(f"Run record error: {e}", file=sys.stderr)

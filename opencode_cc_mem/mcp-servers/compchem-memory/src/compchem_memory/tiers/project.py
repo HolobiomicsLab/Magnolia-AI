@@ -252,6 +252,7 @@ class ProjectManager:
         tool: str,
         status: str,
         metrics: dict[str, Any] | None = None,
+        quality_flags: list[str] | None = None,
         errors_solved: list[str] | None = None,
     ) -> str:
         runs_dir = self._runs_dir(project_dir)
@@ -261,6 +262,7 @@ class ProjectManager:
             "status": status,
             "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
             "metrics": metrics or {},
+            "quality_flags": quality_flags or [],
             "errors_solved": errors_solved or [],
         }
         ts = datetime.now(timezone.utc).strftime("%Y%m%d")
