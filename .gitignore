@@ -29,19 +29,26 @@ old_files/
 opencode_cc_mem/projects/
 
 # Software environments and caches (heavy, local-only)
-opencode_cc_mem/softwares/*/.venv/
-opencode_cc_mem/softwares/*/env/
-opencode_cc_mem/softwares/*/cache/
-opencode_cc_mem/softwares/*/lib/
-opencode_cc_mem/softwares/*/*.tar.gz
-opencode_cc_mem/softwares/*/*.zip
-opencode_cc_mem/softwares/*/*.sif
-
-# Track only Magnolia infrastructure scripts under softwares
+#opencode_cc_mem/softwares/*/.venv/
+#opencode_cc_mem/softwares/*/env/
+#opencode_cc_mem/softwares/*/cache/
+#opencode_cc_mem/softwares/*/lib/
+#opencode_cc_mem/softwares/*/*.tar.gz
+#opencode_cc_mem/softwares/*/*.zip
+#opencode_cc_mem/softwares/*/*.sif
+opencode_cc_mem/softwares/*
 !opencode_cc_mem/softwares/bin/
 opencode_cc_mem/softwares/bin/*
 !opencode_cc_mem/softwares/bin/magnolia-*
 
+# Track only Magnolia infrastructure scripts under softwares
+#!opencode_cc_mem/softwares/bin/
+#opencode_cc_mem/softwares/bin/*
+#!opencode_cc_mem/softwares/bin/magnolia-*
+
 # v1 
 opencode_3_tier_mem/
 
+# design docs
+docs/cybernetics_assessment.md
+todo.md

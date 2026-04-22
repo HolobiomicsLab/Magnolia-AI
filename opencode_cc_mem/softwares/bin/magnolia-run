@@ -45,4 +45,11 @@ magnolia-memory log-bash \
     --result-summary "$RESULT" \
     2>/dev/null
 
+# Auto-assess scientific tool runs (suppress all errors)
+magnolia-memory assess \
+    --project-dir "$PROJECT_DIR" \
+    --command "$COMMAND" \
+    --exit-code "$EXIT_CODE" \
+    2>/dev/null
+
 exit $EXIT_CODE
