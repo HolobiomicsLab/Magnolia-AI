@@ -10,6 +10,7 @@ import yaml
 ENTRY_TYPES = (
     "success_pattern",
     "error_resolution",
+    "failure_pattern",
     "parameter_guidance",
     "workflow_note",
     "note",
@@ -318,6 +319,7 @@ class ProjectManager:
             type_labels = {
                 "success_pattern": "Success Patterns",
                 "error_resolution": "Error Resolutions",
+                "failure_pattern": "Failure Patterns",
                 "parameter_guidance": "Parameter Guidance",
                 "workflow_note": "Workflow Notes",
                 "note": "Notes & Annotations",

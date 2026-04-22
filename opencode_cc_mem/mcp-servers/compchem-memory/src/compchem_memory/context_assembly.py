@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from compchem_memory.retrieval import select_relevant_entries, select_relevant_skills
-from compchem_memory.scanning import scan_memory_headers, format_manifest
 
 
 @dataclass
@@ -46,12 +45,32 @@ def assemble_context(
     sources: list[dict[str, str]] = []
     remaining = token_budget
 
+    # 1. Skills first — strategic constraints before tactical data
+    #    Protected floor: always reserve at least 30% of budget for skills.
+    skill_floor = int(token_budget * 0.30)
+    skill_entries = select_relevant_skills(
+        task_description,
+        skills_dir,
+        budget=allocation.skill_budget,
+    )
+    for entry in skill_entries:
+        content = entry.get("content", "")
+        tool = entry.get("tool", "")
+        sections.append(f"[SKILL: {tool}]\n{content}")
+        sources.append({"tier": "skill", "id": entry.get("filename", "")})
+        remaining -= _estimate_tokens(content)
+
+    # If skills used more than their floor, that's fine — they're strategic.
+    # If they used less, the floor is released back for other tiers.
+
+    # 2. Session context
     session_ctx = _get_session_context(project_dir, allocation.session_budget)
     if session_ctx:
         sections.append(session_ctx)
         sources.append({"tier": "session", "id": "recent"})
         remaining -= _estimate_tokens(session_ctx)
 
+    # 3. Current run state
     if current_run_id:
         run_ctx = _get_run_state(project_dir, current_run_id, allocation.run_budget)
         if run_ctx:
@@ -59,6 +78,7 @@ def assemble_context(
             sources.append({"tier": "run", "id": current_run_id})
             remaining -= _estimate_tokens(run_ctx)
 
+    # 4. Project entries last — fills whatever budget remains
     if remaining > 2000:
         recent_tools = (
             _extract_recent_tools(conversation_history) if conversation_history else []
@@ -66,7 +86,7 @@ def assemble_context(
         proj_entries = select_relevant_entries(
             task_description,
             project_dir,
-            budget=min(int(remaining * 0.5), allocation.project_budget),
+            budget=min(remaining, allocation.project_budget),
             recent_tools=recent_tools,
         )
         for entry in proj_entries:
@@ -74,19 +94,6 @@ def assemble_context(
             title = entry.get("title", entry.get("filename", ""))
             sections.append(f"[PROJECT: {title}]\n{content}")
             sources.append({"tier": "project", "id": entry.get("filename", "")})
-            remaining -= _estimate_tokens(content)
-
-    if remaining > 1000:
-        skill_entries = select_relevant_skills(
-            task_description,
-            skills_dir,
-            budget=allocation.skill_budget,
-        )
-        for entry in skill_entries:
-            content = entry.get("content", "")
-            tool = entry.get("tool", "")
-            sections.append(f"[SKILL: {tool}]\n{content}")
-            sources.append({"tier": "skill", "id": entry.get("filename", "")})
             remaining -= _estimate_tokens(content)
 
     combined = "\n\n---\n\n".join(sections)

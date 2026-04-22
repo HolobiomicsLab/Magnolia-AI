@@ -1,5 +1,7 @@
 """Semantic memory retrieval: heuristic scoring + header-based selection."""
 
+import math
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -153,6 +155,7 @@ def _score_entry(
     type_boost = {
         "error_resolution": 2.5,
         "success_pattern": 2.5,
+        "failure_pattern": 2.5,
         "parameter_guidance": 2.0,
         "workflow_note": 1.5,
         "note": 1.0,
@@ -163,6 +166,18 @@ def _score_entry(
     observations = header.get("observation_count", 0)
     if observations >= 3:
         score *= 1.2
+
+    # Confidence decay: entries not recently verified lose relevance.
+    # Half-life ~60 days; lambda = ln(2)/60 ≈ 0.01155
+    verified_str = header.get("last_verified", header.get("date", ""))
+    if verified_str:
+        try:
+            verified_date = datetime.fromisoformat(verified_str).date()
+            age_days = (datetime.now(timezone.utc).date() - verified_date).days
+            score *= math.exp(-0.01155 * max(age_days, 0))
+        except (ValueError, TypeError):
+            pass  # unparsable date — skip decay
+
     for word in task_words:
         if word in title:
             score += 5.0

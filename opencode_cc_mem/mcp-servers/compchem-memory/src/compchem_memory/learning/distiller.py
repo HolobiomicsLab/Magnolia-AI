@@ -48,6 +48,19 @@ def distill_session(session_path: str) -> list[dict[str, Any]]:
             }
         )
 
+    unresolved_failures = _find_unresolved_failures(events)
+    for err_info in unresolved_failures:
+        candidates.append(
+            {
+                "type": "failure_pattern",
+                "title": f"Unresolved failure: {err_info['error'][:80]}",
+                "content": f"## Tool\n{err_info['tool']}\n\n## Error\n{err_info['error']}\n\n## Context\n{err_info.get('context', 'No additional context')}",
+                "tags": ["failure-pattern", "unresolved", err_info["tool"]],
+                "source": "auto",
+                "confidence": 0.4,
+            }
+        )
+
     return candidates
 
 
@@ -76,3 +89,23 @@ def _find_non_default_params(events: list[dict[str, Any]]) -> list[dict[str, Any
             for p in ev["non_default_params"]:
                 params.append(p)
     return params
+
+
+def _find_unresolved_failures(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Find errors that were never followed by a success for the same tool."""
+    failures = []
+    errors = {}
+    for ev in events:
+        etype = ev.get("event_type", "")
+        tool = ev.get("tool", "unknown")
+        if etype == "tool_error":
+            errors[tool] = {
+                "tool": tool,
+                "error": ev.get("error", "Unknown error"),
+                "context": ev.get("result_summary", ""),
+            }
+        elif etype == "tool_success" and tool in errors:
+            del errors[tool]
+    for info in errors.values():
+        failures.append(info)
+    return failures
