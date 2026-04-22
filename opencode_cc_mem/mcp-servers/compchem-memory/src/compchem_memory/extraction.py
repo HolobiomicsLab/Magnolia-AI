@@ -18,7 +18,7 @@ EXTRACTION_SYSTEM_PROMPT = (
     "You are a computational chemistry memory extraction agent. "
     "Analyze the following session events and extract structured knowledge. "
     "Return a JSON array of extracted entries. Each entry should have:\n"
-    '- "type": one of "error_resolution", "success_pattern", "parameter_guidance", "workflow_note"\n'
+    '- "type": one of "error_resolution", "success_pattern", "failure_pattern", "parameter_guidance", "workflow_note"\n'
     '- "title": concise descriptive title\n'
     '- "content": detailed markdown content\n'
     '- "tags": list of relevant tags\n'
@@ -139,6 +139,22 @@ class AutomaticMemoryExtractor:
                     }
                 )
 
+            for fail_info in self._find_unresolved_failures(events):
+                candidates.append(
+                    {
+                        "type": "failure_pattern",
+                        "title": f"Unresolved failure: {fail_info['error'][:80]}",
+                        "content": (
+                            f"## Tool\n{fail_info['tool']}\n\n"
+                            f"## Error\n{fail_info['error']}\n\n"
+                            f"## Context\n{fail_info.get('context', 'No additional context')}"
+                        ),
+                        "tags": ["failure-pattern", "unresolved", fail_info["tool"]],
+                        "tools": [fail_info["tool"]],
+                        "confidence": 0.4,
+                    }
+                )
+
         saved = []
         for candidate in candidates:
             path = self._save_to_staging(store, candidate)
@@ -219,6 +235,27 @@ class AutomaticMemoryExtractor:
                 for p in ev["non_default_params"]:
                     params.append(p)
         return params
+
+    def _find_unresolved_failures(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Find errors that were never followed by a success for the same tool."""
+        failures = []
+        errors: dict[str, dict[str, str]] = {}
+        for ev in events:
+            etype = ev.get("event_type", "")
+            tool = ev.get("tool", "unknown")
+            if etype == "tool_error":
+                errors[tool] = {
+                    "tool": tool,
+                    "error": ev.get("error", "Unknown error"),
+                    "context": ev.get("result_summary", ""),
+                }
+            elif etype == "tool_success" and tool in errors:
+                del errors[tool]
+        for info in errors.values():
+            failures.append(info)
+        return failures
 
     def _save_to_staging(self, store: Path, candidate: dict[str, Any]) -> str:
         staging_dir = store / "staging"

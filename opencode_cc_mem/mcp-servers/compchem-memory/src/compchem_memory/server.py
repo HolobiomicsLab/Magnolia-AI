@@ -14,7 +14,7 @@ from compchem_memory.learning.assessor import assess_run
 from compchem_memory.learning.distiller import distill_session
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.index import MemoryIndex
-from compchem_memory.context_assembly import assemble_context
+from compchem_memory.context_assembly import assemble_context, _memory_store
 from compchem_memory.retrieval import select_relevant_entries, select_relevant_skills
 from compchem_memory.scanning import (
     scan_memory_headers,
@@ -50,7 +50,7 @@ _extractor: AutomaticMemoryExtractor | None = None
 
 def _get_session_mgr(project_dir: str) -> SessionManager:
     global session_mgr
-    sessions_dir = Path(project_dir) / "sessions"
+    sessions_dir = Path(project_dir) / ".magnolia" / "sessions"
     if session_mgr is None or str(session_mgr.sessions_dir) != str(sessions_dir):
         session_mgr = SessionManager(sessions_dir)
     return session_mgr
@@ -233,7 +233,7 @@ def memory_record_run(
     """Append a new run record to the project's run history index."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
-    return proj_m.record_run(pd, run_id, tool, status, metrics, errors_solved)
+    return proj_m.record_run(pd, run_id, tool, status, metrics=metrics, errors_solved=errors_solved)
 
 
 @mcp.tool()
@@ -326,9 +326,10 @@ def memory_select_relevant(
     entries for a given task. Uses heuristic scoring based on title, description,
     tags, tools, entry type, and confidence."""
     pd = _resolve_project_store(project_dir)
+    store = str(_memory_store(pd))
     entries = select_relevant_entries(
         task_description,
-        pd,
+        store,
         budget=token_budget,
         max_selections=max_selections,
     )
@@ -499,7 +500,7 @@ def memory_scan_headers(
     pd = _resolve_project_store(project_dir)
 
     if tier == "project":
-        entries_dir = Path(pd) / "entries"
+        entries_dir = Path(pd) / ".magnolia" / "entries"
         headers = scan_memory_headers(entries_dir)
     elif tier == "skill":
         headers = scan_skills_headers(SKILLS_DIR)

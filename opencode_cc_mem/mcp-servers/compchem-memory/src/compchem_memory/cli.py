@@ -48,12 +48,14 @@ def cmd_assess(args: argparse.Namespace) -> int:
         }
 
     # 4. Record run YAML
+    #    Pass the project root (not .magnolia/) since ProjectManager._project_store
+    #    adds .magnolia/ itself.
     try:
-        proj_m = ProjectManager(local_dir)
+        proj_m = ProjectManager(Path.home() / ".magnolia")
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         run_id = f"{tool}_{ts}"
         proj_m.record_run(
-            str(local_dir),
+            str(Path(project_dir).resolve()),
             run_id=run_id,
             tool=tool,
             status=assessment.get("overall", "pass" if exit_code == 0 else "failed"),
@@ -139,8 +141,6 @@ def cmd_log_bash(args: argparse.Namespace) -> int:
     sessions_dir = local_dir / "sessions"
 
     ts = datetime.now(timezone.utc).isoformat()
-    fname = f"{ts.replace(':', '').replace('+', '')}.jsonl"
-    # Use a rolling filename based on date
     fname = datetime.now(timezone.utc).strftime("%Y-%m-%d.jsonl")
     path = sessions_dir / fname
 

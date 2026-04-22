@@ -32,6 +32,16 @@ def allocate_budget(total: int) -> BudgetAllocation:
     )
 
 
+def _memory_store(project_dir: str) -> Path:
+    """Resolve the .magnolia/ memory store directory from a project root."""
+    local = Path(project_dir) / ".magnolia"
+    if local.is_symlink():
+        target = local.resolve()
+        if target.exists():
+            return target
+    return local
+
+
 def assemble_context(
     task_description: str,
     project_dir: str,
@@ -41,38 +51,45 @@ def assemble_context(
     conversation_history: list[dict[str, Any]] | None = None,
 ) -> ContextAssembly:
     allocation = allocate_budget(token_budget)
+    store = _memory_store(project_dir)
     sections: list[str] = []
     sources: list[dict[str, str]] = []
     remaining = token_budget
 
     # 0. Project goal — reference signal, always loaded first
-    goal_budget = 500  # goals should be concise
-    goal_ctx = _get_goal(project_dir, goal_budget)
+    goal_budget = 500
+    goal_ctx = _get_goal(store, goal_budget)
     if goal_ctx:
         sections.append(f"[PROJECT GOAL]\n{goal_ctx}")
         sources.append({"tier": "goal", "id": "GOAL.md"})
         remaining -= _estimate_tokens(goal_ctx)
 
     # 1. Skills — strategic constraints before tactical data
-    #    Protected floor: always reserve at least 30% of budget for skills.
+    #    Protected floor: 30% of total budget is reserved for skills.
     skill_floor = int(token_budget * 0.30)
     skill_entries = select_relevant_skills(
         task_description,
         skills_dir,
         budget=allocation.skill_budget,
     )
+    skill_tokens = 0
     for entry in skill_entries:
         content = entry.get("content", "")
         tool = entry.get("tool", "")
         sections.append(f"[SKILL: {tool}]\n{content}")
         sources.append({"tier": "skill", "id": entry.get("filename", "")})
-        remaining -= _estimate_tokens(content)
+        t = _estimate_tokens(content)
+        skill_tokens += t
+        remaining -= t
 
-    # If skills used more than their floor, that's fine — they're strategic.
-    # If they used less, the floor is released back for other tiers.
+    # Enforce floor: reserve skill_floor tokens for skills.
+    # Non-skill content (goal + session + run + project) must not exceed
+    # budget minus skill_floor. Cap remaining unconditionally.
+    goal_tokens_used = token_budget - remaining - skill_tokens
+    remaining = min(remaining, max(0, token_budget - skill_floor - goal_tokens_used))
 
     # 2. Session context
-    session_ctx = _get_session_context(project_dir, allocation.session_budget)
+    session_ctx = _get_session_context(store, allocation.session_budget)
     if session_ctx:
         sections.append(session_ctx)
         sources.append({"tier": "session", "id": "recent"})
@@ -80,7 +97,7 @@ def assemble_context(
 
     # 3. Current run state
     if current_run_id:
-        run_ctx = _get_run_state(project_dir, current_run_id, allocation.run_budget)
+        run_ctx = _get_run_state(store, current_run_id, allocation.run_budget)
         if run_ctx:
             sections.append(run_ctx)
             sources.append({"tier": "run", "id": current_run_id})
@@ -93,7 +110,7 @@ def assemble_context(
         )
         proj_entries = select_relevant_entries(
             task_description,
-            project_dir,
+            str(store),
             budget=min(remaining, allocation.project_budget),
             recent_tools=recent_tools,
         )
@@ -114,8 +131,8 @@ def assemble_context(
     )
 
 
-def _get_session_context(project_dir: str, budget: int) -> str | None:
-    sessions_dir = Path(project_dir) / "sessions"
+def _get_session_context(store: Path, budget: int) -> str | None:
+    sessions_dir = store / "sessions"
     if not sessions_dir.exists():
         return None
     session_files = sorted(
@@ -141,12 +158,9 @@ def _get_session_context(project_dir: str, budget: int) -> str | None:
     return formatted[: budget * 4]
 
 
-def _get_goal(project_dir: str, budget: int) -> str | None:
-    """Load the project goal from GOAL.md."""
-    goal_path = Path(project_dir) / "GOAL.md"
-    if not goal_path.exists():
-        # Also check inside .magnolia/
-        goal_path = Path(project_dir) / ".magnolia" / "GOAL.md"
+def _get_goal(store: Path, budget: int) -> str | None:
+    """Load the project goal from .magnolia/GOAL.md."""
+    goal_path = store / "GOAL.md"
     if not goal_path.exists():
         return None
     try:
@@ -158,8 +172,8 @@ def _get_goal(project_dir: str, budget: int) -> str | None:
         return None
 
 
-def _get_run_state(project_dir: str, run_id: str, budget: int) -> str | None:
-    runs_dir = Path(project_dir) / "runs"
+def _get_run_state(store: Path, run_id: str, budget: int) -> str | None:
+    runs_dir = store / "runs"
     if not runs_dir.exists():
         return None
     import yaml

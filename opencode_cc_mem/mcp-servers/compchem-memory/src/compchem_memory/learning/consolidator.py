@@ -39,16 +39,18 @@ def consolidate_tier(
         report["expired"] = expired
         report["actions"].append(f"Flagged {expired} stale entries")
 
-        remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
-        report["remaining"] = remaining
-
         # Enforce max_entries cap — archive lowest-confidence entries
         archived = _archive_excess(entries_dir, base_dir, max_entries)
         if archived:
             report["archived"] = archived
             report["actions"].append(f"Archived {archived} excess entries (cap: {max_entries})")
-            remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
-            report["remaining"] = remaining
+
+        remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
+        report["remaining"] = remaining
+
+        # Refresh INDEX.md whenever entries were modified
+        if merged or expired or archived:
+            _refresh_index(entries_dir)
 
     elif tier == "skill":
         if skills_dir:
@@ -189,3 +191,18 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
         return yaml.safe_load(text[3:end].strip()) or {}
     except yaml.YAMLError:
         return {}
+
+
+def _refresh_index(entries_dir: Path) -> None:
+    """Regenerate INDEX.md to remove references to archived/deleted entries."""
+    from compchem_memory.tiers.project import ProjectManager
+
+    index_path = entries_dir / "INDEX.md"
+    if not index_path.exists():
+        return
+    # Walk up to find the project root (parent of .magnolia/)
+    # entries_dir is either .../.magnolia/entries or resolved symlink
+    magnolia_dir = entries_dir.parent
+    project_root = str(magnolia_dir.parent) if magnolia_dir.name == ".magnolia" else str(magnolia_dir)
+    proj_m = ProjectManager(Path.home() / ".magnolia")
+    proj_m._update_index(project_root)
