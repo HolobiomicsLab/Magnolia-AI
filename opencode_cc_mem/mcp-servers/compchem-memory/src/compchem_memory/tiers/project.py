@@ -414,3 +414,18 @@ class ProjectManager:
         new_fm = yaml.dump(meta, default_flow_style=False)
         body = text[end + 3:].lstrip("\n")
         fpath.write_text(f"---\n{new_fm}---\n\n{body}")
+
+    # ── Goal management ──────────────────────────────────────────────────
+
+    def get_goal(self, project_dir: str) -> str | None:
+        """Read the project goal. Returns content or None."""
+        goal_path = self._project_store(project_dir) / "GOAL.md"
+        if goal_path.exists():
+            return goal_path.read_text()
+        return None
+
+    def set_goal(self, project_dir: str, content: str) -> str:
+        """Write or update the project goal. Returns path."""
+        goal_path = self._project_store(project_dir) / "GOAL.md"
+        goal_path.write_text(content)
+        return str(goal_path)

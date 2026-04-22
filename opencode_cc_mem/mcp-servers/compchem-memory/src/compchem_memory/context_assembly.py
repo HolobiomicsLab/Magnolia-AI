@@ -45,7 +45,15 @@ def assemble_context(
     sources: list[dict[str, str]] = []
     remaining = token_budget
 
-    # 1. Skills first — strategic constraints before tactical data
+    # 0. Project goal — reference signal, always loaded first
+    goal_budget = 500  # goals should be concise
+    goal_ctx = _get_goal(project_dir, goal_budget)
+    if goal_ctx:
+        sections.append(f"[PROJECT GOAL]\n{goal_ctx}")
+        sources.append({"tier": "goal", "id": "GOAL.md"})
+        remaining -= _estimate_tokens(goal_ctx)
+
+    # 1. Skills — strategic constraints before tactical data
     #    Protected floor: always reserve at least 30% of budget for skills.
     skill_floor = int(token_budget * 0.30)
     skill_entries = select_relevant_skills(
@@ -131,6 +139,23 @@ def _get_session_context(project_dir: str, budget: int) -> str | None:
         return None
     formatted = json.dumps(events, indent=2)
     return formatted[: budget * 4]
+
+
+def _get_goal(project_dir: str, budget: int) -> str | None:
+    """Load the project goal from GOAL.md."""
+    goal_path = Path(project_dir) / "GOAL.md"
+    if not goal_path.exists():
+        # Also check inside .magnolia/
+        goal_path = Path(project_dir) / ".magnolia" / "GOAL.md"
+    if not goal_path.exists():
+        return None
+    try:
+        content = goal_path.read_text().strip()
+        if not content:
+            return None
+        return content[: budget * 4]
+    except OSError:
+        return None
 
 
 def _get_run_state(project_dir: str, run_id: str, budget: int) -> str | None:

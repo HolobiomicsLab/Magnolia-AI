@@ -18,7 +18,7 @@ def ensure_project_store(project_dir: str) -> Path:
     resolved = Path(project_dir).resolve()
     local_dir = resolved / ".magnolia"
     local_dir.mkdir(parents=True, exist_ok=True)
-    for sub in ["entries", "runs", "sessions", "staging", "session-notes", "queue"]:
+    for sub in ["entries", "runs", "sessions", "staging", "session-notes", "queue", "archive"]:
         (local_dir / sub).mkdir(parents=True, exist_ok=True)
     return local_dir
 

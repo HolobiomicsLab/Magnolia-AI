@@ -42,6 +42,14 @@ def consolidate_tier(
         remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
         report["remaining"] = remaining
 
+        # Enforce max_entries cap — archive lowest-confidence entries
+        archived = _archive_excess(entries_dir, base_dir, max_entries)
+        if archived:
+            report["archived"] = archived
+            report["actions"].append(f"Archived {archived} excess entries (cap: {max_entries})")
+            remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
+            report["remaining"] = remaining
+
     elif tier == "skill":
         if skills_dir:
             skill_path = Path(skills_dir)
@@ -123,6 +131,52 @@ def _get_title(text: str) -> str:
         if line.startswith("# "):
             return line[2:].strip()
     return ""
+
+
+def _archive_excess(entries_dir: Path, base_dir: str, max_entries: int) -> int:
+    """Move lowest-confidence entries to archive/ when count exceeds max_entries."""
+    entries = [e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"]
+    if len(entries) <= max_entries:
+        return 0
+
+    # Score each entry by confidence × observation_count, break ties by age (older first)
+    scored: list[tuple[float, datetime, Path]] = []
+    for e in entries:
+        meta = _parse_frontmatter(e.read_text())
+        confidence = meta.get("confidence", 0.5)
+        observations = meta.get("observation_count", 0)
+        score = confidence * (1 + observations * 0.1)
+        date_str = meta.get("date", "2000-01-01")
+        try:
+            date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            date = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        scored.append((score, date, e))
+
+    # Sort ascending: lowest score first, oldest first for ties
+    scored.sort(key=lambda x: (x[0], x[1]))
+
+    to_archive = len(entries) - max_entries
+    archive_dir = Path(base_dir) / ".magnolia" / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    archived = 0
+    for _, _, entry in scored[:to_archive]:
+        dest = archive_dir / entry.name
+        # Don't overwrite existing archives
+        if not dest.exists():
+            entry.rename(dest)
+            archived += 1
+        else:
+            # If archive already has this name, add timestamp suffix
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            dest = archive_dir / f"{entry.stem}_{ts}.md"
+            entry.rename(dest)
+            archived += 1
+
+    return archived
 
 
 def _parse_frontmatter(text: str) -> dict[str, Any]:

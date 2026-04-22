@@ -586,6 +586,34 @@ def memory_annotate(
     return json.dumps({"status": "created", "path": result})
 
 
+@mcp.tool()
+def memory_set_goal(
+    goal: str,
+    project_dir: str | None = None,
+) -> str:
+    """Set or update the project goal. This is the persistent reference signal that
+    guides all memory retrieval and context assembly. Should describe what the project
+    is trying to achieve, key constraints, and success criteria."""
+    pd = _resolve_project_store(project_dir)
+    proj_m = _get_project_mgr()
+    path = proj_m.set_goal(pd, goal)
+    return json.dumps({"status": "set", "path": path})
+
+
+@mcp.tool()
+def memory_get_goal(
+    project_dir: str | None = None,
+) -> str:
+    """Retrieve the current project goal. Returns the GOAL.md content or a message
+    if no goal has been set."""
+    pd = _resolve_project_store(project_dir)
+    proj_m = _get_project_mgr()
+    content = proj_m.get_goal(pd)
+    if content:
+        return content
+    return "No project goal set. Use memory_set_goal to define one."
+
+
 # ── Resources (preserved from v1) ────────────────────────────────────────────
 
 
