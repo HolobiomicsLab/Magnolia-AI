@@ -85,6 +85,15 @@ def cmd_assess(args: argparse.Namespace) -> int:
     flags = assessment.get("quality_flags", [])
     flag_str = f" flags: {flags}" if flags else ""
     print(f"Assessed {tool}: {overall}{flag_str}")
+
+    # Negative confidence feedback: decrement success_pattern entries for failed tool
+    if overall in ("fail", "failed"):
+        try:
+            proj_m.decrement_confidence_for_tool(
+                str(Path(project_dir).resolve()), tool
+            )
+        except Exception:
+            pass  # Non-critical — never break the command
     return 0
 
 

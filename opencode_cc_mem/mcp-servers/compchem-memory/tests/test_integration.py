@@ -490,3 +490,622 @@ class TestFailurePatternEntryType:
         index_path = project_dir / ".magnolia" / "entries" / "INDEX.md"
         text = index_path.read_text()
         assert "Failure Patterns" in text
+
+
+# ── Run outcome feedback into retrieval scoring (2.1) ────────────────────
+
+
+class TestRunOutcomeScoring:
+    def test_failed_runs_boost_error_resolution(self, project_dir):
+        """Entries about error_resolution for a failed tool should score higher."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+
+        # Write a failed run YAML
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+        (runs_dir / "20260422_fail1.yaml").write_text(
+            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": "2026-04-22", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        error_entry = {
+            "title": "haddock3 missing param",
+            "description": "fix for haddock3",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "error_resolution",
+            "confidence": 0.5,
+            "last_verified": "2026-04-22",
+        }
+        from compchem_memory.retrieval import _score_entry, _load_recent_run_outcomes
+
+        outcomes = _load_recent_run_outcomes(str(store))
+        assert outcomes.get("haddock3") == "fail"
+
+        score_with_outcome = _score_entry(error_entry, "haddock3", {"haddock3"}, run_outcomes=outcomes)
+        score_without = _score_entry(error_entry, "haddock3", {"haddock3"}, run_outcomes={})
+        assert score_with_outcome > score_without * 1.5, (
+            f"Error resolution should be boosted after failed run: {score_with_outcome} vs {score_without}"
+        )
+
+    def test_failed_runs_penalize_success_pattern(self, project_dir):
+        """Success pattern entries for a failed tool should score lower."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+        (runs_dir / "20260422_fail1.yaml").write_text(
+            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": "2026-04-22", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        success_entry = {
+            "title": "haddock3 works great",
+            "description": "haddock3 success",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "success_pattern",
+            "confidence": 0.5,
+            "last_verified": "2026-04-22",
+        }
+        from compchem_memory.retrieval import _score_entry, _load_recent_run_outcomes
+
+        outcomes = _load_recent_run_outcomes(str(store))
+        score_with = _score_entry(success_entry, "haddock3", {"haddock3"}, run_outcomes=outcomes)
+        score_without = _score_entry(success_entry, "haddock3", {"haddock3"}, run_outcomes={})
+        assert score_with < score_without, (
+            f"Success pattern should be penalized after failed run: {score_with} vs {score_without}"
+        )
+
+    def test_passed_runs_no_effect(self):
+        """When all runs pass, no boost or penalty is applied."""
+        from compchem_memory.retrieval import _score_entry
+        entry = {
+            "title": "haddock3 note",
+            "description": "test",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "note",
+            "confidence": 0.5,
+            "last_verified": "2026-04-22",
+        }
+        score_pass = _score_entry(entry, "test", {"test"}, run_outcomes={"haddock3": "pass"})
+        score_none = _score_entry(entry, "test", {"test"}, run_outcomes=None)
+        assert score_pass == score_none
+
+    def test_warning_runs_boost_error_resolution_softer(self):
+        """Warning-level outcomes should apply softer multipliers than failures."""
+        from compchem_memory.retrieval import _score_entry
+        error_entry = {
+            "title": "haddock3 error fix",
+            "description": "test",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "error_resolution",
+            "confidence": 0.5,
+            "last_verified": "2026-04-22",
+        }
+        score_warn = _score_entry(error_entry, "test", {"test"}, run_outcomes={"haddock3": "warning"})
+        score_fail = _score_entry(error_entry, "test", {"test"}, run_outcomes={"haddock3": "fail"})
+        score_none = _score_entry(error_entry, "test", {"test"}, run_outcomes={})
+        # Warning boost (1.5x) should be less than fail boost (2.0x), both > no outcome
+        assert score_none < score_warn < score_fail
+
+    def test_old_run_failures_ignored(self, project_dir):
+        """Run failures older than 30 days should not affect scoring."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+        # Write a failed run from 60 days ago
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d")
+        (runs_dir / f"{old_date.replace('-', '')}_old_fail.yaml").write_text(
+            _yaml.dump({"run_id": "old_fail", "tool": "haddock3", "status": "fail", "date": old_date, "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        from compchem_memory.retrieval import _load_recent_run_outcomes
+        outcomes = _load_recent_run_outcomes(str(store))
+        # Old failure should be excluded by the 30-day window
+        assert "haddock3" not in outcomes or outcomes.get("haddock3") != "fail"
+
+    def test_select_relevant_uses_run_outcomes(self, project_dir, skills_dir):
+        """select_relevant_entries should load and use run outcomes."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        # Create error_resolution entry for haddock3
+        mgr.create_entry(
+            str(project_dir),
+            "Haddock3 Error Fix",
+            "Fix for missing parameter",
+            tags=["haddock3"],
+            tools=["haddock3"],
+            entry_type="error_resolution",
+        )
+        # Create a note entry (unrelated)
+        mgr.create_entry(
+            str(project_dir),
+            "Random Note",
+            "Unrelated content",
+        )
+
+        # Write a failed run
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+        (runs_dir / "20260422_fail1.yaml").write_text(
+            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": "2026-04-22", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        from compchem_memory.retrieval import select_relevant_entries
+        entries = select_relevant_entries(
+            "haddock3 docking",
+            str(store),
+            budget=8000,
+            max_selections=5,
+        )
+        # The error_resolution entry should be present and have high relevance
+        haddock_entries = [e for e in entries if "haddock3" in e.get("title", "").lower()]
+        assert len(haddock_entries) > 0, "Error resolution entry should be selected"
+
+
+# ── Negative confidence feedback (2.4) ───────────────────────────────────
+
+
+class TestNegativeConfidenceFeedback:
+    def _age_entry(self, mgr, path, days_ago: int):
+        """Set last_verified to N days ago using the production write path."""
+        old_date = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+        mgr._update_entry_frontmatter(Path(path), "last_verified", old_date)
+
+    def _read_confidence(self, path) -> float:
+        """Parse confidence from an entry file's frontmatter."""
+        text = Path(path).read_text()
+        end = text.find("---", 3)
+        meta = yaml.safe_load(text[3:end].strip()) or {}
+        return meta.get("confidence", -1)
+
+    def test_decrement_on_failed_tool(self, project_dir):
+        """Success pattern entries for a failed tool should lose confidence."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir),
+            "Haddock3 Works Well",
+            "Great results",
+            tools=["haddock3"],
+            entry_type="success_pattern",
+            confidence=0.9,
+        )
+        self._age_entry(mgr, path, 30)
+
+        adjusted = mgr.decrement_confidence_for_tool(str(project_dir), "haddock3", delta=0.1)
+        assert adjusted == 1
+        assert self._read_confidence(path) == 0.8
+
+    def test_no_decrement_for_recently_verified(self, project_dir):
+        """Recently verified entries should NOT be decremented."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir),
+            "Recent Success",
+            "Recently verified",
+            tools=["haddock3"],
+            entry_type="success_pattern",
+            confidence=0.9,
+        )
+        # last_verified is today — should NOT be decremented
+        adjusted = mgr.decrement_confidence_for_tool(str(project_dir), "haddock3")
+        assert adjusted == 0
+
+    def test_no_decrement_for_unrelated_tool(self, project_dir):
+        """Entries for other tools should not be affected."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir),
+            "GNINA Works",
+            "Great results",
+            tools=["gnina"],
+            entry_type="success_pattern",
+            confidence=0.9,
+        )
+        self._age_entry(mgr, path, 30)
+
+        adjusted = mgr.decrement_confidence_for_tool(str(project_dir), "haddock3")
+        assert adjusted == 0
+
+    def test_no_decrement_for_non_success_entries(self, project_dir):
+        """Only success_pattern entries should be decremented."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir),
+            "Haddock3 Error",
+            "Error notes",
+            tools=["haddock3"],
+            entry_type="error_resolution",
+            confidence=0.9,
+        )
+        self._age_entry(mgr, path, 30)
+
+        adjusted = mgr.decrement_confidence_for_tool(str(project_dir), "haddock3")
+        assert adjusted == 0
+
+    def test_confidence_floor_at_zero(self, project_dir):
+        """Confidence should not go below 0."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir),
+            "Low Conf Success",
+            "Barely works",
+            tools=["haddock3"],
+            entry_type="success_pattern",
+            confidence=0.02,
+        )
+        self._age_entry(mgr, path, 30)
+
+        mgr.decrement_confidence_for_tool(str(project_dir), "haddock3", delta=0.1)
+        assert self._read_confidence(path) == 0.0
+
+    def test_e2e_post_run_assess_decrements_confidence(self, project_dir, skills_dir):
+        """End-to-end: assess_run + record_run + decrement on failure
+        should decrement confidence on success_pattern entries."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        # Create a success_pattern entry for haddock3 with old date
+        path = mgr.create_entry(
+            str(project_dir),
+            "Haddock3 Great Results",
+            "Always works",
+            tools=["haddock3"],
+            entry_type="success_pattern",
+            confidence=0.9,
+        )
+        self._age_entry(mgr, path, 30)
+        assert self._read_confidence(path) == 0.9
+
+        # Simulate what post_run_assess does: assess, record, decrement on fail
+        from compchem_memory.learning.assessor import assess_run
+        run_dir = project_dir / "runs" / "haddock3_test"
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        assessment = assess_run(str(run_dir), "haddock3", exit_code=1)
+        overall = assessment.get("overall", "failed")
+        mgr.record_run(
+            str(project_dir),
+            run_id="test_fail",
+            tool="haddock3",
+            status=overall,
+            metrics=assessment.get("metrics", {}),
+            quality_flags=assessment.get("quality_flags", []),
+        )
+
+        # The decrement that post_run_assess would trigger
+        if overall in ("fail", "failed"):
+            mgr.decrement_confidence_for_tool(str(project_dir), "haddock3")
+
+        # Verify confidence was decremented
+        assert self._read_confidence(path) < 0.9
+
+
+# ── Tool name case normalization ─────────────────────────────────────────
+
+
+class TestToolNameCaseNormalization:
+    def test_mixed_case_tool_in_run_matches_entry(self, project_dir):
+        """Run YAML with tool: Haddock3 should match entry tools: [haddock3]."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+        # Write run with mixed-case tool name
+        (runs_dir / "20260423_upper.yaml").write_text(
+            _yaml.dump({"run_id": "upper", "tool": "Haddock3", "status": "fail", "date": "2026-04-23", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        entry = {
+            "title": "haddock3 error",
+            "description": "test",
+            "tags": [],
+            "tools": ["haddock3"],  # lowercase
+            "type": "error_resolution",
+            "confidence": 0.5,
+            "last_verified": "2026-04-23",
+        }
+        from compchem_memory.retrieval import _score_entry, _load_recent_run_outcomes
+        outcomes = _load_recent_run_outcomes(str(store))
+        assert outcomes.get("haddock3") == "fail", f"Expected haddock3→fail, got {outcomes}"
+
+        score_with = _score_entry(entry, "test", {"test"}, run_outcomes=outcomes)
+        score_without = _score_entry(entry, "test", {"test"}, run_outcomes={})
+        assert score_with > score_without, "Mixed-case tool should still trigger boost"
+
+
+# ── Warning penalizes success_pattern ────────────────────────────────────
+
+
+class TestWarningPenalty:
+    def test_warning_penalizes_success_pattern(self):
+        from compchem_memory.retrieval import _score_entry
+        entry = {
+            "title": "haddock3 success",
+            "description": "test",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "success_pattern",
+            "confidence": 0.5,
+            "last_verified": "2026-04-23",
+        }
+        score_warn = _score_entry(entry, "test", {"test"}, run_outcomes={"haddock3": "warning"})
+        score_none = _score_entry(entry, "test", {"test"}, run_outcomes={})
+        assert score_warn < score_none, "Warning should penalize success_pattern"
+
+
+# ── failure_pattern + run outcome interaction ────────────────────────────
+
+
+class TestFailurePatternRunOutcome:
+    def test_failure_pattern_gets_double_boost(self):
+        """failure_pattern entries get type_boost=2.5 AND run_outcome boost=2.0."""
+        from compchem_memory.retrieval import _score_entry
+        entry = {
+            "title": "haddock3 failed",
+            "description": "test",
+            "tags": [],
+            "tools": ["haddock3"],
+            "type": "failure_pattern",
+            "confidence": 0.5,
+            "last_verified": "2026-04-23",
+        }
+        score_fail = _score_entry(entry, "test", {"test"}, run_outcomes={"haddock3": "fail"})
+        score_pass = _score_entry(entry, "test", {"test"}, run_outcomes={"haddock3": "pass"})
+        assert score_fail > score_pass * 1.5, (
+            f"failure_pattern should get multiplicative boost from failed run: {score_fail} vs {score_pass}"
+        )
+
+
+# ── max_runs limit ───────────────────────────────────────────────────────
+
+
+class TestMaxRunsLimit:
+    def test_max_runs_limits_to_20(self, project_dir):
+        """Only the 20 most recent runs should be considered. Create 25 passes
+        with recent dates and 5 fails with older-but-still-within-30-day dates.
+        The 5 fails should be excluded because max_runs=20 caps at the newest 20."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+
+        today = datetime.now(timezone.utc)
+        # 5 fails from 10 days ago
+        for i in range(5):
+            d = (today - timedelta(days=10)).strftime("%Y%m%d")
+            (runs_dir / f"{d}_fail{i}.yaml").write_text(
+                _yaml.dump({"run_id": f"fail{i}", "tool": "haddock3", "status": "fail",
+                            "date": (today - timedelta(days=10)).strftime("%Y-%m-%d"),
+                            "metrics": {}, "quality_flags": [], "errors_solved": []})
+            )
+        # 20 passes from today (newer filenames, will be sorted first)
+        for i in range(20):
+            (runs_dir / f"{today.strftime('%Y%m%d')}_pass{i}.yaml").write_text(
+                _yaml.dump({"run_id": f"pass{i}", "tool": "haddock3", "status": "pass",
+                            "date": today.strftime("%Y-%m-%d"),
+                            "metrics": {}, "quality_flags": [], "errors_solved": []})
+            )
+
+        from compchem_memory.retrieval import _load_recent_run_outcomes
+        outcomes = _load_recent_run_outcomes(str(store), max_runs=20)
+        # The 20 most recent (today's passes) should be within max_runs;
+        # the 10-day-old fails are still within 30-day window but sorted after
+        # today's 20 passes, so they're cut off by max_runs=20.
+        assert outcomes.get("haddock3") == "pass", (
+            f"Expected pass (fails cut off by max_runs), got {outcomes}"
+        )
+
+    def test_recent_failure_within_max_runs(self, project_dir):
+        """A recent failure within max_runs should be detected."""
+        ensure_project_store(str(project_dir))
+        store = project_dir / ".magnolia"
+        runs_dir = store / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        import yaml as _yaml
+
+        # 19 passes, 1 fail (most recent)
+        for i in range(19):
+            day = f"{23 - i:02d}"
+            (runs_dir / f"202604{day}_pass{i}.yaml").write_text(
+                _yaml.dump({"run_id": f"pass{i}", "tool": "haddock3", "status": "pass", "date": f"2026-04-{day}", "metrics": {}, "quality_flags": [], "errors_solved": []})
+            )
+        (runs_dir / "20260423_fail.yaml").write_text(
+            _yaml.dump({"run_id": "fail", "tool": "haddock3", "status": "fail", "date": "2026-04-23", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        )
+
+        from compchem_memory.retrieval import _load_recent_run_outcomes
+        outcomes = _load_recent_run_outcomes(str(store))
+        assert outcomes.get("haddock3") == "fail"
+
+
+# ── Multiple entries decremented ─────────────────────────────────────────
+
+
+class TestMultipleDecrement:
+    def test_multiple_success_entries_decremented(self, project_dir):
+        """All success_pattern entries for a failed tool should be decremented."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        original_confs = []
+        paths = []
+        for i in range(3):
+            conf = 0.8 + i * 0.05
+            p = mgr.create_entry(
+                str(project_dir),
+                f"Haddock3 Success {i}",
+                f"Works great {i}",
+                tools=["haddock3"],
+                entry_type="success_pattern",
+                confidence=conf,
+            )
+            original_confs.append(conf)
+            old_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+            mgr._update_entry_frontmatter(Path(p), "last_verified", old_date)
+            paths.append(p)
+
+        adjusted = mgr.decrement_confidence_for_tool(str(project_dir), "haddock3", delta=0.1)
+        assert adjusted == 3
+
+        for p, orig in zip(paths, original_confs):
+            text = Path(p).read_text()
+            end = text.find("---", 3)
+            meta = yaml.safe_load(text[3:end].strip()) or {}
+            assert meta["confidence"] < orig, (
+                f"Expected confidence < {orig}, got {meta['confidence']}"
+            )
+
+
+# ── Consolidator merge frontmatter ───────────────────────────────────────
+
+
+class TestConsolidatorMerge:
+    def test_merge_combines_frontmatter_not_raw_concat(self, project_dir):
+        """Merged entries should have combined frontmatter, not two YAML blocks."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        # Create two entries with same title but different tags/tools/confidence
+        mgr.create_entry(
+            str(project_dir), "Same Title", "Content A",
+            tags=["tag_a"], tools=["tool_a"], confidence=0.3,
+        )
+        mgr.create_entry(
+            str(project_dir), "Same Title", "Content B",
+            tags=["tag_b"], tools=["tool_b"], confidence=0.9,
+        )
+
+        from compchem_memory.learning.consolidator import consolidate_tier
+        consolidate_tier("project", str(project_dir))
+
+        entries_dir = project_dir / ".magnolia" / "entries"
+        remaining = [f for f in entries_dir.glob("*.md") if f.name != "INDEX.md"]
+        assert len(remaining) == 1, f"Expected 1 merged entry, got {len(remaining)}"
+
+        text = remaining[0].read_text()
+        # Should have only ONE frontmatter block at the top
+        # (body separator "---" is fine, but frontmatter must be a single block)
+        # Verify the second "---" closes frontmatter before any content
+        first_close = text.find("---", 3)
+        second_close = text.find("---", first_close + 3)
+        # The body between the two --- markers should be valid YAML, not mixed content
+        fm_text = text[3:first_close].strip()
+        meta_check = yaml.safe_load(fm_text)
+        assert isinstance(meta_check, dict), "Frontmatter should parse as a single dict"
+
+        # Verify frontmatter was merged
+        end = text.find("---", 3)
+        meta = yaml.safe_load(text[3:end].strip()) or {}
+        assert meta["confidence"] == 0.9, "Should take higher confidence"
+        assert "tag_a" in meta["tags"], "Should include tag_a"
+        assert "tag_b" in meta["tags"], "Should include tag_b"
+        assert "tool_a" in meta["tools"], "Should include tool_a"
+        assert "tool_b" in meta["tools"], "Should include tool_b"
+        assert meta["observation_count"] == 2, "Should sum observation counts"
+
+        # Both bodies should be present
+        assert "Content A" in text
+        assert "Content B" in text
+
+    def test_expire_stale_no_duplicate_keys(self, project_dir):
+        """Expiring an already-stale entry should not duplicate the stale key."""
+        ensure_project_store(str(project_dir))
+        mgr = ProjectManager(Path.home() / ".magnolia")
+
+        path = mgr.create_entry(
+            str(project_dir), "Stale Test", "old content",
+            confidence=0.5,
+        )
+        # Set date to 120 days ago
+        old_date = (datetime.now(timezone.utc) - timedelta(days=120)).strftime("%Y-%m-%d")
+        mgr._update_entry_frontmatter(Path(path), "last_verified", old_date)
+        mgr._update_entry_frontmatter(Path(path), "date", old_date)
+
+        from compchem_memory.learning.consolidator import consolidate_tier
+        # First expiry
+        consolidate_tier("project", str(project_dir), stale_days=90)
+        text1 = Path(path).read_text()
+        assert "stale: true" in text1
+
+        # Second expiry should NOT add duplicate stale key
+        consolidate_tier("project", str(project_dir), stale_days=90)
+        text2 = Path(path).read_text()
+        # Count occurrences of "stale:" in frontmatter
+        end = text2.find("---", 3)
+        fm = text2[3:end]
+        assert fm.count("stale:") == 1, "stale key should appear exactly once in frontmatter"
+
+
+# ── CLI _detect_tool and _detect_run_dir ──────────────────────────────────
+
+
+class TestDetectTool:
+    def test_detects_haddock3(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("haddock3 run.cfg") == "haddock3"
+
+    def test_detects_haddock3_alias(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("run_haddock3 run.cfg") == "haddock3"
+
+    def test_detects_gromacs(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("gmx mdrun -deffnm prod") == "gromacs"
+
+    def test_detects_gnina(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("gnina -r receptor.pdb") == "gnina"
+
+    def test_detects_xtb(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("xtb opt.xyz") == "xtb"
+
+    def test_detects_path_to_tool(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("/usr/local/bin/haddock3 run.cfg") == "haddock3"
+
+    def test_unknown_tool_returns_empty(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("python script.py") == ""
+
+    def test_empty_command_returns_empty(self):
+        from compchem_memory.cli import _detect_tool
+        assert _detect_tool("") == ""
+
+
+class TestDetectRunDir:
+    def test_detects_runs_path_in_command(self, project_dir):
+        from compchem_memory.cli import _detect_run_dir
+        run_dir = project_dir / "runs" / "test_run"
+        run_dir.mkdir(parents=True)
+        # _detect_run_dir checks if the path part itself exists
+        result = _detect_run_dir(f"haddock3 {run_dir}", "haddock3")
+        assert result is not None
+        assert "test_run" in result
+
+    def test_returns_none_for_no_match(self):
+        from compchem_memory.cli import _detect_run_dir
+        result = _detect_run_dir("haddock3 config.cfg", "haddock3")
+        assert result is None

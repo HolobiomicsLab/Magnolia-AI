@@ -1,7 +1,7 @@
 """Project tier: durable, human-readable notes scoped to a project directory."""
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -416,6 +416,44 @@ class ProjectManager:
         fpath.write_text(f"---\n{new_fm}---\n\n{body}")
 
     # ── Goal management ──────────────────────────────────────────────────
+
+    def decrement_confidence_for_tool(
+        self, project_dir: str, tool: str, delta: float = 0.05
+    ) -> int:
+        """Decrement confidence on success_pattern entries matching a failed tool.
+
+        Only applies to entries not recently verified (older than 7 days).
+        Returns count of entries adjusted.
+        """
+        entries_dir = self._entries_dir(project_dir)
+        adjusted = 0
+        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).date()
+        tool_lower = tool.lower()
+        for f in entries_dir.glob("*.md"):
+            if f.name == "INDEX.md":
+                continue
+            text = f.read_text()
+            meta = self._parse_frontmatter(text)
+            if meta.get("type") != "success_pattern":
+                continue
+            entry_tools = [t.lower() for t in meta.get("tools", [])]
+            if tool_lower not in entry_tools:
+                continue
+            # Skip recently verified entries
+            verified_str = meta.get("last_verified", meta.get("date", ""))
+            if verified_str:
+                try:
+                    verified_date = datetime.fromisoformat(verified_str).date()
+                    if verified_date >= seven_days_ago:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            old_conf = meta.get("confidence", 0.5)
+            new_conf = max(0.0, round(old_conf - delta, 2))
+            if new_conf != old_conf:
+                self._update_entry_frontmatter(f, "confidence", new_conf)
+                adjusted += 1
+        return adjusted
 
     def get_goal(self, project_dir: str) -> str | None:
         """Read the project goal. Returns content or None."""

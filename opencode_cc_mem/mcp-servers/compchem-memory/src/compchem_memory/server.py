@@ -298,6 +298,16 @@ def post_run_assess(
         {"run_dir": run_dir, "tool": tool, "assessment": assessment},
         pd,
     )
+    # Negative confidence feedback: if run failed, decrement confidence
+    # on success_pattern entries for this tool.
+    if assessment.get("overall") in ("fail", "failed"):
+        count = proj_m.decrement_confidence_for_tool(pd, tool)
+        if count > 0:
+            sess_m.record(
+                "confidence_decrement",
+                {"tool": tool, "run_dir": run_dir, "entries_adjusted": count},
+                pd,
+            )
     return json.dumps(assessment, indent=2)
 
 
@@ -435,6 +445,18 @@ def memory_search_errors(
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     entries = proj_m.search_entries(pd, keyword=error_message[:50], tags=["error-resolution"])
+    # Also find entries by type error_resolution/failure_pattern (not just by tag)
+    type_entries = proj_m.search_entries(pd, keyword=error_message[:50])
+    type_entries = [
+        e for e in type_entries
+        if e.get("type") in ("error_resolution", "failure_pattern")
+    ]
+    # Merge, dedup by name
+    seen_names = {e["name"] for e in entries}
+    for e in type_entries:
+        if e["name"] not in seen_names:
+            entries.append(e)
+            seen_names.add(e["name"])
     if tool:
         entries = [e for e in entries if tool in str(e.get("tools", []))]
 

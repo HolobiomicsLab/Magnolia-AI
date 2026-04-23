@@ -1,9 +1,11 @@
 """Semantic memory retrieval: heuristic scoring + header-based selection."""
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from compchem_memory.scanning import scan_memory_headers, scan_skills_headers
 from compchem_memory.llm import is_llm_available, call_llm_json
@@ -46,9 +48,10 @@ def select_relevant_entries(
         ]
     task_lower = task_description.lower()
     task_words = set(task_lower.split())
+    run_outcomes = _load_recent_run_outcomes(project_dir)
     scored: list[tuple[float, dict[str, Any]]] = []
     for h in headers:
-        score = _score_entry(h, task_lower, task_words)
+        score = _score_entry(h, task_lower, task_words, run_outcomes=run_outcomes)
         if score > 0:
             scored.append((score, h))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -84,7 +87,7 @@ def select_relevant_entries(
             tokens = max_per_entry
         if used_tokens + tokens > budget:
             continue
-        results.append({**h, "content": content, "relevance_score": round(_score_entry(h, task_lower, task_words), 2)})
+        results.append({**h, "content": content, "relevance_score": round(_score_entry(h, task_lower, task_words, run_outcomes=run_outcomes), 2)})
         used_tokens += tokens
     return results
 
@@ -144,8 +147,60 @@ def select_relevant_skills(
     return results
 
 
+def _load_recent_run_outcomes(
+    store: str | Path, max_runs: int = 20, max_age_days: int = 30,
+) -> dict[str, str]:
+    """Load recent run outcomes from .magnolia/runs/*.yaml.
+
+    Returns a dict mapping tool_name → worst recent status.
+    If a tool has any "fail" in recent runs, value is "fail".
+    Else if any "warning", value is "warning". Otherwise "pass".
+    Only considers runs within max_age_days and up to max_runs files.
+    """
+    runs_dir = Path(store) / "runs"
+    if not runs_dir.exists():
+        return {}
+    # Sort by filename (YYYYMMDD prefix) for durable ordering, not mtime
+    run_files = sorted(runs_dir.glob("*.yaml"), key=lambda p: p.name, reverse=True)
+    # Track per-tool: True if any fail, None if warning-only, False if all pass
+    tool_status: dict[str, int] = {}  # 2=fail, 1=warning, 0=pass
+    count = 0
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=max_age_days)
+    for f in run_files:
+        if count >= max_runs:
+            break
+        if f.name == "INDEX.yaml":
+            continue
+        try:
+            data = yaml.safe_load(f.read_text())
+        except Exception:
+            continue
+        tool = data.get("tool", "").lower()
+        status = data.get("status", "pass").lower()
+        if not tool:
+            continue
+        # Skip runs older than cutoff
+        run_date_str = data.get("date", "")
+        if run_date_str:
+            try:
+                run_date = datetime.fromisoformat(run_date_str).date()
+                if run_date < cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass  # unparsable date — include it
+        level = 2 if "fail" in status else (1 if "warning" in status else 0)
+        tool_status[tool] = max(tool_status.get(tool, 0), level)
+        count += 1
+    # Convert to status strings
+    return {
+        tool: ("fail" if level == 2 else ("warning" if level == 1 else "pass"))
+        for tool, level in tool_status.items()
+    }
+
+
 def _score_entry(
-    header: dict[str, Any], task_lower: str, task_words: set[str]
+    header: dict[str, Any], task_lower: str, task_words: set[str],
+    run_outcomes: dict[str, str] | None = None,
 ) -> float:
     title = header.get("title", "").lower()
     desc = header.get("description", "").lower()
@@ -189,6 +244,27 @@ def _score_entry(
         for tool in tools:
             if word in tool:
                 score += 4.0
+
+    # Run outcome feedback: if recent runs for this entry's tools failed,
+    # boost error_resolution/failure_pattern and penalize success_pattern.
+    # Warnings get softer multipliers than failures.
+    if run_outcomes:
+        entry_tools_failed = any(
+            run_outcomes.get(t) == "fail" for t in tools
+        )
+        entry_tools_warned = any(
+            run_outcomes.get(t) == "warning" for t in tools
+        )
+        if entry_tools_failed:
+            if entry_type in ("error_resolution", "failure_pattern"):
+                score *= 2.0
+            elif entry_type == "success_pattern":
+                score *= 0.7
+        elif entry_tools_warned:
+            if entry_type in ("error_resolution", "failure_pattern"):
+                score *= 1.5
+            elif entry_type == "success_pattern":
+                score *= 0.85
     return score
 
 

@@ -70,7 +70,6 @@ def _resolve_entries_dir(base_dir: str) -> Path:
             return target
     if local.exists():
         return local
-    global_base = Path.home() / ".magnolia"
     return local
 
 
@@ -88,14 +87,46 @@ def _merge_duplicates(entries: list[Path], entries_dir: Path) -> int:
     for title, paths in titles.items():
         if len(paths) > 1:
             keeper = paths[0]
+            keeper_text = keeper.read_text()
+            keeper_meta = _parse_frontmatter(keeper_text)
+            keeper_body = _extract_body(keeper_text)
             for dup in paths[1:]:
-                keeper_text = keeper.read_text()
                 dup_text = dup.read_text()
-                combined = keeper_text + "\n\n---\n\n" + dup_text
-                keeper.write_text(combined)
-                dup.unlink()
+                dup_meta = _parse_frontmatter(dup_text)
+                dup_body = _extract_body(dup_text)
+                # Merge frontmatter: take max confidence, sum observations, union tags/tools
+                if dup_meta.get("confidence", 0) > keeper_meta.get("confidence", 0):
+                    keeper_meta["confidence"] = dup_meta["confidence"]
+                keeper_meta["observation_count"] = (
+                    keeper_meta.get("observation_count", 0) + dup_meta.get("observation_count", 0)
+                )
+                keeper_meta["tags"] = list(set(
+                    keeper_meta.get("tags", []) + dup_meta.get("tags", [])
+                ))
+                keeper_meta["tools"] = list(set(
+                    keeper_meta.get("tools", []) + dup_meta.get("tools", [])
+                ))
+                # Concatenate bodies
+                if dup_body.strip():
+                    keeper_body = keeper_body.rstrip("\n") + "\n\n---\n\n" + dup_body.lstrip("\n")
                 merged += 1
+            # Write merged entry with updated frontmatter FIRST (before unlink)
+            fm_str = yaml.dump(keeper_meta, default_flow_style=False)
+            keeper.write_text(f"---\n{fm_str}---\n\n{keeper_body}\n")
+            # Now safe to delete duplicates
+            for dup in paths[1:]:
+                dup.unlink()
     return merged
+
+
+def _extract_body(text: str) -> str:
+    """Extract the body (content after frontmatter) from a markdown file."""
+    if not text.startswith("---"):
+        return text
+    end = text.find("---", 3)
+    if end == -1:
+        return text
+    return text[end + 3:].lstrip("\n")
 
 
 def _expire_stale(entries_dir: Path, stale_days: int) -> int:
@@ -113,15 +144,32 @@ def _expire_stale(entries_dir: Path, stale_days: int) -> int:
                     tzinfo=timezone.utc
                 )
                 age = (now - verified_date).days
-                if age > stale_days:
-                    new_text = text.replace(
-                        "---", f"---\nstale: true\nstale_age_days: {age}", 1
-                    )
-                    f.write_text(new_text)
+                if age > stale_days and not meta.get("stale"):
+                    _update_frontmatter_field(f, "stale", True)
+                    _update_frontmatter_field(f, "stale_age_days", age)
                     expired += 1
             except ValueError:
                 pass
     return expired
+
+
+def _update_frontmatter_field(f: Path, key: str, value: Any) -> None:
+    """Update a single frontmatter field without corrupting the rest."""
+    text = f.read_text()
+    if not text.startswith("---"):
+        return
+    end = text.find("---", 3)
+    if end == -1:
+        return
+    try:
+        meta = yaml.safe_load(text[3:end].strip()) or {}
+    except yaml.YAMLError:
+        return
+    meta[key] = value
+    meta["updated"] = datetime.now(timezone.utc).isoformat()
+    new_fm = yaml.dump(meta, default_flow_style=False)
+    body = text[end + 3:].lstrip("\n")
+    f.write_text(f"---\n{new_fm}---\n\n{body}")
 
 
 def _get_title(text: str) -> str:
@@ -200,9 +248,29 @@ def _refresh_index(entries_dir: Path) -> None:
     index_path = entries_dir / "INDEX.md"
     if not index_path.exists():
         return
-    # Walk up to find the project root (parent of .magnolia/)
-    # entries_dir is either .../.magnolia/entries or resolved symlink
+    # Find project root by checking if entries_dir's parent is .magnolia/
+    # or if entries_dir is a resolved symlink under a differently-named dir.
+    # Walk up: entries → parent → check if parent is .magnolia or parent/entries
+    # exists as a child of a .magnolia dir.
     magnolia_dir = entries_dir.parent
-    project_root = str(magnolia_dir.parent) if magnolia_dir.name == ".magnolia" else str(magnolia_dir)
+    if magnolia_dir.name == ".magnolia":
+        project_root = str(magnolia_dir.parent)
+    else:
+        # entries_dir may be a resolved symlink target. Check if there's a
+        # .magnolia/entries path that resolves here, and use that project root.
+        # Fallback: use magnolia_dir itself (entries_dir's parent).
+        found = False
+        # Check if any path in the chain has .magnolia -> entries
+        for parent in entries_dir.parents:
+            candidate = parent / ".magnolia" / "entries"
+            try:
+                if candidate.resolve() == entries_dir.resolve():
+                    project_root = str(parent)
+                    found = True
+                    break
+            except OSError:
+                continue
+        if not found:
+            project_root = str(magnolia_dir)
     proj_m = ProjectManager(Path.home() / ".magnolia")
     proj_m._update_index(project_root)
