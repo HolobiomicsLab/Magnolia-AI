@@ -14,18 +14,114 @@ from compchem_memory.llm import is_llm_available, call_llm_json
 MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
 
-EXTRACTION_SYSTEM_PROMPT = (
-    "You are a computational chemistry memory extraction agent. "
-    "Analyze the following session events and extract structured knowledge. "
-    "Return a JSON array of extracted entries. Each entry should have:\n"
-    '- "type": one of "error_resolution", "success_pattern", "failure_pattern", "parameter_guidance", "workflow_note"\n'
-    '- "title": concise descriptive title\n'
-    '- "content": detailed markdown content\n'
-    '- "tags": list of relevant tags\n'
-    '- "tools": list of tools mentioned\n'
-    '- "confidence": float 0.0-1.0\n'
-    "Only extract genuinely useful knowledge. Skip trivial events."
-)
+
+def has_error_fix_pattern(events: list[dict[str, Any]], window: int = 10) -> bool:
+    """True if any tool_error is followed within `window` events by a tool_success
+    for the same tool."""
+    for i, ev in enumerate(events):
+        if ev.get("event_type") != "tool_error":
+            continue
+        tool = ev.get("tool")
+        if not tool:
+            continue
+        for later in events[i + 1 : i + 1 + window]:
+            if later.get("event_type") == "tool_success" and later.get("tool") == tool:
+                return True
+    return False
+
+
+def has_significant_result(events: list[dict[str, Any]], project_dir: str) -> bool:
+    """True if a run_assessment in the events is significant.
+    Three sub-cases:
+      1. overall='pass' AND quality_flags=[]
+      2. overall='pass' preceded by ≥2 tool_error events on same tool
+      3. metrics beat prior best in this project (placeholder — see spec §10)
+    """
+    for i, ev in enumerate(events):
+        if ev.get("event_type") != "run_assessment":
+            continue
+        if ev.get("overall") != "pass":
+            continue
+
+        # Case 1: clean run
+        if not ev.get("quality_flags"):
+            return True
+
+        # Case 2: finally got it working
+        tool = ev.get("tool")
+        if tool:
+            error_count = sum(
+                1
+                for prior in events[:i]
+                if prior.get("event_type") == "tool_error" and prior.get("tool") == tool
+            )
+            if error_count >= 2:
+                return True
+
+        # Case 3: best-in-project — implementation note: compare ev["metrics"] against
+        # runs/*.yaml history for tool. Deferred per spec §10.
+
+    return False
+
+
+EXTRACTION_SYSTEM_PROMPT = """You are extracting durable learnings from a computational chemistry agent
+session. Return a JSON array of entries; each has {type, title, content, tags, tools, confidence}.
+Skip routine or trivial events — aim for fewer, denser entries.
+
+REQUIREMENTS for `content`:
+
+1. Quantitative grounding. Include specific numbers, identifiers, parameters, and
+   measurements from the events: scores, residue numbers, sequence IDs, structure
+   counts, protocol names. No vague summaries like "the run worked well" — say
+   which run, which score, which sequence.
+
+2. Explicit scope / caveat. If a finding applies to one pocket, one protocol, one
+   binding mode, one parameter set: write a `CAVEAT:` section stating exactly what
+   conditions the finding is bounded by. Without a caveat, future sessions will
+   misapply the entry.
+
+3. Negative findings carry equal weight. If something does NOT work, NOT matter, or
+   turned out NOT to be the cause, capture that. "X is not the bottleneck", "Y made
+   no difference", "Z is not critical" are first-class learnings.
+
+4. For error_resolution entries, use this structure:
+     Symptoms: what was observed (logs, errors, behavior).
+     Cause: what was actually wrong.
+     Fix: the working solution, with code/commands.
+     Also: red herrings eliminated (things that turned out NOT to be the cause).
+   The Symptoms section is mandatory — without it, future sessions cannot match
+   the entry to their problem.
+
+5. For success_pattern / parameter_guidance entries, include exact parameters that
+   produced the result and a mandatory CAVEAT bounding applicability.
+
+USE THE MOST SPECIFIC TYPE:
+- `error_resolution`: problem + cause + fix sequence.
+- `success_pattern`: noteworthy positive outcome with parameters that produced it.
+- `failure_pattern`: an attempted approach that did NOT work, captured to save
+  the next attempt.
+- `parameter_guidance`: "X worked with parameters Y; Z did not."
+- `workflow_note`: ordering / sequencing / process knowledge.
+- `note`: ONLY if none of the above fits.
+
+Default to `note` only as a last resort. If the events contain a problem-and-fix
+shape, use `error_resolution`. If they contain a result-with-parameters shape, use
+`success_pattern` or `parameter_guidance`.
+
+TAGS should include:
+- Tool names (haddock3, gromacs, gnina, ...).
+- Project-specific identifiers (peptide IDs, protein names, residue numbers,
+  pocket IDs, sequence labels).
+- Problem domains (peptide-design, hotspot-anchoring, process-management).
+Avoid generic single-word tags. Prefer "haddock3 + hotspot-anchoring" to
+"haddock3-run".
+
+CONFIDENCE: 0.5–0.7 for first-observation patterns. 0.8–0.95 only if the events
+show strong evidence (multiple confirmations within the session, clean metrics,
+explicit user confirmation in the log).
+
+prompt_version: v2.0
+"""
 
 
 class AutomaticMemoryExtractor:
@@ -80,8 +176,14 @@ class AutomaticMemoryExtractor:
             for ev in since
         )
 
-        return tokens >= MIN_TOKENS_BETWEEN_EXTRACTIONS and (
+        threshold_met = tokens >= MIN_TOKENS_BETWEEN_EXTRACTIONS and (
             tool_calls >= MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS or not has_pending
+        )
+        project_dir = str(self.state_path.parent) if self.state_path else ""
+        return (
+            threshold_met
+            or has_error_fix_pattern(since)
+            or has_significant_result(since, project_dir)
         )
 
     def extract_and_save(self, session_path: Path, project_dir: str) -> list[str]:

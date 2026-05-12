@@ -40,6 +40,24 @@ SKILLS_DIR = Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_SKILLS_DIR)))
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
+
+def _run_startup_scan_background():
+    """Run scan_and_distill in a background thread so server boot is not blocked.
+    Safe-by-default: any exception is swallowed."""
+    import threading
+    from compchem_memory.startup_scan import scan_and_distill
+
+    def _worker():
+        try:
+            scan_and_distill(PROJECT_DIR)
+        except Exception as e:
+            print(f"[startup_scan] worker error: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+_run_startup_scan_background()
+
 mcp = FastMCP("compchem-memory")
 
 project_mgr: ProjectManager | None = None
