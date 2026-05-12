@@ -118,7 +118,9 @@ def memory_get_context(
     """Multi-stage context assembly pipeline. Retrieves relevant entries from
     all three tiers (session, project, skill) with token budget management.
     Applies semantic scoring to select the most relevant project-tier entries.
-    Optionally pass conversation_history to improve tool-diversity filtering."""
+    Optionally pass conversation_history to improve tool-diversity filtering.
+
+    Call this when: starting a new task. First action in every session."""
     pd = _resolve_project_store(project_dir)
     result = assemble_context(
         task_description=task_description,
@@ -145,7 +147,9 @@ def memory_record_session(
     project_dir: str | None = None,
 ) -> str:
     """Append a structured entry to the current session log (JSONL).
-    data should contain: tool_name, args, result_summary, error (if any)."""
+    data should contain: tool_name, args, result_summary, error (if any).
+
+    Call this when: you want to log a structured observation that the @captured decorator cannot infer (e.g., user-stated intent, decision rationale)."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     return sess_m.record(event_type, data, pd)
@@ -164,7 +168,9 @@ def memory_record_learning(
     project_dir: str | None = None,
 ) -> str:
     """Propose a new project-tier entry with typed frontmatter. Writes to staging
-    area; entries become active after confirmation or N consistent observations."""
+    area; entries become active after confirmation or N consistent observations.
+
+    Call this when: you have discovered something worth keeping — error_resolution, success_pattern, failure_pattern, or parameter_guidance. See AGENTS.md for content structure."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
 
@@ -207,7 +213,9 @@ def memory_search(
     project_dir: str | None = None,
 ) -> str:
     """Keyword + tag search across all tiers. Returns matching entries with
-    tier label, date, confidence. Uses semantic scoring for project tier."""
+    tier label, date, confidence. Uses semantic scoring for project tier.
+
+    Call this when: you suspect a relevant entry exists but did not surface in memory_get_context."""
     pd = _resolve_project_store(project_dir)
     results = []
 
@@ -234,7 +242,9 @@ def memory_get_run_history(
     project_dir: str | None = None,
 ) -> str:
     """Return run history for the current project (list of YAML records with
-    status, scores, dates)."""
+    status, scores, dates).
+
+    Call this when: assessing past run outcomes for the current project."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return json.dumps(proj_m.get_run_history(pd), indent=2)
@@ -250,7 +260,9 @@ def memory_record_run(
     errors_solved: list[str] | None = None,
     project_dir: str | None = None,
 ) -> str:
-    """Append a new run record to the project's run history index."""
+    """Append a new run record to the project's run history index.
+
+    Call this when: a scientific run has completed and you want to record its metadata + status alongside the run history (magnolia-run already does this for recognized tools)."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.record_run(pd, run_id, tool, status, metrics=metrics, errors_solved=errors_solved)
@@ -264,7 +276,9 @@ def memory_promote(
     skills_dir: str | None = None,
 ) -> str:
     """Move an entry from project tier to skill tier. Requires explicit invocation
-    (human-gated)."""
+    (human-gated).
+
+    Call this when: manually promoting a specific staging entry to the project tier."""
     pd = _resolve_project_store(project_dir)
     sd = skills_dir or str(SKILLS_DIR)
     proj_m = _get_project_mgr()
@@ -280,7 +294,9 @@ def memory_consolidate(
     max_entries: int = 50,
 ) -> str:
     """Merge duplicates, expire stale entries, trim to budget within one tier.
-    Can be called on-demand or scheduled."""
+    Can be called on-demand or scheduled.
+
+    Call this when: running consolidation/deduplication on the project tier (normally periodic, not per-task)."""
     pd = _resolve_project_store(project_dir)
     result = consolidate_tier(
         tier,
@@ -301,7 +317,9 @@ def post_run_assess(
     project_dir: str | None = None,
 ) -> str:
     """After a computation completes: check exit code, verify output files exist,
-    extract metrics, flag quality issues. Records run in memory automatically."""
+    extract metrics, flag quality issues. Records run in memory automatically.
+
+    Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
     assessment = assess_run(run_dir, tool, exit_code)
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
@@ -340,7 +358,9 @@ def memory_confirm(
     entry_name: str,
     project_dir: str | None = None,
 ) -> str:
-    """Confirm a staging entry, moving it to the active project entries."""
+    """Confirm a staging entry, moving it to the active project entries.
+
+    Call this when: reviewing staging entries you want to promote to the durable project tier."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.confirm_staging(pd, entry_name)
@@ -359,7 +379,9 @@ def memory_select_relevant(
 ) -> str:
     """Semantic memory selection: scores and selects the most relevant project-tier
     entries for a given task. Uses heuristic scoring based on title, description,
-    tags, tools, entry type, and confidence."""
+    tags, tools, entry type, and confidence.
+
+    Call this when: filtering a candidate list of entries down to the most relevant for a task."""
     pd = _resolve_project_store(project_dir)
     store = str(_memory_store(pd))
     entries = select_relevant_entries(
@@ -388,7 +410,9 @@ def memory_extract_from_session(
 ) -> str:
     """Automatic memory extraction: distills session logs into typed staging entries
     (error_resolution, success_pattern, parameter_guidance). Runs when thresholds
-    are met (5K tokens or 3 tool calls since last extraction)."""
+    are met (5K tokens or 3 tool calls since last extraction).
+
+    Call this when: forcing an extraction pass on the current session log (normally automatic via inline trigger)."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     log_path = sess_m.get_session_log_path()
@@ -421,7 +445,9 @@ def memory_compact_session(
 ) -> str:
     """Compact session by pruning old tool results and generating summary notes.
     Three-tier strategy: micro-compact, session-memory compact, auto-compact.
-    Returns compaction notes if pruning occurred."""
+    Returns compaction notes if pruning occurred.
+
+    Call this when: the session JSONL has grown large and you want to compact older events into summary notes."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     log_path = sess_m.get_session_log_path()
@@ -469,7 +495,9 @@ def memory_search_errors(
     max_results: int = 5,
 ) -> str:
     """Search memory for similar past errors and their resolutions.
-    Automatically invoked when a tool fails to find relevant fix history."""
+    Automatically invoked when a tool fails to find relevant fix history.
+
+    Call this when: troubleshooting; given an error message, finds similar past resolutions."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     entries = proj_m.search_entries(pd, keyword=error_message[:50], tags=["error-resolution"])
@@ -507,7 +535,9 @@ def memory_distill_session(
     project_dir: str | None = None,
 ) -> str:
     """Distill the current session into proposed project-tier entries.
-    Extracts error resolutions, parameter guidance, and success patterns."""
+    Extracts error resolutions, parameter guidance, and success patterns.
+
+    Call this when: manually requesting distillation of the current session (normally automatic via startup_scan)."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     log_path = sess_m.get_session_log_path()
@@ -548,7 +578,9 @@ def memory_scan_headers(
     tier: str = "project",
 ) -> str:
     """Fast header scan of memory entries (frontmatter only, no full content).
-    Returns catalogue of titles, types, tags, tools for selection."""
+    Returns catalogue of titles, types, tags, tools for selection.
+
+    Call this when: enumerating project-tier entry headers without loading bodies."""
     pd = _resolve_project_store(project_dir)
 
     if tier == "project":
@@ -582,7 +614,9 @@ def memory_health_check(
 ) -> str:
     """Audit the knowledge base for staleness, contradictions, gaps, and orphaned entries.
     Returns a structured report. Default mode is dry-run (no side effects).
-    Set fix=True to auto-resolve safe issues (remove broken refs, mark stale entries)."""
+    Set fix=True to auto-resolve safe issues (remove broken refs, mark stale entries).
+
+    Call this when: running diagnostics for stale entries, low-confidence entries, orphans, duplicates, etc."""
     pd = _resolve_project_store(project_dir)
     result = run_health_check(
         project_dir=pd,
@@ -603,7 +637,9 @@ def memory_notebook(
 ) -> str:
     """Generate a chronological lab notebook timeline from sessions, runs, and entries.
     Returns markdown. Optionally filter by date range or section (entries, runs, sessions).
-    This is a read-only view tool — it does not modify any data."""
+    This is a read-only view tool — it does not modify any data.
+
+    Call this when: working with the project's lab notebook (add/view daily notes)."""
     pd = _resolve_project_store(project_dir)
     return generate_notebook(
         project_dir=pd,
@@ -625,7 +661,9 @@ def memory_annotate(
 ) -> str:
     """Create a human-authored lab notebook entry (type 'note') with optional
     references (paper DOIs, PDB IDs, URLs) and notebook section label.
-    Entries are created directly in the active entries area (not staging)."""
+    Entries are created directly in the active entries area (not staging).
+
+    Call this when: adding an annotation to a specific entry without bumping its observation count."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     result = proj_m.create_entry(
@@ -650,7 +688,9 @@ def memory_set_goal(
 ) -> str:
     """Set or update the project goal. This is the persistent reference signal that
     guides all memory retrieval and context assembly. Should describe what the project
-    is trying to achieve, key constraints, and success criteria."""
+    is trying to achieve, key constraints, and success criteria.
+
+    Call this when: defining the project's reference signal — the persistent intent against which decisions are validated."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     path = proj_m.set_goal(pd, goal)
@@ -663,7 +703,9 @@ def memory_get_goal(
     project_dir: str | None = None,
 ) -> str:
     """Retrieve the current project goal. Returns the GOAL.md content or a message
-    if no goal has been set."""
+    if no goal has been set.
+
+    Call this when: retrieving the project's reference signal."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     content = proj_m.get_goal(pd)
@@ -677,7 +719,9 @@ def memory_get_goal(
 
 @mcp.resource("memory://skills/{tool_name}")
 def get_skill_resource(tool_name: str) -> str:
-    """Full skill file content for a given tool."""
+    """Full skill file content for a given tool.
+
+    Call this when: retrieving the full protocol document for a specific scientific tool."""
     skill_m = _get_skill_mgr()
     content = skill_m.get_skill(tool_name)
     return content or f"No skill found for {tool_name}"
@@ -685,7 +729,9 @@ def get_skill_resource(tool_name: str) -> str:
 
 @mcp.resource("memory://project/index")
 def get_project_index() -> str:
-    """Project-tier entry catalogue for current project."""
+    """Project-tier entry catalogue for current project.
+
+    Call this when: listing all project-tier entries to browse available memory."""
     pd = _resolve_project_store()
     proj_m = _get_project_mgr()
     return json.dumps(proj_m.list_entries(pd), indent=2)
@@ -693,7 +739,9 @@ def get_project_index() -> str:
 
 @mcp.resource("memory://project/entry/{name}")
 def get_project_entry(name: str) -> str:
-    """A single project-tier entry by name."""
+    """A single project-tier entry by name.
+
+    Call this when: reading the full body of a specific project-tier entry."""
     pd = _resolve_project_store()
     proj_m = _get_project_mgr()
     content = proj_m.get_entry(pd, name)
@@ -702,7 +750,9 @@ def get_project_entry(name: str) -> str:
 
 @mcp.resource("memory://runs/index")
 def get_runs_index() -> str:
-    """Run history index for current project."""
+    """Run history index for current project.
+
+    Call this when: browsing the full run history index for the current project."""
     pd = _resolve_project_store()
     proj_m = _get_project_mgr()
     return json.dumps(proj_m.get_run_history(pd), indent=2)

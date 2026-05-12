@@ -95,7 +95,9 @@ def haddock3_run(
     restart_from: int | None = None,
 ) -> str:
     """Validate inputs, write config if needed, launch haddock3 in the run directory.
-    Returns session_id for status polling."""
+    Returns session_id for status polling.
+
+    Call this when: running a HADDOCK3 protein-protein or protein-ligand docking job."""
     result = _haddock3_run(config_path, run_dir, ncores, mode, restart_from)
     if result.get("success"):
         session_id = _generate_session_id()
@@ -115,7 +117,9 @@ def haddock3_run(
 @captured(source="compchem-tools")
 def haddock3_parse_results(run_dir: str) -> str:
     """Parse caprieval/clustfcc/seletopclusts outputs.
-    Returns structured metrics (best score, cluster count, LRMSD range)."""
+    Returns structured metrics (best score, cluster count, LRMSD range).
+
+    Call this when: a HADDOCK3 run has completed and you need to extract scoring metrics."""
     result = _haddock3_parse(run_dir)
     return json.dumps(result, indent=2)
 
@@ -129,7 +133,9 @@ def preprocess_pdb(
     remove_waters: bool = True,
     fix_atom_names: bool = True,
 ) -> str:
-    """Add chain IDs, fix atom names, remove waters. Returns path to cleaned PDB."""
+    """Add chain IDs, fix atom names, remove waters. Returns path to cleaned PDB.
+
+    Call this when: preparing a raw PDB structure for use in docking or MD simulations."""
     result = _preprocess_pdb(
         input_path, output_path, add_chain_id, remove_waters, fix_atom_names
     )
@@ -146,7 +152,9 @@ def generate_restraints(
     segid_two: str | None = None,
 ) -> str:
     """From actpass files, run haddock3-restraints active_passive_to_ambig.
-    Returns path to ambig.tbl."""
+    Returns path to ambig.tbl.
+
+    Call this when: converting active/passive residue definitions into HADDOCK3 ambiguous restraints."""
     result = _generate_restraints(
         actpass_file_1, actpass_file_2, output_path, segid_one, segid_two
     )
@@ -161,7 +169,9 @@ def run_acpype(
     output_dir: str | None = None,
 ) -> str:
     """Run ACPYPE for ligand parameterisation. Post-process atom types to uppercase.
-    Returns paths to .top and .par files."""
+    Returns paths to .top and .par files.
+
+    Call this when: generating GAFF/AMBER force field parameters for a small molecule ligand."""
     result = _run_acpype(input_file, charge_method, output_dir)
     return json.dumps(result, indent=2)
 
@@ -173,7 +183,9 @@ def validate_structure(
     expected_format: str | None = None,
 ) -> str:
     """Basic sanity checks on PDB/SDF: atom count, chain IDs present, non-zero
-    size, parseable by a structure library."""
+    size, parseable by a structure library.
+
+    Call this when: verifying a structure file is well-formed before submitting it to a docking or simulation tool."""
     result = _validate_structure(input_path, expected_format)
     return json.dumps(result, indent=2)
 
@@ -185,7 +197,9 @@ def check_environment(
     min_version: str | None = None,
     check_conda: bool = False,
 ) -> str:
-    """Verify that a given tool binary is available, report version, check conda env."""
+    """Verify that a given tool binary is available, report version, check conda env.
+
+    Call this when: confirming a required scientific tool is installed and accessible before running a job."""
     result = _check_environment(tool_name, min_version, check_conda)
     return json.dumps(result, indent=2)
 
@@ -197,7 +211,9 @@ def stage_gate(
     working_directory: str,
 ) -> str:
     """Run a named gate check (e.g. 'docking_inputs_ready').
-    Takes gate name + working directory. Returns pass/fail with details."""
+    Takes gate name + working directory. Returns pass/fail with details.
+
+    Call this when: validating that all required inputs for a workflow stage are present before proceeding."""
     if gate_name not in GATE_REGISTRY:
         available = ", ".join(sorted(GATE_REGISTRY.keys()))
         return json.dumps(
@@ -217,7 +233,9 @@ def stage_gate(
 @captured(source="compchem-tools")
 def check_run_status(run_dir: str) -> str:
     """Check if a computation run has completed by looking for output files
-    and process status."""
+    and process status.
+
+    Call this when: polling whether a previously launched run directory has finished."""
     rdir = Path(run_dir)
     output_dir = rdir / "output"
 
@@ -273,7 +291,9 @@ def gnina_dock(
     covalent_ligand_atom_pattern: str | None = None,
 ) -> str:
     """Run Gnina molecular docking (classical or covalent mode).
-    Returns paths to output poses and scores."""
+    Returns paths to output poses and scores.
+
+    Call this when: docking a small molecule into a protein binding pocket with Gnina (classical or covalent)."""
     result = _gnina_dock(
         receptor, ligand, out_dir, None,
         center_x, center_y, center_z,
@@ -287,7 +307,9 @@ def gnina_dock(
 @mcp.tool()
 @captured(source="compchem-tools")
 def gnina_parse_results(run_dir: str) -> str:
-    """Parse Gnina docking output SDF for scores and pose information."""
+    """Parse Gnina docking output SDF for scores and pose information.
+
+    Call this when: extracting CNNscore, CNNaffinity, and pose data from a Gnina docking output SDF."""
     result = _gnina_parse(run_dir)
     return json.dumps(result, indent=2)
 
@@ -296,7 +318,9 @@ def gnina_parse_results(run_dir: str) -> str:
 @captured(source="compchem-tools")
 def smarts_validate(smarts: str, smiles: str | None = None) -> str:
     """Validate a SMARTS pattern. Optionally check it matches a SMILES molecule.
-    Returns validity and match count."""
+    Returns validity and match count.
+
+    Call this when: verifying a SMARTS pattern is syntactically correct and matches the intended substructure."""
     result = _smarts_validate(smarts, smiles)
     return json.dumps(result, indent=2)
 
@@ -305,7 +329,9 @@ def smarts_validate(smarts: str, smiles: str | None = None) -> str:
 @captured(source="compchem-tools")
 def alkyne_to_vinyl(alkyne_smiles: str, output_dir: str | None = None) -> str:
     """Convert an alkyne SMILES to Z and E vinyl isomers for covalent docking.
-    Returns isomer SMILES strings."""
+    Returns isomer SMILES strings.
+
+    Call this when: preparing a covalent warhead alkyne for covalent docking by generating its vinyl isomers."""
     result = _alkyne_to_vinyl(alkyne_smiles, output_dir)
     return json.dumps(result, indent=2)
 
@@ -321,7 +347,9 @@ def xtb_optimize(
     solvent: str | None = None,
     ncores: int = 4,
 ) -> str:
-    """Run xTB geometry optimization (GFN2-xTB). Returns optimized structure and energy."""
+    """Run xTB geometry optimization (GFN2-xTB). Returns optimized structure and energy.
+
+    Call this when: performing a fast semi-empirical geometry optimization on a small molecule or fragment."""
     result = _xtb_optimize(input_file, output_dir, method, charge, uhf, solvent, ncores=ncores)
     return json.dumps(result, indent=2)
 
@@ -337,7 +365,9 @@ def xtb_singlepoint(
     solvent: str | None = None,
     ncores: int = 4,
 ) -> str:
-    """Run xTB single-point energy calculation. Returns energy and properties."""
+    """Run xTB single-point energy calculation. Returns energy and properties.
+
+    Call this when: computing a fast single-point energy and electronic properties for a structure without geometry optimization."""
     result = _xtb_singlepoint(input_file, output_dir, method, charge, uhf, solvent, ncores=ncores)
     return json.dumps(result, indent=2)
 
@@ -348,7 +378,9 @@ def xtb_singlepoint(
 @mcp.tool()
 @captured(source="compchem-tools")
 def workflow_load(template_path: str) -> str:
-    """Load and validate a YAML workflow template. Returns the workflow plan."""
+    """Load and validate a YAML workflow template. Returns the workflow plan.
+
+    Call this when: loading a multi-step workflow definition before executing it."""
     result = _load_workflow(template_path)
     return json.dumps(result, indent=2)
 
@@ -356,7 +388,9 @@ def workflow_load(template_path: str) -> str:
 @mcp.tool()
 @captured(source="compchem-tools")
 def workflow_status(run_dir: str) -> str:
-    """Check which steps in a workflow are complete based on output files."""
+    """Check which steps in a workflow are complete based on output files.
+
+    Call this when: monitoring progress of a multi-step workflow to determine which stages have finished."""
     result = _get_workflow_status(run_dir)
     return json.dumps(result, indent=2)
 
@@ -369,7 +403,9 @@ def p2rank_predict(
     threads: int = 4,
 ) -> str:
     """Run P2Rank pocket prediction on a protein structure.
-    Returns ranked pocket list with scores and residues."""
+    Returns ranked pocket list with scores and residues.
+
+    Call this when: identifying druggable binding pockets on a protein structure before docking."""
     result = _p2rank_predict(protein, output_dir, threads)
     return json.dumps(result, indent=2)
 
@@ -386,7 +422,9 @@ def gromacs_setup(
     output_dir: str | None = None,
 ) -> str:
     """Set up a GROMACS MD simulation: generate topology, box, solvate, ions.
-    Returns paths to .gro, .top, and other setup files."""
+    Returns paths to .gro, .top, and other setup files.
+
+    Call this when: preparing a GROMACS MD simulation system from an initial structure."""
     result = _gromacs_setup(
         structure, topology, forcefield, water, box_type, box_distance, output_dir
     )
@@ -401,7 +439,9 @@ def gromacs_run(
     ncores: int = 4,
 ) -> str:
     """Run a GROMACS MD simulation from a .tpr file.
-    Returns paths to trajectory, energy, and log files."""
+    Returns paths to trajectory, energy, and log files.
+
+    Call this when: executing a GROMACS MD simulation from a prepared .tpr input file."""
     result = _gromacs_run(tpr_file, output_dir, ncores)
     return json.dumps(result, indent=2)
 
@@ -412,7 +452,9 @@ def gromacs_parse(
     energy_file: str | None = None,
     trajectory: str | None = None,
 ) -> str:
-    """Parse GROMACS output: extract energy terms from .edr and trajectory info."""
+    """Parse GROMACS output: extract energy terms from .edr and trajectory info.
+
+    Call this when: extracting energy terms and trajectory statistics from a completed GROMACS simulation."""
     result = _gromacs_parse(energy_file, trajectory)
     return json.dumps(result, indent=2)
 
@@ -434,7 +476,9 @@ def orca_setup(
     ncores: int = 4,
 ) -> str:
     """Generate ORCA input file from coordinates.
-    Returns path to the generated .inp file."""
+    Returns path to the generated .inp file.
+
+    Call this when: preparing an ORCA quantum chemistry input file for a given structure and method."""
     result = _orca_setup(
         input_file, method, basis, charge, multiplicity, task, solvent, output_dir, ncores
     )
@@ -449,7 +493,9 @@ def orca_run(
     ncores: int = 4,
 ) -> str:
     """Run ORCA calculation from an .inp file.
-    Returns paths to output files."""
+    Returns paths to output files.
+
+    Call this when: executing an ORCA DFT or semi-empirical quantum chemistry calculation."""
     result = _orca_run(input_file, output_dir, ncores)
     return json.dumps(result, indent=2)
 
@@ -457,7 +503,9 @@ def orca_run(
 @mcp.tool()
 @captured(source="compchem-tools")
 def orca_parse(output_file: str) -> str:
-    """Parse ORCA output for energy, HOMO-LUMO gap, and converged geometry."""
+    """Parse ORCA output for energy, HOMO-LUMO gap, and converged geometry.
+
+    Call this when: extracting energy, frontier orbital gaps, and geometry from a completed ORCA output file."""
     result = _orca_parse(output_file)
     return json.dumps(result, indent=2)
 
@@ -474,7 +522,9 @@ def gaussian_setup(
     output_dir: str | None = None,
 ) -> str:
     """Generate Gaussian .com input file from coordinates.
-    Returns path to the generated .com file."""
+    Returns path to the generated .com file.
+
+    Call this when: preparing a Gaussian input file for DFT or ab initio quantum chemistry calculation."""
     result = _gaussian_setup(input_file, method, basis, charge, multiplicity, task, output_dir)
     return json.dumps(result, indent=2)
 
@@ -487,7 +537,9 @@ def gaussian_run(
     ncores: int = 4,
 ) -> str:
     """Run Gaussian calculation from a .com file.
-    Returns paths to output files."""
+    Returns paths to output files.
+
+    Call this when: executing a Gaussian quantum chemistry calculation from a prepared .com file."""
     result = _gaussian_run(input_file, output_dir, ncores)
     return json.dumps(result, indent=2)
 
@@ -495,7 +547,9 @@ def gaussian_run(
 @mcp.tool()
 @captured(source="compchem-tools")
 def gaussian_parse(output_file: str) -> str:
-    """Parse Gaussian .log output for energy, HOMO-LUMO, and frequencies."""
+    """Parse Gaussian .log output for energy, HOMO-LUMO, and frequencies.
+
+    Call this when: extracting energy, orbital gaps, and vibrational frequencies from a completed Gaussian log."""
     result = _gaussian_parse(output_file)
     return json.dumps(result, indent=2)
 
@@ -513,7 +567,9 @@ def submit_job(
     partition: str | None = None,
 ) -> str:
     """Submit a job to Slurm, PBS, or run locally.
-    Returns job ID and submission details."""
+    Returns job ID and submission details.
+
+    Call this when: submitting a long-running (>30 min) computation to a job scheduler instead of running it in the foreground."""
     result = _submit_job(
         command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition
     )
@@ -527,7 +583,9 @@ def check_job(
     scheduler: str = "slurm",
 ) -> str:
     """Check job status on Slurm, PBS, or local.
-    Returns current status information."""
+    Returns current status information.
+
+    Call this when: monitoring the status of a previously submitted job by its job ID."""
     result = _check_job(job_id, scheduler)
     return json.dumps(result, indent=2)
 
@@ -539,7 +597,9 @@ def cancel_job(
     scheduler: str = "slurm",
 ) -> str:
     """Cancel a running job on Slurm, PBS, or local.
-    Returns cancellation status."""
+    Returns cancellation status.
+
+    Call this when: aborting a running job that is no longer needed or has gone wrong."""
     result = _cancel_job(job_id, scheduler)
     return json.dumps(result, indent=2)
 
@@ -551,7 +611,9 @@ def cancel_job(
 @captured(source="compchem-tools")
 def run_progress(session_id: str) -> str:
     """Poll-based progress for long-running jobs. Returns module completion status,
-    current module, percent complete, and latest scores."""
+    current module, percent complete, and latest scores.
+
+    Call this when: checking intermediate progress of a long-running job via its session ID."""
     session = _active_sessions.get(session_id)
     if not session:
         return json.dumps({"error": f"Session not found: {session_id}"})
@@ -572,7 +634,9 @@ def run_progress(session_id: str) -> str:
 @mcp.tool()
 @captured(source="compchem-tools")
 def list_sessions() -> str:
-    """List all active computation sessions with their status."""
+    """List all active computation sessions with their status.
+
+    Call this when: reviewing all currently tracked computation sessions to find a session ID or check status."""
     sessions = []
     for sid, info in _active_sessions.items():
         sessions.append(

@@ -1,42 +1,42 @@
 ---
 name: magnolia
-version: 1.0
+version: 2.0
 description: General agent behavior rules for Project Magnolia
 ---
 
 # Magnolia Agent Behavior Rules
 
-## Session Logging: Use `magnolia-run` by default
+## Shell commands
 
-When running bash commands for scientific tools inside a Magnolia project, **prefer `magnolia-run`** so that the command, exit code, and working directory are automatically logged to `.magnolia/sessions/`.
+Opencode's bash tool is disabled. **Use `run_shell` for every shell command**;
+it invokes `magnolia-run`, which logs the command, exit code, and working
+directory to `.magnolia/sessions/` and fires auto-assessment for recognized
+scientific tools.
 
-**Good:**
-```bash
-magnolia-run boltzgen run design.yaml --output runs/test
-magnolia-run haddock3 config.cfg
-magnolia-run gmx mdrun -deffnm md
+**Examples:**
+
+```python
+run_shell(cmd="haddock3 config.cfg")
+run_shell(cmd="gmx mdrun -deffnm md")
+run_shell(cmd="ls runs/")
 ```
 
-**Avoid (unless specifically asked otherwise):**
-```bash
-boltzgen run design.yaml --output runs/test
-haddock3 config.cfg
-gmx mdrun -deffnm md
-```
+## Memory
 
-Only skip `magnolia-run` for:
-- Trivial file inspection (`ls`, `cat`, `head`)
-- Git operations
-- Editing or writing files
-- When the user explicitly says not to log
+Refer to `AGENTS.md` for when to call each memory tool. The key points:
 
-## Memory Tracking
+- Start every task with `memory_get_context`.
+- After a fix, call `memory_record_learning(entry_type="error_resolution", ...)`.
+- After a noteworthy result, call `memory_record_learning(entry_type="success_pattern", ...)` with a mandatory CAVEAT.
+- After a confirmed failure mode, call `memory_record_learning(entry_type="failure_pattern", ...)`.
 
-- After significant tool executions, consider calling `magnolia-memory log-bash` explicitly if `magnolia-run` was not used.
-- Long-running jobs (>30 min) should be submitted via `submit_job` (local or Slurm) rather than run in the foreground.
+## Long-running jobs
 
-## Project Structure
+Long-running jobs (>30 min) should be submitted via `submit_job` (local or
+Slurm) rather than run in the foreground.
 
-- Keep all inputs, runs, and memory inside `projects/<name>/`
-- Use `softwares/bin/` wrappers for tool invocation
-- Respect the `.gitignore` boundaries: do not track heavy environments or caches
+## Project structure
+
+- Keep all inputs, runs, and memory inside `projects/<name>/`.
+- Use `softwares/bin/` wrappers for tool invocation.
+- Respect the `.gitignore` boundaries: do not track heavy environments or caches.
