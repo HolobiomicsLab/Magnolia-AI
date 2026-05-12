@@ -42,8 +42,10 @@ class TestSessionManager:
         path = mgr.record("tool_call", {"tool": "haddock3", "args": {}})
         assert Path(path).exists()
         recent = mgr.get_recent()
-        assert len(recent) == 1
-        assert recent[0]["event_type"] == "tool_call"
+        # schema_version=2 writes a session_start header as the first entry
+        assert len(recent) == 2
+        assert recent[0]["event_type"] == "session_start"
+        assert recent[1]["event_type"] == "tool_call"
 
     def test_search(self, tmp_dir):
         mgr = SessionManager(tmp_dir / "sessions")

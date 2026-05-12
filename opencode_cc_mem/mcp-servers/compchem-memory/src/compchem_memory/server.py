@@ -41,7 +41,6 @@ GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
 mcp = FastMCP("compchem-memory")
 
-session_mgr: SessionManager | None = None
 project_mgr: ProjectManager | None = None
 skill_mgr: SkillManager | None = None
 memory_idx: MemoryIndex | None = None
@@ -49,11 +48,8 @@ _extractor: AutomaticMemoryExtractor | None = None
 
 
 def _get_session_mgr(project_dir: str) -> SessionManager:
-    global session_mgr
-    sessions_dir = Path(project_dir) / ".magnolia" / "sessions"
-    if session_mgr is None or str(session_mgr.sessions_dir) != str(sessions_dir):
-        session_mgr = SessionManager(sessions_dir)
-    return session_mgr
+    from compchem_memory.capture import get_session_manager
+    return get_session_manager(project_dir)
 
 
 def _get_project_mgr() -> ProjectManager:
