@@ -18,4 +18,7 @@ def test_every_mcp_tool_has_captured_wrapper():
         # Plain functions decorated with @captured (not wrapped by FastMCP)
         elif inspect.isfunction(obj) and hasattr(obj, "__wrapped__"):
             captured_count += 1
-    assert captured_count >= 1, "Expected at least one @captured tool in compchem_tools.server"
+    assert captured_count >= 20, (
+        f"Expected at least 20 @captured tools in compchem_tools.server, got {captured_count}. "
+        "This suggests @captured decorators were accidentally removed."
+    )

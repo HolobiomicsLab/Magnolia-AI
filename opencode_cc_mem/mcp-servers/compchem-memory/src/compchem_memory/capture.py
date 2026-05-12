@@ -1,6 +1,9 @@
 """Shared capture infrastructure: per-project SessionManager registry + decorator (Task 2)."""
 
+import time
+from functools import wraps
 from pathlib import Path
+from typing import Any, Callable
 
 from compchem_memory.tiers.session import SessionManager
 
@@ -23,11 +26,6 @@ def get_session_manager(project_dir: str, project_id: str | None = None) -> Sess
 def reset_registry() -> None:
     """Test helper: clear the registry."""
     _session_managers.clear()
-
-
-import time
-from functools import wraps
-from typing import Any, Callable
 
 
 def _summarize_args(args: tuple, kwargs: dict) -> str:

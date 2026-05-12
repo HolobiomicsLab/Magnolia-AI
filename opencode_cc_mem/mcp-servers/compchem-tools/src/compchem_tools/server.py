@@ -594,10 +594,9 @@ def _generate_session_id() -> str:
 
 
 @mcp.tool()
-@captured(source="compchem-tools")
 def run_shell(cmd: str, cwd: str | None = None, project_dir: str | None = None) -> dict:
-    """Run a shell command via magnolia-run. Use this for ANY shell command — opencode's
-    bash tool is disabled. magnolia-run writes the session JSONL.
+    """Run a shell command via magnolia-run. magnolia-run writes the JSONL — this
+    proxy intentionally does NOT use @captured to avoid double-logging.
 
     Call this when: you need to invoke any shell command (gnina, gmx, ls, etc.).
     """
