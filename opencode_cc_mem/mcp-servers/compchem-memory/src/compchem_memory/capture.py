@@ -12,8 +12,8 @@ def get_session_manager(project_dir: str, project_id: str | None = None) -> Sess
     Different project_dirs get different managers — never replaced."""
     key = str(Path(project_dir).resolve())
     if key not in _session_managers:
-        sessions_dir = Path(project_dir) / ".magnolia" / "sessions"
-        pid = project_id or Path(project_dir).resolve().name
+        sessions_dir = Path(key) / ".magnolia" / "sessions"
+        pid = project_id or Path(key).name
         _session_managers[key] = SessionManager(
             sessions_dir, project_id=pid, project_dir=key
         )

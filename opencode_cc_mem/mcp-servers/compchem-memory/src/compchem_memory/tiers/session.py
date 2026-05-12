@@ -83,9 +83,9 @@ class SessionManager:
     def get_recent(
         self, n: int = 50, project_dir: str | None = None
     ) -> list[dict[str, Any]]:
-        path = self._get_session_path()
-        if not path.exists():
+        if self._current_session is None or not self._current_session.exists():
             return []
+        path = self._current_session
         with open(path) as f:
             lines = f.readlines()
         events = []
@@ -99,11 +99,10 @@ class SessionManager:
     def search(
         self, keyword: str, project_dir: str | None = None
     ) -> list[dict[str, Any]]:
-        path = self._get_session_path()
-        if not path.exists():
+        if self._current_session is None or not self._current_session.exists():
             return []
         results = []
-        with open(path) as f:
+        with open(self._current_session) as f:
             for line in f:
                 try:
                     entry = json.loads(line)
@@ -126,9 +125,9 @@ class SessionManager:
         return None
 
     def count_events_since(self, cursor: str) -> tuple[int, int]:
-        path = self._get_session_path()
-        if not path.exists():
+        if self._current_session is None or not self._current_session.exists():
             return 0, 0
+        path = self._current_session
         events = []
         cursor_idx = 0
         with open(path) as f:

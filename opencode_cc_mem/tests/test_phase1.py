@@ -386,10 +386,12 @@ class TestSessionLogs:
         mgr.record("tool_error", {"tool": "haddock3_run", "error": "sampling too low"})
 
         recent = mgr.get_recent(n=10)
-        assert len(recent) == 3
+        user_events = [e for e in recent if e["event_type"] != "session_start"]
+        assert len(user_events) == 3
 
         errors = mgr.search("error")
-        assert len(errors) == 1
+        error_events = [e for e in errors if e["event_type"] != "session_start"]
+        assert len(error_events) == 1
 
     def test_session_persists_across_calls(self, test_root):
         _, _, project_dir = test_root
@@ -403,7 +405,8 @@ class TestSessionLogs:
         mgr.record("start", {"message": "session begins"})
         mgr.record("end", {"message": "session ends"})
         all_events = mgr.get_recent(n=100)
-        assert len(all_events) == 2
+        user_events = [e for e in all_events if e["event_type"] != "session_start"]
+        assert len(user_events) == 2
 
 
 # ── Criterion 8: Stage gate docking_inputs_ready ──────────────────────────────

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from compchem_memory.capture import get_session_manager, reset_registry
 from compchem_memory.tiers.session import SessionManager
 
 
@@ -38,13 +39,10 @@ def test_every_event_carries_project_id_and_session_id(sessions_dir):
     mgr.record("tool_success", {"tool": "x"})
 
     path = Path(mgr.get_session_log_path())
-    lines = [json.loads(l) for l in path.read_text().splitlines()]
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
     for event in lines[1:]:
         assert event["project_id"] == "my_project"
         assert event["session_id"] == lines[0]["session_id"]
-
-
-from compchem_memory.capture import get_session_manager, reset_registry
 
 
 def test_dict_keyed_registry_isolates_projects(tmp_path):
@@ -80,3 +78,43 @@ def test_restart_recovers_todays_session(sessions_dir):
     assert mgr2.get_session_log_path() == first_path
     lines = Path(first_path).read_text().splitlines()
     assert len(lines) == 3
+
+
+def test_read_methods_do_not_create_session_file(tmp_path):
+    """get_recent / search / count_events_since on a never-recorded manager
+    must NOT materialize a session file."""
+    sessions_dir = tmp_path / ".magnolia" / "sessions"
+    sessions_dir.mkdir(parents=True)
+
+    mgr = SessionManager(sessions_dir, project_id="p", project_dir=str(tmp_path))
+
+    assert mgr.get_recent() == []
+    assert mgr.search("anything") == []
+    assert mgr.count_events_since("") == (0, 0)
+
+    # No session files should have been created
+    assert list(sessions_dir.glob("*.jsonl")) == []
+
+
+def test_discover_does_not_adopt_wrong_project(tmp_path):
+    """A SessionManager for project A must not adopt a session file written by project B,
+    even if both share the same sessions_dir (defensive: real deployments don't do this,
+    but the registry key must not be the only thing protecting against cross-adoption)."""
+    import time
+
+    sessions_dir = tmp_path / ".magnolia" / "sessions"
+    sessions_dir.mkdir(parents=True)
+
+    mgr_a = SessionManager(sessions_dir, project_id="proj_a", project_dir="/a")
+    mgr_a.record("tool_call", {"tool": "x"})
+    file_a = mgr_a.get_session_log_path()
+
+    # Wait a full second so the timestamp differs and filenames cannot collide.
+    time.sleep(1.1)
+
+    # Brand-new SessionManager for a DIFFERENT project, same sessions_dir.
+    mgr_b = SessionManager(sessions_dir, project_id="proj_b", project_dir="/b")
+    mgr_b.record("tool_call", {"tool": "y"})
+    file_b = mgr_b.get_session_log_path()
+
+    assert file_a != file_b

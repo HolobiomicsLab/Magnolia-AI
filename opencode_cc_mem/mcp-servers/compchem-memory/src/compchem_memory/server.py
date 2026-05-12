@@ -7,6 +7,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from compchem_memory.capture import get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.skill import SkillManager
@@ -48,7 +49,6 @@ _extractor: AutomaticMemoryExtractor | None = None
 
 
 def _get_session_mgr(project_dir: str) -> SessionManager:
-    from compchem_memory.capture import get_session_manager
     return get_session_manager(project_dir)
 
 
