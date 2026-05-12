@@ -149,7 +149,7 @@ def memory_record_session(
     """Append a structured entry to the current session log (JSONL).
     data should contain: tool_name, args, result_summary, error (if any).
 
-    Call this when: you want to log a structured observation that the @captured decorator cannot infer (e.g., user-stated intent, decision rationale)."""
+    Call this when: logging an observation the auto-capture decorator cannot infer (e.g., user-stated intent, a design decision, a hypothesis)."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     return sess_m.record(event_type, data, pd)
@@ -278,7 +278,7 @@ def memory_promote(
     """Move an entry from project tier to skill tier. Requires explicit invocation
     (human-gated).
 
-    Call this when: manually promoting a specific staging entry to the project tier."""
+    Call this when: graduating a mature project-tier entry to the shared skill tier (cross-project, durable protocol)."""
     pd = _resolve_project_store(project_dir)
     sd = skills_dir or str(SKILLS_DIR)
     proj_m = _get_project_mgr()
@@ -360,7 +360,7 @@ def memory_confirm(
 ) -> str:
     """Confirm a staging entry, moving it to the active project entries.
 
-    Call this when: reviewing staging entries you want to promote to the durable project tier."""
+    Call this when: reviewing staging entries you want to promote to the durable project tier (staging → project; use memory_promote for project → skill)."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.confirm_staging(pd, entry_name)
@@ -639,7 +639,7 @@ def memory_notebook(
     Returns markdown. Optionally filter by date range or section (entries, runs, sessions).
     This is a read-only view tool — it does not modify any data.
 
-    Call this when: working with the project's lab notebook (add/view daily notes)."""
+    Call this when: generating a chronological timeline of sessions, runs, and entries for the current project."""
     pd = _resolve_project_store(project_dir)
     return generate_notebook(
         project_dir=pd,
@@ -663,7 +663,7 @@ def memory_annotate(
     references (paper DOIs, PDB IDs, URLs) and notebook section label.
     Entries are created directly in the active entries area (not staging).
 
-    Call this when: adding an annotation to a specific entry without bumping its observation count."""
+    Call this when: creating a human-authored lab notebook note entry directly in the active project tier."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     result = proj_m.create_entry(

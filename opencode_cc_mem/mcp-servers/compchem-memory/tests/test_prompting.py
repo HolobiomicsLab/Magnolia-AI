@@ -52,11 +52,11 @@ from compchem_memory import server as mem_server
 def test_every_memory_tool_docstring_has_call_when():
     """Every MCP tool in compchem_memory.server must have 'Call this when:' in its docstring."""
     failures = []
+    checked = 0
     for name in dir(mem_server):
         if name.startswith("_"):
             continue
         obj = getattr(mem_server, name)
-        # FastMCP wraps tools as FunctionTool — get the inner function
         fn = None
         if hasattr(obj, "fn") and callable(getattr(obj, "fn", None)):
             fn = obj.fn
@@ -64,7 +64,9 @@ def test_every_memory_tool_docstring_has_call_when():
             fn = obj
         if fn is None:
             continue
+        checked += 1
         doc = (fn.__doc__ or "")
         if "Call this when:" not in doc:
             failures.append(name)
+    assert checked >= 15, f"Test scanned only {checked} tools — FastMCP API may have changed"
     assert not failures, f"Missing 'Call this when:' in: {failures}"
