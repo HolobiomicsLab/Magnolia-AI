@@ -63,6 +63,15 @@ def test_has_significant_result_finally_got_it_working(tmp_path):
     assert has_significant_result(events, str(tmp_path)) is True
 
 
+def test_has_significant_result_handles_post_run_assess_event_type(tmp_path):
+    """The MCP post_run_assess tool writes events with event_type='post_run_assess'
+    while the CLI writes 'run_assessment'. Both must be recognized."""
+    events = [
+        {"event_type": "post_run_assess", "tool": "haddock3", "overall": "pass", "quality_flags": []},
+    ]
+    assert has_significant_result(events, str(tmp_path)) is True
+
+
 def test_should_extract_fires_on_error_fix_under_threshold(tmp_path):
     """Error→fix shortcut triggers should_extract even when tokens are far below 5000."""
     state_dir = tmp_path / "state"

@@ -1,6 +1,7 @@
 """Startup scan: walk .magnolia/sessions/, distill any session without a .distilled marker."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,5 +42,4 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()

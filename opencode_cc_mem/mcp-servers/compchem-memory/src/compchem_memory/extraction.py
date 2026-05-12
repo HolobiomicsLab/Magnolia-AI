@@ -38,7 +38,7 @@ def has_significant_result(events: list[dict[str, Any]], project_dir: str) -> bo
       3. metrics beat prior best in this project (placeholder — see spec §10)
     """
     for i, ev in enumerate(events):
-        if ev.get("event_type") != "run_assessment":
+        if ev.get("event_type") not in ("run_assessment", "post_run_assess"):
             continue
         if ev.get("overall") != "pass":
             continue
@@ -133,6 +133,7 @@ class AutomaticMemoryExtractor:
         if not result or not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
+
     def __init__(self, project_dir: str | None = None):
         self.last_cursor: str = ""
         self.state_path: Path | None = None
