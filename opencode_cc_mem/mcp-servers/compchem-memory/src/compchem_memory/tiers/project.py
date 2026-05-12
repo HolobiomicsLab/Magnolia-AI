@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from compchem_memory.storage import backup_file
+
 ENTRY_TYPES = (
     "success_pattern",
     "error_resolution",
@@ -170,8 +172,8 @@ class ProjectManager:
                 break
         if not source:
             raise FileNotFoundError(f"Entry not found: {entry_name}")
+        backup_file(source, project_dir)
         skills_path = Path(skills_dir)
-        skills_path.mkdir(parents=True, exist_ok=True)
         dest = skills_path / source.name
         dest.write_text(source.read_text())
         source.unlink()
@@ -188,6 +190,7 @@ class ProjectManager:
                 break
         if not source:
             raise FileNotFoundError(f"Staging entry not found: {entry_name}")
+        backup_file(source, project_dir)
         dest = entries / source.name
         dest.write_text(source.read_text())
         source.unlink()
@@ -195,7 +198,11 @@ class ProjectManager:
         return str(dest)
 
     def auto_promote_staging(self, project_dir: str) -> list[str]:
-        """Auto-promote staging entries with observation_count >= 3 and confidence > 0.85."""
+        """Auto-promote staging entries with observation_count >= 2, confidence > 0.85,
+        AND observed_in_sessions containing >= 2 distinct session_ids.
+
+        Closes cybernetics §3.4 (single-session auto-promotion risk).
+        """
         staging = self._staging_dir(project_dir)
         promoted = []
         for f in list(staging.glob("*.md")):
@@ -203,7 +210,9 @@ class ProjectManager:
             meta = self._parse_frontmatter(text)
             obs = meta.get("observation_count", 0)
             conf = meta.get("confidence", 0.5)
-            if obs >= 3 and conf > 0.85:
+            sessions = meta.get("observed_in_sessions", []) or []
+            distinct_sessions = len(set(sessions))
+            if obs >= 2 and conf > 0.85 and distinct_sessions >= 2:
                 try:
                     dest = self.confirm_staging(project_dir, f.stem)
                     promoted.append(f.name)
@@ -211,16 +220,21 @@ class ProjectManager:
                     pass
         return promoted
 
-    def bump_observation_count(self, project_dir: str, entry_name: str) -> bool:
-        """Increment observation_count on a staging entry. Returns True if found."""
+    def bump_observation_count(
+        self, project_dir: str, entry_name: str, session_id: str | None = None
+    ) -> bool:
+        """Increment observation_count on a staging entry; record session_id if provided.
+        Returns True if found."""
         staging = self._staging_dir(project_dir)
         for f in staging.glob("*.md"):
             if f.name == entry_name or entry_name in f.name or entry_name in f.stem:
-                self._update_entry_frontmatter(
-                    f,
-                    "observation_count",
-                    self._parse_frontmatter(f.read_text()).get("observation_count", 0) + 1,
-                )
+                meta = self._parse_frontmatter(f.read_text())
+                new_count = meta.get("observation_count", 0) + 1
+                sessions = list(meta.get("observed_in_sessions", []) or [])
+                if session_id and session_id not in sessions:
+                    sessions.append(session_id)
+                self._update_entry_frontmatter(f, "observation_count", new_count)
+                self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
                 return True
         return False
 

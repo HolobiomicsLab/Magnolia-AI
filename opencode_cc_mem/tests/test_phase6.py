@@ -166,7 +166,7 @@ class TestErrorPatternMatching:
 
 class TestPhase6Features:
     def test_auto_promotion(self):
-        """Test that entries with 3+ observations get auto-promoted."""
+        """Test that entries with 2+ observations in distinct sessions get auto-promoted."""
         with tempfile.TemporaryDirectory() as d:
             project_dir = _make_project(Path(d))
             mgr = ProjectManager(Path("/tmp"))
@@ -180,7 +180,7 @@ class TestPhase6Features:
                 confidence=0.9,
             )
 
-            # Read and modify to have high observation count
+            # Read and modify to have high observation count across two distinct sessions
             staging_dir = project_dir / ".magnolia" / "staging"
             staging_files = list(staging_dir.glob("*.md"))
             assert len(staging_files) == 1
@@ -191,8 +191,9 @@ class TestPhase6Features:
             parts = text.split("---")
             assert len(parts) >= 3
             meta = yaml.safe_load(parts[1])
-            meta["observation_count"] = 3
+            meta["observation_count"] = 2
             meta["confidence"] = 0.9
+            meta["observed_in_sessions"] = ["2026-05-12_120000", "2026-05-13_140000"]
             new_fm = yaml.dump(meta, default_flow_style=False)
             body = "---".join(parts[2:])
             f.write_text(f"---\n{new_fm}---{body}")
