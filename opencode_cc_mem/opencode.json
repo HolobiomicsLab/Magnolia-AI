@@ -19,5 +19,10 @@
       }
     }
   },
-  "instructions": ["rules/*.md", "AGENTS.md"]
+  "instructions": [
+    "rules/*.md",
+    "AGENTS.md",
+    "projects/my_project/.magnolia/boot-context.md",
+    "projects/my_project/.magnolia/audit-report.md"
+  ]
 }

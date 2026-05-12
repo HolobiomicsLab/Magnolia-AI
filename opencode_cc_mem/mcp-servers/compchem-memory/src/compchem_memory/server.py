@@ -42,16 +42,29 @@ GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
 
 def _run_startup_scan_background():
-    """Run scan_and_distill in a background thread so server boot is not blocked.
-    Safe-by-default: any exception is swallowed."""
+    """Run scan_and_distill, then regenerate boot-context, then write .current-session-id.
+    All in a background thread; never blocks server boot."""
     import threading
+    import datetime
     from compchem_memory.startup_scan import scan_and_distill
+    from compchem_memory.boot_context import regenerate_boot_context
 
     def _worker():
         try:
             scan_and_distill(PROJECT_DIR)
         except Exception as e:
             print(f"[startup_scan] worker error: {e}")
+        try:
+            regenerate_boot_context(PROJECT_DIR, skills_dir=str(SKILLS_DIR))
+        except Exception as e:
+            print(f"[boot_context] worker error: {e}")
+        try:
+            session_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+            current = Path(PROJECT_DIR) / ".magnolia" / ".current-session-id"
+            current.parent.mkdir(parents=True, exist_ok=True)
+            current.write_text(session_id)
+        except Exception as e:
+            print(f"[session_id] worker error: {e}")
 
     threading.Thread(target=_worker, daemon=True).start()
 
