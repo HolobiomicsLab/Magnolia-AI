@@ -47,10 +47,11 @@ def _summarize_result(result: Any) -> str:
 
 
 def captured(source: str):
-    """Decorator: log tool_call + tool_success/tool_error around an MCP tool.
+    """Decorator: log tool_call + tool_success/tool_error around an MCP tool;
+    inline-trigger extraction when threshold met.
 
-    The wrapped function MUST accept `project_dir` as a keyword argument (existing
-    MCP tools already follow this convention). Logging failures never propagate.
+    Logging failures NEVER propagate.
+    Inline-trigger failures NEVER propagate.
     """
     def decorator(fn: Callable) -> Callable:
         tool_name = fn.__name__
@@ -84,6 +85,7 @@ def captured(source: str):
                         })
                 except Exception:
                     pass
+                _maybe_inline_extract(mgr, project_dir)
                 raise
 
             duration_ms = int((time.time() - t0) * 1000)
@@ -97,8 +99,26 @@ def captured(source: str):
                     })
             except Exception:
                 pass
+            _maybe_inline_extract(mgr, project_dir)
             return result
 
         return wrapper
 
     return decorator
+
+
+def _maybe_inline_extract(mgr, project_dir: str) -> None:
+    """Inline trigger: if should_extract returns True, fire extract_and_save.
+    All exceptions swallowed — extraction failures must never block tools."""
+    if mgr is None:
+        return
+    try:
+        from compchem_memory.extraction import AutomaticMemoryExtractor
+        log_path = mgr.get_session_log_path()
+        if not log_path:
+            return
+        extractor = AutomaticMemoryExtractor(project_dir)
+        if extractor.should_extract(Path(log_path)):
+            extractor.extract_and_save(Path(log_path), project_dir)
+    except Exception:
+        pass

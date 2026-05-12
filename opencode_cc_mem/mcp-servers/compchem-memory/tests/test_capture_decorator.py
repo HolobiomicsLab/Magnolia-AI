@@ -80,3 +80,82 @@ def test_decorator_logging_failure_does_not_break_tool(project_dir, monkeypatch)
 
     result = memory_dummy(project_dir=str(project_dir))
     assert result == "ok"
+
+
+def test_decorator_triggers_inline_extraction_on_error_fix(project_dir, monkeypatch):
+    """After tool_error → tool_success sequence on the same tool, the decorator must
+    inline-call should_extract; if True, fire extract_and_save."""
+    from compchem_memory import capture as cap_mod
+    from compchem_memory import extraction as ext_mod
+
+    calls = {"should_extract": 0, "extract_and_save": 0}
+
+    real_should = ext_mod.AutomaticMemoryExtractor.should_extract
+
+    def spy_should(self, session_path):
+        calls["should_extract"] += 1
+        return True  # Force trigger
+
+    def spy_extract(self, session_path, project_dir_arg):
+        calls["extract_and_save"] += 1
+        return []  # No entries needed for test
+
+    monkeypatch.setattr(ext_mod.AutomaticMemoryExtractor, "should_extract", spy_should)
+    monkeypatch.setattr(ext_mod.AutomaticMemoryExtractor, "extract_and_save", spy_extract)
+
+    @captured(source="compchem-tools")
+    def some_tool(project_dir: str | None = None) -> str:
+        return "ok"
+
+    # Call the tool — decorator should invoke should_extract at least once
+    # (after tool_call, after tool_success). When True, extract_and_save fires.
+    some_tool(project_dir=str(project_dir))
+
+    assert calls["should_extract"] >= 1, "Decorator must call should_extract inline"
+    assert calls["extract_and_save"] >= 1, "Decorator must call extract_and_save when should_extract returns True"
+
+
+def test_decorator_does_not_extract_when_should_extract_false(project_dir, monkeypatch):
+    """When should_extract returns False, the decorator must NOT call extract_and_save."""
+    from compchem_memory import extraction as ext_mod
+
+    calls = {"should_extract": 0, "extract_and_save": 0}
+
+    def spy_should(self, session_path):
+        calls["should_extract"] += 1
+        return False
+
+    def spy_extract(self, session_path, project_dir_arg):
+        calls["extract_and_save"] += 1
+        return []
+
+    monkeypatch.setattr(ext_mod.AutomaticMemoryExtractor, "should_extract", spy_should)
+    monkeypatch.setattr(ext_mod.AutomaticMemoryExtractor, "extract_and_save", spy_extract)
+
+    @captured(source="compchem-tools")
+    def some_tool(project_dir: str | None = None) -> str:
+        return "ok"
+
+    some_tool(project_dir=str(project_dir))
+
+    assert calls["should_extract"] >= 1
+    assert calls["extract_and_save"] == 0, "extract_and_save must not fire when should_extract is False"
+
+
+def test_decorator_inline_extraction_failure_does_not_break_tool(project_dir, monkeypatch):
+    """Hard invariant carries through: an exception inside should_extract or
+    extract_and_save must NOT propagate to the wrapped tool."""
+    from compchem_memory import extraction as ext_mod
+
+    def boom_should(self, session_path):
+        raise RuntimeError("synthetic extraction failure")
+
+    monkeypatch.setattr(ext_mod.AutomaticMemoryExtractor, "should_extract", boom_should)
+
+    @captured(source="compchem-tools")
+    def some_tool(project_dir: str | None = None) -> str:
+        return "ok"
+
+    # Tool must still return successfully despite the exception in should_extract
+    result = some_tool(project_dir=str(project_dir))
+    assert result == "ok"
