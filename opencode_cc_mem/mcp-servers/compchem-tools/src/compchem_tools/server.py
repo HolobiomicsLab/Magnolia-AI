@@ -4,11 +4,15 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "compchem-memory" / "src"))
+from compchem_memory.capture import captured
 
 from fastmcp import FastMCP
 
@@ -64,6 +68,7 @@ from compchem_tools.tools.workflow import (
     load_workflow as _load_workflow,
     get_workflow_status as _get_workflow_status,
 )
+from compchem_tools.tools.shell import run_shell as _run_shell
 from compchem_tools.gates import GATE_REGISTRY
 from compchem_tools.progress import parse_haddock_progress
 
@@ -81,6 +86,7 @@ _active_sessions: dict[str, dict[str, Any]] = {}
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def haddock3_run(
     config_path: str,
     run_dir: str | None = None,
@@ -106,6 +112,7 @@ def haddock3_run(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def haddock3_parse_results(run_dir: str) -> str:
     """Parse caprieval/clustfcc/seletopclusts outputs.
     Returns structured metrics (best score, cluster count, LRMSD range)."""
@@ -114,6 +121,7 @@ def haddock3_parse_results(run_dir: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def preprocess_pdb(
     input_path: str,
     output_path: str | None = None,
@@ -129,6 +137,7 @@ def preprocess_pdb(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def generate_restraints(
     actpass_file_1: str,
     actpass_file_2: str,
@@ -145,6 +154,7 @@ def generate_restraints(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def run_acpype(
     input_file: str,
     charge_method: str = "bcc",
@@ -157,6 +167,7 @@ def run_acpype(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def validate_structure(
     input_path: str,
     expected_format: str | None = None,
@@ -168,6 +179,7 @@ def validate_structure(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def check_environment(
     tool_name: str,
     min_version: str | None = None,
@@ -179,6 +191,7 @@ def check_environment(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def stage_gate(
     gate_name: str,
     working_directory: str,
@@ -201,6 +214,7 @@ def stage_gate(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def check_run_status(run_dir: str) -> str:
     """Check if a computation run has completed by looking for output files
     and process status."""
@@ -241,6 +255,7 @@ def check_run_status(run_dir: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gnina_dock(
     receptor: str,
     ligand: str,
@@ -270,6 +285,7 @@ def gnina_dock(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gnina_parse_results(run_dir: str) -> str:
     """Parse Gnina docking output SDF for scores and pose information."""
     result = _gnina_parse(run_dir)
@@ -277,6 +293,7 @@ def gnina_parse_results(run_dir: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def smarts_validate(smarts: str, smiles: str | None = None) -> str:
     """Validate a SMARTS pattern. Optionally check it matches a SMILES molecule.
     Returns validity and match count."""
@@ -285,6 +302,7 @@ def smarts_validate(smarts: str, smiles: str | None = None) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def alkyne_to_vinyl(alkyne_smiles: str, output_dir: str | None = None) -> str:
     """Convert an alkyne SMILES to Z and E vinyl isomers for covalent docking.
     Returns isomer SMILES strings."""
@@ -293,6 +311,7 @@ def alkyne_to_vinyl(alkyne_smiles: str, output_dir: str | None = None) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def xtb_optimize(
     input_file: str,
     output_dir: str | None = None,
@@ -308,6 +327,7 @@ def xtb_optimize(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def xtb_singlepoint(
     input_file: str,
     output_dir: str | None = None,
@@ -326,6 +346,7 @@ def xtb_singlepoint(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def workflow_load(template_path: str) -> str:
     """Load and validate a YAML workflow template. Returns the workflow plan."""
     result = _load_workflow(template_path)
@@ -333,6 +354,7 @@ def workflow_load(template_path: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def workflow_status(run_dir: str) -> str:
     """Check which steps in a workflow are complete based on output files."""
     result = _get_workflow_status(run_dir)
@@ -340,6 +362,7 @@ def workflow_status(run_dir: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def p2rank_predict(
     protein: str,
     output_dir: str | None = None,
@@ -352,6 +375,7 @@ def p2rank_predict(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gromacs_setup(
     structure: str,
     topology: str | None = None,
@@ -370,6 +394,7 @@ def gromacs_setup(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gromacs_run(
     tpr_file: str,
     output_dir: str | None = None,
@@ -382,6 +407,7 @@ def gromacs_run(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gromacs_parse(
     energy_file: str | None = None,
     trajectory: str | None = None,
@@ -395,6 +421,7 @@ def gromacs_parse(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def orca_setup(
     input_file: str,
     method: str = "B3LYP",
@@ -415,6 +442,7 @@ def orca_setup(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def orca_run(
     input_file: str,
     output_dir: str | None = None,
@@ -427,6 +455,7 @@ def orca_run(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def orca_parse(output_file: str) -> str:
     """Parse ORCA output for energy, HOMO-LUMO gap, and converged geometry."""
     result = _orca_parse(output_file)
@@ -434,6 +463,7 @@ def orca_parse(output_file: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gaussian_setup(
     input_file: str,
     method: str = "B3LYP",
@@ -450,6 +480,7 @@ def gaussian_setup(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gaussian_run(
     input_file: str,
     output_dir: str | None = None,
@@ -462,6 +493,7 @@ def gaussian_run(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def gaussian_parse(output_file: str) -> str:
     """Parse Gaussian .log output for energy, HOMO-LUMO, and frequencies."""
     result = _gaussian_parse(output_file)
@@ -469,6 +501,7 @@ def gaussian_parse(output_file: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def submit_job(
     command: str,
     working_dir: str,
@@ -488,6 +521,7 @@ def submit_job(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def check_job(
     job_id: str,
     scheduler: str = "slurm",
@@ -499,6 +533,7 @@ def check_job(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def cancel_job(
     job_id: str,
     scheduler: str = "slurm",
@@ -513,6 +548,7 @@ def cancel_job(
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def run_progress(session_id: str) -> str:
     """Poll-based progress for long-running jobs. Returns module completion status,
     current module, percent complete, and latest scores."""
@@ -534,6 +570,7 @@ def run_progress(session_id: str) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-tools")
 def list_sessions() -> str:
     """List all active computation sessions with their status."""
     sessions = []
@@ -554,6 +591,17 @@ def _generate_session_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     short = uuid.uuid4().hex[:8]
     return f"{ts}_{short}"
+
+
+@mcp.tool()
+@captured(source="compchem-tools")
+def run_shell(cmd: str, cwd: str | None = None, project_dir: str | None = None) -> dict:
+    """Run a shell command via magnolia-run. Use this for ANY shell command — opencode's
+    bash tool is disabled. magnolia-run writes the session JSONL.
+
+    Call this when: you need to invoke any shell command (gnina, gmx, ls, etc.).
+    """
+    return _run_shell(cmd, cwd=cwd, project_dir=project_dir)
 
 
 if __name__ == "__main__":

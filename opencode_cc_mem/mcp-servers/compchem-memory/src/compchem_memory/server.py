@@ -7,7 +7,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from compchem_memory.capture import get_session_manager
+from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.skill import SkillManager
@@ -90,6 +90,7 @@ def _resolve_project_store(project_dir: str | None = None) -> str:
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_get_context(
     task_description: str,
     project_dir: str | None = None,
@@ -119,6 +120,7 @@ def memory_get_context(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_record_session(
     event_type: str,
     data: dict[str, Any],
@@ -132,6 +134,7 @@ def memory_record_session(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_record_learning(
     title: str,
     content: str,
@@ -179,6 +182,7 @@ def memory_record_learning(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_search(
     keyword: str = "",
     tags: list[str] | None = None,
@@ -207,6 +211,7 @@ def memory_search(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_get_run_history(
     project_dir: str | None = None,
 ) -> str:
@@ -218,6 +223,7 @@ def memory_get_run_history(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_record_run(
     run_id: str,
     tool: str,
@@ -233,6 +239,7 @@ def memory_record_run(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_promote(
     entry_name: str,
     project_dir: str | None = None,
@@ -247,6 +254,7 @@ def memory_promote(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_consolidate(
     tier: str = "project",
     project_dir: str | None = None,
@@ -267,6 +275,7 @@ def memory_consolidate(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def post_run_assess(
     run_dir: str,
     tool: str,
@@ -308,6 +317,7 @@ def post_run_assess(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_confirm(
     entry_name: str,
     project_dir: str | None = None,
@@ -322,6 +332,7 @@ def memory_confirm(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_select_relevant(
     task_description: str,
     project_dir: str | None = None,
@@ -353,6 +364,7 @@ def memory_select_relevant(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_extract_from_session(
     project_dir: str | None = None,
 ) -> str:
@@ -383,6 +395,7 @@ def memory_extract_from_session(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_compact_session(
     project_dir: str | None = None,
     model_context_window: int = 128000,
@@ -430,6 +443,7 @@ def memory_compact_session(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_search_errors(
     error_message: str,
     tool: str | None = None,
@@ -470,6 +484,7 @@ def memory_search_errors(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_distill_session(
     project_dir: str | None = None,
 ) -> str:
@@ -509,6 +524,7 @@ def memory_distill_session(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_scan_headers(
     project_dir: str | None = None,
     tier: str = "project",
@@ -539,6 +555,7 @@ def memory_scan_headers(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_health_check(
     project_dir: str | None = None,
     stale_days: int = 90,
@@ -559,6 +576,7 @@ def memory_health_check(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_notebook(
     start_date: str | None = None,
     end_date: str | None = None,
@@ -578,6 +596,7 @@ def memory_notebook(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_annotate(
     title: str,
     content: str,
@@ -606,6 +625,7 @@ def memory_annotate(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_set_goal(
     goal: str,
     project_dir: str | None = None,
@@ -620,6 +640,7 @@ def memory_set_goal(
 
 
 @mcp.tool()
+@captured(source="compchem-memory")
 def memory_get_goal(
     project_dir: str | None = None,
 ) -> str:

@@ -1,15 +1,13 @@
 #!/bin/bash
-# magnolia-run — wraps any command and logs it to the project memory store.
+# magnolia-run — wraps any command and logs it to the project session JSONL (schema v2).
 # Usage: magnolia-run <command...>
-#
-# This wrapper logs bash executions to project_dir/.magnolia/sessions/
-# without requiring an MCP server. Safe for HPC compute nodes.
 
-# Capture the full command string
+set -uo pipefail
+
 COMMAND="$*"
+START_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
+START_EPOCH_MS=$(($(date +%s%N) / 1000000))
 
-# Detect project directory:
-# Walk up from current directory looking for .magnolia/
 PROJECT_DIR=""
 CURDIR="$(pwd)"
 while [ "$CURDIR" != "/" ]; do
@@ -19,37 +17,55 @@ while [ "$CURDIR" != "/" ]; do
     fi
     CURDIR="$(dirname "$CURDIR")"
 done
-
-# If no .magnolia found, use current directory (memory store will be created)
 if [ -z "$PROJECT_DIR" ]; then
     PROJECT_DIR="$(pwd)"
 fi
+PROJECT_ID="$(basename "$PROJECT_DIR")"
 
-# Run the actual command
+SESSION_ID="${MAGNOLIA_SESSION_ID:-}"
+if [ -z "$SESSION_ID" ] && [ -f "$PROJECT_DIR/.magnolia/.current-session-id" ]; then
+    SESSION_ID="$(cat "$PROJECT_DIR/.magnolia/.current-session-id")"
+fi
+if [ -z "$SESSION_ID" ]; then
+    SESSION_ID="$(date -u +%Y-%m-%d_%H%M%S)"
+fi
+
+SESSIONS_DIR="$PROJECT_DIR/.magnolia/sessions"
+mkdir -p "$SESSIONS_DIR"
+SESSION_FILE="$SESSIONS_DIR/${SESSION_ID}.jsonl"
+
+if [ ! -f "$SESSION_FILE" ]; then
+    printf '{"event_type":"session_start","timestamp":"%s","session_id":"%s","project_id":"%s","project_dir":"%s","schema_version":2}\n' \
+        "$START_ISO" "$SESSION_ID" "$PROJECT_ID" "$PROJECT_DIR" >> "$SESSION_FILE"
+fi
+
+escape_json() {
+    printf '%s' "$1" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read())[1:-1])'
+}
+CMD_ESCAPED="$(escape_json "$COMMAND")"
+
+printf '{"event_type":"tool_call","timestamp":"%s","session_id":"%s","project_id":"%s","source":"magnolia-run","tool":"shell","args_summary":"%s"}\n' \
+    "$START_ISO" "$SESSION_ID" "$PROJECT_ID" "$CMD_ESCAPED" >> "$SESSION_FILE"
+
 eval "$COMMAND"
 EXIT_CODE=$?
 
-# Build result summary based on exit code
+END_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
+END_EPOCH_MS=$(($(date +%s%N) / 1000000))
+DURATION_MS=$((END_EPOCH_MS - START_EPOCH_MS))
+
 if [ $EXIT_CODE -eq 0 ]; then
-    RESULT="Command completed successfully"
+    printf '{"event_type":"tool_success","timestamp":"%s","session_id":"%s","project_id":"%s","source":"magnolia-run","tool":"shell","duration_ms":%d,"result_summary":"exit=0"}\n' \
+        "$END_ISO" "$SESSION_ID" "$PROJECT_ID" "$DURATION_MS" >> "$SESSION_FILE"
 else
-    RESULT="Command failed with exit code $EXIT_CODE"
+    printf '{"event_type":"tool_error","timestamp":"%s","session_id":"%s","project_id":"%s","source":"magnolia-run","tool":"shell","duration_ms":%d,"error":"exit=%d"}\n' \
+        "$END_ISO" "$SESSION_ID" "$PROJECT_ID" "$DURATION_MS" "$EXIT_CODE" >> "$SESSION_FILE"
 fi
 
-# Log to project memory (suppress errors so wrapper never breaks the original command)
-magnolia-memory log-bash \
-    --project-dir "$PROJECT_DIR" \
-    --command "$COMMAND" \
-    --exit "$EXIT_CODE" \
-    --working-dir "$(pwd)" \
-    --result-summary "$RESULT" \
-    2>/dev/null
-
-# Auto-assess scientific tool runs (suppress all errors)
 magnolia-memory assess \
     --project-dir "$PROJECT_DIR" \
     --command "$COMMAND" \
-    --exit-code "$EXIT_CODE" \
-    2>/dev/null
+    --exit "$EXIT_CODE" \
+    2>/dev/null || true
 
 exit $EXIT_CODE
