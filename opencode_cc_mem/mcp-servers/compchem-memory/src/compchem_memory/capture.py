@@ -61,7 +61,10 @@ def _attach_distill_notices(result: Any, project_dir: str) -> Any:
             enriched = dict(result)
             enriched["_distill_notices"] = notices
             return enriched
-        # Other return types: leave untouched, notices stay queued for next call
+        # Other return types (not str/dict): the drained notices cannot be
+        # attached and are discarded. No @captured tool returns such a type
+        # today; if one is added, give it a str or dict return so its notices
+        # surface.
         return result
     except Exception:
         return result
