@@ -35,6 +35,7 @@ from compchem_memory.storage import (
     ensure_project_store,
     resolve_project_dir,
 )
+from compchem_memory.startup_scan import scan_and_distill
 
 SKILLS_DIR = Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_SKILLS_DIR)))
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
@@ -71,6 +72,50 @@ def _run_startup_scan_background():
 
 
 _run_startup_scan_background()
+
+
+def _resolve_distill_interval_seconds() -> int:
+    """Distillation timer interval in seconds. Default 20 minutes; overridable
+    via MAGNOLIA_DISTILL_INTERVAL_MIN. A bad value falls back to the default."""
+    default = 20 * 60
+    raw = os.environ.get("MAGNOLIA_DISTILL_INTERVAL_MIN")
+    if not raw:
+        return default
+    try:
+        minutes = int(raw)
+        if minutes <= 0:
+            return default
+        return minutes * 60
+    except ValueError:
+        return default
+
+
+def _distill_timer_tick(project_dir: str) -> None:
+    """One timer tick: sweep the project for undistilled sessions.
+    Never raises — a timer failure must not crash the server."""
+    try:
+        scan_and_distill(project_dir)
+    except Exception as e:
+        print(f"[distill_timer] tick error: {e}")
+
+
+def _run_distill_timer_background() -> None:
+    """Daemon thread: sweep distillation on a wall-clock interval, so distillation
+    is robust to a long-lived server (no reboot to trigger startup_scan)."""
+    import threading
+    import time
+
+    interval = _resolve_distill_interval_seconds()
+
+    def _worker():
+        while True:
+            time.sleep(interval)
+            _distill_timer_tick(PROJECT_DIR)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+_run_distill_timer_background()
 
 mcp = FastMCP("compchem-memory")
 
