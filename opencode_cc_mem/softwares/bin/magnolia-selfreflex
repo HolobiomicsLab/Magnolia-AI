@@ -41,12 +41,14 @@ echo "[$TIMESTAMP] Distilling sessions..." >> "$LOG_FILE"
 SESSION_FILE=$(ls -t "$MEMORY_DIR/sessions/"*.jsonl 2>/dev/null | head -n 1)
 if [ -n "$SESSION_FILE" ]; then
     python -c "
-from compchem_memory.learning.distiller import distill_session
+from compchem_memory.extraction import AutomaticMemoryExtractor
+from pathlib import Path
 import sys
 
 try:
-    result = distill_session('$SESSION_FILE')
-    print(result)
+    extractor = AutomaticMemoryExtractor('$PROJECT_DIR')
+    saved = extractor.commit(Path('$SESSION_FILE'), '$PROJECT_DIR')
+    print(f'Distilled {len(saved)} learnings from $SESSION_FILE')
 except Exception as e:
     print(f'Distillation skipped or failed: {e}')
     sys.exit(0)
