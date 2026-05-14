@@ -624,7 +624,6 @@ def memory_search_errors(
 
 
 @mcp.tool()
-@captured(source="compchem-memory")
 def memory_distill_session(
     commit: bool = False,
     project_dir: str | None = None,
@@ -663,14 +662,6 @@ def memory_distill_session(
         )
 
     candidates = extractor.preview(session_path)
-    # Advance the cursor so the inline-extraction trigger (in the @captured
-    # decorator) does not immediately re-extract the same events after this
-    # preview call returns.  Writing the cursor is not a "staging entry" — the
-    # spec's "saves nothing" refers to .magnolia/staging/*.md files.
-    events = extractor._read_events(session_path)
-    if events:
-        extractor.last_cursor = events[-1].get("timestamp", "")
-        extractor._save_state()
     return json.dumps(
         {
             "status": "preview",
