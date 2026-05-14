@@ -378,7 +378,7 @@ class TestFailurePattern:
         session_path.write_text("\n".join(json.dumps(e) for e in events))
 
         extractor = AutomaticMemoryExtractor(str(tmp_dir))
-        saved = extractor.extract_and_save(session_path, str(tmp_dir))
+        saved = extractor.commit(session_path, str(tmp_dir))
 
         # Check that failure_pattern entries are among saved
         types = set()

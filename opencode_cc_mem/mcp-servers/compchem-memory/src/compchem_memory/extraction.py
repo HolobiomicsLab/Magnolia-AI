@@ -187,13 +187,10 @@ class AutomaticMemoryExtractor:
             or has_significant_result(since, project_dir)
         )
 
-    def extract_and_save(self, session_path: Path, project_dir: str) -> list[str]:
-        events = self._read_events(session_path)
-        if not events:
-            return []
-
-        store = ensure_project_store(project_dir)
-        candidates = []
+    def _generate_candidates(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Shared candidate generation: LLM-first, heuristic fallback.
+        Pure — reads nothing, writes nothing."""
+        candidates: list[dict[str, Any]] = []
 
         # Try LLM-based extraction first
         if is_llm_available():
@@ -258,14 +255,33 @@ class AutomaticMemoryExtractor:
                     }
                 )
 
+        return candidates
+
+    def preview(self, session_path: Path) -> list[dict[str, Any]]:
+        """Compute candidate learnings and return them. Saves nothing, advances
+        no cursor. The read-only inspection mode."""
+        events = self._read_events(session_path)
+        if not events:
+            return []
+        return self._generate_candidates(events)
+
+    def commit(self, session_path: Path, project_dir: str) -> list[str]:
+        """Compute candidate learnings, save them to staging, advance the cursor.
+        Returns the list of saved staging-entry paths."""
+        events = self._read_events(session_path)
+        if not events:
+            return []
+
+        store = ensure_project_store(project_dir)
+        candidates = self._generate_candidates(events)
+
         saved = []
         for candidate in candidates:
             path = self._save_to_staging(store, candidate)
             saved.append(path)
 
-        if events:
-            self.last_cursor = events[-1].get("timestamp", "")
-            self._save_state()
+        self.last_cursor = events[-1].get("timestamp", "")
+        self._save_state()
 
         return saved
 

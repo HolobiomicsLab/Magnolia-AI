@@ -69,7 +69,7 @@ def test_scan_tolerates_one_broken_file(project_dir, monkeypatch):
     def explode(self, *a, **k):
         raise RuntimeError("synthetic distiller failure")
 
-    monkeypatch.setattr(extraction.AutomaticMemoryExtractor, "extract_and_save", explode)
+    monkeypatch.setattr(extraction.AutomaticMemoryExtractor, "commit", explode)
 
     _write_session(project_dir, "2026-05-10_000000", [{"event_type": "tool_call"}])
     _write_session(project_dir, "2026-05-11_000000", [{"event_type": "tool_call"}])

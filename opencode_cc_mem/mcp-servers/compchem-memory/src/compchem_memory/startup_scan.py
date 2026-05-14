@@ -28,7 +28,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
             skipped += 1
             continue
         try:
-            extractor.extract_and_save(session_path, str(pd))
+            extractor.commit(session_path, str(pd))
             marker.write_text(
                 json.dumps({"distilled_at": _now_iso(), "events_path": session_path.name})
                 + "\n"

@@ -108,7 +108,7 @@ def captured(source: str):
 
 
 def _maybe_inline_extract(mgr, project_dir: str) -> None:
-    """Inline trigger: if should_extract returns True, fire extract_and_save.
+    """Inline trigger: if should_extract returns True, fire commit().
     All exceptions swallowed — extraction failures must never block tools."""
     if mgr is None:
         return
@@ -119,6 +119,6 @@ def _maybe_inline_extract(mgr, project_dir: str) -> None:
             return
         extractor = AutomaticMemoryExtractor(project_dir)
         if extractor.should_extract(Path(log_path)):
-            extractor.extract_and_save(Path(log_path), project_dir)
+            extractor.commit(Path(log_path), project_dir)
     except Exception:
         pass

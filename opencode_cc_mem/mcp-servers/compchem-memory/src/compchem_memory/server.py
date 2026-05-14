@@ -449,7 +449,7 @@ def memory_extract_from_session(
     if not extractor.should_extract(session_path):
         return json.dumps({"status": "threshold_not_met", "extracted": 0})
 
-    saved = extractor.extract_and_save(session_path, pd)
+    saved = extractor.commit(session_path, pd)
     return json.dumps(
         {
             "status": "extracted",
