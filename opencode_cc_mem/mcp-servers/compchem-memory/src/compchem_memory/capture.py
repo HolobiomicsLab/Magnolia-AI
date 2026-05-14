@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from compchem_memory.tiers.session import SessionManager
+from compchem_memory import distill_log
 
 _session_managers: dict[str, SessionManager] = {}
 
@@ -44,6 +45,26 @@ def _summarize_result(result: Any) -> str:
         return "None"
     s = str(result)
     return s[:200] + ("..." if len(s) > 200 else "")
+
+
+def _attach_distill_notices(result: Any, project_dir: str) -> Any:
+    """Drain the .distill-notices queue and attach notices to a tool's result so
+    background/inline distillations surface in the dialogue. Never raises."""
+    try:
+        notices = distill_log.drain_distill_notices(project_dir)
+        if not notices:
+            return result
+        notice_text = "\n".join(notices)
+        if isinstance(result, str):
+            return result + "\n\n" + notice_text
+        if isinstance(result, dict):
+            enriched = dict(result)
+            enriched["_distill_notices"] = notices
+            return enriched
+        # Other return types: leave untouched, notices stay queued for next call
+        return result
+    except Exception:
+        return result
 
 
 def captured(source: str):
@@ -100,7 +121,7 @@ def captured(source: str):
             except Exception:
                 pass
             _maybe_inline_extract(mgr, project_dir)
-            return result
+            return _attach_distill_notices(result, project_dir)
 
         return wrapper
 

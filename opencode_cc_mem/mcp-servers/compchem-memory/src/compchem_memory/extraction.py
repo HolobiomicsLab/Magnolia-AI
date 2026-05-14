@@ -10,6 +10,8 @@ import yaml
 
 from compchem_memory.storage import ensure_project_store
 from compchem_memory.llm import is_llm_available, call_llm_json
+from compchem_memory import distill_log
+from compchem_memory.reflections import pick_quote
 
 MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
@@ -279,6 +281,12 @@ class AutomaticMemoryExtractor:
         for candidate in candidates:
             path = self._save_to_staging(store, candidate)
             saved.append(path)
+
+        if saved:
+            quote = pick_quote("closing")
+            summary = f"{len(saved)} learning(s) distilled from {session_path.name}"
+            distill_log.append_distill_log(project_dir, quote, summary)
+            distill_log.push_distill_notice(project_dir, quote, summary)
 
         self.last_cursor = events[-1].get("timestamp", "")
         self._save_state()
