@@ -9,14 +9,30 @@ from compchem_memory.extraction import AutomaticMemoryExtractor
 
 
 def scan_and_distill(project_dir: str) -> dict[str, Any]:
-    """Find session JSONL files without a sibling .distilled marker; distill them;
-    write the marker. Idempotent — re-running produces no new entries.
+    """Find session JSONL files and distill them.
+
+    Closed sessions (stem != current-session-id): commit, then write a .distilled
+    marker. Idempotent — a marked file is skipped on later scans.
+
+    The active session (stem == current-session-id): commit, but do NOT write a
+    marker — it is still being appended to. The cursor in extraction-state.yaml
+    tracks progress. The marker is only written once the session is no longer
+    active (a later scan when it has become a closed session).
 
     Returns: {"scanned": int, "distilled": int, "skipped": int}.
     """
     pd = Path(project_dir)
     sessions_dir = pd / ".magnolia" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    # Identify the active session (if any)
+    active_id = ""
+    current_file = pd / ".magnolia" / ".current-session-id"
+    if current_file.exists():
+        try:
+            active_id = current_file.read_text().strip()
+        except OSError:
+            active_id = ""
 
     extractor = AutomaticMemoryExtractor(str(pd))
     scanned = distilled = skipped = 0
@@ -27,12 +43,14 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
         if marker.exists():
             skipped += 1
             continue
+        is_active = session_path.stem == active_id
         try:
             extractor.commit(session_path, str(pd))
-            marker.write_text(
-                json.dumps({"distilled_at": _now_iso(), "events_path": session_path.name})
-                + "\n"
-            )
+            if not is_active:
+                marker.write_text(
+                    json.dumps({"distilled_at": _now_iso(), "events_path": session_path.name})
+                    + "\n"
+                )
             distilled += 1
         except Exception as e:
             print(f"[startup_scan] failed on {session_path.name}: {e}")
