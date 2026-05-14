@@ -12,7 +12,6 @@ from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.skill import SkillManager
 from compchem_memory.learning.assessor import assess_run
-from compchem_memory.learning.distiller import distill_session
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.index import MemoryIndex
 from compchem_memory.context_assembly import assemble_context, _memory_store
@@ -627,43 +626,60 @@ def memory_search_errors(
 @mcp.tool()
 @captured(source="compchem-memory")
 def memory_distill_session(
+    commit: bool = False,
     project_dir: str | None = None,
 ) -> str:
-    """Distill the current session into proposed project-tier entries.
-    Extracts error resolutions, parameter guidance, and success patterns.
+    """Distill the current session into project-tier learnings.
 
-    Call this when: manually requesting distillation of the current session (normally automatic via startup_scan)."""
+    commit=False (default): PREVIEW — compute candidate learnings and return them,
+    save nothing. Use this to inspect what the system would learn.
+
+    commit=True: COMMIT — compute and save the learnings to staging now, un-gated
+    (skips the should_extract threshold check). Use this to force consolidation
+    of the current session immediately.
+
+    Call this when: you want to see what the session would distill into
+    (commit=False), or force-distill it now (commit=True)."""
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     log_path = sess_m.get_session_log_path()
     if not log_path:
-        return json.dumps({"status": "no_active_session", "proposed": 0})
+        return json.dumps({"status": "no_active_session"})
 
-    candidates = distill_session(log_path)
-    if not candidates:
-        return json.dumps({"status": "no_candidates", "proposed": 0})
+    from compchem_memory.reflections import pick_quote
+    extractor = _get_extractor(pd)
+    session_path = Path(log_path)
 
-    proj_m = _get_project_mgr()
-    saved = []
-    for c in candidates:
-        path = proj_m.create_entry(
-            pd,
-            title=c["title"],
-            content=c["content"],
-            tags=c.get("tags", []),
-            source="session_distillation",
-            staging=True,
-            entry_type=c.get("type", "note"),
-            tools=c.get("tools", []),
-            confidence=c.get("confidence", 0.5),
+    if commit:
+        saved = extractor.commit(session_path, pd)
+        return json.dumps(
+            {
+                "status": "committed",
+                "saved_count": len(saved),
+                "paths": saved,
+                "reflection": pick_quote("closing"),
+            },
+            indent=2,
         )
-        saved.append(path)
 
-    return json.dumps({
-        "status": "proposed",
-        "proposed": len(saved),
-        "paths": saved,
-    }, indent=2)
+    candidates = extractor.preview(session_path)
+    # Advance the cursor so the inline-extraction trigger (in the @captured
+    # decorator) does not immediately re-extract the same events after this
+    # preview call returns.  Writing the cursor is not a "staging entry" — the
+    # spec's "saves nothing" refers to .magnolia/staging/*.md files.
+    events = extractor._read_events(session_path)
+    if events:
+        extractor.last_cursor = events[-1].get("timestamp", "")
+        extractor._save_state()
+    return json.dumps(
+        {
+            "status": "preview",
+            "candidate_count": len(candidates),
+            "candidates": candidates,
+            "reflection": pick_quote("opening"),
+        },
+        indent=2,
+    )
 
 
 @mcp.tool()

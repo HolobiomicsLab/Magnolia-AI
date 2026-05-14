@@ -21,7 +21,6 @@ import yaml
 
 from compchem_memory.context_assembly import assemble_context, _memory_store
 from compchem_memory.learning.consolidator import consolidate_tier, _archive_excess
-from compchem_memory.learning.distiller import distill_session
 from compchem_memory.extraction import AutomaticMemoryExtractor
 from compchem_memory.retrieval import _score_entry
 from compchem_memory.tiers.project import ProjectManager
@@ -361,7 +360,7 @@ class TestFailurePattern:
         ]
         session_path.write_text("\n".join(json.dumps(e) for e in events))
 
-        candidates = distill_session(str(session_path))
+        candidates = AutomaticMemoryExtractor(str(tmp_dir)).preview(session_path)
         failures = [c for c in candidates if c["type"] == "failure_pattern"]
         assert len(failures) == 1
         assert "Missing parameter file" in failures[0]["title"]

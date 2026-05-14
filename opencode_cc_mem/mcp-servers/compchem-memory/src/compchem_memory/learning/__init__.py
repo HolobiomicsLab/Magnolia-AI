@@ -1,7 +1,6 @@
 """Learning pipeline: post-run assessment, session distillation, consolidation."""
 
 from compchem_memory.learning.assessor import assess_run
-from compchem_memory.learning.distiller import distill_session
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.extraction import AutomaticMemoryExtractor
 from compchem_memory.compaction import (
@@ -13,7 +12,6 @@ from compchem_memory.compaction import (
 
 __all__ = [
     "assess_run",
-    "distill_session",
     "consolidate_tier",
     "AutomaticMemoryExtractor",
     "maybe_compact_session",
