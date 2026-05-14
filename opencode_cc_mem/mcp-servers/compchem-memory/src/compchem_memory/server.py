@@ -35,6 +35,7 @@ from compchem_memory.storage import (
     ensure_project_store,
     resolve_project_dir,
 )
+from compchem_memory.project_guard import check_project
 from compchem_memory.startup_scan import scan_and_distill
 
 SKILLS_DIR = Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_SKILLS_DIR)))
@@ -163,6 +164,19 @@ def _resolve_project_store(project_dir: str | None = None) -> str:
     return pd
 
 
+def _project_switch_blocked_payload(guard) -> str:
+    return json.dumps({
+        "status": "project_switch_blocked",
+        "pinned": guard.pinned,
+        "requested": guard.requested,
+        "message": (
+            f"This session is pinned to project '{Path(guard.pinned).name}'. "
+            f"To record work for '{Path(guard.requested).name}', start a new "
+            f"opencode session."
+        ),
+    })
+
+
 # ── v1 Tools (preserved, enhanced) ──────────────────────────────────────────
 
 
@@ -209,6 +223,9 @@ def memory_record_session(
     data should contain: tool_name, args, result_summary, error (if any).
 
     Call this when: logging an observation the auto-capture decorator cannot infer (e.g., user-stated intent, a design decision, a hypothesis)."""
+    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    if guard.kind == "cross_write":
+        return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     return sess_m.record(event_type, data, pd)
@@ -230,6 +247,9 @@ def memory_record_learning(
     area; entries become active after confirmation or N consistent observations.
 
     Call this when: you have discovered something worth keeping — error_resolution, success_pattern, failure_pattern, or parameter_guidance. See AGENTS.md for content structure."""
+    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    if guard.kind == "cross_write":
+        return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
 
@@ -332,6 +352,9 @@ def memory_record_run(
     """Append a new run record to the project's run history index.
 
     Call this when: a scientific run has completed and you want to record its metadata + status alongside the run history (magnolia-run already does this for recognized tools)."""
+    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    if guard.kind == "cross_write":
+        return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.record_run(pd, run_id, tool, status, metrics=metrics, errors_solved=errors_solved)
@@ -389,6 +412,9 @@ def post_run_assess(
     extract metrics, flag quality issues. Records run in memory automatically.
 
     Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
+    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    if guard.kind == "cross_write":
+        return _project_switch_blocked_payload(guard)
     assessment = assess_run(run_dir, tool, exit_code)
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()

@@ -51,6 +51,16 @@ Update or correct it. Memory drifts as projects evolve; corrections are
 themselves learnings. Note the prior incorrect claim and the corrected
 information.
 
+## When a tool returns project_switch_blocked
+
+If any memory tool returns a JSON payload with `"status": "project_switch_blocked"`,
+the user is trying to record work for a different project than this session is
+pinned to. Do not retry. Relay the payload's `message` to the user plainly — they
+need to start a new opencode session for the other project. One session works on
+one project.
+
+Reading another project's memory is fine and is not blocked — only writing is.
+
 ## Shell commands
 
 Use `run_shell(cmd=...)` for any shell command. Opencode's bash tool is
