@@ -1,6 +1,8 @@
 """Storage resolution: project-local memory store at project_dir/.magnolia/."""
 
 import json
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 GLOBAL_BASE = Path.home() / ".magnolia"
@@ -18,7 +20,7 @@ def ensure_project_store(project_dir: str) -> Path:
     resolved = Path(project_dir).resolve()
     local_dir = resolved / ".magnolia"
     local_dir.mkdir(parents=True, exist_ok=True)
-    for sub in ["entries", "runs", "sessions", "staging", "session-notes", "queue", "archive"]:
+    for sub in ["entries", "runs", "sessions", "staging", "session-notes", "queue", "archive", "backups"]:
         (local_dir / sub).mkdir(parents=True, exist_ok=True)
     return local_dir
 
@@ -26,6 +28,26 @@ def ensure_project_store(project_dir: str) -> Path:
 def resolve_project_dir(project_dir: str | None, default: str = ".") -> str:
     pd = project_dir or default
     return str(Path(pd).resolve())
+
+
+def backup_file(src: Path, project_dir: str) -> Path | None:
+    """Copy a file to .magnolia/backups/ before destructive mutation.
+
+    Returns the backup path, or None if the source doesn't exist.
+    Backup filename: {original_stem}_{timestamp}.md
+    """
+    if not src.exists():
+        return None
+    store = Path(project_dir) / ".magnolia"
+    if store.is_symlink():
+        store = store.resolve()
+    backups_dir = store / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    backup_name = f"{src.stem}_{ts}{src.suffix}"
+    dest = backups_dir / backup_name
+    shutil.copy2(src, dest)
+    return dest
 
 
 def scaffold_obsidian_vault(project_dir: str) -> Path:
