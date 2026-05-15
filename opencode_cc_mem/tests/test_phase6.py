@@ -11,7 +11,7 @@ import yaml
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.learning.consolidator import consolidate_tier, _merge_duplicates
-from compchem_memory.learning.distiller import distill_session
+from compchem_memory.extraction import AutomaticMemoryExtractor
 from compchem_memory.learning.assessor import assess_run
 
 
@@ -99,7 +99,10 @@ class TestConsolidationScale:
 
 
 class TestSessionDistillation:
-    def test_distill_session_extracts_errors(self):
+    def test_distill_session_extracts_errors(self, monkeypatch):
+        from compchem_memory import extraction as ext
+        monkeypatch.setattr(ext, "is_llm_available", lambda: False)
+
         with tempfile.TemporaryDirectory() as d:
             log_path = Path(d) / "session.jsonl"
             events = [
@@ -113,21 +116,27 @@ class TestSessionDistillation:
                 for ev in events:
                     f.write(json.dumps(ev) + "\n")
 
-            candidates = distill_session(str(log_path))
+            candidates = AutomaticMemoryExtractor(d).preview(log_path)
             assert len(candidates) >= 2
             types = [c["type"] for c in candidates]
             assert "error_resolution" in types
-            assert "parameter_choice" in types
+            assert "parameter_guidance" in types
 
-    def test_distill_empty_session(self):
+    def test_distill_empty_session(self, monkeypatch):
+        from compchem_memory import extraction as ext
+        monkeypatch.setattr(ext, "is_llm_available", lambda: False)
+
         with tempfile.TemporaryDirectory() as d:
             log_path = Path(d) / "empty.jsonl"
             log_path.write_text("")
-            candidates = distill_session(str(log_path))
+            candidates = AutomaticMemoryExtractor(d).preview(log_path)
             assert candidates == []
 
-    def test_distill_nonexistent(self):
-        candidates = distill_session("/nonexistent/path.jsonl")
+    def test_distill_nonexistent(self, monkeypatch, tmp_path):
+        from compchem_memory import extraction as ext
+        monkeypatch.setattr(ext, "is_llm_available", lambda: False)
+
+        candidates = AutomaticMemoryExtractor(str(tmp_path)).preview(Path("/nonexistent/path.jsonl"))
         assert candidates == []
 
 
