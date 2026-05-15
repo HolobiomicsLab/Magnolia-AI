@@ -51,4 +51,8 @@ opencode_3_tier_mem/
 
 # design docs
 docs/cybernetics_assessment.md
+docs/superpowers/*
 todo.md
+*.md
+!AGENTS.md
+!README.md
