@@ -55,4 +55,5 @@ docs/superpowers/*
 todo.md
 *.md
 !AGENTS.md
-!README.md.worktrees/
+!README.md
+.worktrees/
