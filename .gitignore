@@ -59,6 +59,7 @@ todo.md
 *.md
 !AGENTS.md
 !README.md
+!docs/azzurra-setup.md
 .worktrees/
 
 opencode_cc_mem/opencode.json
