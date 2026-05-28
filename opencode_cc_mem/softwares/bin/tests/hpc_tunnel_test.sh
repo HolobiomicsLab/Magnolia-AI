@@ -42,10 +42,10 @@ assert_exit() {
 # ---- tests ----
 
 test_already_running() {
-    # pgrep returns a match → script should exit 0 fast.
+    # pgrep returns a match AND port is bound → script should exit 0 fast.
     local dir; dir=$(make_stub_dir)
     write_stub "$dir" pgrep 0 "12345 openconnect"
-    write_stub "$dir" ss 1 ""           # not reached
+    write_stub "$dir" ss 0 "LISTEN 0 128 127.0.0.1:1080 0.0.0.0:*"
     write_stub "$dir" pass 1 ""         # not reached
     write_stub "$dir" sudo 1 ""         # not reached
     PATH="$dir:$PATH" bash "$SCRIPT" >/dev/null 2>&1
@@ -89,6 +89,34 @@ test_missing_sudoers_rule() {
     rm -rf "$dir"
 }
 
+test_zombie_wrapper() {
+    # pgrep matches (process "found") but port is NOT bound. Script must NOT
+    # return 0 early; it must fall through to the startup path. Since pass and
+    # sudo are stubbed to succeed but openconnect can't actually run in a unit
+    # test, the script will hit the port-bind polling timeout and exit 4. We
+    # override TIMEOUT_S=2 (via env) so the test doesn't take 30s.
+    local dir; dir=$(make_stub_dir)
+    write_stub "$dir" pgrep 0 "12345 openconnect"   # process "found"
+    write_stub "$dir" ss 1 ""                        # port NOT listening
+    write_stub "$dir" pass 0 "secret"                # pass succeeds
+    write_stub "$dir" sudo 0 ""                      # sudo -n true succeeds
+    TIMEOUT_S=2 PATH="$dir:$PATH" bash "$SCRIPT" >/dev/null 2>&1
+    assert_exit $? 4 "zombie_wrapper"
+    rm -rf "$dir"
+}
+
+test_no_user_set() {
+    # Neither UNICA_USER nor USER set → exit 5 before any stub matters.
+    local dir; dir=$(make_stub_dir)
+    write_stub "$dir" pgrep 1 ""
+    write_stub "$dir" ss 1 ""
+    write_stub "$dir" pass 1 ""
+    write_stub "$dir" sudo 1 ""
+    PATH="$dir:$PATH" env -u UNICA_USER -u USER bash "$SCRIPT" >/dev/null 2>&1
+    assert_exit $? 5 "no_user_set"
+    rm -rf "$dir"
+}
+
 # Note: cold-start happy path is integration-tested manually (separate task) —
 # can't be unit-tested without actually spawning openconnect.
 
@@ -100,6 +128,8 @@ else
     test_port_already_listening
     test_missing_pass_entry
     test_missing_sudoers_rule
+    test_zombie_wrapper
+    test_no_user_set
 fi
 
 echo ""
