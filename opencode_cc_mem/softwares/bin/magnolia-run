@@ -47,7 +47,7 @@ CMD_ESCAPED="$(escape_json "$COMMAND")"
 printf '{"event_type":"tool_call","timestamp":"%s","session_id":"%s","project_id":"%s","source":"magnolia-run","tool":"shell","args_summary":"%s"}\n' \
     "$START_ISO" "$SESSION_ID" "$PROJECT_ID" "$CMD_ESCAPED" >> "$SESSION_FILE"
 
-eval "$COMMAND"
+"$@"
 EXIT_CODE=$?
 
 END_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
