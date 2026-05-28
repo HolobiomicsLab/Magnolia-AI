@@ -52,9 +52,14 @@ if ! pass show "$PASS_ENTRY" >/dev/null 2>&1; then
     exit 2
 fi
 
-# 3b. sudo without password?
-if ! sudo -n true 2>/dev/null; then
-    log "ERROR: \`sudo -n true\` failed. Add the NOPASSWD sudoers rule:"
+# 3b. NOPASSWD sudoers rule for openconnect present?
+# Test the specific permission we need (`sudo -n -l <cmd>` exits 0 if the
+# user can run that command without a password) rather than `sudo -n true`,
+# which fails as soon as you have a minimal NOPASSWD scope that doesn't
+# also cover /usr/bin/true.
+if ! sudo -n -l /usr/sbin/openconnect >/dev/null 2>&1; then
+    log "ERROR: cannot run openconnect via sudo without password."
+    log "       Add the NOPASSWD sudoers rule:"
     log "       echo '$UNICA_USER ALL=(root) NOPASSWD: /usr/sbin/openconnect' | sudo tee /etc/sudoers.d/openconnect"
     log "       sudo chmod 0440 /etc/sudoers.d/openconnect"
     exit 3
