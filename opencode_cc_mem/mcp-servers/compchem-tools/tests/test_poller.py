@@ -61,3 +61,72 @@ def test_scan_active_returns_empty_when_runs_dir_absent(tmp_path):
     pd = tmp_path / "proj"
     pd.mkdir()
     assert poller._scan_active_runs(str(pd)) == []
+
+
+class _RecordingMgr:
+    """Stub ProjectManager that records calls."""
+    def __init__(self):
+        self.updates: list[dict] = []
+        self.entries: list[dict] = []
+    def update_run(self, project_dir, run_id, patch):
+        self.updates.append({"run_id": run_id, "patch": patch})
+        return f"/fake/{run_id}.yaml"
+    def create_entry(self, project_dir, title, content, *, tags=None,
+                     source="auto", staging=False, entry_type="note", **_kw):
+        self.entries.append({"title": title, "content": content,
+                              "tags": tags or [], "staging": staging,
+                              "entry_type": entry_type, "source": source})
+        return f"/fake/staging/{title}.md"
+
+
+def test_capture_failure_writes_yaml_patch_and_staging_entry(tmp_path):
+    run_dir = tmp_path / "rd"
+    run_dir.mkdir()
+    (run_dir / "job.err").write_text("\n".join(f"err line {i}" for i in range(80)) + "\n")
+    (run_dir / "job.out").write_text("\n".join(f"out line {i}" for i in range(80)) + "\n")
+    mgr = _RecordingMgr()
+    poller.capture_failure(
+        project_dir=str(tmp_path / "proj"),
+        run_id="r1",
+        tool="xtb",
+        local_run_dir=run_dir,
+        state="FAILED",
+        exit_code="1:0",
+        project_mgr=mgr,
+    )
+    # YAML patch
+    assert len(mgr.updates) == 1
+    patch = mgr.updates[0]["patch"]
+    assert patch["lifecycle"] == "fetched"
+    fail = patch["remote"]["failure"]
+    assert fail["state"] == "FAILED"
+    assert fail["exit_code"] == "1:0"
+    assert "err line 79" in fail["err_tail"]  # last lines kept
+    assert "out line 79" in fail["out_tail"]
+    assert fail["captured_at"]
+    # Staging entry
+    assert len(mgr.entries) == 1
+    entry = mgr.entries[0]
+    assert entry["staging"] is True
+    assert "r1" in entry["title"]
+    assert "FAILED" in entry["content"]
+    assert "xtb" in entry["tags"]
+
+
+def test_capture_failure_handles_missing_log_files(tmp_path):
+    run_dir = tmp_path / "rd"
+    run_dir.mkdir()  # no .err / .out
+    mgr = _RecordingMgr()
+    poller.capture_failure(
+        project_dir=str(tmp_path / "proj"),
+        run_id="r2",
+        tool="xtb",
+        local_run_dir=run_dir,
+        state="TIMEOUT",
+        exit_code="0:0",
+        project_mgr=mgr,
+    )
+    fail = mgr.updates[0]["patch"]["remote"]["failure"]
+    assert fail["err_tail"] == ""
+    assert fail["out_tail"] == ""
+    assert fail["state"] == "TIMEOUT"
