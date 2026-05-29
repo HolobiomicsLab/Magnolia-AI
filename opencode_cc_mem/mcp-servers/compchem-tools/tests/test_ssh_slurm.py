@@ -508,3 +508,111 @@ def test_fetch_missing_local_run_dir_in_yaml_returns_run_record_missing(fake_sub
     # Critical: rsync MUST NOT have been called
     cmds = [" ".join(c) for c in fake_subprocess.calls]
     assert not any("rsync" in c for c in cmds), f"rsync should not have been called: {cmds}"
+
+
+# ── M7: jobs.py scheduler dispatch + fetch_job_results MCP tool ───────────────
+
+
+def test_submit_job_dispatches_ssh_slurm_to_module(fake_subprocess, tmp_path, monkeypatch):
+    from compchem_tools.tools.jobs import submit_job as submit_job_underlying
+
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    local_run_dir = project_dir / "runs" / "x"
+    local_run_dir.mkdir(parents=True)
+
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["azzurra sbatch"] = CompletedProcess(
+        [], 0, "Submitted batch job 22222\n", ""
+    )
+    monkeypatch.setattr(
+        "compchem_tools.tools.ssh_slurm._generate_run_id",
+        lambda tool: f"{tool}_FIXED",
+    )
+
+    result = submit_job_underlying(
+        command="echo hi",
+        working_dir=str(local_run_dir),
+        scheduler="ssh-slurm",
+        cluster="azzurra",
+        project_dir=str(project_dir),
+        tool="xtb",
+    )
+    assert result["success"] is True
+    assert result["job_id"] == "22222"
+    assert result["scheduler"] == "ssh-slurm"
+
+
+def test_check_job_dispatches_ssh_slurm_to_module(fake_subprocess, tmp_path):
+    from compchem_tools.tools.jobs import check_job as check_job_underlying
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["sacct -j 33333"] = CompletedProcess(
+        [], 0,
+        "33333|RUNNING|0:0|00:00:30||00:00:25|2026-05-29T14:00:00|Unknown|compute01\n",
+        "",
+    )
+    result = check_job_underlying(
+        job_id="33333", scheduler="ssh-slurm",
+        cluster="azzurra", project_dir=str(project_dir),
+    )
+    assert result["success"] is True
+    assert result["state"] == "RUNNING"
+    assert result["lifecycle"] == "running"
+
+
+def test_cancel_job_dispatches_ssh_slurm_to_module(fake_subprocess, tmp_path):
+    from compchem_tools.tools.jobs import cancel_job as cancel_job_underlying
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="xtb_TEST",
+        tool="xtb",
+        status=None,
+        lifecycle="running",
+        remote={"cluster": "azzurra", "job_id": "44444"},
+    )
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["scancel 44444"] = CompletedProcess([], 0, "", "")
+    result = cancel_job_underlying(
+        job_id="44444", scheduler="ssh-slurm",
+        cluster="azzurra", project_dir=str(project_dir),
+    )
+    assert result["success"] is True
+    assert result["lifecycle"] == "cancelled"
+
+
+def test_fetch_job_results_mcp_tool_returns_json(fake_subprocess, tmp_path):
+    from compchem_tools.server import fetch_job_results as fetch_mcp_tool
+    # FastMCP wraps @mcp.tool()-decorated functions in FunctionTool; the
+    # underlying callable is exposed as .fn (same drift the pre-existing
+    # test_phase{3,4,5}_tools_return_json failures hit).
+    fetch_mcp = fetch_mcp_tool.fn
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    local_run_dir = project_dir / "runs" / "x"
+    local_run_dir.mkdir(parents=True)
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="xtb_20260529_140000",
+        tool="xtb",
+        status=None,
+        lifecycle="completed",
+        remote={
+            "cluster": "azzurra",
+            "job_id": "55555",
+            "local_run_dir": str(local_run_dir),
+            "remote_run_dir": "/workspace/user/magnolia/p/runs/xtb_20260529_140000",
+        },
+    )
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["rsync"] = CompletedProcess(
+        [], 0, "Number of regular files transferred: 3\n", ""
+    )
+    out = fetch_mcp(job_id="55555", project_dir=str(project_dir))
+    # MCP tool returns a JSON string
+    data = json.loads(out)
+    assert data["success"] is True
+    assert data["files_fetched"] == 3

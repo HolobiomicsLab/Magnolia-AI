@@ -604,6 +604,32 @@ def cancel_job(
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+@captured(source="compchem-tools")
+def fetch_job_results(
+    job_id: str,
+    project_dir: str | None = None,
+) -> str:
+    """Pull a remote SSH-Slurm job's run dir back to its recorded local path.
+
+    Looks up the run by `job_id` in <project_dir>/.magnolia/runs/*.yaml.
+    rsyncs the remote_run_dir to local_run_dir, updates the yaml to
+    lifecycle="fetched", returns a JSON summary.
+
+    Call this when: you've checked a job (`check_job`), it returned
+    `terminal: true`, and you want the output files locally before running
+    `post_run_assess`."""
+    from compchem_tools.tools import ssh_slurm
+    if project_dir is None:
+        return json.dumps(
+            {"success": False, "error_kind": "run_record_missing",
+             "error": "project_dir is required"},
+            indent=2,
+        )
+    result = ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+    return json.dumps(result, indent=2)
+
+
 # ── v2 Session Management Tools ──────────────────────────────────────────────
 
 
