@@ -97,3 +97,67 @@ def test_manifest_is_written_before_rsync_push(monkeypatch, tmp_path):
     assert manifest_existed_at_rsync, "rsync was never called"
     assert manifest_existed_at_rsync[0] is True, \
         "manifest.json did not exist at the moment of the rsync push"
+
+
+def test_writeahead_record_exists_before_sbatch(tmp_path, monkeypatch):
+    """submit() must write lifecycle='submitting' BEFORE invoking sbatch,
+    so a crash between sbatch-success and the upgrade leaves a breadcrumb."""
+    from subprocess import CompletedProcess
+    pd = tmp_path / "proj"
+    pd.mkdir()
+    work = tmp_path / "work"
+    mgr = ssh_slurm.ProjectManager(global_base=tmp_path / ".magnolia")
+    monkeypatch.setattr(ssh_slurm, "_PROJECT_MANAGER", mgr)
+
+    # Make sbatch fail so submit() returns BEFORE upgrading lifecycle.
+    # The writeahead record must still be present.
+    def fake_run(cmd, *, capture_output=True, text=True, timeout=None, **kw):
+        cmd_str = " ".join(cmd)
+        if cmd_str.endswith("hpc_tunnel.sh"):
+            return CompletedProcess(cmd, 0, "", "")
+        if cmd[0] == "rsync":
+            return CompletedProcess(cmd, 0, "", "")
+        if "sbatch job.slurm" in cmd_str:
+            return CompletedProcess(cmd, 1, "", "sbatch: error: simulated")
+        return CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(ssh_slurm.subprocess, "run", fake_run)
+
+    result = ssh_slurm.submit(
+        command="xtb x.xyz",
+        working_dir=str(work),
+        project_dir=str(pd),
+        tool="xtb",
+    )
+    assert result["success"] is False  # sbatch failed as designed
+    # But a writeahead breadcrumb exists
+    runs = list((pd / ".magnolia" / "runs").glob("*.yaml"))
+    runs = [r for r in runs if r.name != "INDEX.yaml"]
+    assert len(runs) == 1, f"expected one writeahead YAML, found {runs}"
+    import yaml
+    rec = yaml.safe_load(runs[0].read_text())
+    assert rec["lifecycle"] == "submitting"
+    assert rec["remote"]["scheduler"] == "ssh-slurm"
+    assert rec["remote"]["remote_run_dir"]  # populated
+    assert rec["remote"].get("job_id") in (None, "", "pending")  # no job_id yet
+
+
+def test_writeahead_is_upgraded_to_submitted_on_success(fake_subprocess, tmp_path, monkeypatch):
+    pd = tmp_path / "proj"
+    pd.mkdir()
+    work = tmp_path / "work"
+    mgr = ssh_slurm.ProjectManager(global_base=tmp_path / ".magnolia")
+    monkeypatch.setattr(ssh_slurm, "_PROJECT_MANAGER", mgr)
+    result = ssh_slurm.submit(
+        command="xtb x.xyz",
+        working_dir=str(work),
+        project_dir=str(pd),
+        tool="xtb",
+    )
+    assert result["success"] is True
+    runs = list((pd / ".magnolia" / "runs").glob("*.yaml"))
+    runs = [r for r in runs if r.name != "INDEX.yaml"]
+    assert len(runs) == 1
+    import yaml
+    rec = yaml.safe_load(runs[0].read_text())
+    assert rec["lifecycle"] == "submitted"
+    assert rec["remote"]["job_id"] == "555111"

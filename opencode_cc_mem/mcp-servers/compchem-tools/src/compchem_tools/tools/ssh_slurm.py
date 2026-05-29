@@ -251,6 +251,27 @@ def submit(
     }
     (manifest_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
+    # L4: writeahead breadcrumb. If we crash between sbatch returning a
+    # job_id and the post-sbatch upgrade below, this leaves a local pointer
+    # to the (self-describing) remote dir so the run is recoverable.
+    _PROJECT_MANAGER.record_run(
+        project_dir=project_dir,
+        run_id=run_id,
+        tool=tool or "raw",
+        status=None,
+        lifecycle="submitting",
+        remote={
+            "scheduler": "ssh-slurm",
+            "cluster": cluster,
+            "account": account,
+            "qos": qos,
+            "partition": partition,
+            "local_run_dir": str(local_run_dir),
+            "remote_run_dir": remote_run_dir,
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
     push = _rsync_push(local_run_dir, cluster, remote_run_dir)
     if push.returncode != 0:
         return {"success": False, "error_kind": "rsync_push_failed",
@@ -273,24 +294,14 @@ def submit(
                 "error": "sbatch returncode=0 but jobid not found",
                 "details": {"stdout": sb.stdout.strip()}}
 
-    remote_record = {
-        "scheduler": "ssh-slurm",
-        "cluster": cluster,
-        "job_id": job_id,
-        "account": account,
-        "qos": qos,
-        "partition": partition,
-        "local_run_dir": str(local_run_dir),
-        "remote_run_dir": remote_run_dir,
-        "submitted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _PROJECT_MANAGER.record_run(
+    # Upgrade the writeahead to lifecycle=submitted now that we have a job_id.
+    _PROJECT_MANAGER.update_run(
         project_dir=project_dir,
         run_id=run_id,
-        tool=tool or "raw",
-        status=None,
-        lifecycle="submitted",
-        remote=remote_record,
+        patch={
+            "lifecycle": "submitted",
+            "remote": {"job_id": job_id},
+        },
     )
 
     return {
