@@ -14,14 +14,37 @@ def submit_job(
     memory: str = "4GB",
     time_limit: str = "24:00:00",
     partition: str | None = None,
+    # ssh-slurm-specific kwargs (ignored by slurm/pbs/local branches)
+    project_dir: str | None = None,
+    cluster: str = "azzurra",
+    account: str | None = None,
+    qos: str | None = None,
+    tool: str | None = None,
 ) -> dict[str, Any]:
-    """Submit a job to Slurm, PBS, or run locally.
+    """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details."""
+    scheduler = scheduler.lower()
+
+    if scheduler == "ssh-slurm":
+        from compchem_tools.tools import ssh_slurm
+        return ssh_slurm.submit(
+            command=command,
+            working_dir=working_dir,
+            project_dir=project_dir,
+            cluster=cluster,
+            account=account,
+            qos=qos,
+            partition=partition,
+            job_name=job_name,
+            ncores=ncores,
+            memory=memory,
+            time_limit=time_limit,
+            tool=tool,
+        )
+
     wdir = Path(working_dir)
     if not wdir.exists():
         return {"success": False, "error": f"Working directory not found: {working_dir}"}
-
-    scheduler = scheduler.lower()
 
     if scheduler == "slurm":
         return _submit_slurm(command, wdir, job_name, ncores, memory, time_limit, partition)
@@ -30,14 +53,17 @@ def submit_job(
     elif scheduler == "local":
         return _submit_local(command, wdir, job_name, ncores)
     else:
-        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', or 'local'."}
+        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
 
 
 def check_job(
     job_id: str,
     scheduler: str = "slurm",
+    # ssh-slurm-specific kwargs
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
 ) -> dict[str, Any]:
-    """Check job status on Slurm, PBS, or local.
+    """Check job status on Slurm, PBS, ssh-slurm, or local.
     Returns current status information."""
     scheduler = scheduler.lower()
 
@@ -47,15 +73,25 @@ def check_job(
         return _check_pbs(job_id)
     elif scheduler == "local":
         return _check_local(job_id)
+    elif scheduler == "ssh-slurm":
+        from compchem_tools.tools import ssh_slurm
+        return ssh_slurm.check(
+            job_id=job_id,
+            cluster=cluster,
+            project_dir=project_dir,
+        )
     else:
-        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', or 'local'."}
+        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
 
 
 def cancel_job(
     job_id: str,
     scheduler: str = "slurm",
+    # ssh-slurm-specific kwargs
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
 ) -> dict[str, Any]:
-    """Cancel a running job on Slurm, PBS, or local.
+    """Cancel a running job on Slurm, PBS, ssh-slurm, or local.
     Returns cancellation status."""
     scheduler = scheduler.lower()
 
@@ -65,8 +101,15 @@ def cancel_job(
         return _cancel_pbs(job_id)
     elif scheduler == "local":
         return _cancel_local(job_id)
+    elif scheduler == "ssh-slurm":
+        from compchem_tools.tools import ssh_slurm
+        return ssh_slurm.cancel(
+            job_id=job_id,
+            cluster=cluster,
+            project_dir=project_dir,
+        )
     else:
-        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', or 'local'."}
+        return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
 
 
 # ── Slurm ────────────────────────────────────────────────────────────────────
