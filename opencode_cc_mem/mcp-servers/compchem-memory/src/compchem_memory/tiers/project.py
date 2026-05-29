@@ -19,6 +19,57 @@ ENTRY_TYPES = (
 )
 
 
+def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge `patch` into `base`. Patch values override; nested
+    dicts are merged element-wise; non-dict values replace whole.
+    """
+    out = dict(base)
+    for key, value in patch.items():
+        if key in out and isinstance(out[key], dict) and isinstance(value, dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _format_index_value(value: Any) -> str:
+    """Render a single index field for the flow-style row.
+
+    Goals: human-readable, greppable, round-trips through yaml.safe_load.
+    - None -> 'null'
+    - bool -> 'true'/'false'
+    - int/float -> str(value)
+    - all-digit strings get single-quoted so they round-trip as str (e.g. job_id)
+    - other strings emit bare unless they contain flow-context terminators
+      (`,` `{` `}` `[` `]`) or leading/trailing whitespace, in which case
+      they get single-quoted.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    s = str(value)
+    if s == "":
+        return "''"
+    needs_quote = (
+        s.isdigit()  # preserve as string (e.g. job_id)
+        or s != s.strip()
+        or any(ch in s for ch in (",", "{", "}", "[", "]", "'", '"', "\n"))
+        or s[0] in ("&", "*", "!", "|", ">", "%", "@", "`", "#")
+    )
+    if needs_quote:
+        return "'" + s.replace("'", "''") + "'"
+    return s
+
+
+def _format_index_row(row: dict[str, Any]) -> str:
+    """Render one index row in flow-style YAML on a single line."""
+    parts = [f"{k}: {_format_index_value(v)}" for k, v in row.items()]
+    return "{" + ", ".join(parts) + "}"
+
+
 class ProjectManager:
     def __init__(self, global_base: Path):
         self.global_base = global_base
@@ -265,13 +316,16 @@ class ProjectManager:
         project_dir: str,
         run_id: str,
         tool: str,
-        status: str,
+        status: str | None,
         metrics: dict[str, Any] | None = None,
         quality_flags: list[str] | None = None,
         errors_solved: list[str] | None = None,
+        *,
+        lifecycle: str | None = None,
+        remote: dict[str, Any] | None = None,
     ) -> str:
         runs_dir = self._runs_dir(project_dir)
-        record = {
+        record: dict[str, Any] = {
             "run_id": run_id,
             "tool": tool,
             "status": status,
@@ -280,10 +334,38 @@ class ProjectManager:
             "quality_flags": quality_flags or [],
             "errors_solved": errors_solved or [],
         }
+        if lifecycle is not None:
+            record["lifecycle"] = lifecycle
+        if remote is not None:
+            record["remote"] = remote
         ts = datetime.now(timezone.utc).strftime("%Y%m%d")
         fname = f"{ts}_{run_id}.yaml"
         fpath = runs_dir / fname
-        fpath.write_text(yaml.dump(record, default_flow_style=False))
+        fpath.write_text(yaml.dump(record, default_flow_style=False, sort_keys=False))
+        self._update_runs_index(project_dir)
+        return str(fpath)
+
+    def update_run(
+        self,
+        project_dir: str,
+        run_id: str,
+        patch: dict[str, Any],
+    ) -> str:
+        """Load runs/<date>_<run_id>.yaml, deep-merge `patch`, write back,
+        refresh INDEX.yaml. Returns the YAML path.
+
+        Raises FileNotFoundError if the run record doesn't exist.
+        """
+        runs_dir = self._runs_dir(project_dir)
+        matches = list(runs_dir.glob(f"*_{run_id}.yaml"))
+        if not matches:
+            raise FileNotFoundError(
+                f"No run record for run_id={run_id!r} in {runs_dir}"
+            )
+        fpath = matches[0]
+        existing = yaml.safe_load(fpath.read_text()) or {}
+        merged = _deep_merge(existing, patch)
+        fpath.write_text(yaml.dump(merged, default_flow_style=False, sort_keys=False))
         self._update_runs_index(project_dir)
         return str(fpath)
 
@@ -358,28 +440,50 @@ class ProjectManager:
         index_path.write_text("".join(lines))
 
     def _update_runs_index(self, project_dir: str) -> None:
-        runs = self.get_run_history(project_dir)
+        """Scan all runs/*_*.yaml files, emit a one-line-per-record INDEX.yaml.
+
+        Output is flow-style YAML: each record renders on its own line, which
+        makes the file `grep`-friendly (any grep hit returns a complete record
+        with all identifying columns).
+        """
         runs_dir = self._runs_dir(project_dir)
+        index_path = self._runs_index_path(project_dir)
 
         # Backward compat: remove old INDEX.md if it exists
         old_index = runs_dir / "INDEX.md"
         if old_index.exists():
             old_index.unlink()
 
-        index_path = self._runs_index_path(project_dir)
-        index_data = {
-            "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "runs": [
-                {
-                    "run_id": r.get("run_id", ""),
-                    "tool": r.get("tool", ""),
-                    "status": r.get("status", ""),
-                    "date": r.get("date", ""),
-                }
-                for r in runs
-            ],
-        }
-        index_path.write_text(yaml.dump(index_data, default_flow_style=False))
+        records: list[dict[str, Any]] = []
+        for yfile in sorted(runs_dir.glob("*.yaml")):
+            if yfile.name == "INDEX.yaml":
+                continue
+            try:
+                data = yaml.safe_load(yfile.read_text()) or {}
+            except yaml.YAMLError:
+                continue
+            remote = data.get("remote") or {}
+            slurm = remote.get("slurm") or {}
+            row = {
+                "run_id": data.get("run_id"),
+                "tool": data.get("tool"),
+                "date": data.get("date"),
+                "lifecycle": data.get("lifecycle"),
+                "status": data.get("status"),
+                "cluster": remote.get("cluster"),
+                "job_id": remote.get("job_id"),
+                "slurm_state": slurm.get("state"),
+                "elapsed": slurm.get("elapsed"),
+                "node": slurm.get("node_list"),
+            }
+            records.append(row)
+        if not records:
+            index_path.write_text("[]\n")
+            return
+        lines = ["# runs/INDEX.yaml — auto-maintained by ProjectManager._update_runs_index()"]
+        for row in records:
+            lines.append(f"- {_format_index_row(row)}")
+        index_path.write_text("\n".join(lines) + "\n")
 
     def _update_related_links(
         self,
