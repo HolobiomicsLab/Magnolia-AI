@@ -150,6 +150,8 @@ module use {modulefiles_use}
 {module_load_line}
 
 cd "$SLURM_SUBMIT_DIR"
+mkdir -p .magnolia
+echo "$SLURM_JOB_ID" > .magnolia/jobid
 {command}
 """
     path = local_run_dir / "job.slurm"
