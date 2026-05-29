@@ -36,7 +36,7 @@ def assess_and_record(
         project_dir,
         run_id=run_id,
         tool=tool,
-        status=assessment.get("overall", "pass" if exit_code == 0 else "failed"),
+        status=assessment.get("overall", "pass" if exit_code == 0 else "fail"),
         metrics=assessment.get("metrics", {}),
         quality_flags=assessment.get("quality_flags", []),
         errors_solved=[],
