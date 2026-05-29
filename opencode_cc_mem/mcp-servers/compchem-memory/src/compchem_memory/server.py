@@ -11,7 +11,6 @@ from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.skill import SkillManager
-from compchem_memory.learning.assessor import assess_run
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.index import MemoryIndex
 from compchem_memory.context_assembly import assemble_context, _memory_store
@@ -414,18 +413,15 @@ def post_run_assess(
     guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
-    assessment = assess_run(run_dir, tool, exit_code)
+    from compchem_memory.learning.orchestrator import assess_and_record
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
-    run_id = Path(run_dir).name
-    proj_m.record_run(
-        pd,
-        run_id=run_id,
+    assessment = assess_and_record(
+        run_dir=run_dir,
         tool=tool,
-        status=assessment.get("overall", "pass" if exit_code == 0 else "failed"),
-        metrics=assessment.get("metrics", {}),
-        quality_flags=assessment.get("quality_flags", []),
-        errors_solved=[],
+        exit_code=exit_code,
+        project_dir=pd,
+        project_mgr=proj_m,
     )
     sess_m = _get_session_mgr(pd)
     sess_m.record(

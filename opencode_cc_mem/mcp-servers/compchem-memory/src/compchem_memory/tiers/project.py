@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from compchem_memory.atomic_io import atomic_write_text
 from compchem_memory.storage import backup_file
 
 ENTRY_TYPES = (
@@ -341,7 +342,7 @@ class ProjectManager:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d")
         fname = f"{ts}_{run_id}.yaml"
         fpath = runs_dir / fname
-        fpath.write_text(yaml.dump(record, default_flow_style=False, sort_keys=False))
+        atomic_write_text(fpath, yaml.dump(record, default_flow_style=False, sort_keys=False))
         self._update_runs_index(project_dir)
         return str(fpath)
 
@@ -365,7 +366,7 @@ class ProjectManager:
         fpath = matches[0]
         existing = yaml.safe_load(fpath.read_text()) or {}
         merged = _deep_merge(existing, patch)
-        fpath.write_text(yaml.dump(merged, default_flow_style=False, sort_keys=False))
+        atomic_write_text(fpath, yaml.dump(merged, default_flow_style=False, sort_keys=False))
         self._update_runs_index(project_dir)
         return str(fpath)
 
@@ -437,7 +438,7 @@ class ProjectManager:
                     )
                 lines.append("\n")
 
-        index_path.write_text("".join(lines))
+        atomic_write_text(index_path, "".join(lines))
 
     def _update_runs_index(self, project_dir: str) -> None:
         """Scan all runs/*_*.yaml files, emit a one-line-per-record INDEX.yaml.
@@ -462,6 +463,8 @@ class ProjectManager:
                 data = yaml.safe_load(yfile.read_text()) or {}
             except yaml.YAMLError:
                 continue
+            if not isinstance(data, dict):
+                continue
             remote = data.get("remote") or {}
             slurm = remote.get("slurm") or {}
             row = {
@@ -478,12 +481,12 @@ class ProjectManager:
             }
             records.append(row)
         if not records:
-            index_path.write_text("[]\n")
+            atomic_write_text(index_path, "[]\n")
             return
         lines = ["# runs/INDEX.yaml — auto-maintained by ProjectManager._update_runs_index()"]
         for row in records:
             lines.append(f"- {_format_index_row(row)}")
-        index_path.write_text("\n".join(lines) + "\n")
+        atomic_write_text(index_path, "\n".join(lines) + "\n")
 
     def _update_related_links(
         self,
