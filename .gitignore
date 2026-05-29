@@ -60,6 +60,8 @@ todo.md
 !AGENTS.md
 !README.md
 !docs/azzurra-setup.md
+!opencode_cc_mem/rules/*.md
+opencode_cc_mem/rules/hpc_azzurra.md
 .worktrees/
 
 opencode_cc_mem/opencode.json
