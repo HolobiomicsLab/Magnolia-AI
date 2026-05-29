@@ -275,3 +275,150 @@ def submit(
         "remote_run_dir": remote_run_dir,
         "local_run_dir": str(local_run_dir),
     }
+
+
+def _parse_sacct(line: str) -> dict[str, str] | None:
+    """Parse a single sacct row produced with -P -X -n and the
+    --format=JobID,State,ExitCode,Elapsed,MaxRSS,AveCPU,Start,End,NodeList
+    field order. Returns None if the line is empty or malformed.
+    """
+    if not line or not line.strip():
+        return None
+    fields = line.strip().split("|")
+    if len(fields) < 9:
+        return None
+    return {
+        "job_id": fields[0],
+        "state": fields[1],
+        "exit_code": fields[2],
+        "elapsed": fields[3],
+        "max_rss": fields[4],
+        "ave_cpu": fields[5],
+        "start": fields[6],
+        "end": fields[7],
+        "node_list": fields[8],
+    }
+
+
+# State sets per rules/slurm.md
+_RUNNING_STATES = {"PD", "PENDING", "CF", "CONFIGURING", "R", "RUNNING", "S", "SUSPENDED", "CG", "COMPLETING"}
+_COMPLETED_STATES = {"CD", "COMPLETED"}
+_CANCELLED_STATES = {"CA", "CANCELLED", "CANCELLED+"}
+
+
+def _state_to_lifecycle(state: str) -> str:
+    if state in _RUNNING_STATES:
+        return "running"
+    if state in _COMPLETED_STATES:
+        return "completed"
+    if state in _CANCELLED_STATES or state.startswith("CANCELLED"):
+        return "cancelled"
+    return "failed"
+
+
+def _is_terminal(state: str) -> bool:
+    return _state_to_lifecycle(state) in ("completed", "failed", "cancelled")
+
+
+_SACCT_FORMAT = "JobID,State,ExitCode,Elapsed,MaxRSS,AveCPU,Start,End,NodeList"
+
+
+def _find_run_by_job_id(project_dir: str, job_id: str) -> tuple[str, dict] | None:
+    """Scan runs/*.yaml; return (run_id, record) for the matching job_id."""
+    import yaml as yamlpkg
+    runs_dir = Path(project_dir) / ".magnolia" / "runs"
+    if not runs_dir.exists():
+        return None
+    for f in runs_dir.glob("*.yaml"):
+        if f.name == "INDEX.yaml":
+            continue
+        try:
+            data = yamlpkg.safe_load(f.read_text()) or {}
+        except yamlpkg.YAMLError:
+            continue
+        if (data.get("remote") or {}).get("job_id") == job_id:
+            return data["run_id"], data
+    return None
+
+
+def check(
+    *,
+    job_id: str,
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
+) -> dict[str, Any]:
+    """Check Slurm state for a job. Returns lifecycle + sacct resource fields.
+
+    Tunnel up → sacct first (covers historical + most live jobs) → falls
+    back to squeue for in-queue jobs that haven't entered accounting yet.
+    If project_dir given, persists slurm.* fields and last_polled_at via
+    ProjectManager.update_run.
+    """
+    if cluster not in CLUSTER_CONFIG:
+        return {"success": False, "error_kind": "unknown_cluster", "error": cluster}
+    try:
+        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+
+    sa = _ssh(cluster, f"sacct -j {job_id} -X -P -n --format={_SACCT_FORMAT}")
+    sacct = _parse_sacct(sa.stdout)
+
+    if sacct is not None:
+        state = sacct["state"]
+        lifecycle = _state_to_lifecycle(state)
+        result = {
+            "success": True,
+            "state": state,
+            "lifecycle": lifecycle,
+            "terminal": _is_terminal(state),
+            "exit_code": sacct["exit_code"],
+            "elapsed": sacct["elapsed"],
+            "max_rss": sacct["max_rss"],
+            "ave_cpu": sacct["ave_cpu"],
+            "start": sacct["start"],
+            "end": sacct["end"],
+            "node_list": sacct["node_list"],
+        }
+        slurm_record = {
+            "state": state,
+            "exit_code": sacct["exit_code"],
+            "elapsed": sacct["elapsed"],
+            "max_rss": sacct["max_rss"],
+            "ave_cpu": sacct["ave_cpu"],
+            "start": sacct["start"],
+            "end": sacct["end"],
+            "node_list": sacct["node_list"],
+        }
+    else:
+        sq = _ssh(cluster, f"squeue -j {job_id} -h -o '%T'")
+        state = sq.stdout.strip()
+        if not state:
+            return {"success": False, "error_kind": "job_not_found",
+                    "error": f"no sacct or squeue record for {job_id}"}
+        lifecycle = _state_to_lifecycle(state)
+        result = {
+            "success": True,
+            "state": state,
+            "lifecycle": lifecycle,
+            "terminal": _is_terminal(state),
+        }
+        slurm_record = {"state": state}
+
+    if project_dir:
+        found = _find_run_by_job_id(project_dir, job_id)
+        if found:
+            run_id, _ = found
+            _PROJECT_MANAGER.update_run(
+                project_dir=project_dir,
+                run_id=run_id,
+                patch={
+                    "lifecycle": lifecycle,
+                    "remote": {
+                        "slurm": slurm_record,
+                        "last_polled_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                },
+            )
+
+    return result

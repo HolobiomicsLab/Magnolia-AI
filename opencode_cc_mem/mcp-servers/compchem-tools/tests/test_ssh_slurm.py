@@ -273,3 +273,121 @@ def test_submit_rsync_push_failure_returns_rsync_push_failed(fake_subprocess, tm
     )
     assert result["success"] is False
     assert result["error_kind"] == "rsync_push_failed"
+
+
+def test_parse_sacct_completed_row():
+    line = "11331448|COMPLETED|0:0|00:00:42|256M|00:00:38|2026-05-29T14:00:10|2026-05-29T14:00:52|gpu06"
+    parsed = ssh_slurm._parse_sacct(line)
+    assert parsed["state"] == "COMPLETED"
+    assert parsed["exit_code"] == "0:0"
+    assert parsed["elapsed"] == "00:00:42"
+    assert parsed["max_rss"] == "256M"
+    assert parsed["ave_cpu"] == "00:00:38"
+    assert parsed["start"] == "2026-05-29T14:00:10"
+    assert parsed["end"] == "2026-05-29T14:00:52"
+    assert parsed["node_list"] == "gpu06"
+
+
+def test_parse_sacct_empty_returns_none():
+    assert ssh_slurm._parse_sacct("") is None
+    assert ssh_slurm._parse_sacct("\n") is None
+
+
+def test_parse_sacct_malformed_returns_none():
+    assert ssh_slurm._parse_sacct("not|enough|fields") is None
+
+
+@pytest.mark.parametrize("state,expected", [
+    ("PD", "running"),
+    ("CF", "running"),
+    ("R", "running"),
+    ("S", "running"),
+    ("CG", "running"),
+    ("CD", "completed"),
+    ("COMPLETED", "completed"),
+    ("F", "failed"),
+    ("FAILED", "failed"),
+    ("TO", "failed"),
+    ("TIMEOUT", "failed"),
+    ("NF", "failed"),
+    ("BF", "failed"),
+    ("OOM", "failed"),
+    ("DL", "failed"),
+    ("PR", "failed"),
+    ("RV", "failed"),
+    ("CA", "cancelled"),
+    ("CANCELLED", "cancelled"),
+    ("CANCELLED+", "cancelled"),
+    ("WHATEVER", "failed"),  # unknown state → conservative
+])
+def test_state_to_lifecycle(state, expected):
+    assert ssh_slurm._state_to_lifecycle(state) == expected
+
+
+def test_state_to_lifecycle_terminal_flag():
+    assert ssh_slurm._is_terminal("COMPLETED") is True
+    assert ssh_slurm._is_terminal("FAILED") is True
+    assert ssh_slurm._is_terminal("CANCELLED") is True
+    assert ssh_slurm._is_terminal("RUNNING") is False
+    assert ssh_slurm._is_terminal("PENDING") is False
+
+
+def test_check_returns_completed_state_with_resources(fake_subprocess, tmp_path):
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="haddock3_20260529_140000",
+        tool="haddock3",
+        status=None,
+        lifecycle="submitted",
+        remote={"cluster": "azzurra", "job_id": "11331448"},
+    )
+
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["sacct -j 11331448"] = CompletedProcess(
+        [], 0,
+        "11331448|COMPLETED|0:0|00:00:42|256M|00:00:38|2026-05-29T14:00:10|2026-05-29T14:00:52|gpu06\n",
+        "",
+    )
+
+    result = ssh_slurm.check(
+        job_id="11331448",
+        cluster="azzurra",
+        project_dir=str(project_dir),
+    )
+
+    assert result["success"] is True
+    assert result["state"] == "COMPLETED"
+    assert result["lifecycle"] == "completed"
+    assert result["terminal"] is True
+    assert result["elapsed"] == "00:00:42"
+    assert result["max_rss"] == "256M"
+
+    yaml_files = list((project_dir / ".magnolia" / "runs").glob("*_haddock3_20260529_140000.yaml"))
+    import yaml as yamlpkg
+    rec = yamlpkg.safe_load(yaml_files[0].read_text())
+    assert rec["lifecycle"] == "completed"
+    assert rec["remote"]["slurm"]["state"] == "COMPLETED"
+    assert rec["remote"]["slurm"]["elapsed"] == "00:00:42"
+
+
+def test_check_falls_back_to_squeue_when_sacct_empty(fake_subprocess, tmp_path):
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["sacct"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["squeue"] = CompletedProcess([], 0, "PD\n", "")
+
+    result = ssh_slurm.check(
+        job_id="99999",
+        cluster="azzurra",
+        project_dir=str(project_dir),
+    )
+
+    assert result["success"] is True
+    assert result["state"] == "PD"
+    assert result["lifecycle"] == "running"
+    assert result["terminal"] is False
