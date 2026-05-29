@@ -60,20 +60,40 @@ def test_submit_writes_manifest_into_local_run_dir(fake_subprocess, tmp_path, mo
     assert data["submitted_at"]  # iso timestamp
 
 
-def test_manifest_is_written_before_rsync_push(fake_subprocess, tmp_path, monkeypatch):
-    """If the manifest write happens AFTER push, the remote dir won't have it."""
+def test_manifest_is_written_before_rsync_push(monkeypatch, tmp_path):
+    """The manifest must exist on disk AT THE MOMENT rsync runs, so the
+    push includes it. Verified by capturing existence inside the fake
+    subprocess at the rsync call site."""
+    from subprocess import CompletedProcess
     pd = tmp_path / "proj"
     pd.mkdir()
     work = tmp_path / "work"
     monkeypatch.setattr(ssh_slurm, "_PROJECT_MANAGER",
                         ssh_slurm.ProjectManager(global_base=tmp_path / ".magnolia"))
+
+    manifest_existed_at_rsync: list[bool] = []
+
+    def fake_run(cmd, *, capture_output=True, text=True, timeout=None, **kw):
+        cmd_str = " ".join(cmd)
+        if cmd_str.endswith("hpc_tunnel.sh"):
+            return CompletedProcess(cmd, 0, "", "")
+        if cmd[0] == "rsync":
+            # snapshot existence at the EXACT moment rsync would have run
+            manifest_existed_at_rsync.append(
+                (work / ".magnolia" / "manifest.json").exists()
+            )
+            return CompletedProcess(cmd, 0, "Number of regular files transferred: 3\n", "")
+        if "sbatch job.slurm" in cmd_str:
+            return CompletedProcess(cmd, 0, "Submitted batch job 555111\n", "")
+        return CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(ssh_slurm.subprocess, "run", fake_run)
     ssh_slurm.submit(
         command="xtb x.xyz",
         working_dir=str(work),
         project_dir=str(pd),
         tool="xtb",
     )
-    # Manifest must exist on disk by the time rsync runs
-    rsync_idx = next(i for i, c in enumerate(fake_subprocess) if c[0] == "rsync")
-    assert rsync_idx >= 0
-    assert (work / ".magnolia" / "manifest.json").exists()
+    assert manifest_existed_at_rsync, "rsync was never called"
+    assert manifest_existed_at_rsync[0] is True, \
+        "manifest.json did not exist at the moment of the rsync push"

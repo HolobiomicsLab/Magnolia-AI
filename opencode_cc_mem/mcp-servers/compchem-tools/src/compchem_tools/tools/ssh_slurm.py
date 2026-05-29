@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from subprocess import CompletedProcess
+import json
 import re
 import subprocess  # noqa: F401 — patched by tests via tools.ssh_slurm.subprocess.run
 from typing import Any
@@ -248,8 +249,7 @@ def submit(
         "command": command,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
     }
-    import json as _json
-    (manifest_dir / "manifest.json").write_text(_json.dumps(manifest, indent=2) + "\n")
+    (manifest_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
     push = _rsync_push(local_run_dir, cluster, remote_run_dir)
     if push.returncode != 0:
