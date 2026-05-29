@@ -236,7 +236,12 @@ def submit(
                 "error": f"rsync push exit={push.returncode}",
                 "details": {"stderr": push.stderr.strip()}}
 
-    sb = _ssh(cluster, f"sbatch {remote_run_dir}/job.slurm")
+    # Invoke sbatch from inside the run dir so SLURM_SUBMIT_DIR resolves to it.
+    # Otherwise sbatch runs from the ssh login dir ($HOME), Slurm sets
+    # SLURM_SUBMIT_DIR to $HOME, the script's `cd "$SLURM_SUBMIT_DIR"` lands
+    # in $HOME, relative-path input files (rsynced into the run dir) become
+    # unreachable, and `--output=%x_%j.out` / `--error=%x_%j.err` land in $HOME.
+    sb = _ssh(cluster, f"cd {remote_run_dir} && sbatch job.slurm")
     if sb.returncode != 0:
         return {"success": False, "error_kind": "sbatch_rejected",
                 "error": f"sbatch exit={sb.returncode}",

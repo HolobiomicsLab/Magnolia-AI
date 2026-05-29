@@ -188,7 +188,10 @@ def test_submit_writes_sbatch_rsyncs_calls_sbatch_writes_yaml(
     cmds = [" ".join(c) for c in fake_subprocess.calls]
     assert any("hpc_tunnel.sh" in c for c in cmds)
     assert any("rsync -az --mkpath" in c for c in cmds)
-    assert any("ssh -o BatchMode=yes azzurra sbatch" in c for c in cmds)
+    # sbatch is invoked from inside the remote run dir so SLURM_SUBMIT_DIR
+    # resolves correctly. The argv reaching subprocess.run is
+    # ["ssh", "-o", "BatchMode=yes", "azzurra", "cd /path && sbatch job.slurm"].
+    assert any("ssh -o BatchMode=yes azzurra cd " in c and "&& sbatch job.slurm" in c for c in cmds)
 
     assert (local_run_dir / "job.slurm").exists()
     assert "haddock3 input.cfg" in (local_run_dir / "job.slurm").read_text()
@@ -243,7 +246,7 @@ def test_submit_sbatch_rejected_returns_sbatch_rejected(fake_subprocess, tmp_pat
     fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
     # NB: canned key must not collide with pytest's tmp_path basename, which
     # may contain "sbatch" (the test function name). Match the ssh argv instead.
-    fake_subprocess.canned["azzurra sbatch"] = CompletedProcess(
+    fake_subprocess.canned["&& sbatch job.slurm"] = CompletedProcess(
         [], 1, "", "sbatch: error: QOSGrpCpuLimit\n"
     )
     result = ssh_slurm.submit(
@@ -522,7 +525,7 @@ def test_submit_job_dispatches_ssh_slurm_to_module(fake_subprocess, tmp_path, mo
     local_run_dir.mkdir(parents=True)
 
     fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
-    fake_subprocess.canned["azzurra sbatch"] = CompletedProcess(
+    fake_subprocess.canned["&& sbatch job.slurm"] = CompletedProcess(
         [], 0, "Submitted batch job 22222\n", ""
     )
     monkeypatch.setattr(
