@@ -463,6 +463,8 @@ class ProjectManager:
                 data = yaml.safe_load(yfile.read_text()) or {}
             except yaml.YAMLError:
                 continue
+            if not isinstance(data, dict):
+                continue
             remote = data.get("remote") or {}
             slurm = remote.get("slurm") or {}
             row = {
