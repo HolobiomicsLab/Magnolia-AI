@@ -391,3 +391,88 @@ def test_check_falls_back_to_squeue_when_sacct_empty(fake_subprocess, tmp_path):
     assert result["state"] == "PD"
     assert result["lifecycle"] == "running"
     assert result["terminal"] is False
+
+
+def test_cancel_calls_scancel_and_updates_lifecycle(fake_subprocess, tmp_path):
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="haddock3_20260529_140000",
+        tool="haddock3",
+        status=None,
+        lifecycle="running",
+        remote={"cluster": "azzurra", "job_id": "11331448"},
+    )
+
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["scancel 11331448"] = CompletedProcess([], 0, "", "")
+
+    result = ssh_slurm.cancel(
+        job_id="11331448",
+        cluster="azzurra",
+        project_dir=str(project_dir),
+    )
+
+    assert result["success"] is True
+    assert result["lifecycle"] == "cancelled"
+
+    cmds = [" ".join(c) for c in fake_subprocess.calls]
+    assert any("scancel 11331448" in c for c in cmds)
+
+    import yaml as yamlpkg
+    yaml_files = list((project_dir / ".magnolia" / "runs").glob("*_haddock3_20260529_140000.yaml"))
+    rec = yamlpkg.safe_load(yaml_files[0].read_text())
+    assert rec["lifecycle"] == "cancelled"
+
+
+def test_fetch_pulls_run_dir_and_updates_fetched_at(fake_subprocess, tmp_path):
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    local_run_dir = project_dir / "runs" / "haddock3_TEST"
+    local_run_dir.mkdir(parents=True)
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="haddock3_20260529_140000",
+        tool="haddock3",
+        status=None,
+        lifecycle="completed",
+        remote={
+            "cluster": "azzurra",
+            "job_id": "11331448",
+            "local_run_dir": str(local_run_dir),
+            "remote_run_dir": "/workspace/user/magnolia/p/runs/haddock3_20260529_140000",
+        },
+    )
+
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["rsync"] = CompletedProcess(
+        [], 0,
+        "Number of files: 12 (reg: 10, dir: 2)\nNumber of regular files transferred: 10\n",
+        "",
+    )
+
+    result = ssh_slurm.fetch(
+        job_id="11331448",
+        project_dir=str(project_dir),
+    )
+
+    assert result["success"] is True
+    assert result["files_fetched"] == 10
+
+    import yaml as yamlpkg
+    yaml_files = list((project_dir / ".magnolia" / "runs").glob("*_haddock3_20260529_140000.yaml"))
+    rec = yamlpkg.safe_load(yaml_files[0].read_text())
+    assert rec["lifecycle"] == "fetched"
+    assert "fetched_at" in rec["remote"]
+
+
+def test_fetch_missing_yaml_returns_run_record_missing(fake_subprocess, tmp_path):
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    result = ssh_slurm.fetch(
+        job_id="99999",
+        project_dir=str(project_dir),
+    )
+    assert result["success"] is False
+    assert result["error_kind"] == "run_record_missing"

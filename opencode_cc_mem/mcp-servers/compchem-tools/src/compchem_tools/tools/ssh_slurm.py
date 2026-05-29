@@ -422,3 +422,90 @@ def check(
             )
 
     return result
+
+
+def cancel(
+    *,
+    job_id: str,
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
+) -> dict[str, Any]:
+    """Cancel a Slurm job via ssh scancel; update yaml to lifecycle=cancelled."""
+    if cluster not in CLUSTER_CONFIG:
+        return {"success": False, "error_kind": "unknown_cluster", "error": cluster}
+    try:
+        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+    sc = _ssh(cluster, f"scancel {job_id}")
+    if sc.returncode != 0:
+        return {"success": False, "error_kind": "ssh_failed",
+                "error": f"scancel exit={sc.returncode}",
+                "details": {"stderr": sc.stderr.strip()}}
+    if project_dir:
+        found = _find_run_by_job_id(project_dir, job_id)
+        if found:
+            run_id, _ = found
+            _PROJECT_MANAGER.update_run(
+                project_dir=project_dir,
+                run_id=run_id,
+                patch={"lifecycle": "cancelled"},
+            )
+    return {"success": True, "lifecycle": "cancelled"}
+
+
+_RSYNC_STATS_FILES_RE = re.compile(r"Number of regular files transferred:\s+(\d+)")
+
+
+def _parse_rsync_files_transferred(stdout: str) -> int:
+    m = _RSYNC_STATS_FILES_RE.search(stdout or "")
+    return int(m.group(1)) if m else 0
+
+
+def fetch(
+    *,
+    job_id: str,
+    project_dir: str,
+) -> dict[str, Any]:
+    """Pull the remote run dir to its recorded local_run_dir.
+
+    Looks up the run by job_id in runs/*.yaml; uses the cluster, remote_run_dir,
+    and local_run_dir fields from the YAML's remote: block.
+    """
+    found = _find_run_by_job_id(project_dir, job_id)
+    if not found:
+        return {"success": False, "error_kind": "run_record_missing",
+                "error": f"no run with job_id={job_id} under {project_dir}"}
+    run_id, rec = found
+    remote = rec.get("remote") or {}
+    cluster = remote.get("cluster")
+    remote_run_dir = remote.get("remote_run_dir")
+    local_run_dir = Path(remote.get("local_run_dir", ""))
+    if not cluster or not remote_run_dir or not local_run_dir:
+        return {"success": False, "error_kind": "run_record_missing",
+                "error": f"run {run_id} record is missing cluster/remote_run_dir/local_run_dir"}
+    try:
+        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+
+    pull = _rsync_pull(cluster, remote_run_dir, local_run_dir)
+    if pull.returncode != 0:
+        return {"success": False, "error_kind": "rsync_pull_failed",
+                "error": f"rsync pull exit={pull.returncode}",
+                "details": {"stderr": pull.stderr.strip()}}
+    files_fetched = _parse_rsync_files_transferred(pull.stdout)
+    _PROJECT_MANAGER.update_run(
+        project_dir=project_dir,
+        run_id=run_id,
+        patch={
+            "lifecycle": "fetched",
+            "remote": {"fetched_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+    return {
+        "success": True,
+        "files_fetched": files_fetched,
+        "local_run_dir": str(local_run_dir),
+        "remote_run_dir": remote_run_dir,
+    }
