@@ -1,7 +1,6 @@
 """post_run_assess MCP tool must still record the run + return a JSON dict
 with the same overall/metrics/quality_flags after delegation."""
 import json
-from pathlib import Path
 
 
 def test_post_run_assess_still_records_and_returns_json(tmp_path, monkeypatch):

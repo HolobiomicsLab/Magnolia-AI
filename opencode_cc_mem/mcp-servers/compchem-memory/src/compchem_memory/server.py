@@ -11,7 +11,6 @@ from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.tiers.skill import SkillManager
-from compchem_memory.learning.assessor import assess_run
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.index import MemoryIndex
 from compchem_memory.context_assembly import assemble_context, _memory_store
