@@ -480,10 +480,11 @@ def fetch(
     remote = rec.get("remote") or {}
     cluster = remote.get("cluster")
     remote_run_dir = remote.get("remote_run_dir")
-    local_run_dir = Path(remote.get("local_run_dir", ""))
-    if not cluster or not remote_run_dir or not local_run_dir:
+    local_run_dir_str = remote.get("local_run_dir")
+    if not cluster or not remote_run_dir or not local_run_dir_str:
         return {"success": False, "error_kind": "run_record_missing",
                 "error": f"run {run_id} record is missing cluster/remote_run_dir/local_run_dir"}
+    local_run_dir = Path(local_run_dir_str)
     try:
         _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
     except RuntimeError as e:

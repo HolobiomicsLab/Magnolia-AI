@@ -476,3 +476,35 @@ def test_fetch_missing_yaml_returns_run_record_missing(fake_subprocess, tmp_path
     )
     assert result["success"] is False
     assert result["error_kind"] == "run_record_missing"
+
+
+def test_fetch_missing_local_run_dir_in_yaml_returns_run_record_missing(fake_subprocess, tmp_path):
+    """Regression: Path("") is truthy (it's Path('.')), so the old validation
+    silently rsync'd into CWD when local_run_dir was missing.
+    """
+    project_dir = tmp_path / "p"
+    (project_dir / ".magnolia" / "runs").mkdir(parents=True)
+    # Record a run whose remote block lacks local_run_dir
+    ssh_slurm._PROJECT_MANAGER.record_run(
+        project_dir=str(project_dir),
+        run_id="haddock3_BROKEN",
+        tool="haddock3",
+        status=None,
+        lifecycle="completed",
+        remote={
+            "cluster": "azzurra",
+            "job_id": "77777",
+            "remote_run_dir": "/workspace/user/some/path",
+            # local_run_dir intentionally absent
+        },
+    )
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    result = ssh_slurm.fetch(
+        job_id="77777",
+        project_dir=str(project_dir),
+    )
+    assert result["success"] is False
+    assert result["error_kind"] == "run_record_missing"
+    # Critical: rsync MUST NOT have been called
+    cmds = [" ".join(c) for c in fake_subprocess.calls]
+    assert not any("rsync" in c for c in cmds), f"rsync should not have been called: {cmds}"
