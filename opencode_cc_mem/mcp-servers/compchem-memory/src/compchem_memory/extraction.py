@@ -17,6 +17,29 @@ MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
 
 
+# Matches a bare 'exit=N' error message with optional surrounding whitespace
+# and no further content. Shell-tool errors that capture only the exit code
+# (no stderr text, no stdout, no command) are not informative learnings —
+# they used to flood staging with 'Resolved: exit=1'-style entries.
+_BARE_EXIT_RE = re.compile(r"^\s*exit\s*=\s*\d+\s*$", re.IGNORECASE)
+
+
+def _is_meaningful_error(err: str | None) -> bool:
+    """True if `err` has diagnostic content worth a memory entry.
+
+    False for: empty/whitespace; a bare 'exit=N' line; the literal
+    'Unknown error' fallback.
+    """
+    if not err or not err.strip():
+        return False
+    s = err.strip()
+    if s.lower() == "unknown error":
+        return False
+    if _BARE_EXIT_RE.match(s):
+        return False
+    return True
+
+
 def has_error_fix_pattern(events: list[dict[str, Any]], window: int = 10) -> bool:
     """True if any tool_error is followed within `window` events by a tool_success
     for the same tool."""
@@ -322,7 +345,10 @@ class AutomaticMemoryExtractor:
             etype = ev.get("event_type", "")
             tool = ev.get("tool", "unknown")
             if etype == "tool_error":
-                pending_errors[tool] = ev.get("error", "")
+                err = ev.get("error", "")
+                if not _is_meaningful_error(err):
+                    continue  # bare 'exit=N' or empty — no signal, skip
+                pending_errors[tool] = err
             elif etype == "tool_success" and tool in pending_errors:
                 pairs.append(
                     (
@@ -366,16 +392,25 @@ class AutomaticMemoryExtractor:
     def _find_unresolved_failures(
         self, events: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Find errors that were never followed by a success for the same tool."""
+        """Find errors that were never followed by a success for the same tool.
+
+        Skips bare 'exit=N' errors that carry no diagnostic content — those
+        produce content-free 'Unresolved failure: exit=1'-style memory entries
+        that dilute the signal in staging (cf. 2026-05-30 audit: 115/118
+        staging entries were of this form).
+        """
         failures = []
         errors: dict[str, dict[str, str]] = {}
         for ev in events:
             etype = ev.get("event_type", "")
             tool = ev.get("tool", "unknown")
             if etype == "tool_error":
+                err = ev.get("error", "Unknown error")
+                if not _is_meaningful_error(err):
+                    continue  # bare 'exit=N' or empty — no signal, skip
                 errors[tool] = {
                     "tool": tool,
-                    "error": ev.get("error", "Unknown error"),
+                    "error": err,
                     "context": ev.get("result_summary", ""),
                 }
             elif etype == "tool_success" and tool in errors:
