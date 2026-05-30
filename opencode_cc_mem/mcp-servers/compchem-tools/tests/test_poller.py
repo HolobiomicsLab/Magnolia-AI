@@ -130,3 +130,101 @@ def test_capture_failure_handles_missing_log_files(tmp_path):
     assert fail["err_tail"] == ""
     assert fail["out_tail"] == ""
     assert fail["state"] == "TIMEOUT"
+
+
+class _StubSshSlurm:
+    def __init__(self):
+        self.fetch_calls = []
+    def fetch(self, *, job_id, project_dir):
+        self.fetch_calls.append(job_id)
+        return {"success": True, "files_fetched": 3}
+
+
+def _record_running(scheduler="ssh-slurm", **extra):
+    rec = {
+        "run_id": "r1", "tool": "xtb", "lifecycle": "running",
+        "remote": {
+            "scheduler": scheduler, "cluster": "azzurra",
+            "job_id": "777", "local_run_dir": "/some/local", "remote_run_dir": "/r/777",
+        },
+    }
+    rec.update(extra)
+    return rec
+
+
+def test_dispatch_completed_calls_fetch_then_assess(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    assess_called = []
+    def fake_assess(**kw):
+        assess_called.append(kw)
+        return {"overall": "pass", "metrics": {}, "quality_flags": []}
+    monkeypatch.setattr(poller, "assess_and_record", fake_assess)
+
+    rec = _record_running()
+    rec["remote"]["local_run_dir"] = str(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "COMPLETED", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "completed"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    assert ssh.fetch_calls == ["777"]
+    assert len(assess_called) == 1
+    assert assess_called[0]["tool"] == "xtb"
+    assert assess_called[0]["exit_code"] == 0
+
+
+def test_dispatch_failed_calls_fetch_then_capture(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **kw: pytest.fail("must not assess on failure"))
+    rec = _record_running()
+    rec["remote"]["local_run_dir"] = str(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "FAILED", "exit_code": "1:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    assert ssh.fetch_calls == ["777"]
+    # capture_failure → one update + one staging entry
+    assert any(u["patch"].get("remote", {}).get("failure") for u in mgr.updates)
+    assert len(mgr.entries) == 1
+
+
+def test_dispatch_node_fail_no_fetch_flags_retry(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    rec = _record_running()
+    poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    assert ssh.fetch_calls == []
+    assert any(u["patch"].get("remote", {}).get("retry_recommended") is True
+                for u in mgr.updates)
+
+
+def test_dispatch_cancelled_no_fetch(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    rec = _record_running()
+    poller.dispatch_terminal(rec, {"state": "CANCELLED", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "cancelled"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    assert ssh.fetch_calls == []
+    # Just a state-record update (lifecycle update was already made by check())
+    # — no failure, no retry_recommended.
+    assert not any(u["patch"].get("remote", {}).get("failure") for u in mgr.updates)
+
+
+def test_dispatch_unknown_state_treated_as_science_failure(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    rec = _record_running()
+    rec["remote"]["local_run_dir"] = str(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "WEIRDNESS", "exit_code": "?",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    assert ssh.fetch_calls == ["777"]  # conservative: fetch + capture
+    assert len(mgr.entries) == 1

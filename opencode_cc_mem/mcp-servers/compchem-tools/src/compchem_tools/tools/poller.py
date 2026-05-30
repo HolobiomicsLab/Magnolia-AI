@@ -110,6 +110,84 @@ def capture_failure(
     )
 
 
+from compchem_memory.learning.orchestrator import assess_and_record  # noqa: E402
+
+
+def _category(state: str) -> str:
+    """Map a sacct state string to a dispatch category.
+
+    Unknown states fall to 'science_failure' (conservative: fetch + capture
+    so the logs are not lost)."""
+    s = state.upper()
+    if s in ("COMPLETED", "CD"):
+        return "success"
+    if s in _SCIENCE_FAILURE_STATES:
+        return "science_failure"
+    if s in _INFRA_FAILURE_STATES:
+        return "infra_failure"
+    if s in _DELIBERATE_STATES or s.startswith("CANCELLED"):
+        return "deliberate"
+    return "science_failure"
+
+
+def _parse_exit_code(raw: str) -> int:
+    """sacct ExitCode is 'N:M' (process exit : signal). Return N as int.
+    Returns 0 on unparseable input (assess_run treats this as a hint, not law)."""
+    if not raw:
+        return 0
+    head = raw.split(":", 1)[0]
+    try:
+        return int(head)
+    except ValueError:
+        return 0
+
+
+def dispatch_terminal(
+    run_record: dict[str, Any],
+    check_result: dict[str, Any],
+    *,
+    project_dir: str,
+    project_mgr: Any,
+) -> str:
+    """Branch on terminal state. Returns the chosen category."""
+    state = check_result.get("state", "")
+    category = _category(state)
+    run_id = run_record["run_id"]
+    tool = run_record.get("tool", "raw")
+    remote = run_record.get("remote") or {}
+    job_id = remote.get("job_id")
+    local_run_dir = Path(remote.get("local_run_dir", ""))
+
+    if category == "success":
+        ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+        assess_and_record(
+            run_dir=str(local_run_dir),
+            tool=tool,
+            exit_code=_parse_exit_code(check_result.get("exit_code", "0:0")),
+            project_dir=project_dir,
+            project_mgr=project_mgr,
+        )
+    elif category == "science_failure":
+        ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+        capture_failure(
+            project_dir=project_dir, run_id=run_id, tool=tool,
+            local_run_dir=local_run_dir,
+            state=state, exit_code=check_result.get("exit_code", ""),
+            project_mgr=project_mgr,
+        )
+    elif category == "infra_failure":
+        project_mgr.update_run(
+            project_dir, run_id,
+            {"lifecycle": "failed",
+             "remote": {"retry_recommended": True,
+                         "retry_reason": state}},
+        )
+    elif category == "deliberate":
+        # check() already set lifecycle=cancelled; nothing to do.
+        pass
+    return category
+
+
 def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
     """Return ssh-slurm runs in lifecycle ∈ {submitted, running} with a job_id.
 
