@@ -8,6 +8,10 @@
 # the project name and detected venv python), then execs opencode from
 # opencode_cc_mem/. The wrapper's argument always wins over any pre-set
 # MAGNOLIA_PROJECT_DIR in the environment.
+#
+# If the project doesn't exist, prompts (y/N, default N) to scaffold it:
+# creates the .magnolia/ subdirs and a seed GOAL.md (optionally expanded
+# from a one-line description via the `claude` CLI when available).
 
 set -euo pipefail
 
@@ -22,12 +26,17 @@ CONFIG="$OPENCODE_DIR/opencode.json"
 PROJECTS_DIR="$OPENCODE_DIR/projects"
 VENV_PY="$REPO_ROOT/.venv/bin/python3"
 
+# Subdirs created under <project>/.magnolia/ for every new project. Matches
+# the layout that ProjectManager + the auto-extractor + the poller all
+# expect; pre-creating avoids first-write races and silent fallbacks.
+MAGNOLIA_SUBDIRS=(entries staging runs sessions queue archive backups session-notes)
+
 usage() {
     cat <<EOF
 Usage: magnolia <project>
 
-Launch opencode for the given Magnolia project. The project must exist as
-a subdirectory of $PROJECTS_DIR/.
+Launch opencode for the given Magnolia project. If the project does not
+exist, prompts to scaffold it under $PROJECTS_DIR/.
 
 Examples:
   magnolia hsc70_peptides
@@ -43,11 +52,149 @@ EOF
             fi
         done
         if [ "$found" -eq 0 ]; then
-            echo "  (none — create one at $PROJECTS_DIR/<name>/)"
+            echo "  (none — pass any name to create one)"
         fi
     else
         echo "  (projects dir missing at $PROJECTS_DIR/)"
     fi
+}
+
+# Scaffold a new project: <project>/.magnolia/ + standard subdirs.
+# Idempotent — safe to re-run on a project that already has some structure.
+create_project_structure() {
+    local proj="$1"
+    local root="$PROJECTS_DIR/$proj"
+    local magdir="$root/.magnolia"
+    mkdir -p "$magdir"
+    for sub in "${MAGNOLIA_SUBDIRS[@]}"; do
+        mkdir -p "$magdir/$sub"
+    done
+    echo "  created: $root/.magnolia/{$(IFS=,; echo "${MAGNOLIA_SUBDIRS[*]}")}"
+}
+
+# Write GOAL.md from a one-line description.
+# If a description was provided AND Magnolia's LLM is configured
+# (MAGNOLIA_LLM_API_KEY set + the repo venv has the `anthropic` SDK), expand
+# the one-liner into a structured markdown via `compchem_memory.llm.call_llm`
+# — the same provider+model the rest of Magnolia uses for memory work
+# (default: claude-haiku-4-5-20251001 via MAGNOLIA_LLM_MODEL). On any
+# failure (no key, no SDK, network, parse error), fall back cleanly to a
+# minimal template with the user's input preserved verbatim.
+write_goal_md() {
+    local proj="$1"
+    local goal_line="$2"
+    local goal_path="$PROJECTS_DIR/$proj/.magnolia/GOAL.md"
+
+    if [ -z "$goal_line" ]; then
+        cat > "$goal_path" <<EOF
+# Goal: $proj
+
+<!-- TODO: write a one-line summary of what this project is trying to
+     achieve, then expand into Background / Inputs / Approach / Success
+     Criteria. The agent can help with this on first launch. -->
+EOF
+        echo "  created: GOAL.md (empty template — fill in on first launch)"
+        return
+    fi
+
+    if [ -x "$VENV_PY" ] && [ -n "${MAGNOLIA_LLM_API_KEY:-}" ]; then
+        echo "  expanding goal via Magnolia's LLM (${MAGNOLIA_LLM_MODEL:-claude-haiku-4-5-20251001})…" >&2
+        local system_prompt user_content
+        system_prompt="You are scaffolding GOAL.md for a computational-chemistry project named '$proj' in a Magnolia memory-backed agent system. Generate a concise markdown GOAL.md (about 200-400 words) with these sections:
+- '# Goal: $proj' (H1 title)
+- '## One-line summary' (the user's input, verbatim)
+- '## Background' (2-3 sentences placing the goal in scientific context)
+- '## Inputs' (bullets — anticipated data/files needed; mark items the user must provide as TODO)
+- '## Approach' (3-5 bullets, expected steps; reasonable guesses are fine, mark unknowns as TODO)
+- '## Success criteria' (how 'done' will be measured)
+- '## Open questions' (things the user/agent should clarify before starting)
+
+Output ONLY the markdown content. No preamble, no code fences around the whole document, no signature."
+        user_content="$goal_line"
+
+        local llm_out
+        # Pass prompts via env vars to avoid shell-quoting hazards; sys.path
+        # inject so we don't rely on an editable install from this shell.
+        llm_out="$(MAGNOLIA_GOAL_SYSTEM="$system_prompt" MAGNOLIA_GOAL_USER="$user_content" \
+            MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
+            "$VENV_PY" -c "
+import os, sys
+sys.path.insert(0, os.environ['MEM_SRC'])
+from compchem_memory.llm import call_llm
+out = call_llm(os.environ['MAGNOLIA_GOAL_SYSTEM'], os.environ['MAGNOLIA_GOAL_USER'], max_tokens=1500)
+sys.stdout.write(out or '')
+" 2>/dev/null)" || true
+
+        if [ -n "$llm_out" ]; then
+            printf '%s\n' "$llm_out" > "$goal_path"
+            echo "  created: GOAL.md (expanded by Magnolia's LLM)"
+            return
+        fi
+        echo "  warning: LLM expansion returned empty — falling back to minimal template" >&2
+    elif [ -z "${MAGNOLIA_LLM_API_KEY:-}" ]; then
+        echo "  note: MAGNOLIA_LLM_API_KEY unset — skipping LLM expansion" >&2
+    fi
+
+    cat > "$goal_path" <<EOF
+# Goal: $proj
+
+## One-line summary
+$goal_line
+
+<!-- TODO: expand into Background / Inputs / Approach / Success criteria.
+     The agent can help with this on first launch. -->
+EOF
+    echo "  created: GOAL.md (minimal template — user goal preserved verbatim)"
+}
+
+# Read a prompt response from stdin if stdin is a terminal. Echoes the
+# answer on stdout; non-zero exit if stdin isn't a tty (e.g. the script
+# was invoked from a pipe or with a redirected stdin).
+_read_from_tty() {
+    local prompt="$1"
+    local answer=""
+    if [ ! -t 0 ]; then
+        return 1
+    fi
+    printf '%s' "$prompt" >&2
+    IFS= read -r answer || return 1
+    printf '%s' "$answer"
+}
+
+prompt_create_project() {
+    local proj="$1"
+    echo "Project '$proj' does not exist at $PROJECTS_DIR/$proj/" >&2
+    echo >&2
+    local answer
+    if ! answer="$(_read_from_tty "Create it? [y/N] ")"; then
+        echo >&2
+        echo "error: no controlling terminal — cannot prompt to create project." >&2
+        echo "Re-run from an interactive shell, or create the directory manually:" >&2
+        echo "  mkdir -p $PROJECTS_DIR/$proj/.magnolia/{$(IFS=,; echo "${MAGNOLIA_SUBDIRS[*]}")}" >&2
+        exit 1
+    fi
+    case "$answer" in
+        y|Y|yes|YES)
+            : # fall through to scaffold
+            ;;
+        *)
+            echo "Aborted; no project created." >&2
+            exit 1
+            ;;
+    esac
+
+    echo "Scaffolding $PROJECTS_DIR/$proj/ …" >&2
+    create_project_structure "$proj"
+
+    local goal_line
+    echo >&2
+    # If goal prompt fails (unlikely given the create prompt just succeeded),
+    # treat it as 'skipped' — falls through to the empty-template branch.
+    goal_line="$(_read_from_tty "Briefly describe the project goal in one line (or press Enter to skip): " || true)"
+    write_goal_md "$proj" "$goal_line"
+    echo >&2
+    echo "Project '$proj' ready. Launching opencode…" >&2
+    echo >&2
 }
 
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -65,10 +212,7 @@ fi
 PROJECT="$1"
 
 if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
-    echo "error: project '$PROJECT' not found at $PROJECTS_DIR/$PROJECT/" >&2
-    echo >&2
-    usage >&2
-    exit 1
+    prompt_create_project "$PROJECT"
 fi
 
 if [ ! -f "$TEMPLATE" ]; then
