@@ -188,6 +188,70 @@ def dispatch_terminal(
     return category
 
 
+def poll_jobs(project_dir: str) -> dict[str, Any]:
+    """One sweep: scan active runs, check each, dispatch terminals.
+
+    Returns a JSON-able summary dict. Holds _SWEEP_LOCK non-blocking; if a
+    previous sweep is still running, returns {"skipped": "busy"} without
+    doing work.
+
+    Never raises — one bad run is logged and counted in errors; one bad
+    sweep is wrapped by the timer runner."""
+    if not _SWEEP_LOCK.acquire(blocking=False):
+        log.info("poll_jobs: previous sweep still running; skipping this tick")
+        return {"skipped": "busy"}
+    try:
+        polled = transitioned = fetched = assessed = failures_captured = errors = 0
+        for rec in _scan_active_runs(project_dir):
+            run_id = rec["run_id"]
+            remote = rec.get("remote") or {}
+            job_id = remote.get("job_id")
+            cluster = remote.get("cluster", "azzurra")
+            try:
+                check_result = ssh_slurm.check(
+                    job_id=job_id, cluster=cluster, project_dir=project_dir,
+                )
+            except Exception as e:
+                log.warning("poll_jobs: check failed for %s (job %s): %s",
+                            run_id, job_id, e)
+                errors += 1
+                continue
+            if not check_result.get("success", True):
+                log.warning("poll_jobs: check non-success for %s: %s",
+                            run_id, check_result.get("error"))
+                errors += 1
+                continue
+            polled += 1
+            if not check_result.get("terminal"):
+                continue
+            transitioned += 1
+            try:
+                category = dispatch_terminal(
+                    rec, check_result,
+                    project_dir=project_dir, project_mgr=_PROJECT_MANAGER,
+                )
+            except Exception as e:
+                log.warning("poll_jobs: dispatch failed for %s: %s", run_id, e)
+                errors += 1
+                continue
+            if category == "success":
+                fetched += 1
+                assessed += 1
+            elif category == "science_failure":
+                fetched += 1
+                failures_captured += 1
+        return {
+            "polled": polled,
+            "transitioned": transitioned,
+            "fetched": fetched,
+            "assessed": assessed,
+            "failures_captured": failures_captured,
+            "errors": errors,
+        }
+    finally:
+        _SWEEP_LOCK.release()
+
+
 def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
     """Return ssh-slurm runs in lifecycle ∈ {submitted, running} with a job_id.
 

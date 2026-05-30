@@ -228,3 +228,74 @@ def test_dispatch_unknown_state_treated_as_science_failure(tmp_path, monkeypatch
                               project_dir=str(tmp_path / "proj"), project_mgr=mgr)
     assert ssh.fetch_calls == ["777"]  # conservative: fetch + capture
     assert len(mgr.entries) == 1
+
+
+def test_poll_jobs_polls_each_active_run(tmp_path, monkeypatch):
+    pd = tmp_path / "proj"
+    runs = pd / ".magnolia" / "runs"
+    _write_run(runs, "r1", lifecycle="submitted", job_id="11")
+    _write_run(runs, "r2", lifecycle="running",   job_id="22")
+    _write_run(runs, "r_done", lifecycle="fetched", job_id="33")  # excluded
+
+    seen_checks: list[str] = []
+    def fake_check(*, job_id, cluster="azzurra", project_dir=None):
+        seen_checks.append(job_id)
+        return {"success": True, "state": "RUNNING", "lifecycle": "running",
+                "terminal": False}
+    monkeypatch.setattr(poller.ssh_slurm, "check", fake_check)
+    monkeypatch.setattr(poller, "_PROJECT_MANAGER", _RecordingMgr())
+
+    summary = poller.poll_jobs(str(pd))
+    assert sorted(seen_checks) == ["11", "22"]
+    assert summary["polled"] == 2
+    assert summary["transitioned"] == 0
+
+
+def test_poll_jobs_dispatches_terminal_runs(tmp_path, monkeypatch):
+    pd = tmp_path / "proj"
+    runs = pd / ".magnolia" / "runs"
+    _write_run(runs, "r1", lifecycle="running", job_id="11")
+    monkeypatch.setattr(poller.ssh_slurm, "check",
+        lambda *, job_id, cluster="azzurra", project_dir=None:
+            {"success": True, "state": "COMPLETED", "lifecycle": "completed",
+             "terminal": True, "exit_code": "0:0"})
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller.ssh_slurm, "fetch", ssh.fetch)
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **kw: {"overall": "pass"})
+    monkeypatch.setattr(poller, "_PROJECT_MANAGER", _RecordingMgr())
+    summary = poller.poll_jobs(str(pd))
+    assert summary["polled"] == 1
+    assert summary["transitioned"] == 1
+    assert summary["assessed"] == 1
+    assert ssh.fetch_calls == ["11"]
+
+
+def test_poll_jobs_skips_when_lock_held(tmp_path, monkeypatch):
+    """If a sweep is already running, return skipped without doing work."""
+    pd = tmp_path / "proj"
+    (pd / ".magnolia" / "runs").mkdir(parents=True)
+    monkeypatch.setattr(poller.ssh_slurm, "check",
+                        lambda **kw: pytest.fail("should not be called"))
+    with poller._SWEEP_LOCK:
+        summary = poller.poll_jobs(str(pd))
+    assert summary == {"skipped": "busy"}
+
+
+def test_poll_jobs_one_bad_run_does_not_abort_sweep(tmp_path, monkeypatch):
+    pd = tmp_path / "proj"
+    runs = pd / ".magnolia" / "runs"
+    _write_run(runs, "ok",  lifecycle="submitted", job_id="11")
+    _write_run(runs, "bad", lifecycle="submitted", job_id="22")
+
+    def fake_check(*, job_id, **kw):
+        if job_id == "22":
+            raise RuntimeError("simulated network")
+        return {"success": True, "state": "RUNNING", "lifecycle": "running",
+                "terminal": False}
+    monkeypatch.setattr(poller.ssh_slurm, "check", fake_check)
+    monkeypatch.setattr(poller, "_PROJECT_MANAGER", _RecordingMgr())
+    summary = poller.poll_jobs(str(pd))
+    # ok still polled; bad counted as an error but not raising
+    assert summary["polled"] == 1
+    assert summary["errors"] == 1
