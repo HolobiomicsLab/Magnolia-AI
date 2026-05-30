@@ -18,6 +18,7 @@ def assess_and_record(
     exit_code: int,
     project_dir: str,
     project_mgr: ProjectManager,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Run assess_run; record the assessment to runs/<id>.yaml.
 
@@ -29,9 +30,16 @@ def assess_and_record(
     Session-event recording is the caller's responsibility — the poller
     operates outside a user session, and over-recording from there would
     pollute the distill stream.
+
+    run_id: explicit magnolia run_id to key the YAML on. When None (default),
+    falls back to basename(run_dir) — correct for the MCP tool path where
+    run_dir IS the magnolia-named directory.  The poller must pass the
+    run_record["run_id"] explicitly so the assessment updates the existing
+    YAML rather than creating an orphan keyed on basename(local_run_dir).
     """
     assessment = assess_run(run_dir, tool, exit_code)
-    run_id = Path(run_dir).name
+    if run_id is None:
+        run_id = Path(run_dir).name
     project_mgr.record_run(
         project_dir,
         run_id=run_id,

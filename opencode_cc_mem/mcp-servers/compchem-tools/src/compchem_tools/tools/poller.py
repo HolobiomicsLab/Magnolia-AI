@@ -166,6 +166,7 @@ def dispatch_terminal(
             exit_code=_parse_exit_code(check_result.get("exit_code", "0:0")),
             project_dir=project_dir,
             project_mgr=project_mgr,
+            run_id=run_id,
         )
     elif category == "science_failure":
         ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
