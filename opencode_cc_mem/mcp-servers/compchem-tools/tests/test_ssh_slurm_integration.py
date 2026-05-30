@@ -128,3 +128,43 @@ def test_poll_drives_short_job_to_fetched(tmp_path):
     assert rec["lifecycle"] == "fetched", f"final: {rec}"
     # Assessment ran → status set
     assert rec.get("status") in ("pass", "warning", "fail")
+
+
+def test_poll_captures_failed_job(tmp_path):
+    """A job that exits non-zero must end with lifecycle=fetched, a
+    structured failure record, and a staging memory entry."""
+    import os
+    if os.environ.get("MAGNOLIA_INTEGRATION_AZZURRA") != "1":
+        import pytest; pytest.skip("set MAGNOLIA_INTEGRATION_AZZURRA=1 to run")
+    import time, yaml
+    from compchem_tools.tools import ssh_slurm, poller
+    pd = tmp_path / "proj"; pd.mkdir()
+    work = tmp_path / "work"
+    submit = ssh_slurm.submit(
+        command="echo failing-on-purpose >&2; exit 7",
+        working_dir=str(work),
+        project_dir=str(pd),
+        tool=None,
+        job_name="csweep_fail",
+        ncores=1, memory="1GB", time_limit="00:05:00",
+    )
+    assert submit["success"], submit
+    deadline = time.time() + 180
+    rec = None
+    while time.time() < deadline:
+        poller.poll_jobs(str(pd))
+        runs = [p for p in (pd / ".magnolia" / "runs").glob("*.yaml")
+                if p.name != "INDEX.yaml"]
+        rec = yaml.safe_load(runs[0].read_text())
+        if rec.get("lifecycle") == "fetched":
+            break
+        time.sleep(10)
+    assert rec is not None
+    assert rec["lifecycle"] == "fetched"
+    fail = rec.get("remote", {}).get("failure")
+    assert fail, f"expected remote.failure, got {rec}"
+    assert fail["state"] == "FAILED"
+    assert "failing-on-purpose" in fail.get("err_tail", "") + fail.get("out_tail", "")
+    # Staging entry present
+    staging_dir = pd / ".magnolia" / "staging"
+    assert any(p.name.endswith(".md") for p in staging_dir.glob("*.md"))
