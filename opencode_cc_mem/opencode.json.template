@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": { "bash": false },
+  "logLevel": "INFO",
+  "mcp": {
+    "compchem-tools": {
+      "type": "local",
+      "command": ["@@PYTHON@@", "-m", "compchem_tools.server"],
+      "timeout": 60000,
+      "enabled": true,
+      "environment": {
+        "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
+        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
+      }
+    },
+    "compchem-memory": {
+      "type": "local",
+      "command": ["@@PYTHON@@", "-m", "compchem_memory.server"],
+      "timeout": 60000,
+      "enabled": true,
+      "environment": {
+        "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
+        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
+      }
+    }
+  },
+  "instructions": [
+    "rules/*.md",
+    "AGENTS.md",
+    "projects/@@PROJECT@@/.magnolia/boot-context.md",
+    "projects/@@PROJECT@@/.magnolia/audit-report.md"
+  ]
+}
