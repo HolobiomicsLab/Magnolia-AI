@@ -1,0 +1,105 @@
+#!/bin/bash
+# magnolia — launch opencode for a specific Magnolia project.
+#
+# Usage:   magnolia <project>
+# Example: magnolia hsc70_peptides
+#
+# Renders opencode_cc_mem/opencode.json from opencode.json.template (substituting
+# the project name and detected venv python), then execs opencode from
+# opencode_cc_mem/. The wrapper's argument always wins over any pre-set
+# MAGNOLIA_PROJECT_DIR in the environment.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+# softwares/bin/magnolia → opencode_cc_mem/
+OPENCODE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# opencode_cc_mem/ → repo root
+REPO_ROOT="$(cd "$OPENCODE_DIR/.." && pwd)"
+
+TEMPLATE="$OPENCODE_DIR/opencode.json.template"
+CONFIG="$OPENCODE_DIR/opencode.json"
+PROJECTS_DIR="$OPENCODE_DIR/projects"
+VENV_PY="$REPO_ROOT/.venv/bin/python3"
+
+usage() {
+    cat <<EOF
+Usage: magnolia <project>
+
+Launch opencode for the given Magnolia project. The project must exist as
+a subdirectory of $PROJECTS_DIR/.
+
+Examples:
+  magnolia hsc70_peptides
+
+Available projects:
+EOF
+    if [ -d "$PROJECTS_DIR" ]; then
+        found=0
+        for d in "$PROJECTS_DIR"/*/; do
+            if [ -d "$d" ]; then
+                echo "  $(basename "$d")"
+                found=1
+            fi
+        done
+        if [ "$found" -eq 0 ]; then
+            echo "  (none — create one at $PROJECTS_DIR/<name>/)"
+        fi
+    else
+        echo "  (projects dir missing at $PROJECTS_DIR/)"
+    fi
+}
+
+if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    usage
+    exit 0
+fi
+
+if [ "$#" -gt 1 ]; then
+    echo "error: expected exactly one project argument, got $#" >&2
+    echo >&2
+    usage >&2
+    exit 1
+fi
+
+PROJECT="$1"
+
+if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
+    echo "error: project '$PROJECT' not found at $PROJECTS_DIR/$PROJECT/" >&2
+    echo >&2
+    usage >&2
+    exit 1
+fi
+
+if [ ! -f "$TEMPLATE" ]; then
+    echo "error: template missing at $TEMPLATE" >&2
+    exit 1
+fi
+
+if ! command -v opencode >/dev/null 2>&1; then
+    echo "error: 'opencode' not found in PATH" >&2
+    exit 1
+fi
+
+# Prefer the repo's venv python if present; fall back to PATH `python`.
+if [ -x "$VENV_PY" ]; then
+    PYTHON_CMD="$VENV_PY"
+else
+    PYTHON_CMD="python"
+    echo "warning: venv python not found at $VENV_PY; using 'python' from PATH" >&2
+fi
+
+# Render template → opencode.json atomically (tmp + mv same-dir).
+TMP="$(mktemp "$CONFIG.tmp.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+sed -e "s|@@PROJECT@@|$PROJECT|g" \
+    -e "s|@@PYTHON@@|$PYTHON_CMD|g" \
+    "$TEMPLATE" > "$TMP"
+mv "$TMP" "$CONFIG"
+trap - EXIT
+
+# Wrapper argument wins over any pre-set env var.
+export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
+
+cd "$OPENCODE_DIR"
+exec opencode
