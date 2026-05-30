@@ -299,3 +299,47 @@ def test_poll_jobs_one_bad_run_does_not_abort_sweep(tmp_path, monkeypatch):
     # ok still polled; bad counted as an error but not raising
     assert summary["polled"] == 1
     assert summary["errors"] == 1
+
+
+def test_resolve_poll_interval_default_when_unset(monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_POLL_INTERVAL_MIN", raising=False)
+    assert poller._resolve_poll_interval_seconds() == 5 * 60
+
+
+def test_resolve_poll_interval_uses_env(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_POLL_INTERVAL_MIN", "12")
+    assert poller._resolve_poll_interval_seconds() == 12 * 60
+
+
+def test_resolve_poll_interval_bad_value_falls_back(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_POLL_INTERVAL_MIN", "nonsense")
+    assert poller._resolve_poll_interval_seconds() == 5 * 60
+    monkeypatch.setenv("MAGNOLIA_POLL_INTERVAL_MIN", "0")
+    assert poller._resolve_poll_interval_seconds() == 5 * 60
+    monkeypatch.setenv("MAGNOLIA_POLL_INTERVAL_MIN", "-3")
+    assert poller._resolve_poll_interval_seconds() == 5 * 60
+
+
+def test_poll_tick_never_raises(monkeypatch):
+    monkeypatch.setattr(poller, "poll_jobs",
+                        lambda pd: (_ for _ in ()).throw(RuntimeError("kaboom")))
+    poller._poll_tick("/no/where")  # must not raise
+
+
+def test_run_poll_timer_does_startup_sweep_before_sleep(monkeypatch):
+    """The worker must call _poll_tick BEFORE the first sleep, so a freshly
+    re-opened opencode reconciles immediately instead of after one interval."""
+    monkeypatch.setattr(poller, "_resolve_poll_interval_seconds", lambda: 0.01)
+    monkeypatch.setattr(poller, "PROJECT_DIR_FOR_TIMER", "/p")
+    calls: list[str] = []
+    def fake_tick(pd):
+        calls.append(pd)
+        if len(calls) >= 2:
+            raise SystemExit  # break the loop after two ticks
+    monkeypatch.setattr(poller, "_poll_tick", fake_tick)
+    try:
+        poller._run_poll_timer_background_worker()
+    except SystemExit:
+        pass
+    assert calls[0] == "/p"   # first tick is the startup sweep
+    assert len(calls) >= 2

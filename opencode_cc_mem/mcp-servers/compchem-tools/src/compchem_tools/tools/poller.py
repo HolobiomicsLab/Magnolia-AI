@@ -252,6 +252,57 @@ def poll_jobs(project_dir: str) -> dict[str, Any]:
         _SWEEP_LOCK.release()
 
 
+import os  # noqa: E402 — late import keeps top tidy
+
+
+# Set by server.py at import time so the worker thread sees the right project.
+PROJECT_DIR_FOR_TIMER: str = ""
+
+
+def _resolve_poll_interval_seconds() -> int:
+    """Poll interval in seconds. Default 5 min, overridable via
+    MAGNOLIA_POLL_INTERVAL_MIN. Bad / zero / negative values fall back."""
+    default = 5 * 60
+    raw = os.environ.get("MAGNOLIA_POLL_INTERVAL_MIN")
+    if not raw:
+        return default
+    try:
+        minutes = int(raw)
+        if minutes <= 0:
+            return default
+        return minutes * 60
+    except ValueError:
+        return default
+
+
+def _poll_tick(project_dir: str) -> None:
+    """One timer tick. Wraps poll_jobs so a timer firing NEVER raises."""
+    try:
+        poll_jobs(project_dir)
+    except Exception as e:
+        log.warning("_poll_tick error: %s", e)
+
+
+def _run_poll_timer_background_worker() -> None:
+    """Startup sweep + interval loop. Pulled out for testability."""
+    import time
+    interval = _resolve_poll_interval_seconds()
+    # Startup catch-up sweep BEFORE entering the sleep loop: reconciles any
+    # jobs that finished while opencode was closed.
+    _poll_tick(PROJECT_DIR_FOR_TIMER)
+    while True:
+        time.sleep(interval)
+        _poll_tick(PROJECT_DIR_FOR_TIMER)
+
+
+def run_poll_timer_background(project_dir: str) -> None:
+    """Spawn the daemon thread. Called once from server.py at import."""
+    global PROJECT_DIR_FOR_TIMER
+    PROJECT_DIR_FOR_TIMER = project_dir
+    t = threading.Thread(target=_run_poll_timer_background_worker, daemon=True)
+    t.start()
+
+
 def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
     """Return ssh-slurm runs in lifecycle ∈ {submitted, running} with a job_id.
 
