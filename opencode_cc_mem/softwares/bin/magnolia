@@ -73,13 +73,13 @@ create_project_structure() {
 }
 
 # Write GOAL.md from a one-line description.
-# If a description was provided AND Magnolia's LLM is configured
-# (MAGNOLIA_LLM_API_KEY set + the repo venv has the `anthropic` SDK), expand
-# the one-liner into a structured markdown via `compchem_memory.llm.call_llm`
-# — the same provider+model the rest of Magnolia uses for memory work
-# (default: claude-haiku-4-5-20251001 via MAGNOLIA_LLM_MODEL). On any
-# failure (no key, no SDK, network, parse error), fall back cleanly to a
-# minimal template with the user's input preserved verbatim.
+# If a description was provided AND Magnolia's LLM client has a usable
+# provider (per `is_llm_available()` in compchem_memory.llm — which
+# autodetects DEEPSEEK_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY),
+# expand the one-liner into a structured markdown via call_llm — same
+# provider+model the rest of Magnolia uses for memory work. On any
+# failure (no provider configured, network, parse error), fall back
+# cleanly to a minimal template with the user's input preserved verbatim.
 write_goal_md() {
     local proj="$1"
     local goal_line="$2"
@@ -97,8 +97,12 @@ EOF
         return
     fi
 
-    if [ -x "$VENV_PY" ] && [ -n "${MAGNOLIA_LLM_API_KEY:-}" ]; then
-        echo "  expanding goal via Magnolia's LLM (${MAGNOLIA_LLM_MODEL:-claude-haiku-4-5-20251001})…" >&2
+    # Try LLM expansion. Defer the "is the LLM available + which model"
+    # decision to compchem_memory.llm — it knows the full resolution order
+    # (MAGNOLIA_LLM_PROVIDER → MAGNOLIA_LLM_API_KEY → DEEPSEEK → ANTHROPIC →
+    # OPENAI). Anything that's not "got useful text back" → fall through
+    # to the minimal template.
+    if [ -x "$VENV_PY" ]; then
         local system_prompt user_content
         system_prompt="You are scaffolding GOAL.md for a computational-chemistry project named '$proj' in a Magnolia memory-backed agent system. Generate a concise markdown GOAL.md (about 200-400 words) with these sections:
 - '# Goal: $proj' (H1 title)
@@ -112,27 +116,36 @@ EOF
 Output ONLY the markdown content. No preamble, no code fences around the whole document, no signature."
         user_content="$goal_line"
 
+        # Probe + announce + call, all in one venv python invocation, so the
+        # provider/model the user sees printed is the one that actually
+        # served the request.
         local llm_out
-        # Pass prompts via env vars to avoid shell-quoting hazards; sys.path
-        # inject so we don't rely on an editable install from this shell.
         llm_out="$(MAGNOLIA_GOAL_SYSTEM="$system_prompt" MAGNOLIA_GOAL_USER="$user_content" \
             MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
             "$VENV_PY" -c "
 import os, sys
 sys.path.insert(0, os.environ['MEM_SRC'])
-from compchem_memory.llm import call_llm
+from compchem_memory.llm import call_llm, is_llm_available, _resolve_provider, _get_model
+if not is_llm_available():
+    print('NO_PROVIDER', file=sys.stderr)
+    sys.exit(0)
+provider, model = _resolve_provider(), _get_model(_resolve_provider())
+print(f'PROVIDER={provider} MODEL={model}', file=sys.stderr)
 out = call_llm(os.environ['MAGNOLIA_GOAL_SYSTEM'], os.environ['MAGNOLIA_GOAL_USER'], max_tokens=1500)
 sys.stdout.write(out or '')
-" 2>/dev/null)" || true
+" 2> >(while IFS= read -r line; do
+    case "$line" in
+        PROVIDER=*) echo "  expanding goal via Magnolia's LLM (${line#*MODEL=})…" >&2 ;;
+        NO_PROVIDER) echo "  note: no LLM provider configured (set DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY) — skipping LLM expansion" >&2 ;;
+        *) echo "  llm stderr: $line" >&2 ;;
+    esac
+done))" || true
 
         if [ -n "$llm_out" ]; then
             printf '%s\n' "$llm_out" > "$goal_path"
             echo "  created: GOAL.md (expanded by Magnolia's LLM)"
             return
         fi
-        echo "  warning: LLM expansion returned empty — falling back to minimal template" >&2
-    elif [ -z "${MAGNOLIA_LLM_API_KEY:-}" ]; then
-        echo "  note: MAGNOLIA_LLM_API_KEY unset — skipping LLM expansion" >&2
     fi
 
     cat > "$goal_path" <<EOF
