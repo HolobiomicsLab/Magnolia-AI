@@ -343,3 +343,35 @@ def test_run_poll_timer_does_startup_sweep_before_sleep(monkeypatch):
         pass
     assert calls[0] == "/p"   # first tick is the startup sweep
     assert len(calls) >= 2
+
+
+def test_dispatch_success_passes_run_id_explicitly(tmp_path, monkeypatch):
+    """When the poller's success path assesses a finished run, the assessment
+    must update the EXISTING run YAML (keyed on the magnolia run_id), not
+    create an orphan keyed on basename(local_run_dir)."""
+    mgr = _RecordingMgr()
+    # _RecordingMgr doesn't implement record_run, so add a stub:
+    mgr.records = []
+    def record_run(project_dir, *, run_id, tool, status=None,
+                    metrics=None, quality_flags=None, errors_solved=None,
+                    lifecycle=None, remote=None):
+        mgr.records.append({"run_id": run_id, "tool": tool, "status": status})
+        return f"/fake/{run_id}.yaml"
+    mgr.record_run = record_run
+
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    captured_run_ids: list[str] = []
+    def fake_assess(*, run_dir, tool, exit_code, project_dir, project_mgr, run_id=None):
+        captured_run_ids.append(run_id)
+        return {"overall": "pass"}
+    monkeypatch.setattr(poller, "assess_and_record", fake_assess)
+
+    rec = _record_running()
+    rec["run_id"] = "xtb_20260530_003349"  # magnolia run_id
+    rec["remote"]["local_run_dir"] = str(tmp_path / "work_arbitrary")
+    poller.dispatch_terminal(rec, {"state": "COMPLETED", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "completed"},
+                              project_dir=str(tmp_path / "proj"), project_mgr=mgr)
+    # The explicit run_id must be the magnolia-generated one, not basename(local_run_dir)
+    assert captured_run_ids == ["xtb_20260530_003349"]
