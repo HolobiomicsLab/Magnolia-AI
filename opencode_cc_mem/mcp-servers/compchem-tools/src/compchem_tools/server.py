@@ -630,6 +630,22 @@ def fetch_job_results(
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+@captured(source="compchem-tools")
+def poll_jobs(project_dir: str | None = None) -> str:
+    """Run one async-lifecycle sweep: for each ssh-slurm job in lifecycle
+    {submitted, running}, check sacct; on terminal state, fetch + assess
+    (success) or fetch + capture (failure) or flag retry (infra failure).
+
+    The same sweep runs automatically every MAGNOLIA_POLL_INTERVAL_MIN
+    minutes in the background (default 5). Use this tool to force an
+    immediate sweep — e.g. right after submitting a short job."""
+    from compchem_tools.tools import poller
+    pd = project_dir or os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
+    summary = poller.poll_jobs(pd)
+    return json.dumps(summary, indent=2)
+
+
 # ── v2 Session Management Tools ──────────────────────────────────────────────
 
 
@@ -692,6 +708,11 @@ def run_shell(cmd: str, cwd: str | None = None, project_dir: str | None = None) 
     """
     return _run_shell(cmd, cwd=cwd, project_dir=project_dir)
 
+
+# Start the async-lifecycle poller timer. Daemon thread; dies cleanly when
+# the MCP subprocess exits. See poller.py for details.
+from compchem_tools.tools import poller as _poller
+_poller.run_poll_timer_background(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
 
 if __name__ == "__main__":
     mcp.run()
