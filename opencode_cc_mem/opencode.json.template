@@ -6,9 +6,10 @@
     "compchem-tools": {
       "type": "local",
       "command": ["@@PYTHON@@", "-m", "compchem_tools.server"],
-      "timeout": 60000,
+      "timeout": 660000,
       "enabled": true,
       "environment": {
+        "MAGNOLIA_ROOT": "@@MAGNOLIA_ROOT@@",
         "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
         "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
       }
@@ -16,9 +17,10 @@
     "compchem-memory": {
       "type": "local",
       "command": ["@@PYTHON@@", "-m", "compchem_memory.server"],
-      "timeout": 60000,
+      "timeout": 660000,
       "enabled": true,
       "environment": {
+        "MAGNOLIA_ROOT": "@@MAGNOLIA_ROOT@@",
         "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
         "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
       }

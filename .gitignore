@@ -50,7 +50,14 @@ opencode_cc_mem/softwares/bin/*
 #opencode_cc_mem/softwares/bin/*
 #!opencode_cc_mem/softwares/bin/magnolia-*
 
-# v1 
+# Codegraph index (local dev tooling)
+.codegraph/
+
+# Magnolia memory pipeline state (runtime, local)
+extraction-state.yaml
+**/extraction-state.yaml
+
+# v1
 opencode_3_tier_mem/
 
 # design docs

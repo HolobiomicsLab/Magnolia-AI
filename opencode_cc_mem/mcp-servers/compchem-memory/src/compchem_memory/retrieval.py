@@ -175,8 +175,11 @@ def _load_recent_run_outcomes(
             data = yaml.safe_load(f.read_text())
         except Exception:
             continue
-        tool = data.get("tool", "").lower()
-        status = data.get("status", "pass").lower()
+        # Use `or` rather than get()'s default: an in-flight remote job records
+        # the key present with a null value (status: null, lifecycle: running),
+        # so get("status", "pass") returns None, not the default.
+        tool = (data.get("tool") or "").lower()
+        status = (data.get("status") or "pass").lower()
         if not tool:
             continue
         # Skip runs older than cutoff
