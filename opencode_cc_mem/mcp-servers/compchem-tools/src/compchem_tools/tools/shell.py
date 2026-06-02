@@ -47,7 +47,8 @@ def run_shell(
 
     Call this when: you need to execute any shell command. Opencode's bash tool is disabled.
     """
-    magnolia_run = shutil.which("magnolia-run") or "/mnt/d/new_repos/project_magnolia/opencode_cc_mem/softwares/bin/magnolia-run"
+    magnolia_root = os.environ.get("MAGNOLIA_ROOT", "")
+    magnolia_run = shutil.which("magnolia-run") or (os.path.join(magnolia_root, "softwares/bin/magnolia-run") if magnolia_root else None)
     if not os.path.isfile(magnolia_run):
         return {
             "exit_code": -1,

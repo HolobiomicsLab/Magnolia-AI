@@ -31,7 +31,7 @@ CLUSTER_CONFIG: dict[str, dict[str, Any]] = {
         "scratch_root": "/workspace/{user}/magnolia",
         "default_user": "user",
         "default_account": "groupaccount",
-        "default_qos": "qos_groupaccount",
+        "default_qos": "",  # left empty: auto-assigned by Slurm; explicit qos_groupaccount triggers QOSGrpCpuLimit
         "default_partition": "cpucourt",
         "tunnel_script": "hpc_tunnel.sh",
         "modulefiles_use": "$HOME/modulefiles",
@@ -131,11 +131,12 @@ def _write_sbatch_script(
     SLURM_SUBMIT_DIR, then the user's command.
     """
     module_load_line = f"module load {tool}/local" if tool else ""
+    qos_line = f"#SBATCH --qos={qos}\n" if qos else ""
     script = f"""\
 #!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --account={account}
-#SBATCH --qos={qos}
+{qos_line}\
 #SBATCH --partition={partition}
 #SBATCH --time={time_limit}
 #SBATCH --nodes=1
