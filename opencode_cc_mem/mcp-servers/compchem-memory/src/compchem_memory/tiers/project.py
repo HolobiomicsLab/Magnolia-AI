@@ -1,5 +1,6 @@
 """Project tier: durable, human-readable notes scoped to a project directory."""
 
+import difflib
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -273,41 +274,86 @@ class ProjectManager:
         return promoted
 
     def bump_observation_count(
-        self, project_dir: str, entry_name: str, session_id: str | None = None
+        self,
+        project_dir: str,
+        entry_name: str,
+        session_id: str | None = None,
+        content: str | None = None,
     ) -> bool:
-        """Increment observation_count on a staging entry; record session_id if provided.
+        """Increment observation_count on a staging entry; record session_id if
+        provided. If `content` is given and not already present, append it as a
+        dated observation block so a re-observed learning is never lost.
         Returns True if found."""
         staging = self._staging_dir(project_dir)
         for f in staging.glob("*.md"):
             if f.name == entry_name or entry_name in f.name or entry_name in f.stem:
-                meta = self._parse_frontmatter(f.read_text())
+                text = f.read_text()
+                meta = self._parse_frontmatter(text)
                 new_count = meta.get("observation_count", 0) + 1
                 sessions = list(meta.get("observed_in_sessions", []) or [])
                 if session_id and session_id not in sessions:
                     sessions.append(session_id)
+                # Enrich, don't discard: append the new content if it adds info.
+                if content and content.strip() and content.strip() not in text:
+                    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    block = f"\n\n## Observation {new_count} ({date})\n\n{content.strip()}\n"
+                    atomic_write_text(f, text.rstrip() + block)
                 self._update_entry_frontmatter(f, "observation_count", new_count)
                 self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
                 return True
         return False
 
+    # Common words that carry no topic; ignored when comparing titles.
+    _STOPWORDS = frozenset({
+        "a", "an", "the", "to", "of", "for", "and", "or", "is", "are", "be",
+        "in", "on", "at", "by", "with", "from", "into", "as", "it", "its",
+        "this", "that", "than", "then", "when", "not", "no", "same", "before",
+        "after", "always", "must", "should", "via", "per", "but",
+    })
+
+    def _significant_words(self, title_lower: str) -> set[str]:
+        """Topic-bearing words of a title: alphanumerics stripped, stopwords and
+        single characters removed."""
+        words = re.findall(r"[a-z0-9_]+", title_lower)
+        return {w for w in words if w not in self._STOPWORDS and len(w) > 1}
+
     def find_similar_staging(
-        self, project_dir: str, title: str, tags: list[str]
+        self,
+        project_dir: str,
+        title: str,
+        tags: list[str],
+        entry_type: str | None = None,
     ) -> str | None:
-        """Find a staging entry with similar title or shared tags. Returns filename or None."""
+        """Find a staging entry that is genuinely the same learning. Returns the
+        filename or None.
+
+        Matching is driven by title similarity, NOT tag overlap: shared
+        project-identity tags (e.g. the project name) are present on nearly every
+        entry, so keying on them turned a generic note into a magnet that
+        absorbed unrelated learnings. Tags only break ties. Entries of a
+        different ``entry_type`` are never matched — a project ``note`` and an
+        ``error_resolution`` are different kinds of knowledge."""
         staging = self._staging_dir(project_dir)
         title_lower = title.lower()
+        title_words = self._significant_words(title_lower)
         tags_set = set(t.lower() for t in tags)
         best_match = None
-        best_score = 0
+        best_score = 0.0
         for f in staging.glob("*.md"):
             meta = self._parse_frontmatter(f.read_text())
+            existing_type = meta.get("type")
+            if entry_type is not None and existing_type and existing_type != entry_type:
+                continue
             existing_title = meta.get("title", "").lower()
+            ratio = difflib.SequenceMatcher(None, title_lower, existing_title).ratio()
+            # Count only meaningful shared words — common stopwords like "to"/
+            # "before" carry no topic and must not, on their own, force a match.
+            shared_title_words = title_words & self._significant_words(existing_title)
+            if ratio < 0.6 and len(shared_title_words) < 2:
+                continue
             existing_tags = set(t.lower() for t in meta.get("tags", []))
-            score = len(tags_set & existing_tags)
-            title_words = set(title_lower.split())
-            existing_words = set(existing_title.split())
-            score += len(title_words & existing_words) * 2
-            if score > best_score and score >= 2:
+            score = ratio + len(tags_set & existing_tags) * 0.1
+            if score > best_score:
                 best_score = score
                 best_match = f.name
         return best_match
@@ -381,15 +427,29 @@ class ProjectManager:
             results.append(record)
         return results
 
-    def _parse_frontmatter(self, text: str) -> dict[str, Any]:
+    @staticmethod
+    def _split_frontmatter(text: str) -> tuple[str, str] | None:
+        """Return (frontmatter_yaml, body) or None if there is no frontmatter.
+
+        The closing delimiter is the next line that is exactly ``---`` at column
+        zero. A bare substring search trips over a ``---`` inside a value (e.g. a
+        markdown rule in ``description``), and YAML indents a scalar's
+        continuation lines — so an indented ``---`` is content, not the
+        delimiter; only a non-indented ``---`` closes the frontmatter."""
         if not text.startswith("---"):
+            return None
+        lines = text.split("\n")
+        for i in range(1, len(lines)):
+            if lines[i].rstrip("\r") == "---":
+                return "\n".join(lines[1:i]), "\n".join(lines[i + 1:])
+        return None
+
+    def _parse_frontmatter(self, text: str) -> dict[str, Any]:
+        split = self._split_frontmatter(text)
+        if split is None:
             return {}
-        end = text.find("---", 3)
-        if end == -1:
-            return {}
-        fm = text[3:end].strip()
         try:
-            return yaml.safe_load(fm) or {}
+            return yaml.safe_load(split[0]) or {}
         except yaml.YAMLError:
             return {}
 
@@ -520,12 +580,10 @@ class ProjectManager:
         self, fpath: Path, key: str, value: Any
     ) -> None:
         text = fpath.read_text()
-        if not text.startswith("---"):
+        split = self._split_frontmatter(text)
+        if split is None:
             return
-        end = text.find("---", 3)
-        if end == -1:
-            return
-        fm = text[3:end].strip()
+        fm, body = split
         try:
             meta = yaml.safe_load(fm) or {}
         except yaml.YAMLError:
@@ -533,7 +591,7 @@ class ProjectManager:
         meta[key] = value
         meta["updated"] = datetime.now(timezone.utc).isoformat()
         new_fm = yaml.dump(meta, default_flow_style=False)
-        body = text[end + 3:].lstrip("\n")
+        body = body.lstrip("\n")
         fpath.write_text(f"---\n{new_fm}---\n\n{body}")
 
     # ── Goal management ──────────────────────────────────────────────────

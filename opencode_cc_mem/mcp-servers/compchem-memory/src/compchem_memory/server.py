@@ -256,9 +256,9 @@ def memory_record_learning(
     session_id = sess_m._current_session_id  # may be None on first call
 
     # Check for similar existing staging entry to bump instead of duplicate
-    similar = proj_m.find_similar_staging(pd, title, tags or [])
+    similar = proj_m.find_similar_staging(pd, title, tags or [], entry_type=entry_type)
     if similar:
-        proj_m.bump_observation_count(pd, similar, session_id=session_id)
+        proj_m.bump_observation_count(pd, similar, session_id=session_id, content=content)
         promoted = proj_m.auto_promote_staging(pd)
         return json.dumps({
             "status": "bumped",

@@ -45,9 +45,12 @@ def p2rank_predict(
         }
 
         if proc.returncode == 0:
-            # Parse predictions CSV
-            csv_file = out / prot.stem + "_predictions.csv"
+            # Parse predictions CSV. P2Rank names it after the full input
+            # filename, e.g. "1fbl.pdb_predictions.csv".
+            csv_file = out / (prot.name + "_predictions.csv")
             # Also try common naming patterns
+            if not csv_file.exists():
+                csv_file = out / (prot.stem + "_predictions.csv")
             if not csv_file.exists():
                 csv_file = out / "predictions.csv"
             if not csv_file.exists():
@@ -91,7 +94,12 @@ def _parse_predictions_csv(csv_path: Path) -> list[dict[str, Any]]:
         lines = [l for l in text.split("\n") if not l.startswith("#")]
         reader = csv.DictReader(io.StringIO("\n".join(lines)))
         for row in reader:
-            pocket: dict[str, Any] = dict(row)
+            # P2Rank pads both column names and values with spaces
+            # (e.g. "  rank", "    9.77"), so strip keys and values.
+            pocket: dict[str, Any] = {
+                (k.strip() if k else k): (v.strip() if isinstance(v, str) else v)
+                for k, v in row.items()
+            }
             # Convert numeric fields
             for key in ("rank", "score", "probability", "center_x", "center_y", "center_z", "residue_count", "volume"):
                 if key in pocket:
@@ -101,10 +109,12 @@ def _parse_predictions_csv(csv_path: Path) -> list[dict[str, Any]]:
                             pocket[key] = int(pocket[key])
                     except (ValueError, TypeError):
                         pass
-            # Parse residue list if present
-            if "residues" in pocket and isinstance(pocket["residues"], str):
+            # Parse residue list. P2Rank 2.5.x names this column "residue_ids";
+            # older/other formats use "residues".
+            residues_str = pocket.get("residue_ids") or pocket.get("residues")
+            if isinstance(residues_str, str):
                 pocket["residue_list"] = [
-                    r.strip() for r in pocket["residues"].split() if r.strip()
+                    r.strip() for r in residues_str.split() if r.strip()
                 ]
             pockets.append(pocket)
     except Exception:
