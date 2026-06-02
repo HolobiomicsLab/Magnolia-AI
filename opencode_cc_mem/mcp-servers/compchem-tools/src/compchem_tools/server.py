@@ -565,13 +565,20 @@ def submit_job(
     memory: str = "4GB",
     time_limit: str = "24:00:00",
     partition: str | None = None,
+    # ssh-slurm-specific kwargs
+    project_dir: str | None = None,
+    cluster: str = "azzurra",
+    account: str | None = None,
+    qos: str | None = None,
+    tool: str | None = None,
 ) -> str:
     """Submit a job to Slurm, PBS, or run locally.
     Returns job ID and submission details.
 
     Call this when: submitting a long-running (>30 min) computation to a job scheduler instead of running it in the foreground."""
     result = _submit_job(
-        command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition
+        command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition,
+        project_dir=project_dir, cluster=cluster, account=account, qos=qos, tool=tool,
     )
     return json.dumps(result, indent=2)
 
@@ -581,12 +588,15 @@ def submit_job(
 def check_job(
     job_id: str,
     scheduler: str = "slurm",
+    # ssh-slurm-specific kwargs
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
 ) -> str:
     """Check job status on Slurm, PBS, or local.
     Returns current status information.
 
     Call this when: monitoring the status of a previously submitted job by its job ID."""
-    result = _check_job(job_id, scheduler)
+    result = _check_job(job_id, scheduler, cluster=cluster, project_dir=project_dir)
     return json.dumps(result, indent=2)
 
 
@@ -595,12 +605,15 @@ def check_job(
 def cancel_job(
     job_id: str,
     scheduler: str = "slurm",
+    # ssh-slurm-specific kwargs
+    cluster: str = "azzurra",
+    project_dir: str | None = None,
 ) -> str:
     """Cancel a running job on Slurm, PBS, or local.
     Returns cancellation status.
 
     Call this when: aborting a running job that is no longer needed or has gone wrong."""
-    result = _cancel_job(job_id, scheduler)
+    result = _cancel_job(job_id, scheduler, cluster=cluster, project_dir=project_dir)
     return json.dumps(result, indent=2)
 
 

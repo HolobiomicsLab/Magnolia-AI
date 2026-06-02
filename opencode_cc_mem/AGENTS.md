@@ -63,8 +63,8 @@ Reading another project's memory is fine and is not blocked — only writing is.
 
 ## Shell commands
 
-Use `run_shell(cmd=...)` for any shell command. Opencode's bash tool is
-disabled. `run_shell` invokes `magnolia-run`, which writes the session JSONL
+Use `compchem-tools_run_shell(cmd=...)` for any shell command. Opencode's bash tool is
+disabled. `compchem-tools_run_shell` invokes `magnolia-run`, which writes the session JSONL
 and fires auto-assessment for recognized scientific tools.
 
 ## Periodically
