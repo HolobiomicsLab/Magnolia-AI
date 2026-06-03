@@ -10,6 +10,15 @@ import yaml
 from compchem_memory.scanning import scan_memory_headers, scan_skills_headers
 from compchem_memory.llm import is_llm_available, call_llm_json
 
+# Staging-exposure (phase 1): warning-type learnings are surfaced from staging
+# before promotion because acting on a wrong warning costs only a verification;
+# prescriptive types stay promotion-gated. Provisional hits are down-weighted so
+# a promoted entry of equal match always wins, and capped so they can't crowd
+# out trusted knowledge.
+_WARNING_TYPES = {"error_resolution", "failure_pattern"}
+_PROVISIONAL_PENALTY = 0.6
+_MAX_PROVISIONAL = 2
+
 
 def llm_select_memories(
     task_description: str,
@@ -46,14 +55,37 @@ def select_relevant_entries(
         headers = [
             h for h in headers if not any(t in h.get("tools", []) for t in recent_tools)
         ]
+    for h in headers:
+        h["provisional"] = False
+
+    # Phase 1: also expose warning-type staging entries as provisional
+    # candidates, so a freshly-recorded lesson is recallable before promotion.
+    staging_warnings = [
+        h for h in scan_memory_headers(Path(project_dir) / "staging")
+        if h.get("type") in _WARNING_TYPES
+    ]
+    for h in staging_warnings:
+        h["provisional"] = True
+
     task_lower = task_description.lower()
     task_words = set(task_lower.split())
     run_outcomes = _load_recent_run_outcomes(project_dir)
+
     scored: list[tuple[float, dict[str, Any]]] = []
     for h in headers:
         score = _score_entry(h, task_lower, task_words, run_outcomes=run_outcomes)
         if score > 0:
             scored.append((score, h))
+
+    # Provisional candidates are down-weighted and capped before merging.
+    prov_scored: list[tuple[float, dict[str, Any]]] = []
+    for h in staging_warnings:
+        score = _score_entry(h, task_lower, task_words, run_outcomes=run_outcomes)
+        if score > 0:
+            prov_scored.append((score * _PROVISIONAL_PENALTY, h))
+    prov_scored.sort(key=lambda x: x[0], reverse=True)
+    scored.extend(prov_scored[:_MAX_PROVISIONAL])
+
     scored.sort(key=lambda x: x[0], reverse=True)
 
     # Phase 2: LLM picks from top-15 candidates if available

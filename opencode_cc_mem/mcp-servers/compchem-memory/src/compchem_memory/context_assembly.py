@@ -117,8 +117,14 @@ def assemble_context(
         for entry in proj_entries:
             content = entry.get("content", "")
             title = entry.get("title", entry.get("filename", ""))
-            sections.append(f"[PROJECT: {title}]\n{content}")
-            sources.append({"tier": "project", "id": entry.get("filename", "")})
+            if entry.get("provisional"):
+                header = f"[PROVISIONAL — unconfirmed staging learning, verify before relying: {title}]"
+                tier = "staging"
+            else:
+                header = f"[PROJECT: {title}]"
+                tier = "project"
+            sections.append(f"{header}\n{content}")
+            sources.append({"tier": tier, "id": entry.get("filename", "")})
             remaining -= _estimate_tokens(content)
 
     combined = "\n\n---\n\n".join(sections)
