@@ -16,6 +16,7 @@ ENTRY_TYPES = (
     "error_resolution",
     "failure_pattern",
     "parameter_guidance",
+    "scientific_finding",
     "workflow_note",
     "note",
 )
@@ -415,6 +416,53 @@ class ProjectManager:
         atomic_write_text(fpath, yaml.dump(merged, default_flow_style=False, sort_keys=False))
         self._update_runs_index(project_dir)
         return str(fpath)
+
+    def upsert_run(
+        self,
+        project_dir: str,
+        run_id: str,
+        tool: str,
+        status: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        quality_flags: list[str] | None = None,
+        errors_solved: list[str] | None = None,
+        *,
+        lifecycle: str | None = None,
+        remote: dict[str, Any] | None = None,
+    ) -> str:
+        """Write the run record for ``run_id`` to ONE file: deep-merge into the
+        existing record if present, else create it.
+
+        Only non-empty fields are written, so an assessment that supplies just
+        status+metrics never erases the submit/poller's ``remote``/``lifecycle``
+        data. Use this (not ``record_run``) for any writer that may touch an
+        already-existing run — ``record_run`` is create-only and forks a new
+        dated file per call, which overwrites (same day) or duplicates (next
+        day) the existing record."""
+        runs_dir = self._runs_dir(project_dir)
+        matches = sorted(runs_dir.glob(f"*_{run_id}.yaml"))
+        if not matches:
+            return self.record_run(
+                project_dir, run_id, tool, status,
+                metrics=metrics, quality_flags=quality_flags,
+                errors_solved=errors_solved, lifecycle=lifecycle, remote=remote,
+            )
+        patch: dict[str, Any] = {}
+        if status is not None:
+            patch["status"] = status
+        if metrics:
+            patch["metrics"] = metrics
+        if quality_flags:
+            patch["quality_flags"] = quality_flags
+        if errors_solved:
+            patch["errors_solved"] = errors_solved
+        if lifecycle is not None:
+            patch["lifecycle"] = lifecycle
+        if remote:
+            patch["remote"] = remote
+        if not patch:
+            return str(matches[0])
+        return self.update_run(project_dir, run_id, patch)
 
     def get_run_history(self, project_dir: str) -> list[dict[str, Any]]:
         runs_dir = self._runs_dir(project_dir)
