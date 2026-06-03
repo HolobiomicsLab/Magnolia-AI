@@ -246,6 +246,7 @@ def _score_entry(
         "error_resolution": 2.5,
         "success_pattern": 2.5,
         "failure_pattern": 2.5,
+        "scientific_finding": 2.5,
         "parameter_guidance": 2.0,
         "workflow_note": 1.5,
         "note": 1.0,
