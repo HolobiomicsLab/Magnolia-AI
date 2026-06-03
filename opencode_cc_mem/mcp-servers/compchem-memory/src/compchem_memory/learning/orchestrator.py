@@ -40,13 +40,15 @@ def assess_and_record(
     assessment = assess_run(run_dir, tool, exit_code)
     if run_id is None:
         run_id = Path(run_dir).name
-    project_mgr.record_run(
+    # Upsert (not record_run): merge the assessment into the EXISTING run_id
+    # record so a same-day-completed job keeps its remote/lifecycle data instead
+    # of having it overwritten, and a next-day assessment doesn't fork a twin.
+    project_mgr.upsert_run(
         project_dir,
         run_id=run_id,
         tool=tool,
         status=assessment.get("overall", "pass" if exit_code == 0 else "fail"),
         metrics=assessment.get("metrics", {}),
         quality_flags=assessment.get("quality_flags", []),
-        errors_solved=[],
     )
     return assessment

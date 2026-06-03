@@ -54,7 +54,7 @@ def cmd_assess(args: argparse.Namespace) -> int:
         proj_m = ProjectManager(Path.home() / ".magnolia")
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         run_id = f"{tool}_{ts}"
-        proj_m.record_run(
+        proj_m.upsert_run(
             str(Path(project_dir).resolve()),
             run_id=run_id,
             tool=tool,
