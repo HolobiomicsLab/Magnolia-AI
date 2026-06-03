@@ -56,7 +56,27 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
             print(f"[startup_scan] failed on {session_path.name}: {e}")
             continue
 
-    return {"scanned": scanned, "distilled": distilled, "skipped": skipped}
+    # Also distill the REAL opencode conversations captured for this workspace
+    # (the tool log alone can't hold scientific findings). The capture plugin
+    # writes the mapping at the opencode project root; learnings land in this
+    # project's staging. Guarded: never let it break tool-log distillation.
+    ingested = 0
+    try:
+        from compchem_memory.opencode_ingest import ingest_opencode_sessions
+        store = pd / ".magnolia"
+        mapping = store / "opencode-sessions.jsonl"
+        if not mapping.exists():
+            # plugin writes at the workspace root (…/projects/<name> -> root)
+            root_map = pd.parent.parent / ".magnolia" / "opencode-sessions.jsonl"
+            if root_map.exists():
+                mapping = root_map
+        if mapping.exists():
+            ingested = len(ingest_opencode_sessions(str(store), str(mapping)))
+    except Exception as e:
+        print(f"[startup_scan] opencode ingest failed: {e}")
+
+    return {"scanned": scanned, "distilled": distilled, "skipped": skipped,
+            "opencode_ingested": ingested}
 
 
 def _now_iso() -> str:

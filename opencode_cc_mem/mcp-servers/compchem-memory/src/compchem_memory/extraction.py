@@ -149,12 +149,63 @@ prompt_version: v2.0
 """
 
 
+CONVERSATION_EXTRACTION_PROMPT = """You are extracting durable learnings from the FULL TRANSCRIPT of a
+computational chemistry agent conversation — user messages, assistant reasoning, assistant
+responses, and tool use. Unlike a tool log, this contains the actual scientific reasoning,
+interpretations, decisions, and conclusions. Extract THOSE.
+
+Return a JSON array of entries; each has {type, title, content, tags, tools, confidence}.
+Fewer, denser entries. Skip greetings, chit-chat, and routine status.
+
+PRIORITIZE capturing:
+- Scientific findings and RELATIONSHIPS stated or concluded in the conversation
+  (e.g. "the contact map shows peptide F2 within 4 Angstrom of Hsc70 R272"),
+  naming the specific residues / scores / structures / runs involved.
+- The user's intent and decisions — what was chosen and WHY.
+- Reasoning that explains a result (mechanism, interpretation), flagged as
+  hypothesis vs. observation.
+
+Content rules: quantitative grounding (specific numbers/residues/IDs, not vague
+summaries); a mandatory CAVEAT bounding applicability; negative findings count
+("X is not the cause", "Y made no difference").
+
+USE THE MOST SPECIFIC TYPE:
+- `scientific_finding`: a concrete result/relationship about the system under study
+  (residues, contacts, scores, binding modes). State HOW it was determined (which
+  tool/analysis) so it can be re-verified. Do NOT assert a mechanism from a label
+  without the underlying measurement.
+- `error_resolution`: problem + cause + fix (Symptoms section mandatory).
+- `failure_pattern`: an approach that did NOT work, saved for the next attempt.
+- `success_pattern` / `parameter_guidance`: positive outcome / "X worked, Z did not" + exact params.
+- `workflow_note`: ordering / process knowledge.
+- `note`: last resort only.
+
+TAGS: tool names, project identifiers (peptide IDs, protein names, residue numbers),
+problem domains. Avoid generic single-word tags.
+
+CONFIDENCE: 0.5-0.7 for a first observation; 0.8+ only with strong in-conversation
+evidence (clean metrics, explicit confirmation).
+prompt_version: conv-v1.0
+"""
+
+
 class AutomaticMemoryExtractor:
 
     def _llm_distill(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Use LLM to extract structured knowledge from session events."""
         events_json = json.dumps(events, indent=2, default=str)
         result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000)
+        if not result or not isinstance(result, list):
+            return []
+        return [r for r in result if isinstance(r, dict) and "title" in r]
+
+    def distill_transcript(self, transcript: str) -> list[dict[str, Any]]:
+        """Distill a real conversation TRANSCRIPT (not tool events) into candidate
+        learnings. This is the path that can capture scientific findings and
+        relationships that never appear in the tool log."""
+        if not transcript or not transcript.strip():
+            return []
+        result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000)
         if not result or not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
