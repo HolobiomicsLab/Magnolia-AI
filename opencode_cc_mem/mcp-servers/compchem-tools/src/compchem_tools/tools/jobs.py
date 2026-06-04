@@ -1,5 +1,6 @@
 """Job management tools: submit, check, and cancel jobs on Slurm, PBS, or local."""
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -114,6 +115,121 @@ def cancel_job(
         )
     else:
         return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
+
+
+# ── Run status (authoritative-first) ──────────────────────────────────────────
+
+
+def check_run_status(run_dir: str) -> dict[str, Any]:
+    """Report whether a computation run has finished.
+
+    Authoritative-first: if this run dir belongs to a tracked (ssh-slurm) run,
+    trust its record's ``lifecycle`` / ``remote.slurm.state`` rather than the
+    local output files. Local files are only complete and atomic once
+    ``lifecycle == fetched`` (the rsync pull is non-atomic), so inspecting them
+    during the completed-but-unfetched window or mid-fetch misreports a job that
+    COMPLETED on the cluster as not-completed/failed. Purely-local runs (no
+    remote record) fall back to local-file inspection."""
+    rdir = Path(run_dir)
+    record = _find_run_record(rdir)
+    if record and (record.get("remote") or {}).get("scheduler"):
+        return _status_from_record(record, rdir)
+    return _status_from_local_files(rdir)
+
+
+def _find_run_record(rdir: Path) -> dict[str, Any] | None:
+    """Locate the run record for ``rdir`` via ``remote.local_run_dir``.
+
+    A run dir lives at ``<project_dir>/runs/<name>``, so the project dir is two
+    levels up. Best-effort: any failure (no project, import error) yields None
+    and the caller degrades to local-file inspection."""
+    try:
+        from compchem_memory.tiers.project import ProjectManager
+    except Exception:
+        return None
+    project_dir = rdir.parent.parent
+    try:
+        pm = ProjectManager(global_base=Path.home() / ".magnolia")
+        return pm.find_run_by_local_dir(str(project_dir), str(rdir))
+    except Exception:
+        return None
+
+
+def _status_from_record(record: dict[str, Any], rdir: Path) -> dict[str, Any]:
+    remote = record.get("remote") or {}
+    slurm = remote.get("slurm") or {}
+    lifecycle = record.get("lifecycle")
+    result: dict[str, Any] = {
+        "run_dir": str(rdir),
+        "exists": rdir.exists(),
+        "source": "run_record",
+        "lifecycle": lifecycle,
+        "slurm_state": slurm.get("state"),
+        "job_id": remote.get("job_id"),
+        "cluster": remote.get("cluster"),
+        "completed": False,
+        "results_local": False,
+    }
+    if lifecycle == "fetched":
+        # Results are local and atomic now — safe to read the output tree.
+        local = _status_from_local_files(rdir)
+        result["modules"] = local.get("modules", [])
+        if "log_last_line" in local:
+            result["log_last_line"] = local["log_last_line"]
+        result["completed"] = True
+        result["results_local"] = True
+    elif lifecycle == "completed":
+        result["completed"] = True
+        result["note"] = (
+            "Job completed on the cluster but results are not fetched locally "
+            "yet; call fetch_job_results to pull them."
+        )
+    elif lifecycle == "cancelled":
+        result["cancelled"] = True
+        result["note"] = "Job was cancelled on the cluster."
+    elif lifecycle == "failed":
+        result["failed"] = True
+        result["note"] = (
+            f"Job failed on the cluster (slurm state: {slurm.get('state') or 'unknown'})."
+        )
+    else:
+        # submitting / submitted / running / pending / unknown — still in flight.
+        result["running"] = True
+        result["note"] = (
+            f"Job is {lifecycle or 'in flight'} on the cluster; not finished yet."
+        )
+    return result
+
+
+def _status_from_local_files(rdir: Path) -> dict[str, Any]:
+    """Inspect a local HADDOCK-style run dir: output modules + io.json finished
+    flag + last log line. Correct for purely-local runs and for fetched remote
+    runs."""
+    output_dir = rdir / "output"
+    result: dict[str, Any] = {
+        "run_dir": str(rdir),
+        "exists": rdir.exists(),
+        "output_dir_exists": output_dir.exists(),
+        "source": "local_files",
+        "completed": False,
+        "modules": [],
+    }
+    if output_dir.exists():
+        result["modules"] = sorted(
+            d.name for d in output_dir.iterdir() if d.is_dir()
+        )
+        io_jsons = list(output_dir.glob("*/io.json"))
+        if io_jsons:
+            try:
+                io_data = json.loads(sorted(io_jsons)[-1].read_text())
+                if io_data.get("finished"):
+                    result["completed"] = True
+            except Exception:
+                pass
+        log_file = rdir / "log"
+        if log_file.exists():
+            result["log_last_line"] = log_file.read_text().strip().split("\n")[-1]
+    return result
 
 
 # ── Slurm ────────────────────────────────────────────────────────────────────

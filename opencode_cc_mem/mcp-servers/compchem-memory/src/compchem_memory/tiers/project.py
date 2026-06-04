@@ -504,6 +504,45 @@ class ProjectManager:
         self._update_runs_index(project_dir)
         return True
 
+    def find_run_by_local_dir(
+        self, project_dir: str, local_run_dir: str
+    ) -> dict[str, Any] | None:
+        """Return the run record whose ``remote.local_run_dir`` matches
+        ``local_run_dir`` (path-resolved), or None.
+
+        This is the only reliable run_dir -> record mapping: a run dir's
+        basename does not embed the run_id, but ssh-slurm records pin their
+        local dir in ``remote.local_run_dir``. Used by ``check_run_status`` to
+        read the authoritative lifecycle/slurm state instead of guessing from
+        local output files. Purely-local runs have no ``remote`` block and so
+        never match (callers fall back to local-file inspection)."""
+        runs_dir = self._project_store(project_dir) / "runs"
+        if not runs_dir.is_dir():
+            return None
+        try:
+            target = Path(local_run_dir).resolve()
+        except Exception:
+            return None
+        match: dict[str, Any] | None = None
+        for f in sorted(runs_dir.glob("*.yaml")):  # sorted: newest (date-prefixed) wins
+            if f.name == "INDEX.yaml":
+                continue
+            try:
+                rec = yaml.safe_load(f.read_text())
+            except Exception:
+                continue
+            if not isinstance(rec, dict):
+                continue
+            lrd = (rec.get("remote") or {}).get("local_run_dir")
+            if not lrd:
+                continue
+            try:
+                if Path(lrd).resolve() == target:
+                    match = rec
+            except Exception:
+                continue
+        return match
+
     def get_run_history(self, project_dir: str) -> list[dict[str, Any]]:
         runs_dir = self._runs_dir(project_dir)
         results: list[dict[str, Any]] = []
