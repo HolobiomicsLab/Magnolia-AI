@@ -55,6 +55,7 @@ from compchem_tools.tools.jobs import (
     submit_job as _submit_job,
     check_job as _check_job,
     cancel_job as _cancel_job,
+    check_run_status as _check_run_status,
 )
 from compchem_tools.tools.p2rank import (
     p2rank_predict as _p2rank_predict,
@@ -232,41 +233,15 @@ def stage_gate(
 @mcp.tool()
 @captured(source="compchem-tools")
 def check_run_status(run_dir: str) -> str:
-    """Check if a computation run has completed by looking for output files
-    and process status.
+    """Check if a computation run has completed.
+
+    Authoritative-first: for tracked ssh-slurm runs this reports from the run
+    record's lifecycle/slurm state (so a job that COMPLETED on the cluster but
+    isn't fetched yet reads as completed with results_local=False, NOT failed);
+    purely-local runs fall back to inspecting output files.
 
     Call this when: polling whether a previously launched run directory has finished."""
-    rdir = Path(run_dir)
-    output_dir = rdir / "output"
-
-    result: dict[str, Any] = {
-        "run_dir": str(rdir),
-        "exists": rdir.exists(),
-        "output_dir_exists": output_dir.exists(),
-        "completed": False,
-        "modules": [],
-    }
-
-    if output_dir.exists():
-        modules = sorted([d.name for d in output_dir.iterdir() if d.is_dir()])
-        result["modules"] = modules
-
-        io_jsons = list(output_dir.glob("*/io.json"))
-        if io_jsons:
-            try:
-                last_io = sorted(io_jsons)[-1]
-                io_data = json.loads(last_io.read_text())
-                if io_data.get("finished"):
-                    result["completed"] = True
-            except Exception:
-                pass
-
-        log_file = rdir / "log"
-        if log_file.exists():
-            last_line = log_file.read_text().strip().split("\n")[-1]
-            result["log_last_line"] = last_line
-
-    return json.dumps(result, indent=2)
+    return json.dumps(_check_run_status(run_dir), indent=2)
 
 
 # ── Phase 3: Gnina / Covalent / xTB Tools ───────────────────────────────────
