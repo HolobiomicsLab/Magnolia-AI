@@ -20,6 +20,8 @@ def submit_job(
     account: str | None = None,
     qos: str | None = None,
     tool: str | None = None,
+    restart_of: str | None = None,
+    remote_precommand: str | None = None,
 ) -> dict[str, Any]:
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details."""
@@ -40,6 +42,8 @@ def submit_job(
             memory=memory,
             time_limit=time_limit,
             tool=tool,
+            restart_of=restart_of,
+            remote_precommand=remote_precommand,
         )
 
     wdir = Path(working_dir)

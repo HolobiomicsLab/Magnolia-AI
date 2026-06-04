@@ -195,6 +195,8 @@ def submit(
     memory: str = "4GB",
     time_limit: str = "24:00:00",
     tool: str | None = None,
+    restart_of: str | None = None,
+    remote_precommand: str | None = None,
 ) -> dict[str, Any]:
     """Submit a job to the cluster via SSH-driven Slurm.
 
@@ -215,10 +217,25 @@ def submit(
     except RuntimeError as e:
         return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
 
-    run_id = _generate_run_id(tool or "job")
     local_run_dir = Path(working_dir)
     local_run_dir.mkdir(parents=True, exist_ok=True)
-    remote_run_dir = _remote_run_dir(cluster, project_dir, run_id)
+    prior_remote: dict[str, Any] = {}
+    if restart_of:
+        # Resume in the EXISTING remote dir (where the partial output lives),
+        # reusing the same logical run record. Don't mint a new dir/id.
+        prior = _PROJECT_MANAGER.get_run(project_dir, restart_of)
+        if not prior:
+            return {"success": False, "error_kind": "run_not_found",
+                    "error": f"no run record for run_id={restart_of!r} to restart"}
+        prior_remote = prior.get("remote") or {}
+        remote_run_dir = prior_remote.get("remote_run_dir")
+        if not remote_run_dir:
+            return {"success": False, "error_kind": "no_remote_dir",
+                    "error": f"run {restart_of!r} has no remote_run_dir to restart in"}
+        run_id = restart_of
+    else:
+        run_id = _generate_run_id(tool or "job")
+        remote_run_dir = _remote_run_dir(cluster, project_dir, run_id)
 
     _write_sbatch_script(
         local_run_dir,
@@ -255,23 +272,32 @@ def submit(
     # L4: writeahead breadcrumb. If we crash between sbatch returning a
     # job_id and the post-sbatch upgrade below, this leaves a local pointer
     # to the (self-describing) remote dir so the run is recoverable.
-    _PROJECT_MANAGER.record_run(
-        project_dir=project_dir,
-        run_id=run_id,
-        tool=tool or "raw",
-        status=None,
-        lifecycle="submitting",
-        remote={
-            "scheduler": "ssh-slurm",
-            "cluster": cluster,
-            "account": account,
-            "qos": qos,
-            "partition": partition,
-            "local_run_dir": str(local_run_dir),
-            "remote_run_dir": remote_run_dir,
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+    remote_fields = {
+        "scheduler": "ssh-slurm",
+        "cluster": cluster,
+        "account": account,
+        "qos": qos,
+        "partition": partition,
+        "local_run_dir": str(local_run_dir),
+        "remote_run_dir": remote_run_dir,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if restart_of:
+        # Reset the one record for this logical run to a clean in-flight state.
+        # begin_restart REPLACES `remote`, dropping the prior slurm/failure/
+        # job_id/fetched_at so the lifecycle is consistent and the poller (which
+        # scans lifecycle in {submitted, running}) re-tracks the NEW job.
+        remote_fields["restart_count"] = (prior_remote.get("restart_count") or 0) + 1
+        _PROJECT_MANAGER.begin_restart(project_dir, run_id, remote_fields)
+    else:
+        _PROJECT_MANAGER.record_run(
+            project_dir=project_dir,
+            run_id=run_id,
+            tool=tool or "raw",
+            status=None,
+            lifecycle="submitting",
+            remote=remote_fields,
+        )
 
     push = _rsync_push(local_run_dir, cluster, remote_run_dir)
     if push.returncode != 0:
@@ -284,7 +310,11 @@ def submit(
     # SLURM_SUBMIT_DIR to $HOME, the script's `cd "$SLURM_SUBMIT_DIR"` lands
     # in $HOME, relative-path input files (rsynced into the run dir) become
     # unreachable, and `--output=%x_%j.out` / `--error=%x_%j.err` land in $HOME.
-    sb = _ssh(cluster, f"cd {remote_run_dir} && sbatch job.slurm")
+    inner = f"cd {remote_run_dir} && "
+    if remote_precommand:
+        inner += f"{remote_precommand} && "
+    inner += "sbatch job.slurm"
+    sb = _ssh(cluster, inner)
     if sb.returncode != 0:
         return {"success": False, "error_kind": "sbatch_rejected",
                 "error": f"sbatch exit={sb.returncode}",
