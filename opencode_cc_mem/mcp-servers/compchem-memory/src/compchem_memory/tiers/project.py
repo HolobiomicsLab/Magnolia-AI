@@ -464,6 +464,46 @@ class ProjectManager:
             return str(matches[0])
         return self.update_run(project_dir, run_id, patch)
 
+    def get_run(self, project_dir: str, run_id: str) -> dict[str, Any] | None:
+        """Return the run record for ``run_id`` (parsed YAML), or None if absent."""
+        runs_dir = self._runs_dir(project_dir)
+        matches = sorted(runs_dir.glob(f"*_{run_id}.yaml"))
+        if not matches:
+            return None
+        try:
+            return yaml.safe_load(matches[0].read_text()) or {}
+        except Exception:
+            return None
+
+    def begin_restart(
+        self, project_dir: str, run_id: str, remote: dict[str, Any]
+    ) -> bool:
+        """Reset an existing run record for an IN-PLACE restart. Returns False if
+        the run doesn't exist.
+
+        Unlike ``upsert_run`` (which merges and never erases), a restart must
+        CLEAR the prior terminal markers so the lifecycle is consistent and the
+        poller treats it as a fresh in-flight job: ``status`` -> None,
+        ``lifecycle`` -> 'submitting', and ``remote`` REPLACED wholesale (so a
+        stale ``slurm`` state, ``failure``, old ``job_id``, ``fetched_at`` and
+        ``retry_recommended`` are dropped). Durable fields to keep (dirs,
+        cluster, restart_count) must be supplied in ``remote``."""
+        runs_dir = self._runs_dir(project_dir)
+        matches = sorted(runs_dir.glob(f"*_{run_id}.yaml"))
+        if not matches:
+            return False
+        fpath = matches[0]
+        try:
+            rec = yaml.safe_load(fpath.read_text()) or {}
+        except Exception:
+            return False
+        rec["status"] = None
+        rec["lifecycle"] = "submitting"
+        rec["remote"] = remote  # wholesale replace — stale terminal markers gone
+        atomic_write_text(fpath, yaml.dump(rec, default_flow_style=False, sort_keys=False))
+        self._update_runs_index(project_dir)
+        return True
+
     def get_run_history(self, project_dir: str) -> list[dict[str, Any]]:
         runs_dir = self._runs_dir(project_dir)
         results: list[dict[str, Any]] = []

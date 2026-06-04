@@ -571,14 +571,25 @@ def submit_job(
     account: str | None = None,
     qos: str | None = None,
     tool: str | None = None,
+    # restart/resume an existing run in its remote dir (ssh-slurm only)
+    restart_of: str | None = None,
+    remote_precommand: str | None = None,
 ) -> str:
-    """Submit a job to Slurm, PBS, or run locally.
+    """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details.
 
-    Call this when: submitting a long-running (>30 min) computation to a job scheduler instead of running it in the foreground."""
+    Call this when: submitting a long-running (>30 min) computation to a job
+    scheduler instead of running it in the foreground.
+
+    To RESTART/resume an ssh-slurm run in place (e.g. haddock3 --restart N,
+    gromacs -cpi): pass restart_of=<prior run_id> and the resume command; it
+    reuses that run's remote dir (preserving partial output) and run record
+    instead of starting fresh. Use remote_precommand to clean an incomplete
+    step first (e.g. "rm -rf output/04_flexref")."""
     result = _submit_job(
         command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition,
         project_dir=project_dir, cluster=cluster, account=account, qos=qos, tool=tool,
+        restart_of=restart_of, remote_precommand=remote_precommand,
     )
     return json.dumps(result, indent=2)
 
