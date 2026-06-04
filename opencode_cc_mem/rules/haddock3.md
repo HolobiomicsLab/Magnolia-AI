@@ -1,8 +1,8 @@
 ---
 name: haddock3
 description: Critical rules, common mistakes, module parameters, and troubleshooting for HADDOCK3 molecular docking.
-version: 1.0
-last_verified: 2026-03-30
+version: 1.1
+last_verified: 2026-06-03
 ---
 
 # HADDOCK3 Rules
@@ -105,6 +105,34 @@ haddock3-pp protein.pdb > clean.pdb       # Preprocess PDB
 | `invalid literal for int()` | SPACE-separated, not comma-separated |
 | `Could not identify chainID or segID` | Add chain ID at column 22 in PDB |
 | Ligand flies away in MD | Set `mdsteps_rigid=0`, `mdsteps_cool1=0` |
+
+## Contact Map Analysis
+
+The `contactmap` module produces `output/NN_contactmap/` with per-cluster TSV and HTML files.
+
+### Critical: heavyatoms file excludes hydrogen
+
+`clusterN_heavyatoms_interchain_contacts.tsv` reports distances between **non-hydrogen atoms only** despite its name. Salt bridges and H-bonds are invisible in this file — they depend on polar hydrogen geometry. Using this file for interaction typing produces false negatives (e.g., reporting "no salt bridge" for K-D pairs at 3.8 Å heavy-atom distance when the actual NH↔O distance is 1.6 Å).
+
+**Always measure interactions from the PDB models directly** (`output/11_seletopclusts/cluster_N_model_M.pdb.gz`). These include polar hydrogens.
+
+### Interaction typing — never use contact-type labels alone
+
+The `contact-type` column in `interchain_contacts.tsv` classifies residue pairs by physico-chemical category (polar, apolar, positive, negative), **not** by actual interaction mechanism. Two aromatics in proximity does not imply π-stacking; a `positive-apolar` label does not imply cation-π.
+
+**Rule:** Never claim a specific interaction mechanism (salt bridge, H-bond, π-stacking, cation-π) from contact-type labels alone. Measure atom-level distances. Thresholds:
+- Salt bridge: oppositely charged group heavy atoms ≤ 4.0 Å (N–O)
+- H-bond: donor–acceptor ≤ 3.5 Å
+- Cation-π: cation center to ring centroid ≤ 6.0 Å
+- π-stacking: ring centroid ≤ 5.5 Å, angle < 30°
+
+### Which file to use
+
+| File | Contains | Use for |
+|---|---|---|
+| `clusterN_interchain_contacts.tsv` | Residue-level contacts, `shortest-dist` includes H | Quick scan, identifying contact pairs |
+| `clusterN_heavyatoms_interchain_contacts.tsv` | Atom-level contacts, **H excluded** | Backbone geometry only — do NOT use for polar interactions |
+| `11_seletopclusts/cluster_N_model_M.pdb.gz` | Full structure including H | **Source of truth** for interaction typing |
 
 ## Workflow Template
 
