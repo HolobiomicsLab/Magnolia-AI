@@ -98,6 +98,51 @@ def test_ingest_does_not_mark_on_export_failure(store):
     assert not (store / "opencode-distilled" / "ses_fail.json").exists()  # retry next time
 
 
+def test_export_session_reads_full_output_via_file_not_truncated_pipe(monkeypatch):
+    """Regression: `opencode export` truncates piped stdout at one 64 KB pipe
+    buffer, so export_session must redirect to a FILE (full output), not capture
+    a pipe. A >64 KB session piped -> invalid JSON -> None -> silently skipped."""
+    import subprocess as sp
+    big = {"info": {"id": "ses_big"},
+           "messages": [{"info": {"role": "user"},
+                         "parts": [{"type": "text", "text": "x" * 100000}]}],
+           "end_marker": "TAIL_OK"}
+    payload = json.dumps(big)
+    assert len(payload) > 65536  # must exceed one pipe buffer to be a real test
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured.update(kwargs)
+        # Model opencode's bug: a pipe is truncated; a file gets the full write.
+        if kwargs.get("capture_output") or kwargs.get("stdout") in (sp.PIPE, -1):
+            return sp.CompletedProcess(cmd, 0, stdout=payload[:65536], stderr="")
+        out = kwargs.get("stdout")
+        out.write(payload)
+        out.flush()
+        return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(oi.subprocess, "run", fake_run)
+    result = oi.export_session("ses_big")
+    assert result is not None
+    assert result.get("end_marker") == "TAIL_OK"   # full JSON, not cut off
+    assert not captured.get("capture_output")        # must not pipe-capture
+
+
+def test_ingest_does_not_mark_on_distill_failure(store):
+    """A distiller that returns None (LLM error / context overflow) must NOT mark
+    the session done — otherwise a transient failure loses the session forever.
+    Distinct from a distiller returning [] (genuine empty), which DOES mark."""
+    _write_mapping(store, ["ses_llmfail"])
+    oi.ingest_opencode_sessions(
+        str(store),
+        exporter=lambda s: _export([{"info": {"role": "user"},
+                                     "parts": [{"type": "text", "text": "hi"}]}]),
+        distiller=lambda t: None,  # None == distillation FAILED
+    )
+    assert not (store / "opencode-distilled" / "ses_llmfail.json").exists()  # retry
+
+
 def test_saved_entry_carries_provenance(store):
     _write_mapping(store, ["ses_prov"])
     oi.ingest_opencode_sessions(str(store),
