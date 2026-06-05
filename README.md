@@ -78,6 +78,17 @@ Magnolia can also review its own notes while you are away. A small script called
 
 This keeps the notebook tidy and ensures that hard-won lessons do not get lost in long chat sessions.
 
+#### Limitation: conversation distillation and your model's *effective* context window
+Magnolia learns in two ways. The **tool log** captures what commands ran and how they ended — but it cannot see *reasoning*. So a conclusion you reach by interpreting results (for example, *"the contact map shows peptide F2 within 4 Å of Hsc70 R272"*) is only captured by the second path: **conversation distillation**, which feeds the whole chat transcript to your model and asks it to extract the scientific findings.
+
+That second path is the more valuable one, and it has a quality ceiling set by your model's **effective** context window — *not* its advertised maximum. Models attend reliably over a span considerably smaller than the number they advertise; recall of facts buried in the middle of a long input degrades well before the hard limit ("lost in the middle"). Practical consequences:
+
+- **Long sessions can have findings silently skimmed**, even when the transcript technically fits. The longer the conversation, the more likely a mid-transcript result is under-weighted or missed.
+- **Smaller-window models are more exposed.** Large-context models (DeepSeek, Claude, GPT-4o-mini) handle typical sessions comfortably, but this is an assumption about *your* chosen provider, not a guarantee — pick a generous-context model if you run long sessions.
+- **A hard overflow is not silently lost.** If the transcript exceeds the model's limit (or the call otherwise fails), distillation returns an error rather than "nothing found", and the session is left unmarked so it is **retried on a later sweep** instead of being discarded.
+
+A planned improvement is to **chunk** long transcripts and distill each piece within the effective window, then merge — so recall stays high regardless of session length. Until then: for sessions where you reach important conclusions, the most reliable capture is to say so explicitly (*"note that down: …"*), which records the finding immediately and independently of the distiller.
+
 ### 3. The Tools
 Scientific programs like **HADDOCK3**, **BoltzGen**, and **GROMACS** live in a `softwares/` folder. Magnolia knows how to call them, but it installs them in isolated "fenced yards" so they don't interfere with each other. You don't need to memorize command lines.
 

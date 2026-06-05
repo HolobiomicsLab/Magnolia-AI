@@ -199,14 +199,21 @@ class AutomaticMemoryExtractor:
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
 
-    def distill_transcript(self, transcript: str) -> list[dict[str, Any]]:
+    def distill_transcript(self, transcript: str) -> list[dict[str, Any]] | None:
         """Distill a real conversation TRANSCRIPT (not tool events) into candidate
         learnings. This is the path that can capture scientific findings and
-        relationships that never appear in the tool log."""
+        relationships that never appear in the tool log.
+
+        Returns ``None`` when the LLM call itself FAILED (no provider, network
+        error, or context overflow — call_llm_json returns None), so the caller
+        can retry rather than permanently marking the session done. Returns ``[]``
+        only when the LLM succeeded but found nothing worth keeping."""
         if not transcript or not transcript.strip():
             return []
         result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000)
-        if not result or not isinstance(result, list):
+        if result is None:
+            return None  # LLM failed — distinct from "ran and found nothing"
+        if not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
 

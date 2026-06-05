@@ -70,15 +70,36 @@ def reconstruct_transcript(export: dict) -> str:
 def export_session(ses_id: str) -> Optional[dict]:
     """`opencode export <id>` raw (NOT --sanitize). Returns parsed JSON or None
     on any failure, so the caller can retry on a later sweep rather than marking
-    a failed export as done."""
+    a failed export as done.
+
+    IMPORTANT: `opencode export` truncates its stdout at one 64 KB pipe buffer
+    when stdout is a pipe — so `capture_output=True` silently yields invalid
+    (cut-off) JSON for any session larger than 64 KB, which are exactly the
+    content-rich sessions worth distilling. Writing to a regular FILE gets the
+    full output, so we redirect to a temp file and read it back."""
+    import os
+    import tempfile
+
     try:
-        proc = subprocess.run(
-            ["opencode", "export", ses_id],
-            capture_output=True, text=True, timeout=120,
-        )
-        if proc.returncode != 0 or not proc.stdout.strip():
-            return None
-        return json.loads(proc.stdout)
+        fd, tmp = tempfile.mkstemp(prefix="oc_export_", suffix=".json")
+        os.close(fd)
+        try:
+            with open(tmp, "w") as out:
+                proc = subprocess.run(
+                    ["opencode", "export", ses_id],
+                    stdout=out, stderr=subprocess.DEVNULL, timeout=120,
+                )
+            if proc.returncode != 0:
+                return None
+            data = Path(tmp).read_text()
+            if not data.strip():
+                return None
+            return json.loads(data)
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
     except Exception:
         return None
 
@@ -159,6 +180,11 @@ def ingest_opencode_sessions(
             continue  # export failed — don't mark; retry on a later sweep
         transcript = scrub_secrets(reconstruct_transcript(export))
         candidates = distiller(transcript) if transcript.strip() else []
+        if candidates is None:
+            # Distillation FAILED (LLM error / context overflow), as opposed to
+            # succeeding with nothing to extract ([]). Don't mark — retry on a
+            # later sweep so a transient failure never loses the session.
+            continue
         for c in candidates:
             if isinstance(c, dict) and c.get("title"):
                 saved.append(_save_candidate(store, c, sid))
