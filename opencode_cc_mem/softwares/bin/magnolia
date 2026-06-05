@@ -258,5 +258,16 @@ trap - EXIT
 # Wrapper argument wins over any pre-set env var.
 export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
 
+# Activate the project venv for THIS process — and thus opencode, its MCP
+# servers, and any tool subprocesses (p2rank, haddock3, …) they spawn, so
+# binaries resolve on PATH. magnolia runs as a subprocess, so this never leaks
+# into the caller's interactive shell: quitting opencode restores the prior env.
+if [ -f "$REPO_ROOT/.venv/bin/activate" ]; then
+    set +u  # activate references unset vars under `set -u`
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/.venv/bin/activate"
+    set -u
+fi
+
 cd "$OPENCODE_DIR"
 exec opencode
