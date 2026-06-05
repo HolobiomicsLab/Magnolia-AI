@@ -33,13 +33,20 @@ MAGNOLIA_SUBDIRS=(entries staging runs sessions queue archive backups session-no
 
 usage() {
     cat <<EOF
-Usage: magnolia <project>
+Usage: magnolia [--critic] <project>
 
 Launch opencode for the given Magnolia project. If the project does not
 exist, prompts to scaffold it under $PROJECTS_DIR/.
 
+Options:
+  --critic  Enable the flag-only claim-vs-action critic for this session.
+            An independent judge LLM flags report claims not backed by the
+            tools actually run; verdicts are logged to
+            <project>/.magnolia/claim-critic/ and shown as toasts. Changes nothing.
+
 Examples:
   magnolia hsc70_peptides
+  magnolia --critic hsc70_peptides
 
 Available projects:
 EOF
@@ -215,14 +222,30 @@ if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     exit 0
 fi
 
-if [ "$#" -gt 1 ]; then
-    echo "error: expected exactly one project argument, got $#" >&2
+# Parse flags (currently just --critic) plus the single project positional.
+CRITIC=0
+PROJECT=""
+for arg in "$@"; do
+    case "$arg" in
+        --critic) CRITIC=1 ;;
+        -h|--help) usage; exit 0 ;;
+        --*) echo "error: unknown option '$arg'" >&2; echo >&2; usage >&2; exit 1 ;;
+        *)
+            if [ -n "$PROJECT" ]; then
+                echo "error: expected exactly one project argument" >&2
+                echo >&2; usage >&2; exit 1
+            fi
+            PROJECT="$arg"
+            ;;
+    esac
+done
+
+if [ -z "$PROJECT" ]; then
+    echo "error: no project specified" >&2
     echo >&2
     usage >&2
     exit 1
 fi
-
-PROJECT="$1"
 
 if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
     prompt_create_project "$PROJECT"
@@ -257,6 +280,12 @@ trap - EXIT
 
 # Wrapper argument wins over any pre-set env var.
 export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
+
+# Flag-only claim critic (claim-critic.ts no-ops unless this is set).
+if [ "$CRITIC" = "1" ]; then
+    export MAGNOLIA_CRITIC=1
+    echo "claim-critic enabled (flag-only): verdicts → projects/$PROJECT/.magnolia/claim-critic/" >&2
+fi
 
 cd "$OPENCODE_DIR"
 exec opencode
