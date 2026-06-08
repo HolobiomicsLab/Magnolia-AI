@@ -28,7 +28,7 @@ import { join } from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
-const JUDGE_MODEL = process.env.MAGNOLIA_CRITIC_MODEL || "deepseek-chat"
+const JUDGE_MODEL = process.env.MAGNOLIA_CRITIC_MODEL || "deepseek-v4-flash"
 const MAX_OUTPUT_CHARS = 2000   // per-tool-output cap fed to the judge
 const MAX_TRACE_CHARS = 20000   // total trace cap
 const MIN_REPORT_CHARS = 200    // skip trivial turns (acks, one-liners)
