@@ -250,6 +250,7 @@ fi
 TMP="$(mktemp "$CONFIG.tmp.XXXXXX")"
 trap 'rm -f "$TMP"' EXIT
 sed -e "s|@@PROJECT@@|$PROJECT|g" \
+    -e "s|@@MAGNOLIA_ROOT@@|$REPO_ROOT|g" \
     -e "s|@@PYTHON@@|$PYTHON_CMD|g" \
     "$TEMPLATE" > "$TMP"
 mv "$TMP" "$CONFIG"
