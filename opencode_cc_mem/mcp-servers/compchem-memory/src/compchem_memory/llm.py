@@ -41,7 +41,10 @@ PROVIDER_OPENAI = "openai"
 _VALID_PROVIDERS = {PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI}
 
 _DEFAULT_MODEL = {
-    PROVIDER_DEEPSEEK: "deepseek-chat",
+    # deepseek-chat is a back-compat alias for deepseek-v4-flash, deprecated
+    # 2026-07-24; use the explicit v4 id (1M context, cheap). Override per
+    # provider via MAGNOLIA_LLM_MODEL (e.g. deepseek-v4-pro for higher recall).
+    PROVIDER_DEEPSEEK: "deepseek-v4-flash",
     PROVIDER_ANTHROPIC: "claude-haiku-4-5-20251001",
     PROVIDER_OPENAI: "gpt-4o-mini",
 }
