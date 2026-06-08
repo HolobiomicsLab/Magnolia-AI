@@ -30,8 +30,9 @@ import type { Plugin } from "@opencode-ai/plugin"
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
 const JUDGE_MODEL = process.env.MAGNOLIA_CRITIC_MODEL || "deepseek-v4-flash"
 const MAX_OUTPUT_CHARS = 2000        // per-tool-output cap for most tools
+const MAX_OUTPUT_CHARS_OLD = 500    // tighter cap for older non-evidence tools
 const MAX_OUTPUT_CHARS_EVIDENCE = 0  // uncapped for tools that carry evidence (0 = no cap)
-const MAX_TRACE_CHARS = 50000        // total trace cap
+const MAX_TRACE_CHARS = 80000        // total trace cap (larger: full-session scope)
 const MIN_REPORT_CHARS = 200         // skip trivial turns (acks, one-liners)
 
 // Tools whose full output the judge needs to see (project memory, run history, etc.)
@@ -44,12 +45,15 @@ const EVIDENCE_TOOLS = new Set([
 
 const SYSTEM =
   "You are a verification auditor for a scientific computing assistant. You are given " +
-  "(1) the assistant's REPORT and (2) the TOOL_TRACE of what it actually did this turn " +
-  "(tools called, their inputs, and their real outputs). Flag any claim in the report that " +
-  "is NOT supported by the actions in the trace — e.g. a computed number, energy, ranking, " +
-  "or interaction mechanism that no tool output actually produced, or analysis steps the " +
-  "report implies but the trace shows were skipped. Judge ONLY whether the report's claims " +
-  "are backed by the actions/outputs in the trace, not abstract scientific correctness. " +
+  "(1) the assistant's REPORT (from the CURRENT turn) and (2) the TOOL_TRACE of " +
+  "ALL tools the assistant ran across the ENTIRE session (tools called, their inputs, " +
+  "and their real outputs; older tools may have shorter output summaries). " +
+  "Claims in the report may be supported by tools run in earlier turns, not just " +
+  "the current one. Flag any claim in the report that is NOT supported by any action " +
+  "in the trace — e.g. a computed number, energy, ranking, or interaction mechanism " +
+  "that no tool output actually produced, or analysis steps the report implies but " +
+  "the trace shows were skipped. Judge ONLY whether the report's claims are backed " +
+  "by the actions/outputs in the trace, not abstract scientific correctness. " +
   'Respond with strict JSON: {"flag": boolean, "severity": "none|low|high", ' +
   '"unsupported_claims": [string], "why": string}.'
 
@@ -85,30 +89,44 @@ export const ClaimCritic: Plugin = async ({ client, directory }) => {
       const msgs: any[] = resp?.data ?? resp ?? []
       if (!Array.isArray(msgs) || msgs.length === 0) return
 
-      // The current turn = everything after the last user message.
+      // The current turn = everything after the last user message (for the report text).
       let lastUser = -1
       msgs.forEach((m, i) => { if (m?.info?.role === "user") lastUser = i })
       const turn = msgs.slice(lastUser + 1)
 
+      // Collect the report text from the CURRENT turn only.
       const reportParts: string[] = []
-      const traceItems: any[] = []
       for (const m of turn) {
         if (m?.info?.role !== "assistant") continue
         for (const p of (m?.parts ?? [])) {
-          if (p?.type === "text" && !p?.synthetic && p?.text) {
-            reportParts.push(p.text)
-          } else if (p?.type === "tool") {
-            const st = p?.state ?? {}
-            const raw = typeof st?.output === "string" ? st.output : ""
-            const cap = EVIDENCE_TOOLS.has(p?.tool) ? MAX_OUTPUT_CHARS_EVIDENCE : MAX_OUTPUT_CHARS
-            const output = cap ? raw.slice(0, cap) : raw
-            traceItems.push({ tool: p?.tool, status: st?.status, input: st?.input, output })
-          }
+          if (p?.type === "text" && !p?.synthetic && p?.text) reportParts.push(p.text)
         }
       }
 
       const report = reportParts.join("\n").trim()
-      if (report.length < MIN_REPORT_CHARS) return // nothing substantive to audit
+      if (report.length < MIN_REPORT_CHARS) return
+
+      // Collect tools from the ENTIRE session so the judge sees evidence loaded
+      // in earlier turns, not just the current one.
+      const traceItems: any[] = []
+      msgs.forEach((m, i) => {
+        if (m?.info?.role !== "assistant") return
+        const isCurrentTurn = i > lastUser
+        for (const p of (m?.parts ?? [])) {
+          if (p?.type !== "tool") continue
+          const st = p?.state ?? {}
+          const raw = typeof st?.output === "string" ? st.output : ""
+          const isEvidence = EVIDENCE_TOOLS.has(p?.tool)
+          let cap: number
+          if (isEvidence) cap = MAX_OUTPUT_CHARS_EVIDENCE        // uncapped
+          else if (isCurrentTurn) cap = MAX_OUTPUT_CHARS          // full cap
+          else cap = MAX_OUTPUT_CHARS_OLD                        // tighter for older tools
+          const output = cap ? raw.slice(0, cap) : raw
+          const item: any = { tool: p?.tool, status: st?.status, input: st?.input, output }
+          if (!isCurrentTurn) item.turn = "earlier"              // flag as cross-turn evidence
+          traceItems.push(item)
+        }
+      })
 
       let traceText = JSON.stringify(traceItems, null, 1)
       if (traceText.length > MAX_TRACE_CHARS) traceText = traceText.slice(0, MAX_TRACE_CHARS) + "\n…(truncated)"
