@@ -29,9 +29,18 @@ import type { Plugin } from "@opencode-ai/plugin"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
 const JUDGE_MODEL = process.env.MAGNOLIA_CRITIC_MODEL || "deepseek-v4-flash"
-const MAX_OUTPUT_CHARS = 2000   // per-tool-output cap fed to the judge
-const MAX_TRACE_CHARS = 20000   // total trace cap
-const MIN_REPORT_CHARS = 200    // skip trivial turns (acks, one-liners)
+const MAX_OUTPUT_CHARS = 2000        // per-tool-output cap for most tools
+const MAX_OUTPUT_CHARS_EVIDENCE = 0  // uncapped for tools that carry evidence (0 = no cap)
+const MAX_TRACE_CHARS = 50000        // total trace cap
+const MIN_REPORT_CHARS = 200         // skip trivial turns (acks, one-liners)
+
+// Tools whose full output the judge needs to see (project memory, run history, etc.)
+const EVIDENCE_TOOLS = new Set([
+  "memory_get_context",
+  "memory_get_run_history",
+  "memory_search",
+  "memory_scan_headers",
+])
 
 const SYSTEM =
   "You are a verification auditor for a scientific computing assistant. You are given " +
@@ -90,7 +99,9 @@ export const ClaimCritic: Plugin = async ({ client, directory }) => {
             reportParts.push(p.text)
           } else if (p?.type === "tool") {
             const st = p?.state ?? {}
-            const output = typeof st?.output === "string" ? st.output.slice(0, MAX_OUTPUT_CHARS) : ""
+            const raw = typeof st?.output === "string" ? st.output : ""
+            const cap = EVIDENCE_TOOLS.has(p?.tool) ? MAX_OUTPUT_CHARS_EVIDENCE : MAX_OUTPUT_CHARS
+            const output = cap ? raw.slice(0, cap) : raw
             traceItems.push({ tool: p?.tool, status: st?.status, input: st?.input, output })
           }
         }
