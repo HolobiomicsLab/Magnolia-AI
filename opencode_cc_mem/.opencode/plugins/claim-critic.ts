@@ -8,7 +8,7 @@
  * analysis steps the report implies but the trace shows were skipped.
  *
  * It changes NOTHING in the session: it only appends a verdict to
- *   <directory>/.magnolia/claim-critic/<sessionID>.jsonl
+ *   <project>/.magnolia/claim-critic/<sessionID>.jsonl
  * and shows a toast when something is flagged. No blocking, no edits.
  *
  * Enable per-session by exporting MAGNOLIA_CRITIC=1 (the `magnolia --critic`
@@ -61,7 +61,12 @@ export const ClaimCritic: Plugin = async ({ client, directory }) => {
   if (!ENABLED) return {}
 
   const apiKey = process.env.DEEPSEEK_API_KEY
-  const criticDir = join(directory, ".magnolia", "claim-critic")
+  // MAGNOLIA_PROJECT_DIR is exported by the magnolia wrapper (e.g. "projects/hsc70_new").
+  // Fall back to the opencode root directory if unset.
+  const projectDir = process.env.MAGNOLIA_PROJECT_DIR
+  const criticDir = projectDir
+    ? join(directory, projectDir, ".magnolia", "claim-critic")
+    : join(directory, ".magnolia", "claim-critic")
 
   async function judge(report: string, traceText: string): Promise<any> {
     const res = await fetch("https://api.deepseek.com/chat/completions", {
