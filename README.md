@@ -120,58 +120,82 @@ project_magnolia/
 
 ## Getting started
 
-### 1. Choose an AI coding tool
+### 1. Install OpenCode (Magnolia's chat interface)
 
-Magnolia is built around an **open-source full stack**. The agent harness is [OpenCode](https://github.com/anomalyco/opencode) — a free, open-source, terminal-based AI coding agent with MCP support. You bring your own API key or coding plan.
+Magnolia uses [OpenCode](https://github.com/anomalyco/opencode) as its chat interface — a free, open-source, terminal-based AI coding agent. Install it by following the instructions at [opencode.ai](https://opencode.ai). Think of OpenCode as the window you type into; Magnolia is the research assistant on the other side.
 
-Other MCP-compatible tools should also work (although not tested):
+### 2. Pick a model provider
 
-| Tool | Cost | Notes |
-|------|------|-------|
-| [OpenCode](https://github.com/anomalyco/opencode) | Free + your API key | What this project was built with. 100% open source. |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Free tier / Anthropic API key | Anthropic's official CLI. |
-| [Aider](https://github.com/paul-gauthier/aider) | Free + your API key | Terminal-based AI pair programmer. Open source. |
-| [Cline](https://github.com/cline/cline) (VS Code) | Free + your API key | Autonomous coding agent in VS Code. Open source. |
-
-### 2. Choose a model provider
-
-OpenCode supports 75+ providers. You can use a **coding plan** (flat-rate subscription) or **pay-as-you-go** (API key, billed per token).
-
-**Coding plans** (recommended for heavy use):
+Magnolia needs an LLM provider to think with. It works with 75+ providers — here are the most common:
 
 | Plan | Provider | Notes |
 |------|----------|-------|
 | **Kimi Coding Plan** (Moderato tier) | Moonshot AI | Budget-friendly. What I use daily. |
 | **GLM Coding Plan** | Z.AI (Zhipu AI) | Strong multilingual and coding capabilities. |
-| Claude Max | Anthropic | Higher usage limits than Pro tier — needed for extensive agent use. |
+| Claude Max | Anthropic | Higher usage limits than Pro tier. |
 | ChatGPT Plus / Pro | OpenAI | Versatile, widely available. |
 | GitHub Copilot | GitHub | Uses your existing Copilot subscription. |
 | OpenCode Zen | OpenCode | Curated, tested models from the OpenCode team. |
 
-**Pay-as-you-go API keys:**
+Also supported via pay-as-you-go API keys: Anthropic, OpenAI, Google Vertex AI, Moonshot AI, DeepSeek, OpenRouter, and local models via Ollama / llama.cpp / LM Studio.
 
-| Provider | Notes |
-|----------|-------|
-| Anthropic | Claude models, billed per token |
-| OpenAI | GPT models|
-| Google Vertex AI | Gemini models, large context window |
-| Moonshot AI | Kimi K2.5 via API |
-| DeepSeek | DeepSeek Reasoner |
-| OpenRouter | Aggregator — access many providers with one key |
+You'll be prompted to connect a provider the first time you launch (step 4). Your choice is saved, so this is a one-time thing. You can switch provider or model later by typing `/connect` or `/models` in the chat.
 
-You can also run **local models** via Ollama, llama.cpp, or LM Studio at no cost beyond hardware.
+### 3. Build Magnolia's helper programs (one-time setup)
 
-Connect your provider by typing `/connect` in OpenCode, then `/models` to pick a model.
+Magnolia's tools and memory system are powered by two small Python programs that run in the background. They need to be installed before your first session — this takes about 2 minutes and you only do it once.
 
-### 3. Set up a project
+**How they work.** These programs connect to Magnolia through a standard protocol (think USB, but for software). Magnolia routes your requests through them automatically:
 
-1. **Launch your AI tool in this folder** — for example, open a terminal, `cd` into `project_magnolia/`, and type `opencode`. (The MCP servers are already configured in `opencode.json`.) If you prefer an IDE, extensions like Cline for VS Code work too — just open this folder as your workspace.
-2. **Create a new project folder**, for example:
+- **compchem-tools** — runs scientific software (docking, simulation, HPC job management)
+- **compchem-memory** — the lab notebook (remembers results, learns from sessions, tracks what worked)
+
+Without them installed, Magnolia can chat but can't *do* anything or *remember* anything.
+
+**You'll need:** Python 3.11 or newer installed on your computer. If you're not sure, open a terminal and run `python3 --version`. Most Linux and macOS computers already have this. If yours doesn't, install it from [python.org](https://www.python.org/downloads/) or your system package manager.
+
+**Step-by-step:**
+
+Open a terminal, `cd` into the `project_magnolia/` folder, and run these commands in order:
+
+```bash
+# 1. Create an isolated Python environment (so Magnolia's dependencies
+#    don't interfere with anything else on your computer)
+python3 -m venv .venv
+
+# 2. Install the helper programs and all their dependencies.
+.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-tools
+.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-memory
+```
+
+**If `pip` is not found** (some minimal Python installs omit it), run this instead:
+```bash
+.venv/bin/python3 -m ensurepip --upgrade
+.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-tools
+.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-memory
+```
+
+**Verify it worked:** Run this command — if it prints the message below, you're all set:
+
+```bash
+.venv/bin/python3 -c "import compchem_tools, compchem_memory; print('Helper programs are ready.')"
+```
+
+You should see: `Helper programs are ready.`
+
+---
+
+### 4. Start your first project
+
+1. **Launch Magnolia with a project name** — open a terminal, `cd` into `project_magnolia/`, and run:
    ```
-   opencode_cc_mem/projects/my_docking_project/
+   ./opencode_cc_mem/softwares/bin/magnolia my_docking_project
    ```
-3. **Put your input files in the project folder** (for example, a protein PDB and a peptide PDB).
-4. **Tell Magnolia what you want**, including where the files are and what you have already tried.
+   Replace `my_docking_project` with whatever you want to call your project. If the project doesn't exist yet, Magnolia will offer to scaffold it for you (creates the folder structure and a `GOAL.md`), then open the chat interface.
+
+   The first time you launch, you'll be prompted to connect a model provider (see step 2 for options).
+2. **Put your input files in the project folder** (for example, a protein PDB and a peptide PDB).
+3. **Tell Magnolia what you want**, including where the files are and what you have already tried.
 
 **New to working with AI assistants?** Read [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md) for a step-by-step example of how to supervise Magnolia effectively — from planning an experiment to analyzing results.
 
