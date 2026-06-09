@@ -282,6 +282,11 @@ trap - EXIT
 # Wrapper argument wins over any pre-set env var.
 export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
 
+# Let the capture plugin (and any other opencode plugin) know which project
+# is active. opencode does not pass shell env vars to plugin code; this file
+# is the only reliable channel.
+echo "$PROJECT" > "$OPENCODE_DIR/.magnolia/.active-project"
+
 # Activate the project venv for THIS process — and thus opencode, its MCP
 # servers, and any tool subprocesses (p2rank, haddock3, …) they spawn, so
 # binaries resolve on PATH. magnolia runs as a subprocess, so this never leaks

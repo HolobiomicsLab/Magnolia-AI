@@ -22,11 +22,15 @@ import { join, dirname } from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 
 function projectMapPath(directory: string): string | null {
-  // magnolia exports MAGNOLIA_PROJECT_DIR (e.g. "projects/obp") before
-  // exec-ing opencode, so the opencode process — and this plugin — see it.
-  const pd = process.env.MAGNOLIA_PROJECT_DIR
-  if (!pd) return null
-  return join(directory, pd, ".magnolia", "opencode-sessions.jsonl")
+  // magnolia writes the active project name to .magnolia/.active-project
+  // before exec-ing opencode, because opencode does not pass shell env vars
+  // to plugin code. This marker file is the only reliable channel.
+  try {
+    const marker = join(directory, ".magnolia", ".active-project")
+    const proj = readFileSync(marker, "utf8").trim()
+    if (!proj) return null
+    return join(directory, "projects", proj, ".magnolia", "opencode-sessions.jsonl")
+  } catch { return null }
 }
 
 export const MagnoliaSessionCapture: Plugin = async ({ directory, worktree }) => {
