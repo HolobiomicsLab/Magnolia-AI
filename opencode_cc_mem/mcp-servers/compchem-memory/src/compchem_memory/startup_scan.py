@@ -56,20 +56,18 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
             print(f"[startup_scan] failed on {session_path.name}: {e}")
             continue
 
-    # Also distill the REAL opencode conversations captured for this workspace
-    # (the tool log alone can't hold scientific findings). The capture plugin
-    # writes the mapping at the opencode project root; learnings land in this
-    # project's staging. Guarded: never let it break tool-log distillation.
+    # Also distill the REAL opencode conversations captured for THIS project.
+    # The capture plugin (magnolia-session-capture.ts) writes a project-specific
+    # mapping at <project>/.magnolia/opencode-sessions.jsonl keyed by
+    # MAGNOLIA_PROJECT_DIR. We ONLY read that — no fallback to a workspace-root
+    # mapping (which would leak sessions from other projects into this project's
+    # staging). If no mapping exists for this project yet, conversation
+    # distillation is simply not active for it.
     ingested = 0
     try:
         from compchem_memory.opencode_ingest import ingest_opencode_sessions
         store = pd / ".magnolia"
         mapping = store / "opencode-sessions.jsonl"
-        if not mapping.exists():
-            # plugin writes at the workspace root (…/projects/<name> -> root)
-            root_map = pd.parent.parent / ".magnolia" / "opencode-sessions.jsonl"
-            if root_map.exists():
-                mapping = root_map
         if mapping.exists():
             ingested = len(ingest_opencode_sessions(str(store), str(mapping)))
     except Exception as e:
