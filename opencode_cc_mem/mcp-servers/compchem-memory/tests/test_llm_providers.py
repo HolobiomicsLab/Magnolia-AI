@@ -103,7 +103,7 @@ def test_get_api_key_openai(monkeypatch):
 # ============ _get_model =============
 
 def test_get_model_defaults(monkeypatch):
-    assert llm._get_model("deepseek") == "deepseek-chat"
+    assert llm._get_model("deepseek") == "deepseek-v4-flash"
     assert llm._get_model("anthropic") == "claude-haiku-4-5-20251001"
     assert llm._get_model("openai") == "gpt-4o-mini"
 
@@ -192,7 +192,7 @@ def test_call_llm_deepseek_posts_to_chat_completions(monkeypatch):
     assert out == "from deepseek"
     assert captured["url"] == "https://api.deepseek.com/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer ds-key-abc"
-    assert captured["json"]["model"] == "deepseek-chat"
+    assert captured["json"]["model"] == "deepseek-v4-flash"
     assert captured["json"]["max_tokens"] == 42
     assert captured["json"]["messages"] == [
         {"role": "system", "content": "you are a helper"},
