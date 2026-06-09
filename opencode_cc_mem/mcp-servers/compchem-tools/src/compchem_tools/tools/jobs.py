@@ -2,8 +2,18 @@
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from compchem_memory.tiers.project import ProjectManager
+
+_PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
+
+
+def _generate_run_id(tool: str) -> str:
+    """Generate a unique run_id: <tool>_<YYYYMMDD_HHMMSS> in UTC."""
+    return f"{tool}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
 
 def submit_job(
@@ -15,7 +25,6 @@ def submit_job(
     memory: str = "4GB",
     time_limit: str = "24:00:00",
     partition: str | None = None,
-    # ssh-slurm-specific kwargs (ignored by slurm/pbs/local branches)
     project_dir: str | None = None,
     cluster: str = "azzurra",
     account: str | None = None,
@@ -52,15 +61,36 @@ def submit_job(
         return {"success": False, "error": f"Working directory not found: {working_dir}"}
 
     if scheduler == "slurm":
-        return _submit_slurm(command, wdir, job_name, ncores, memory, time_limit, partition)
+        result = _submit_slurm(command, wdir, job_name, ncores, memory, time_limit, partition)
     elif scheduler == "pbs":
-        return _submit_pbs(command, wdir, job_name, ncores, memory, time_limit, partition)
+        result = _submit_pbs(command, wdir, job_name, ncores, memory, time_limit, partition)
     elif scheduler == "local":
-        return _submit_local(command, wdir, job_name, ncores)
+        result = _submit_local(command, wdir, job_name, ncores)
     else:
         return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
 
+    # Record the run in .magnolia/runs/ for consistency with ssh-slurm.
+    # Non-ssh-slurm schedulers don't have a remote block; the run shows up
+    # with lifecycle="running" (local, process started) or "submitted"
+    # (slurm/pbs, handed to scheduler) and no remote key — that distinction
+    # is the differentiator. Only records when project_dir is provided
+    # (required for the agent path; human ad-hoc use can skip it).
+    if result.get("success") and project_dir:
+        run_id = _generate_run_id(tool or "job")
+        lifecycle = "running" if scheduler == "local" else "submitted"
+        try:
+            _PROJECT_MANAGER.record_run(
+                project_dir=str(project_dir),
+                run_id=run_id,
+                tool=tool or "raw",
+                status=None,
+                lifecycle=lifecycle,
+            )
+            result["run_id"] = run_id
+        except Exception:
+            pass  # never let run recording break the submission result
 
+    return result
 def check_job(
     job_id: str,
     scheduler: str = "slurm",
