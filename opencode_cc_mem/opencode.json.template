@@ -2,6 +2,10 @@
   "$schema": "https://opencode.ai/config.json",
   "tools": { "bash": false },
   "logLevel": "INFO",
+  "plugin": [
+    ".opencode/plugins/magnolia-session-capture.ts",
+    ".opencode/plugins/claim-critic.ts"
+  ],
   "mcp": {
     "compchem-tools": {
       "type": "local",
