@@ -1,31 +1,62 @@
-"""Startup scan: walk .magnolia/sessions/, distill any session without a .distilled marker."""
+"""Startup/timer distillation sweep.
+
+One distillation path: the opencode dialogue transcript is the source of truth.
+The tool-event heuristic extractor runs ONLY as a fallback, when the dialogue
+path cannot — no `opencode` binary, no LLM, or no captured session mapping.
+"""
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from compchem_memory.extraction import AutomaticMemoryExtractor
+from compchem_memory.llm import is_llm_available
+
+
+def _opencode_available() -> bool:
+    return shutil.which("opencode") is not None
 
 
 def scan_and_distill(project_dir: str) -> dict[str, Any]:
-    """Find session JSONL files and distill them.
+    """Distil the project's sessions into staging.
 
-    Closed sessions (stem != current-session-id): commit, then write a .distilled
-    marker. Idempotent — a marked file is skipped on later scans.
+    Dialogue is primary: if a captured opencode mapping exists and both the
+    `opencode` binary and an LLM are available, distil the real conversation
+    transcripts (incrementally, cursor-based) and nothing else. Otherwise fall
+    back to the tool-event heuristic extractor over `.magnolia/sessions/*.jsonl`.
 
-    The active session (stem == current-session-id): commit, but do NOT write a
-    marker — it is still being appended to. The cursor in extraction-state.yaml
-    tracks progress. The marker is only written once the session is no longer
-    active (a later scan when it has become a closed session).
-
-    Returns: {"scanned": int, "distilled": int, "skipped": int}.
+    Returns a dict with a `mode` of "dialogue" or "tool_event".
     """
     pd = Path(project_dir)
+    store = pd / ".magnolia"
+    mapping = store / "opencode-sessions.jsonl"
+
+    if mapping.exists() and is_llm_available() and _opencode_available():
+        return _distill_dialogue(store)
+    return _distill_tool_events(pd)
+
+
+def _distill_dialogue(store: Path) -> dict[str, Any]:
+    from compchem_memory.opencode_ingest import ingest_opencode_sessions
+
+    ingested = len(ingest_opencode_sessions(str(store)))
+    return {"mode": "dialogue", "opencode_ingested": ingested,
+            "scanned": 0, "distilled": 0, "skipped": 0}
+
+
+def _distill_tool_events(pd: Path) -> dict[str, Any]:
+    """Fallback: distil the SessionManager tool-event logs.
+
+    Closed sessions (stem != current-session-id) are committed then sealed with a
+    .distilled marker. The active session is committed but NOT sealed — it is
+    still being appended to, and the cursor in extraction-state.yaml tracks
+    progress so a later scan picks up its new events.
+    """
     sessions_dir = pd / ".magnolia" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    # Identify the active session (if any)
     active_id = ""
     current_file = pd / ".magnolia" / ".current-session-id"
     if current_file.exists():
@@ -56,25 +87,8 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
             print(f"[startup_scan] failed on {session_path.name}: {e}")
             continue
 
-    # Also distill the REAL opencode conversations captured for THIS project.
-    # The capture plugin (magnolia-session-capture.ts) writes a project-specific
-    # mapping at <project>/.magnolia/opencode-sessions.jsonl keyed by
-    # MAGNOLIA_PROJECT_DIR. We ONLY read that — no fallback to a workspace-root
-    # mapping (which would leak sessions from other projects into this project's
-    # staging). If no mapping exists for this project yet, conversation
-    # distillation is simply not active for it.
-    ingested = 0
-    try:
-        from compchem_memory.opencode_ingest import ingest_opencode_sessions
-        store = pd / ".magnolia"
-        mapping = store / "opencode-sessions.jsonl"
-        if mapping.exists():
-            ingested = len(ingest_opencode_sessions(str(store), str(mapping)))
-    except Exception as e:
-        print(f"[startup_scan] opencode ingest failed: {e}")
-
-    return {"scanned": scanned, "distilled": distilled, "skipped": skipped,
-            "opencode_ingested": ingested}
+    return {"mode": "tool_event", "scanned": scanned, "distilled": distilled,
+            "skipped": skipped, "opencode_ingested": 0}
 
 
 def _now_iso() -> str:
