@@ -478,31 +478,9 @@ class AutomaticMemoryExtractor:
         return failures
 
     def _save_to_staging(self, store: Path, candidate: dict[str, Any]) -> str:
-        staging_dir = store / "staging"
-        staging_dir.mkdir(parents=True, exist_ok=True)
+        from compchem_memory.staging_io import save_candidate
 
-        title = candidate.get("title", "untitled")
-        slug = re.sub(r"[^a-zA-Z0-9]+", "_", title)[:60].strip("_")
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-        fname = f"{ts}_{slug}.md"
-        fpath = staging_dir / fname
-
-        frontmatter = {
-            "id": ts,
-            "type": candidate.get("type", "note"),
-            "title": title,
-            "description": candidate.get("content", "")[:200],
-            "tools": candidate.get("tools", []),
-            "tags": candidate.get("tags", []),
-            "created": datetime.now(timezone.utc).isoformat(),
-            "updated": datetime.now(timezone.utc).isoformat(),
-            "source": "auto_extraction",
-            "observation_count": 1,
-            "confidence": candidate.get("confidence", 0.5),
-        }
-        fm_str = "---\n" + yaml.dump(frontmatter, default_flow_style=False) + "---\n\n"
-        fpath.write_text(fm_str + candidate.get("content", "") + "\n")
-        return str(fpath)
+        return save_candidate(store, candidate, source="auto_extraction")
 
     def _read_events(self, session_path: Path) -> list[dict[str, Any]]:
         events = []
