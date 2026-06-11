@@ -65,8 +65,8 @@ def _write_mapping(store, ids):
 
 def test_ingest_processes_each_new_session_once(store):
     _write_mapping(store, ["ses_a", "ses_b"])
-    exported = {"ses_a": _export([{"info": {"role": "user"}, "parts": [{"type": "text", "text": "A"}]}]),
-                "ses_b": _export([{"info": {"role": "user"}, "parts": [{"type": "text", "text": "B"}]}])}
+    exported = {"ses_a": _export([{"info": {"id": "a1", "role": "user"}, "parts": [{"type": "text", "text": "A"}]}]),
+                "ses_b": _export([{"info": {"id": "b1", "role": "user"}, "parts": [{"type": "text", "text": "B"}]}])}
     seen = []
 
     def fake_export(sid): return exported[sid]

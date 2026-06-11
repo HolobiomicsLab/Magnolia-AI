@@ -34,7 +34,9 @@ from compchem_memory.storage import (
     resolve_project_dir,
 )
 from compchem_memory.project_guard import check_project
-from compchem_memory.startup_scan import scan_and_distill
+from compchem_memory.startup_scan import scan_and_distill, _opencode_available
+from compchem_memory.llm import is_llm_available
+from compchem_memory.opencode_ingest import _latest_sid, distill_session_transcript
 
 SKILLS_DIR = Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_SKILLS_DIR)))
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
@@ -636,12 +638,37 @@ def memory_distill_session(
     Call this when: you want to see what the session would distill into
     (commit=False), or force-distill it now (commit=True)."""
     pd = _resolve_project_store(project_dir)
+    from compchem_memory.reflections import pick_quote
+
+    # Primary: distil the active session's real dialogue transcript. Same single
+    # path the timer/startup sweep uses — the manual tool just forces a sweep of
+    # the current session now.
+    store = Path(pd) / ".magnolia"
+    sid = _latest_sid(store / "opencode-sessions.jsonl")
+    if sid and is_llm_available() and _opencode_available():
+        res = distill_session_transcript(str(store), sid, commit=commit)
+        if res is not None:
+            if res["status"] == "committed":
+                return json.dumps(
+                    {"status": "committed", "saved_count": len(res["saved"]),
+                     "paths": res["saved"], "source": "dialogue",
+                     "reflection": pick_quote("closing")},
+                    indent=2,
+                )
+            return json.dumps(
+                {"status": "preview", "candidate_count": len(res["candidates"]),
+                 "candidates": res["candidates"], "source": "dialogue",
+                 "reflection": pick_quote("opening")},
+                indent=2,
+            )
+
+    # Fallback: tool-event log (no dialogue available — no LLM, no opencode, or
+    # no captured session).
     sess_m = _get_session_mgr(pd)
     log_path = sess_m.get_session_log_path()
     if not log_path:
         return json.dumps({"status": "no_active_session"})
 
-    from compchem_memory.reflections import pick_quote
     extractor = _get_extractor(pd)
     session_path = Path(log_path)
 
@@ -652,6 +679,7 @@ def memory_distill_session(
                 "status": "committed",
                 "saved_count": len(saved),
                 "paths": saved,
+                "source": "tool_event",
                 "reflection": pick_quote("closing"),
             },
             indent=2,
@@ -663,6 +691,7 @@ def memory_distill_session(
             "status": "preview",
             "candidate_count": len(candidates),
             "candidates": candidates,
+            "source": "tool_event",
             "reflection": pick_quote("opening"),
         },
         indent=2,
