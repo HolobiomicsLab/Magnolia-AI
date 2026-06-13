@@ -122,3 +122,11 @@ def test_consolidate_no_clusters_writes_empty_proposal(tmp_path):
     assert result["clusters"] == 0
     data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
     assert data["proposals"] == []
+
+
+def test_default_clusterer_resilient_to_bad_llm_output(monkeypatch):
+    from compchem_memory import consolidation, llm
+    payload = [{"id": "a.md", "title": "x", "gist": "g"}]
+    for bad in (None, "not a dict", ["a", "list"], {"clusters": None}, {"no_clusters": 1}):
+        monkeypatch.setattr(llm, "call_llm_json", lambda *a, **k: bad)
+        assert consolidation._default_clusterer(payload) == []
