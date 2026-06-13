@@ -8,6 +8,7 @@ new knowledge), human-confirm (Increment B). Scoped to natural-language types;
 deterministic tool-output keeps the existing lexical dedup.
 """
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -126,3 +127,45 @@ def cluster_findings(
                 "rationale": c.get("rationale", ""),
             })
     return clusters
+
+
+def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Real LLM implementation lands in Task 5. Tests always inject a clusterer.
+    return []
+
+
+def consolidate_project_findings(
+    store_dir: str,
+    *,
+    clusterer: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+    types: tuple[str, ...] = NL_TYPES,
+) -> dict[str, Any]:
+    """Increment A (proposal-only): cluster a project's natural-language findings,
+    compute each cluster's merged preview, and write them to
+    `<store>/reflex/consolidation-proposal.json`. Mutates NO staging entries and
+    applies nothing. Returns {"clusters": int, "artifact": str}."""
+    clusterer = clusterer or _default_clusterer
+    store = Path(store_dir)
+    entries = _load_findings(store / "staging", types)
+    clusters = cluster_findings(entries, clusterer)
+
+    proposals = []
+    for c in clusters:
+        preview = merge_entries(c["members"])
+        proposals.append({
+            "confidence": c["confidence"],
+            "rationale": c["rationale"],
+            "sources": preview["sources"],
+            "canonical": preview["canonical"],
+            "merged_preview": {
+                "title": preview["meta"].get("title", ""),
+                "observation_count": preview["meta"]["observation_count"],
+                "observed_in_sessions": preview["meta"]["observed_in_sessions"],
+                "body": preview["body"],
+            },
+        })
+
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps({"proposals": proposals, "applied": []}, indent=2))
+    return {"clusters": len(proposals), "artifact": str(artifact)}
