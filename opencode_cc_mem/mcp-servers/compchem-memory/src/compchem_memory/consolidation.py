@@ -129,26 +129,41 @@ def cluster_findings(
     return clusters
 
 
+# Findings are clustered in small title-sorted batches. Reasoning models (e.g.
+# deepseek-v4-flash) spend output budget on reasoning_content that scales with
+# payload size; a single call over a large payload exhausts max_tokens before
+# emitting any answer. Title-sorting puts near-duplicate findings in the same
+# batch, so cross-batch misses are rare.
+_CLUSTER_BATCH = 15
+
+_CLUSTER_SYSTEM = (
+    "You consolidate a computational-chemistry project's memory. Given a JSON "
+    "list of finding entries (id, title, gist), group ONLY entries that assert "
+    "the SAME claim about the SAME system. Do NOT group entries that merely "
+    "share a topic or differ in any material detail (different peptide, metric, "
+    "residue, or conclusion). Most entries will be singletons. "
+    'Return JSON: {"clusters": [{"ids": [...], "confidence": 0.0-1.0, '
+    '"rationale": "one line"}]}. Only include clusters with 2+ ids.'
+)
+
+
 def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """LLM clusterer: group findings that assert the SAME claim about the SAME
-    system. Conservative — never group merely-related items. Returns
-    [{"ids":[...], "confidence":float, "rationale":str}]. Empty on LLM failure."""
+    system. Conservative — never group merely-related items. Processes the
+    payload in small title-sorted batches so a reasoning model's budget is not
+    exhausted on a large payload. Returns [{"ids":[...], "confidence":float,
+    "rationale":str}]; batches that fail the LLM call contribute nothing."""
     from compchem_memory.llm import call_llm_json
 
-    system = (
-        "You consolidate a computational-chemistry project's memory. Given a JSON "
-        "list of finding entries (id, title, gist), group ONLY entries that assert "
-        "the SAME claim about the SAME system. Do NOT group entries that merely "
-        "share a topic or differ in any material detail (different peptide, metric, "
-        "residue, or conclusion). Most entries will be singletons. "
-        'Return JSON: {"clusters": [{"ids": [...], "confidence": 0.0-1.0, '
-        '"rationale": "one line"}]}. Only include clusters with 2+ ids.'
-    )
-    result = call_llm_json(system, json.dumps(payload), max_tokens=2000)
-    if not result or not isinstance(result, dict):
-        return []
-    # `or []` guards against {"clusters": null} — valid JSON the LLM could emit.
-    return [c for c in (result.get("clusters") or []) if isinstance(c, dict)]
+    items = sorted(payload, key=lambda p: (p.get("title") or "").lower())
+    clusters: list[dict[str, Any]] = []
+    for i in range(0, len(items), _CLUSTER_BATCH):
+        batch = items[i:i + _CLUSTER_BATCH]
+        result = call_llm_json(_CLUSTER_SYSTEM, json.dumps(batch), max_tokens=8000)
+        if isinstance(result, dict):
+            # `or []` guards against {"clusters": null} — valid JSON the LLM could emit.
+            clusters.extend(c for c in (result.get("clusters") or []) if isinstance(c, dict))
+    return clusters
 
 
 def consolidate_project_findings(
