@@ -34,8 +34,11 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     mapping = store / "opencode-sessions.jsonl"
 
     if mapping.exists() and is_llm_available() and _opencode_available():
-        return _distill_dialogue(store)
-    return _distill_tool_events(pd)
+        result = _distill_dialogue(store)
+    else:
+        result = _distill_tool_events(pd)
+    _commit_after_sweep(store, result)
+    return result
 
 
 def _distill_dialogue(store: Path) -> dict[str, Any]:
@@ -93,3 +96,15 @@ def _distill_tool_events(pd: Path) -> dict[str, Any]:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _commit_after_sweep(store: Path, result: dict) -> None:
+    """One boundary commit per sweep. Never lets a versioning failure break
+    distillation."""
+    from compchem_memory import versioning
+    try:
+        msg = (f"distill: {result.get('opencode_ingested', 0)} dialogue, "
+               f"{result.get('distilled', 0)} tool-event")
+        versioning.commit_all(store, msg)
+    except Exception as e:  # noqa: BLE001 - versioning must never break the sweep
+        print(f"[versioning] commit skipped: {e}")
