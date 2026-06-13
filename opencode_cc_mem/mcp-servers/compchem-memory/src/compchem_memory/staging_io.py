@@ -51,6 +51,7 @@ def save_candidate(
     }
     if opencode_session_id is not None:
         fm["opencode_session_id"] = opencode_session_id
+        fm["observed_in_sessions"] = [opencode_session_id]
 
     fpath.write_text(
         "---\n" + yaml.dump(fm, default_flow_style=False) + "---\n\n"

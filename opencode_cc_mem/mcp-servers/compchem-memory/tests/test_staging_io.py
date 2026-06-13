@@ -53,3 +53,20 @@ def test_save_candidate_omits_provenance_key_when_absent(store):
     meta = yaml.safe_load(Path(path).read_text().split("---")[1])
     assert "opencode_session_id" not in meta
     assert meta["source"] == "auto_extraction"
+
+
+def test_save_candidate_stamps_observed_in_sessions_from_provenance(store):
+    from compchem_memory.staging_io import save_candidate
+
+    path = save_candidate(store, {"title": "t", "content": "c"},
+                          source="opencode_distill", opencode_session_id="ses_live")
+    meta = yaml.safe_load(Path(path).read_text().split("---")[1])
+    assert meta["observed_in_sessions"] == ["ses_live"]
+
+
+def test_save_candidate_omits_observed_in_sessions_without_provenance(store):
+    from compchem_memory.staging_io import save_candidate
+
+    path = save_candidate(store, {"title": "t", "content": "c"}, source="auto_extraction")
+    meta = yaml.safe_load(Path(path).read_text().split("---")[1])
+    assert "observed_in_sessions" not in meta
