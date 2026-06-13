@@ -82,3 +82,43 @@ def test_cluster_findings_resolves_ids_and_drops_singletons(tmp_path):
     assert len(clusters) == 1                      # singleton dropped
     assert clusters[0]["confidence"] == 0.95
     assert {m["id"] for m in clusters[0]["members"]} == {"a.md", "b.md"}
+
+
+from compchem_memory.consolidation import consolidate_project_findings
+
+
+def test_consolidate_writes_proposal_and_mutates_nothing(tmp_path):
+    store = tmp_path / ".magnolia"
+    staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "a.md", "N-term ALA wins", "canonical body longer text", ses="ses_1")
+    _write(staging, "b.md", "ALA beats C-term", "shorter", ses="ses_2")
+    before = {p.name: p.read_text() for p in staging.glob("*.md")}
+
+    def fake_clusterer(payload):
+        return [{"ids": ["a.md", "b.md"], "confidence": 0.95, "rationale": "same claim"}]
+
+    result = consolidate_project_findings(str(store), clusterer=fake_clusterer)
+
+    art = store / "reflex" / "consolidation-proposal.json"
+    assert art.exists()
+    data = json.loads(art.read_text())
+    assert len(data["proposals"]) == 1
+    p = data["proposals"][0]
+    assert p["confidence"] == 0.95
+    assert set(p["sources"]) == {str(staging / "a.md"), str(staging / "b.md")}
+    assert p["merged_preview"]["observation_count"] == 2
+    after = {p.name: p.read_text() for p in staging.glob("*.md")}
+    assert after == before                       # proposal-only: nothing changed
+    assert result["clusters"] == 1
+    assert result["artifact"] == str(art)        # spec'd return contract
+    assert data["applied"] == []                 # nothing applied in Increment A
+
+
+def test_consolidate_no_clusters_writes_empty_proposal(tmp_path):
+    store = tmp_path / ".magnolia"
+    staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "a.md", "lone finding", "body", ses="ses_1")
+    result = consolidate_project_findings(str(store), clusterer=lambda payload: [])
+    assert result["clusters"] == 0
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["proposals"] == []
