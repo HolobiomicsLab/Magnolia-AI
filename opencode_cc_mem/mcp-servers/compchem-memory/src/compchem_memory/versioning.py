@@ -53,6 +53,10 @@ def commit_all(store: Path, message: str) -> str | None:
     # `git diff --cached --quiet` exits 0 when nothing is staged, 1 when there is.
     if _git(store, "diff", "--cached", "--quiet").returncode == 0:
         return None
-    _git(store, "commit", "-q", "-m", message)
+    # A failed commit (e.g. an index.lock race) must not be reported as success:
+    # rev-parse would otherwise return the stale prior HEAD, or the literal "HEAD"
+    # on a repo with no commits yet.
+    if _git(store, "commit", "-q", "-m", message).returncode != 0:
+        return None
     rev = _git(store, "rev-parse", "HEAD").stdout.strip()
-    return rev or None
+    return rev if len(rev) in (40, 64) else None

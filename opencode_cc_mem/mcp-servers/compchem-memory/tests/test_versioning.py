@@ -81,6 +81,22 @@ def test_commit_all_is_noop_on_clean_tree(tmp_path):
     assert rev is None  # nothing to commit -> no empty commit
 
 
+def test_commit_all_returns_none_when_commit_fails(tmp_path):
+    store = tmp_path / ".magnolia"
+    (store / "staging").mkdir(parents=True)
+    (store / "staging" / "a.md").write_text("x")
+    versioning.ensure_repo(store)
+    # A pre-commit hook that fails makes `git commit` exit non-zero AFTER the add
+    # and the staged-changes check pass — exercising the commit-returncode guard.
+    hook = store / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+
+    rev = versioning.commit_all(store, "blocked by hook")
+
+    assert rev is None  # failed commit must not be reported as success
+
+
 def test_commit_all_ignores_plumbing_changes(tmp_path):
     store = tmp_path / ".magnolia"
     (store / "staging").mkdir(parents=True)
