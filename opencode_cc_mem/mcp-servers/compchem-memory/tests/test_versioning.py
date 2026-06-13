@@ -56,3 +56,40 @@ def test_ensure_repo_is_idempotent(tmp_path):
     versioning.ensure_repo(store)
     versioning.ensure_repo(store)  # must not raise or reinit
     assert versioning.is_repo(store)
+
+
+def test_commit_all_commits_changes_and_returns_hash(tmp_path):
+    store = tmp_path / ".magnolia"
+    (store / "staging").mkdir(parents=True)
+    (store / "staging" / "a.md").write_text("first learning")
+
+    rev = versioning.commit_all(store, "distill: 1 dialogue")
+
+    assert rev is not None and len(rev) in (40, 64)  # sha-1 or sha-256
+    log = _git(store, "log", "--oneline").stdout
+    assert "distill: 1 dialogue" in log
+
+
+def test_commit_all_is_noop_on_clean_tree(tmp_path):
+    store = tmp_path / ".magnolia"
+    (store / "staging").mkdir(parents=True)
+    (store / "staging" / "a.md").write_text("x")
+    versioning.commit_all(store, "first")
+
+    rev = versioning.commit_all(store, "nothing changed")
+
+    assert rev is None  # nothing to commit -> no empty commit
+
+
+def test_commit_all_ignores_plumbing_changes(tmp_path):
+    store = tmp_path / ".magnolia"
+    (store / "staging").mkdir(parents=True)
+    (store / "sessions").mkdir(parents=True)
+    (store / "staging" / "a.md").write_text("x")
+    versioning.commit_all(store, "first")
+
+    # a plumbing-only change must NOT produce a commit
+    (store / "sessions" / "log.jsonl").write_text("noise")
+    rev = versioning.commit_all(store, "should be skipped")
+
+    assert rev is None

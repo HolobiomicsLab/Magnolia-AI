@@ -41,3 +41,18 @@ def ensure_repo(store: str | Path) -> None:
     gi = store / ".gitignore"
     if not gi.exists() or gi.read_text() != _GITIGNORE:
         gi.write_text(_GITIGNORE)
+
+
+def commit_all(store: Path, message: str) -> str | None:
+    """Stage the tracked tiers and commit if anything changed. Returns the new
+    commit hash, or None when there is nothing to commit (a clean tree, or only
+    gitignored plumbing changed). Never raises on a clean tree."""
+    store = Path(store)
+    ensure_repo(store)
+    _git(store, "add", "-A")
+    # `git diff --cached --quiet` exits 0 when nothing is staged, 1 when there is.
+    if _git(store, "diff", "--cached", "--quiet").returncode == 0:
+        return None
+    _git(store, "commit", "-q", "-m", message)
+    rev = _git(store, "rev-parse", "HEAD").stdout.strip()
+    return rev or None
