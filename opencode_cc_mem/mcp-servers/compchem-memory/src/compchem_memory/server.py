@@ -164,6 +164,17 @@ def _resolve_project_store(project_dir: str | None = None) -> str:
     return pd
 
 
+def _safe_version_commit(store: Path, message: str) -> None:
+    """Commit the store to its versioning repo, best-effort. A versioning failure
+    must never turn an already-saved distill into a tool error (mirrors the
+    sweep's _commit_after_sweep contract)."""
+    from compchem_memory import versioning
+    try:
+        versioning.commit_all(store, message)
+    except Exception as e:  # noqa: BLE001 - versioning must never break distill
+        print(f"[versioning] commit skipped: {e}")
+
+
 def _project_switch_blocked_payload(guard) -> str:
     return json.dumps({
         "status": "project_switch_blocked",
@@ -649,6 +660,7 @@ def memory_distill_session(
         res = distill_session_transcript(str(store), sid, commit=commit)
         if res is not None:
             if res["status"] == "committed":
+                _safe_version_commit(store, f"manual distill: {len(res['saved'])} dialogue")
                 return json.dumps(
                     {"status": "committed", "saved_count": len(res["saved"]),
                      "paths": res["saved"], "source": "dialogue",
@@ -674,6 +686,7 @@ def memory_distill_session(
 
     if commit:
         saved = extractor.commit(session_path, pd)
+        _safe_version_commit(Path(pd) / ".magnolia", f"manual distill: {len(saved)} tool-event")
         return json.dumps(
             {
                 "status": "committed",

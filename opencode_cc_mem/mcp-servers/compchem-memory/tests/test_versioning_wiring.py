@@ -64,3 +64,32 @@ def test_sweep_survives_versioning_failure(project_dir, monkeypatch):
     result = scan_and_distill(str(project_dir))  # must not raise
 
     assert result["mode"] == "tool_event"
+
+
+def test_manual_commit_creates_a_versioning_commit(tmp_path, monkeypatch):
+    from compchem_memory import server, opencode_ingest as oi
+    from compchem_memory.storage import ensure_project_store
+    from compchem_memory.capture import reset_registry
+
+    reset_registry()
+    pd = tmp_path / "proj"
+    ensure_project_store(str(pd))
+    monkeypatch.setattr(server, "PROJECT_DIR", str(pd))
+    (pd / ".magnolia" / "opencode-sessions.jsonl").write_text(
+        json.dumps({"opencode_session_id": "ses_live", "ts": "t"}) + "\n")
+    monkeypatch.setattr(server, "is_llm_available", lambda: True)
+    monkeypatch.setattr(server, "_opencode_available", lambda: True)
+    monkeypatch.setattr(oi, "export_session", lambda sid: {
+        "info": {"id": sid},
+        "messages": [{"info": {"id": "m1", "role": "user"},
+                      "parts": [{"type": "text", "text": "a real finding worth keeping"}]}]})
+    monkeypatch.setattr(oi, "_default_distiller",
+                        lambda t: [{"title": "Finding", "content": t, "type": "scientific_finding"}])
+
+    fn = getattr(server.memory_distill_session, "fn", server.memory_distill_session)
+    fn(commit=True, project_dir=str(pd))
+
+    store = pd / ".magnolia"
+    log = _git(store, "log", "--oneline").stdout
+    assert "manual distill" in log
+    reset_registry()
