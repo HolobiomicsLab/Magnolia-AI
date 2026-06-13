@@ -15,6 +15,9 @@ from compchem_memory.extraction import AutomaticMemoryExtractor
 from compchem_memory.llm import is_llm_available
 
 
+_CONSOLIDATION_MIN_FINDINGS = 20  # gate: skip consolidation below this many findings
+
+
 def _opencode_available() -> bool:
     return shutil.which("opencode") is not None
 
@@ -37,6 +40,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
         result = _distill_dialogue(store)
     else:
         result = _distill_tool_events(pd)
+    _maybe_consolidate(store)
     _commit_after_sweep(store, result)
     return result
 
@@ -108,3 +112,16 @@ def _commit_after_sweep(store: Path, result: dict) -> None:
         versioning.commit_all(store, msg)
     except Exception as e:  # noqa: BLE001 - versioning must never break the sweep
         print(f"[versioning] commit skipped: {e}")
+
+
+def _maybe_consolidate(store: Path) -> None:
+    """Gated, proposal-only finding consolidation. Never breaks the sweep."""
+    try:
+        if not is_llm_available():
+            return
+        from compchem_memory.consolidation import _load_findings, consolidate_project_findings
+        if len(_load_findings(store / "staging")) < _CONSOLIDATION_MIN_FINDINGS:
+            return
+        consolidate_project_findings(str(store))
+    except Exception as e:  # noqa: BLE001 - consolidation must never break the sweep
+        print(f"[consolidation] skipped: {e}")

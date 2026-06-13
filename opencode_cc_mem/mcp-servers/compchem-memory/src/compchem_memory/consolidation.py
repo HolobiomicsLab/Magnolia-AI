@@ -130,8 +130,25 @@ def cluster_findings(
 
 
 def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # Real LLM implementation lands in Task 5. Tests always inject a clusterer.
-    return []
+    """LLM clusterer: group findings that assert the SAME claim about the SAME
+    system. Conservative — never group merely-related items. Returns
+    [{"ids":[...], "confidence":float, "rationale":str}]. Empty on LLM failure."""
+    from compchem_memory.llm import call_llm_json
+
+    system = (
+        "You consolidate a computational-chemistry project's memory. Given a JSON "
+        "list of finding entries (id, title, gist), group ONLY entries that assert "
+        "the SAME claim about the SAME system. Do NOT group entries that merely "
+        "share a topic or differ in any material detail (different peptide, metric, "
+        "residue, or conclusion). Most entries will be singletons. "
+        'Return JSON: {"clusters": [{"ids": [...], "confidence": 0.0-1.0, '
+        '"rationale": "one line"}]}. Only include clusters with 2+ ids.'
+    )
+    result = call_llm_json(system, json.dumps(payload), max_tokens=2000)
+    if not result or not isinstance(result, dict):
+        return []
+    # `or []` guards against {"clusters": null} — valid JSON the LLM could emit.
+    return [c for c in (result.get("clusters") or []) if isinstance(c, dict)]
 
 
 def consolidate_project_findings(
