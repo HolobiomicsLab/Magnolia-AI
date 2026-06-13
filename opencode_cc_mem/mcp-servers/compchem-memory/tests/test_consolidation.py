@@ -42,3 +42,43 @@ def test_merge_unions_tags_and_takes_max_confidence():
     merged = merge_entries(entries)
     assert set(merged["meta"]["tags"]) == {"haddock3", "hsc70"}
     assert merged["meta"]["confidence"] == 0.8
+
+
+import json
+from pathlib import Path
+import yaml
+from compchem_memory.consolidation import cluster_findings, _load_findings
+
+
+def _write(staging, name, title, body, typ="scientific_finding", ses="ses_x"):
+    fm = {"title": title, "type": typ, "opencode_session_id": ses,
+          "observed_in_sessions": [ses], "tags": [], "tools": [], "confidence": 0.6}
+    (staging / name).write_text("---\n" + yaml.dump(fm) + "---\n\n" + body + "\n")
+
+
+def test_load_findings_filters_to_nl_types(tmp_path):
+    staging = tmp_path / "staging"; staging.mkdir()
+    _write(staging, "a.md", "finding A", "body", typ="scientific_finding")
+    _write(staging, "b.md", "an error", "body", typ="error_resolution")  # deterministic -> excluded
+    entries = _load_findings(staging)
+    titles = {e["meta"]["title"] for e in entries}
+    assert "finding A" in titles
+    assert "an error" not in titles
+    assert all(e["id"] == e["path"].split("/")[-1] for e in entries)  # id is filename
+
+
+def test_cluster_findings_resolves_ids_and_drops_singletons(tmp_path):
+    staging = tmp_path / "staging"; staging.mkdir()
+    _write(staging, "a.md", "N-term ALA wins", "b1", ses="ses_1")
+    _write(staging, "b.md", "ALA beats C-term", "b2", ses="ses_2")
+    _write(staging, "c.md", "unrelated finding", "b3", ses="ses_3")
+    entries = _load_findings(staging)
+
+    def fake_clusterer(payload):
+        return [{"ids": ["a.md", "b.md"], "confidence": 0.95, "rationale": "same claim"},
+                {"ids": ["c.md"], "confidence": 0.9, "rationale": "alone"}]
+
+    clusters = cluster_findings(entries, fake_clusterer)
+    assert len(clusters) == 1                      # singleton dropped
+    assert clusters[0]["confidence"] == 0.95
+    assert {m["id"] for m in clusters[0]["members"]} == {"a.md", "b.md"}
