@@ -8,7 +8,10 @@ new knowledge), human-confirm (Increment B). Scoped to natural-language types;
 deterministic tool-output keeps the existing lexical dedup.
 """
 
+from pathlib import Path
 from typing import Any, Callable
+
+import yaml
 
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
@@ -70,3 +73,56 @@ def merge_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "sources": [e["path"] for e in entries],
         "canonical": canonical["path"],
     }
+
+
+def _load_findings(staging_dir: Path, types: tuple[str, ...] = NL_TYPES) -> list[dict[str, Any]]:
+    """Load natural-language finding entries from staging as
+    {"id","path","meta","body"}; id is the filename (stable, unique)."""
+    staging_dir = Path(staging_dir)
+    out: list[dict[str, Any]] = []
+    if not staging_dir.exists():
+        return out
+    for f in sorted(staging_dir.glob("*.md")):
+        if f.name == "INDEX.md":
+            continue
+        text = f.read_text(errors="replace")
+        meta, body = {}, text
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) == 3:
+                try:
+                    meta = yaml.safe_load(parts[1]) or {}
+                except yaml.YAMLError:
+                    meta = {}
+                body = parts[2]
+        if meta.get("type") in types:
+            out.append({"id": f.name, "path": str(f), "meta": meta, "body": body.strip()})
+    return out
+
+
+def cluster_findings(
+    entries: list[dict[str, Any]],
+    clusterer: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Ask `clusterer` to group same-claim entries. Payload sent to the clusterer
+    is compact (id/title/gist/type/session). Returns clusters of >=2 resolved
+    members with confidence + rationale; singletons are dropped."""
+    payload = [{
+        "id": e["id"],
+        "title": e["meta"].get("title", ""),
+        "gist": e["body"][:200],
+        "type": e["meta"].get("type"),
+        "session": e["meta"].get("opencode_session_id"),
+    } for e in entries]
+    raw = clusterer(payload) or []
+    by_id = {e["id"]: e for e in entries}
+    clusters: list[dict[str, Any]] = []
+    for c in raw:
+        members = [by_id[i] for i in c.get("ids", []) if i in by_id]
+        if len(members) >= 2:
+            clusters.append({
+                "members": members,
+                "confidence": float(c.get("confidence", 0.0)),
+                "rationale": c.get("rationale", ""),
+            })
+    return clusters
