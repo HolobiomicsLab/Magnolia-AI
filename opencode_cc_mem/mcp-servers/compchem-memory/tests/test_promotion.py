@@ -173,3 +173,29 @@ def test_propose_carries_rejection_forward(tmp_path):
     propose_promotions(str(store), **args)                    # a.md still eligible
     data = _json.loads(art_path.read_text())
     assert data["rejected"] == [0]                            # carried forward by key
+
+
+# ---------------------------------------------------------------------------
+# render_promotions_markdown tests
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import render_promotions_markdown
+
+
+def test_render_lists_pending_with_flags(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    propose_promotions(str(store), skills_dir=str(tmp_path / "rules"),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    path = render_promotions_markdown(str(store))
+    assert path == str(tmp_path / "magnolia-review" / "promotions.md")
+    md = Path(path).read_text()
+    assert "[0]" in md
+    assert "Alpha rule" in md
+    assert "action: accept" in md
+    assert "~~~~" in md
+
+
+def test_render_none_when_no_pending(tmp_path):
+    store = tmp_path / ".magnolia"; (store / "reflex").mkdir(parents=True)
+    (store / "reflex" / "promotion-proposal.json").write_text(
+        '{"proposals": [], "applied": [], "rejected": []}')
+    assert render_promotions_markdown(str(store)) is None
