@@ -222,6 +222,36 @@ def _parse_entry(path: str | Path) -> dict[str, Any] | None:
     return {"id": p.name, "path": str(p), "meta": meta, "body": body.strip()}
 
 
+def apply_proposals(store_dir: str, accepted: list[int]) -> dict[str, Any]:
+    """Apply the accepted proposal indices from the artifact via apply_merge, mark
+    them in `applied`, and persist the artifact. Unknown / out-of-range / already-
+    applied indices are ignored. Returns {"applied": int, "merged": [...],
+    "skipped": [indices]}."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return {"applied": 0, "merged": [], "skipped": []}
+    data = json.loads(artifact.read_text())
+    proposals = data.get("proposals", [])
+    already = set(data.get("applied", []))
+
+    merged_paths: list[str] = []
+    skipped: list[int] = []
+    for i in accepted:
+        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in already:
+            continue
+        res = apply_merge(proposals[i].get("sources", []))
+        if res["skipped"]:
+            skipped.append(i)
+        else:
+            merged_paths.append(res["merged"])
+            already.add(i)
+
+    data["applied"] = sorted(already)
+    artifact.write_text(json.dumps(data, indent=2))
+    return {"applied": len(merged_paths), "merged": merged_paths, "skipped": skipped}
+
+
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     """Apply one consolidation: re-read the still-present sources, merge them, write
     the merged entry OVER the canonical file, and remove the other sources. Re-reads

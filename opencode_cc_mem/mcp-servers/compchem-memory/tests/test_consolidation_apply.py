@@ -39,3 +39,40 @@ def test_apply_merge_skips_when_fewer_than_two_sources_survive(tmp_path):
     assert res["skipped"] is True
     assert res["merged"] is None
     assert Path(a).exists()
+
+
+import json
+from compchem_memory.consolidation import apply_proposals, consolidate_project_findings
+
+
+def _store_with_proposal(tmp_path):
+    store = tmp_path / ".magnolia"
+    staging = store / "staging"; staging.mkdir(parents=True)
+    a = _write(staging, "a.md", "N-term ALA wins", "canonical longer body", "ses_1")
+    b = _write(staging, "b.md", "ALA beats C-term", "short", "ses_2")
+    c = _write(staging, "c.md", "lone finding", "unrelated", "ses_3")
+    consolidate_project_findings(
+        str(store),
+        clusterer=lambda payload: [{"ids": ["a.md", "b.md"], "confidence": 0.95, "rationale": "same"}],
+    )
+    return store, a, b, c
+
+
+def test_apply_proposals_applies_accepted_index_and_marks_it(tmp_path):
+    store, a, b, c = _store_with_proposal(tmp_path)
+
+    res = apply_proposals(str(store), [0])
+
+    assert res["applied"] == 1
+    surviving = [p for p in (a, b) if Path(p).exists()]
+    assert len(surviving) == 1
+    assert Path(c).exists()               # c untouched (never in a cluster)
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["applied"] == [0]
+
+
+def test_apply_proposals_ignores_unknown_or_already_applied(tmp_path):
+    store, *_ = _store_with_proposal(tmp_path)
+    apply_proposals(str(store), [0])
+    res = apply_proposals(str(store), [0, 99])      # re-apply 0 + out-of-range
+    assert res["applied"] == 0
