@@ -65,8 +65,9 @@ _PANEL_SYSTEM = (
 def _default_judge(entry: dict[str, Any], lens_idx: int) -> dict[str, Any] | None:
     from compchem_memory.llm import call_llm_json
     payload = {"title": entry["meta"].get("title", ""), "body": entry["body"][:1500]}
-    return call_llm_json(_PANEL_SYSTEM, json.dumps(payload), max_tokens=400,
-                         temperature=_PROMOTION_PANEL_TEMPERATURE)
+    res = call_llm_json(_PANEL_SYSTEM, json.dumps(payload), max_tokens=400,
+                        temperature=_PROMOTION_PANEL_TEMPERATURE)
+    return res if isinstance(res, dict) else None
 
 
 def run_panel(
