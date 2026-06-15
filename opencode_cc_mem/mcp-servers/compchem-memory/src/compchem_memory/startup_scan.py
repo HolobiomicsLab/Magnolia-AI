@@ -41,6 +41,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     else:
         result = _distill_tool_events(pd)
     _maybe_consolidate(store)
+    _maybe_promote(store)
     _commit_after_sweep(store, result)
     return result
 
@@ -112,6 +113,20 @@ def _commit_after_sweep(store: Path, result: dict) -> None:
         versioning.commit_all(store, msg)
     except Exception as e:  # noqa: BLE001 - versioning must never break the sweep
         print(f"[versioning] commit skipped: {e}")
+
+
+def _maybe_promote(store: Path) -> None:
+    """Gated, proposal-only project→skill promotion. Never breaks the sweep."""
+    try:
+        if not is_llm_available():
+            return
+        from compchem_memory.promotion import propose_promotions, eligible_entries
+        from compchem_memory.server import SKILLS_DIR
+        if not eligible_entries(str(store)):
+            return
+        propose_promotions(str(store), skills_dir=str(SKILLS_DIR))
+    except Exception as e:  # noqa: BLE001 - promotion must never break the sweep
+        print(f"[promotion] skipped: {e}")
 
 
 def _maybe_consolidate(store: Path) -> None:
