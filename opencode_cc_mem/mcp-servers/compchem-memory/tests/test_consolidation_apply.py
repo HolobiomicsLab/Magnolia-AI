@@ -76,3 +76,22 @@ def test_apply_proposals_ignores_unknown_or_already_applied(tmp_path):
     apply_proposals(str(store), [0])
     res = apply_proposals(str(store), [0, 99])      # re-apply 0 + out-of-range
     assert res["applied"] == 0
+
+
+from compchem_memory.consolidation import render_review_markdown
+
+
+def test_render_review_markdown_to_visible_dir(tmp_path):
+    store, *_ = _store_with_proposal(tmp_path)
+    path = render_review_markdown(str(store))
+    assert path == str(tmp_path / "magnolia-review" / "proposals.md")
+    md = Path(path).read_text()
+    assert "[0]" in md
+    assert "action: accept" in md
+    assert "N-term ALA wins" in md or "ALA beats C-term" in md
+
+
+def test_render_review_markdown_none_when_no_unapplied(tmp_path):
+    store, *_ = _store_with_proposal(tmp_path)
+    apply_proposals(str(store), [0])
+    assert render_review_markdown(str(store)) is None
