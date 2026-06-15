@@ -19,6 +19,9 @@ build/
 venv/
 .env
 
+# Logs / generated tool artifacts (e.g. AmberTools teLeap leap.log)
+*.log
+
 # Magnolia runtime data
 .magnolia/
 
