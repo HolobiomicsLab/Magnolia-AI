@@ -267,3 +267,53 @@ def test_call_llm_json_returns_none_on_parse_failure(monkeypatch):
 def test_call_llm_json_returns_none_when_text_is_none(monkeypatch):
     # No provider → call_llm returns None → call_llm_json must too
     assert llm.call_llm_json("s", "u") is None
+
+
+def test_disable_thinking_and_temperature_sent_for_deepseek(monkeypatch):
+    """call_llm_json(disable_thinking=True, temperature=0) must send DeepSeek's
+    thinking-disabled param and temperature in the request body."""
+    from compchem_memory import llm
+    monkeypatch.delenv("MAGNOLIA_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("MAGNOLIA_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"choices": [{"message": {"content": "{\"ok\": 1}"}}]}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured["body"] = json
+        return FakeResp()
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+
+    out = llm.call_llm_json("sys", "user", disable_thinking=True, temperature=0)
+    assert out == {"ok": 1}
+    assert captured["body"]["thinking"] == {"type": "disabled"}
+    assert captured["body"]["temperature"] == 0
+
+
+def test_thinking_not_sent_by_default(monkeypatch):
+    from compchem_memory import llm
+    monkeypatch.delenv("MAGNOLIA_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("MAGNOLIA_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"choices": [{"message": {"content": "{}"}}]}
+
+    monkeypatch.setattr(llm.httpx, "post",
+                        lambda url, headers=None, json=None, timeout=None: captured.update(body=json) or FakeResp())
+    llm.call_llm_json("sys", "user")
+    assert "thinking" not in captured["body"]
+    assert "temperature" not in captured["body"]
