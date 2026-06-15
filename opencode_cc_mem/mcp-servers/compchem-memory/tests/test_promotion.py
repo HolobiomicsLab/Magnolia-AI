@@ -93,3 +93,31 @@ def test_draft_rule_falls_back_on_drafter_failure():
     assert drafted["name"]                                 # derived from title
     assert drafted["body"] == "raw body"                   # falls back to entry body
     assert drafted["tags"] == ["x"]
+
+
+# ---------------------------------------------------------------------------
+# consistency check tests
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import check_consistency, _existing_rule_summaries
+
+
+def test_existing_rule_summaries_reads_name_description(tmp_path):
+    rules = tmp_path / "rules"; rules.mkdir()
+    (rules / "r1.md").write_text(
+        "---\nname: prejob-check\ndescription: validate before submit\n---\n\nbody")
+    got = _existing_rule_summaries(str(rules))
+    assert {"name": "prejob-check", "description": "validate before submit"} in got
+
+
+def test_check_consistency_passes_through_checker():
+    drafted = {"name": "n", "description": "d", "tags": [], "body": "b"}
+    res = check_consistency(drafted, [], checker=lambda d, rules: {
+        "status": "duplicate", "related_rule": "prejob-check", "note": "same"})
+    assert res["status"] == "duplicate"
+    assert res["related_rule"] == "prejob-check"
+
+
+def test_check_consistency_defaults_ok_on_checker_failure():
+    drafted = {"name": "n", "description": "d", "tags": [], "body": "b"}
+    res = check_consistency(drafted, [], checker=lambda d, rules: None)
+    assert res == {"status": "ok", "related_rule": None, "note": ""}
