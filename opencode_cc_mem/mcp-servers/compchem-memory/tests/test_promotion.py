@@ -296,3 +296,26 @@ def test_apply_archive_failure_not_double_counted(tmp_path, monkeypatch):
     assert res["failed"] == [0]
     data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
     assert data["applied"] == []                # mark not persisted
+
+
+def test_review_and_apply_tools_end_to_end(tmp_path, monkeypatch):
+    from compchem_memory import server
+    store = tmp_path / ".magnolia"; entries = store / "entries"; entries.mkdir(parents=True)
+    _entry(entries, "a.md", "Alpha rule", "use alpha", ["s1", "s2", "s3"])
+    skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+
+    pd = str(tmp_path)
+    monkeypatch.setattr(server, "PROJECT_DIR", pd)
+    monkeypatch.setattr(server, "SKILLS_DIR", skills)
+    review = getattr(server.memory_review_promotions, "fn", server.memory_review_promotions)
+    apply = getattr(server.memory_apply_promotions, "fn", server.memory_apply_promotions)
+
+    r = _json.loads(review(project_dir=pd))
+    assert r["pending"] == 1 and Path(r["review_file"]).exists()
+
+    out = _json.loads(apply(accept=[0], project_dir=pd))
+    assert out["applied"] == 1
+    assert (skills / "alpha-rule.md").exists()
+    assert not (tmp_path / "magnolia-review" / "promotions.md").exists()  # cleaned
