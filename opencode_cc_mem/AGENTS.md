@@ -72,3 +72,18 @@ and fires auto-assessment for recognized scientific tools.
 Call `memory_confirm` to promote useful staging entries to the durable project
 tier. The staging area is a low-pass filter; without confirmation, useful
 learnings stay below the surface.
+
+## Reviewing consolidation proposals
+
+If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposals
+(check at the start of a session), surface them for the user:
+
+1. Call `memory_review_consolidation` — it writes a readable review to
+   `magnolia-review/proposals.md` and returns a summary.
+2. Present the proposed merges briefly and ask the user to accept/reject/modify.
+   The user may also edit `magnolia-review/proposals.md` directly.
+3. Call `memory_apply_consolidation(accept=[indices the user accepted])`. Merges
+   are applied deterministically and committed (reversible via git). The review
+   directory is removed once all proposals are handled.
+
+Never apply a proposal the user did not confirm.
