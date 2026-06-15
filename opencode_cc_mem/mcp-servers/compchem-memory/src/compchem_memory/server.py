@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -174,6 +173,17 @@ def _safe_version_commit(store: Path, message: str) -> None:
         versioning.commit_all(store, message)
     except Exception as e:  # noqa: BLE001 - versioning must never break distill
         print(f"[versioning] commit skipped: {e}")
+
+
+def _drop_review_file(pd: str, filename: str) -> None:
+    """Remove one review file from the shared magnolia-review/ dir, and the dir
+    itself only if it's now empty. Scoped to the caller's own file so the two
+    self-reflex passes (consolidation, promotion) don't delete each other's
+    pending review."""
+    review_dir = Path(pd) / "magnolia-review"
+    (review_dir / filename).unlink(missing_ok=True)
+    if review_dir.exists() and not any(review_dir.iterdir()):
+        review_dir.rmdir()
 
 
 def _project_switch_blocked_payload(guard) -> str:
@@ -756,11 +766,7 @@ def memory_apply_consolidation(
     data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
     handled = set(data.get("applied", [])) | set(data.get("rejected", []))
     if len(handled) >= len(data.get("proposals", [])):
-        review_md = Path(pd) / "magnolia-review" / "proposals.md"
-        review_md.unlink(missing_ok=True)
-        rd = Path(pd) / "magnolia-review"
-        if rd.exists() and not any(rd.iterdir()):
-            rd.rmdir()
+        _drop_review_file(pd, "proposals.md")
     return json.dumps({"status": "applied", **result}, indent=2)
 
 
@@ -811,11 +817,7 @@ def memory_apply_promotions(
     data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
     handled = set(data.get("applied", [])) | set(data.get("rejected", []))
     if len(handled) >= len(data.get("proposals", [])):
-        review_md = Path(pd) / "magnolia-review" / "promotions.md"
-        review_md.unlink(missing_ok=True)
-        rd = Path(pd) / "magnolia-review"
-        if rd.exists() and not any(rd.iterdir()):
-            rd.rmdir()
+        _drop_review_file(pd, "promotions.md")
     return json.dumps({"status": "applied", **result}, indent=2)
 
 
