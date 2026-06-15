@@ -200,8 +200,15 @@ def consolidate_project_findings(
 
     artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text(json.dumps({"proposals": proposals, "applied": []}, indent=2))
+    artifact.write_text(json.dumps({"proposals": proposals, "applied": [], "rejected": []}, indent=2))
     return {"clusters": len(proposals), "artifact": str(artifact)}
+
+
+def _pending_indices(data: dict[str, Any]) -> list[int]:
+    """Proposal indices that are neither applied nor rejected — the single source
+    of truth for 'still needs review' (shared by render + the review tool)."""
+    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
+    return [i for i in range(len(data.get("proposals", []))) if i not in handled]
 
 
 def _parse_entry(path: str | Path) -> dict[str, Any] | None:
@@ -222,34 +229,58 @@ def _parse_entry(path: str | Path) -> dict[str, Any] | None:
     return {"id": p.name, "path": str(p), "meta": meta, "body": body.strip()}
 
 
-def apply_proposals(store_dir: str, accepted: list[int]) -> dict[str, Any]:
-    """Apply the accepted proposal indices from the artifact via apply_merge, mark
-    them in `applied`, and persist the artifact. Unknown / out-of-range / already-
-    applied indices are ignored. Returns {"applied": int, "merged": [...],
-    "skipped": [indices]}."""
+def apply_proposals(
+    store_dir: str, accepted: list[int], reject: list[int] | None = None
+) -> dict[str, Any]:
+    """Apply the accepted proposal indices via apply_merge and record `reject`ed
+    indices as durably handled (so they stop re-surfacing). Marks state in the
+    artifact and persists it AFTER EACH applied merge, so a later failure can't
+    lose earlier marks. A merge that raises is recorded in `failed` and never
+    aborts the batch. Unknown / out-of-range / already-handled indices are ignored.
+    Returns {"applied": int, "merged": [...], "skipped": [...], "rejected": int,
+    "failed": [...]}."""
     store = Path(store_dir)
     artifact = store / "reflex" / "consolidation-proposal.json"
     if not artifact.exists():
-        return {"applied": 0, "merged": [], "skipped": []}
+        return {"applied": 0, "merged": [], "skipped": [], "rejected": 0, "failed": []}
     data = json.loads(artifact.read_text())
     proposals = data.get("proposals", [])
     already = set(data.get("applied", []))
+    rejected_set = set(data.get("rejected", []))
+
+    def _persist():
+        data["applied"] = sorted(already)
+        data["rejected"] = sorted(rejected_set)
+        artifact.write_text(json.dumps(data, indent=2))
+
+    rejected_count = 0
+    for i in reject or []:
+        if isinstance(i, int) and 0 <= i < len(proposals) and i not in already and i not in rejected_set:
+            rejected_set.add(i)
+            rejected_count += 1
 
     merged_paths: list[str] = []
     skipped: list[int] = []
+    failed: list[int] = []
     for i in accepted:
-        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in already:
+        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in already or i in rejected_set:
             continue
-        res = apply_merge(proposals[i].get("sources", []))
+        try:
+            res = apply_merge(proposals[i].get("sources", []))
+        except Exception as e:  # noqa: BLE001 - one bad merge must not abort the batch
+            print(f"[consolidation] apply failed for proposal {i}: {e}")
+            failed.append(i)
+            continue
         if res["skipped"]:
             skipped.append(i)
         else:
             merged_paths.append(res["merged"])
             already.add(i)
+            _persist()  # incremental: earlier marks survive a later failure
 
-    data["applied"] = sorted(already)
-    artifact.write_text(json.dumps(data, indent=2))
-    return {"applied": len(merged_paths), "merged": merged_paths, "skipped": skipped}
+    _persist()
+    return {"applied": len(merged_paths), "merged": merged_paths,
+            "skipped": skipped, "rejected": rejected_count, "failed": failed}
 
 
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
@@ -287,8 +318,7 @@ def render_review_markdown(store_dir: str) -> str | None:
         return None
     data = json.loads(artifact.read_text())
     proposals = data.get("proposals", [])
-    applied = set(data.get("applied", []))
-    pending = [(i, p) for i, p in enumerate(proposals) if i not in applied]
+    pending = _pending_indices(data)
     if not pending:
         return None
 
@@ -300,7 +330,8 @@ def render_review_markdown(store_dir: str) -> str | None:
         "change it to `reject`. Then tell the agent which to apply (e.g. \"apply 0 and 2\").",
         "",
     ]
-    for i, p in pending:
+    for i in pending:
+        p = proposals[i]
         mp = p.get("merged_preview", {})
         lines += [
             f"## [{i}] {mp.get('title', '')}",
@@ -310,13 +341,16 @@ def render_review_markdown(store_dir: str) -> str | None:
             "- sources:",
         ]
         lines += [f"    - {Path(s).name}" for s in p.get("sources", [])]
+        body = mp.get("body", "") or ""
+        shown = body[:1500] + ("\n…(truncated)" if len(body) > 1500 else "")
+        # `~~~~` fence won't be closed early by a ``` block inside a finding body.
         lines += [
             "",
             "<details><summary>merged preview</summary>",
             "",
-            "```",
-            (mp.get("body", "") or "")[:1500],
-            "```",
+            "~~~~",
+            shown,
+            "~~~~",
             "</details>",
             "",
         ]

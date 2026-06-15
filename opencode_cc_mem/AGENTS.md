@@ -82,8 +82,10 @@ If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposal
    `magnolia-review/proposals.md` and returns a summary.
 2. Present the proposed merges briefly and ask the user to accept/reject/modify.
    The user may also edit `magnolia-review/proposals.md` directly.
-3. Call `memory_apply_consolidation(accept=[indices the user accepted])`. Merges
-   are applied deterministically and committed (reversible via git). The review
-   directory is removed once all proposals are handled.
+3. Call `memory_apply_consolidation(accept=[accepted indices], reject=[rejected
+   indices])`. Accepted merges are applied deterministically and committed
+   (reversible via git); rejected ones are durably dismissed so they don't
+   re-surface. The review directory is removed once every proposal has been
+   handled (accepted or rejected).
 
 Never apply a proposal the user did not confirm.
