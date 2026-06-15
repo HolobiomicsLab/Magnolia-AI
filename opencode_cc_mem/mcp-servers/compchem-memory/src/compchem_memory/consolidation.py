@@ -14,6 +14,11 @@ from typing import Any, Callable
 
 import yaml
 
+from compchem_memory.reflex_common import (
+    parse_frontmatter_file as _parse_entry,
+    pending_indices as _pending_indices,
+)
+
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
             "note", "workflow_note")
@@ -234,31 +239,6 @@ def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
         if isinstance(idx, int) and 0 <= idx < len(old):
             keys.add(_cluster_key(old[idx].get("sources", [])))
     return keys
-
-
-def _pending_indices(data: dict[str, Any]) -> list[int]:
-    """Proposal indices that are neither applied nor rejected — the single source
-    of truth for 'still needs review' (shared by render + the review tool)."""
-    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
-    return [i for i in range(len(data.get("proposals", []))) if i not in handled]
-
-
-def _parse_entry(path: str | Path) -> dict[str, Any] | None:
-    """Load one staging entry as {"id","path","meta","body"}, or None if missing."""
-    p = Path(path)
-    if not p.exists():
-        return None
-    text = p.read_text(encoding="utf-8", errors="replace")
-    meta, body = {}, text
-    if text.startswith("---"):
-        parts = text.split("---", 2)
-        if len(parts) == 3:
-            try:
-                meta = yaml.safe_load(parts[1]) or {}
-            except yaml.YAMLError:
-                meta = {}
-            body = parts[2]
-    return {"id": p.name, "path": str(p), "meta": meta, "body": body.strip()}
 
 
 def apply_proposals(
