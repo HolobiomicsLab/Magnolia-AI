@@ -89,3 +89,19 @@ If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposal
    handled (accepted or rejected).
 
 Never apply a proposal the user did not confirm.
+
+## Reviewing rule-elevation proposals
+
+If `.magnolia/reflex/promotion-proposal.json` exists with unapplied proposals
+(check at the start of a session), surface them for the user:
+
+1. Call `memory_review_promotions` — it writes a readable review to
+   `magnolia-review/promotions.md` and returns a summary.
+2. Present each proposed elevation (entry, panel approvals, any ⚠ correctness or
+   duplicate/conflict flags, the drafted rule) and ask the user to accept/reject.
+3. Call `memory_apply_promotions(accept=[…], reject=[…])` (or `promote_raw=[…]`
+   to elevate the entry verbatim instead of the draft). Applied rules are written
+   and committed (reversible via git); the source project entry is archived. Edit
+   the resulting rule file afterward if needed.
+
+Never elevate a proposal the user did not confirm.
