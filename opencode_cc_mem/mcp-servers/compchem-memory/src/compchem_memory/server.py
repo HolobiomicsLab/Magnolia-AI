@@ -761,6 +761,61 @@ def memory_apply_consolidation(
 
 
 @mcp.tool()
+def memory_review_promotions(project_dir: str | None = None) -> str:
+    """Render pending project→skill rule-elevation proposals to a visible,
+    read-only review file at <project>/magnolia-review/promotions.md and report a
+    summary. Call this at session start when a promotion proposal exists, or when
+    the user asks to review proposed rule elevations."""
+    from compchem_memory.promotion import render_promotions_markdown
+    from compchem_memory.reflex_common import pending_indices
+    pd = _resolve_project_store(project_dir)
+    store = Path(pd) / ".magnolia"
+    review_file = render_promotions_markdown(str(store))
+    if not review_file:
+        return json.dumps({"status": "no_pending_proposals", "pending": 0})
+    data = json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    proposals = data.get("proposals", [])
+    pending = [{"index": i, "entry_title": proposals[i].get("entry_title", ""),
+                "distinct_sessions": proposals[i].get("distinct_sessions"),
+                "consistency": proposals[i].get("consistency", {}).get("status")}
+               for i in pending_indices(data)]
+    return json.dumps({"status": "review_ready", "pending": len(pending),
+                       "review_file": review_file, "proposals": pending}, indent=2)
+
+
+@mcp.tool()
+def memory_apply_promotions(
+    accept: list[int], reject: list[int] | None = None,
+    promote_raw: list[int] | None = None, project_dir: str | None = None,
+) -> str:
+    """Apply confirmed rule elevations (by index): `accept` writes each drafted
+    rule and archives the source project entry; `promote_raw` elevates the entry
+    verbatim instead of the draft; `reject` durably dismisses a proposal. Commits
+    to the versioning repo (reversible via git). Removes magnolia-review/
+    promotions.md once every proposal is handled. Edit the resulting rule file
+    afterward if needed."""
+    from compchem_memory import promotion
+    pd = _resolve_project_store(project_dir)
+    store = Path(pd) / ".magnolia"
+    result = promotion.apply_promotions(
+        str(store), str(SKILLS_DIR), accept=accept, reject=reject,
+        promote_raw=promote_raw)
+    if result["applied"] or result["promoted_raw"]:
+        n = result["applied"] + result["promoted_raw"]
+        _safe_version_commit(store, f"promote: {n} rule(s)")
+    artifact = store / "reflex" / "promotion-proposal.json"
+    data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
+    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
+    if len(handled) >= len(data.get("proposals", [])):
+        review_md = Path(pd) / "magnolia-review" / "promotions.md"
+        review_md.unlink(missing_ok=True)
+        rd = Path(pd) / "magnolia-review"
+        if rd.exists() and not any(rd.iterdir()):
+            rd.rmdir()
+    return json.dumps({"status": "applied", **result}, indent=2)
+
+
+@mcp.tool()
 @captured(source="compchem-memory")
 def memory_scan_headers(
     project_dir: str | None = None,
