@@ -291,3 +291,94 @@ def render_promotions_markdown(store_dir: str) -> str | None:
     out = review_dir / "promotions.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     return str(out)
+
+
+# ---------------------------------------------------------------------------
+# Apply path: accept / reject / promote_raw
+# ---------------------------------------------------------------------------
+from compchem_memory.storage import backup_file
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _write_rule(skills_dir: str, drafted: dict[str, Any]) -> str:
+    """Write a drafted rule to <skills_dir>/<name>.md with full frontmatter."""
+    meta = {"name": drafted["name"], "description": drafted.get("description", ""),
+            "version": "1.0", "tags": drafted.get("tags") or [],
+            "last_verified": _today()}
+    dest = Path(skills_dir) / f"{drafted['name']}.md"
+    Path(skills_dir).mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        "---\n" + yaml.dump(meta, default_flow_style=False, allow_unicode=True)
+        + "---\n\n" + drafted.get("body", "").strip() + "\n", encoding="utf-8")
+    return str(dest)
+
+
+def _archive_entry(source: str, store_dir: str) -> None:
+    """Back up then remove the project entry (it is now a rule)."""
+    p = Path(source)
+    if p.exists():
+        backup_file(p, str(Path(store_dir).parent))
+        p.unlink(missing_ok=True)
+
+
+def apply_promotions(
+    store_dir: str, skills_dir: str,
+    accept: list[int] | None = None, reject: list[int] | None = None,
+    promote_raw: list[int] | None = None,
+) -> dict[str, Any]:
+    """Apply accepted promotions (write drafted rule + archive source entry),
+    promote_raw (elevate entry verbatim), and record rejections durably.
+    Persists after each apply; one failure never aborts the batch (recorded in
+    `failed`). Deterministic over the artifact — no markdown parsing."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "promotion-proposal.json"
+    empty = {"applied": 0, "rules": [], "promoted_raw": 0, "rejected": 0, "failed": []}
+    if not artifact.exists():
+        return empty
+    data = json.loads(artifact.read_text())
+    proposals = data.get("proposals", [])
+    applied_set = set(data.get("applied", []))
+    rejected_set = set(data.get("rejected", []))
+
+    def _persist():
+        data["applied"] = sorted(applied_set)
+        data["rejected"] = sorted(rejected_set)
+        artifact.write_text(json.dumps(data, indent=2))
+
+    rejected_n = 0
+    for i in reject or []:
+        if isinstance(i, int) and 0 <= i < len(proposals) and i not in applied_set and i not in rejected_set:
+            rejected_set.add(i); rejected_n += 1
+
+    rules: list[str] = []
+    raw_n = 0
+    failed: list[int] = []
+    for i in (accept or []) + (promote_raw or []):
+        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in applied_set or i in rejected_set:
+            continue
+        p = proposals[i]
+        try:
+            if i in (accept or []):
+                rules.append(_write_rule(skills_dir, p["drafted_rule"]))
+            else:
+                e = parse_frontmatter_file(p["source"])
+                if e is None:
+                    failed.append(i); continue
+                rules.append(_write_rule(skills_dir, {
+                    "name": _slug(e["meta"].get("name") or e["meta"].get("title", "")),
+                    "description": e["meta"].get("description", e["meta"].get("title", "")),
+                    "tags": e["meta"].get("tags") or [], "body": e["body"]}))
+                raw_n += 1
+            _archive_entry(p["source"], store_dir)
+            applied_set.add(i)
+            _persist()
+        except Exception as ex:  # noqa: BLE001 - one bad apply must not abort the batch
+            print(f"[promotion] apply failed for proposal {i}: {ex}")
+            failed.append(i)
+
+    _persist()
+    return {"applied": len(rules) - raw_n, "rules": rules, "promoted_raw": raw_n,
+            "rejected": rejected_n, "failed": failed}
