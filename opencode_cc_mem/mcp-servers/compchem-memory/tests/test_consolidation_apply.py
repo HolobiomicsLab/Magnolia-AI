@@ -95,3 +95,24 @@ def test_render_review_markdown_none_when_no_unapplied(tmp_path):
     store, *_ = _store_with_proposal(tmp_path)
     apply_proposals(str(store), [0])
     assert render_review_markdown(str(store)) is None
+
+
+def test_review_and_apply_tools(tmp_path, monkeypatch):
+    from compchem_memory import server
+
+    store, a, b, c = _store_with_proposal(tmp_path)
+    pd = str(tmp_path)
+    monkeypatch.setattr(server, "PROJECT_DIR", pd)
+
+    review = getattr(server.memory_review_consolidation, "fn", server.memory_review_consolidation)
+    apply = getattr(server.memory_apply_consolidation, "fn", server.memory_apply_consolidation)
+
+    r = json.loads(review(project_dir=pd))
+    assert r["pending"] == 1
+    assert Path(r["review_file"]).exists()
+
+    out = json.loads(apply(accept=[0], project_dir=pd))
+    assert out["applied"] == 1
+    assert sum(Path(p).exists() for p in (a, b)) == 1
+    assert Path(c).exists()
+    assert not (tmp_path / "magnolia-review").exists()
