@@ -79,6 +79,22 @@ haddock3-pp protein.pdb > clean.pdb       # Preprocess PDB
 - `inter_rigid = 0.01` for buried sites
 - `mdsteps_rigid = 0` and `mdsteps_cool1 = 0` in flexref for small ligands
 
+## AIR-free Score
+
+**Formula:** `AIR-free = score − w_air × air`
+
+Read `score` and `air` from `capri_clt.tsv`. Write out every calculation:
+
+```
+score [X] − w_air × air [Y] = [RESULT]
+```
+
+**Sanity checks before presenting:**
+- AIR-free must be more negative than raw score (air is positive)
+- If AIR-free differs from raw score by >15, re-check — you probably subtracted full air instead of w_air×air (typical correction is 2–10 points for w_air=0.1)
+
+**Common mistake:** Subtracting full `air` instead of `w_air × air`. This produces values ~10× too negative when w_air=0.1. Always write the intermediate product explicitly.
+
 ## Sampling Guidelines
 
 | Scenario | Sampling |
@@ -133,6 +149,14 @@ The `contact-type` column in `interchain_contacts.tsv` classifies residue pairs 
 | `clusterN_interchain_contacts.tsv` | Residue-level contacts, `shortest-dist` includes H | Quick scan, identifying contact pairs |
 | `clusterN_heavyatoms_interchain_contacts.tsv` | Atom-level contacts, **H excluded** | Backbone geometry only — do NOT use for polar interactions |
 | `11_seletopclusts/cluster_N_model_M.pdb.gz` | Full structure including H | **Source of truth** for interaction typing |
+
+### Comparative analysis — measure from PDB models, not TSV files
+
+When comparing contacts across multiple runs, extract the best-cluster PDB
+models (`11_seletopclusts/cluster_N_model_1.pdb.gz`) and measure atom-level
+distances with a script. The TSV files are per-run summaries; cross-run
+comparison requires consistent atom-level measurement to identify which
+interactions are gained, lost, or shifted.
 
 ## Workflow Template
 
