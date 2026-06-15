@@ -183,3 +183,49 @@ def check_consistency(
         status = "ok"
     return {"status": status, "related_rule": res.get("related_rule"),
             "note": res.get("note", "")}
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _entry_key(proposal: dict[str, Any]) -> str:
+    """Content identity of a promotion proposal — the source entry basename."""
+    return Path(proposal.get("source", "")).name
+
+
+def propose_promotions(
+    store_dir: str, *, skills_dir: str,
+    judge=None, drafter=None, checker=None,
+) -> dict[str, Any]:
+    """Gate → panel → draft → consistency. Write survivors to
+    reflex/promotion-proposal.json. Proposal-only; mutates no entries.
+    Carries prior rejections forward by content key (entry basename)."""
+    store = Path(store_dir)
+    rules = _existing_rule_summaries(skills_dir)
+    proposals: list[dict[str, Any]] = []
+    for entry in eligible_entries(store_dir):
+        panel = run_panel(entry, judge=judge)
+        if not panel["survives"]:
+            continue
+        drafted = draft_rule(entry, drafter=drafter)
+        consistency = check_consistency(drafted, rules, checker=checker)
+        proposals.append({
+            "source": entry["path"],
+            "entry_title": entry["meta"].get("title", ""),
+            "distinct_sessions": _distinct_sessions(entry["meta"]),
+            "panel": {"approvals": panel["approvals"], "passes": panel["passes"],
+                      "correctness_flag": panel["correctness_flag"]},
+            "consistency": consistency,
+            "drafted_rule": drafted,
+            "confidence": round(panel["approvals"] / _PROMOTION_PANEL_PASSES, 2),
+        })
+
+    artifact = store / "reflex" / "promotion-proposal.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    prior_keys = prior_rejected_keys(artifact, _entry_key)
+    rejected = [i for i, p in enumerate(proposals) if _entry_key(p) in prior_keys]
+    artifact.write_text(json.dumps(
+        {"proposals": proposals, "applied": [], "rejected": rejected}, indent=2))
+    return {"candidates": len(proposals), "artifact": str(artifact)}
