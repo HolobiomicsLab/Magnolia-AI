@@ -76,6 +76,11 @@ dressed as a finding wastes the user's time and corrupts downstream decisions.
 - The word "likely" or "presumably" without a follow-up sentence saying what
   would settle it.
 
+**Verify calculations before presenting.** Computed values (AIR-free scores,
+energy differences, RMSD deltas) must be verified by a script or explicit
+step-by-step arithmetic before appearing in a table. Never present a value
+computed mentally — write the calculation out or run a one-liner.
+
 When in doubt, under-claim and name the missing analysis.
 
 ## Shell commands
