@@ -756,7 +756,11 @@ def memory_apply_consolidation(
     data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
     handled = set(data.get("applied", [])) | set(data.get("rejected", []))
     if len(handled) >= len(data.get("proposals", [])):
-        shutil.rmtree(Path(pd) / "magnolia-review", ignore_errors=True)
+        review_md = Path(pd) / "magnolia-review" / "proposals.md"
+        review_md.unlink(missing_ok=True)
+        rd = Path(pd) / "magnolia-review"
+        if rd.exists() and not any(rd.iterdir()):
+            rd.rmdir()
     return json.dumps({"status": "applied", **result}, indent=2)
 
 
