@@ -275,3 +275,54 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
             Path(e["path"]).unlink(missing_ok=True)
             removed.append(e["path"])
     return {"merged": canonical, "removed": removed, "skipped": False}
+
+
+def render_review_markdown(store_dir: str) -> str | None:
+    """Write a human-readable review of the UNAPPLIED proposals to a VISIBLE,
+    ephemeral `<project>/magnolia-review/proposals.md` (sibling of .magnolia — not
+    hidden). Returns the path, or None if there is nothing left to review."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return None
+    data = json.loads(artifact.read_text())
+    proposals = data.get("proposals", [])
+    applied = set(data.get("applied", []))
+    pending = [(i, p) for i, p in enumerate(proposals) if i not in applied]
+    if not pending:
+        return None
+
+    lines = [
+        "# Consolidation proposals — review",
+        "",
+        "Each finding below was distilled multiple times; the agent proposes merging",
+        "the duplicates into one entry. For each: leave `action: accept` to merge, or",
+        "change it to `reject`. Then tell the agent which to apply (e.g. \"apply 0 and 2\").",
+        "",
+    ]
+    for i, p in pending:
+        mp = p.get("merged_preview", {})
+        lines += [
+            f"## [{i}] {mp.get('title', '')}",
+            "- action: accept",
+            f"- confidence: {p.get('confidence')}  |  distinct sessions: {mp.get('observation_count')}",
+            f"- why: {p.get('rationale', '')}",
+            "- sources:",
+        ]
+        lines += [f"    - {Path(s).name}" for s in p.get("sources", [])]
+        lines += [
+            "",
+            "<details><summary>merged preview</summary>",
+            "",
+            "```",
+            (mp.get("body", "") or "")[:1500],
+            "```",
+            "</details>",
+            "",
+        ]
+
+    review_dir = store.parent / "magnolia-review"
+    review_dir.mkdir(parents=True, exist_ok=True)
+    out = review_dir / "proposals.md"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return str(out)
