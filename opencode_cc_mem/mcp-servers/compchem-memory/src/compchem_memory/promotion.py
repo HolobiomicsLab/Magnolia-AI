@@ -45,3 +45,48 @@ def eligible_entries(store_dir: str) -> list[dict[str, Any]]:
         if e and _distinct_sessions(e["meta"]) >= _PROMOTION_MIN_SESSIONS:
             out.append(e)
     return out
+
+
+# ---------------------------------------------------------------------------
+# K=3 consensus panel
+# ---------------------------------------------------------------------------
+
+_PANEL_SYSTEM = (
+    "You judge whether ONE computational-chemistry project learning should become "
+    "a durable RULE. Approve ONLY if it is (a) correct — following it would not be "
+    "wrong — and (b) general — stated as guidance, not bolted to one peptide, "
+    "system, or single run. Be conservative; most learnings are NOT rule-worthy. "
+    'Return JSON: {"approve": bool, "correctness_concern": str|null, '
+    '"generality_concern": str|null}. Set correctness_concern only if following '
+    "the rule could produce a wrong result."
+)
+
+
+def _default_judge(entry: dict[str, Any], lens_idx: int) -> dict[str, Any] | None:
+    from compchem_memory.llm import call_llm_json
+    payload = {"title": entry["meta"].get("title", ""), "body": entry["body"][:1500]}
+    return call_llm_json(_PANEL_SYSTEM, json.dumps(payload), max_tokens=400,
+                         temperature=_PROMOTION_PANEL_TEMPERATURE)
+
+
+def run_panel(
+    entry: dict[str, Any],
+    judge: Callable[[dict[str, Any], int], dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    """Run K independent passes. survives iff >= _PROMOTION_PANEL_APPROVE approve.
+    Any pass raising a correctness_concern is surfaced (correctness veto/flag)."""
+    judge = judge or _default_judge
+    passes: list[dict[str, Any]] = []
+    for k in range(_PROMOTION_PANEL_PASSES):
+        v = judge(entry, k) or {"approve": False, "correctness_concern": None,
+                                 "generality_concern": None}
+        passes.append(v)
+    approvals = sum(1 for v in passes if v.get("approve"))
+    correctness_flag = next((v.get("correctness_concern") for v in passes
+                             if v.get("correctness_concern")), None)
+    return {
+        "passes": passes,
+        "approvals": approvals,
+        "survives": approvals >= _PROMOTION_PANEL_APPROVE,
+        "correctness_flag": correctness_flag,
+    }

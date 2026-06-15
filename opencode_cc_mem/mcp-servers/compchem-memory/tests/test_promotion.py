@@ -27,3 +27,44 @@ def test_eligible_dedups_sessions_within_entry(tmp_path):
     entries = tmp_path / ".magnolia" / "entries"; entries.mkdir(parents=True)
     _entry(entries, "dup.md", "dup", "b", ["s1", "s1", "s2"])        # only 2 distinct
     assert eligible_entries(str(tmp_path / ".magnolia")) == []
+
+
+# ---------------------------------------------------------------------------
+# Panel tests
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import run_panel
+
+
+def test_panel_survives_on_majority_and_flags_correctness(tmp_path):
+    entry = {"id": "e.md", "meta": {"title": "T"}, "body": "use X"}
+    votes = [
+        {"approve": True,  "correctness_concern": None, "generality_concern": None},
+        {"approve": True,  "correctness_concern": None, "generality_concern": "narrow"},
+        {"approve": False, "correctness_concern": "wrong for ligands", "generality_concern": None},
+    ]
+    calls = iter(votes)
+    res = run_panel(entry, judge=lambda e, lens_idx: next(calls))
+    assert res["approvals"] == 2
+    assert res["survives"] is True
+    assert res["correctness_flag"] == "wrong for ligands"   # surfaced, not outvoted
+    assert len(res["passes"]) == 3
+
+
+def test_panel_dropped_below_majority(tmp_path):
+    entry = {"id": "e.md", "meta": {"title": "T"}, "body": "use X"}
+    votes = [
+        {"approve": True,  "correctness_concern": None, "generality_concern": None},
+        {"approve": False, "correctness_concern": None, "generality_concern": "narrow"},
+        {"approve": False, "correctness_concern": None, "generality_concern": "narrow"},
+    ]
+    calls = iter(votes)
+    res = run_panel(entry, judge=lambda e, lens_idx: next(calls))
+    assert res["approvals"] == 1
+    assert res["survives"] is False
+
+
+def test_panel_handles_none_vote_as_reject(tmp_path):
+    entry = {"id": "e.md", "meta": {"title": "T"}, "body": "use X"}
+    res = run_panel(entry, judge=lambda e, lens_idx: None)   # all passes fail
+    assert res["approvals"] == 0
+    assert res["survives"] is False
