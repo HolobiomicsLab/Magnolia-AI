@@ -230,3 +230,64 @@ def propose_promotions(
     artifact.write_text(json.dumps(
         {"proposals": proposals, "applied": [], "rejected": rejected}, indent=2))
     return {"candidates": len(proposals), "artifact": str(artifact)}
+
+
+# ---------------------------------------------------------------------------
+# Read-only review renderer
+# ---------------------------------------------------------------------------
+
+
+def render_promotions_markdown(store_dir: str) -> str | None:
+    """Write a read-only review of UNAPPLIED promotion proposals to
+    <project>/magnolia-review/promotions.md. Returns the path, or None if nothing
+    is pending."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "promotion-proposal.json"
+    if not artifact.exists():
+        return None
+    data = json.loads(artifact.read_text())
+    proposals = data.get("proposals", [])
+    pending = pending_indices(data)
+    if not pending:
+        return None
+
+    lines = [
+        "# Rule-elevation proposals — review",
+        "",
+        "Each project learning below passed the panel; the agent proposes elevating",
+        "it to a cross-project rule. Tell the agent which to apply or reject "
+        '(e.g. "apply 0, reject 1"). Edit the rule file AFTER it is created.',
+        "",
+    ]
+    for i in pending:
+        p = proposals[i]
+        dr = p.get("drafted_rule", {})
+        cons = p.get("consistency", {})
+        flag = p.get("panel", {}).get("correctness_flag")
+        lines += [
+            f"## [{i}] {p.get('entry_title', '')}",
+            "- action: accept",
+            f"- confidence: {p.get('confidence')}  |  distinct sessions: "
+            f"{p.get('distinct_sessions')}  |  approvals: "
+            f"{p.get('panel', {}).get('approvals')}/{_PROMOTION_PANEL_PASSES}",
+        ]
+        if flag:
+            lines.append(f"- ⚠ correctness concern: {flag}")
+        if cons.get("status") in ("duplicate", "conflict"):
+            lines.append(f"- ⚠ {cons['status']} of existing rule "
+                         f"`{cons.get('related_rule')}`: {cons.get('note', '')}")
+        lines += [
+            f"- proposed rule: `{dr.get('name', '')}` — {dr.get('description', '')}",
+            "",
+            "<details><summary>drafted rule body</summary>",
+            "",
+            *fenced_preview(dr.get("body", "")),
+            "</details>",
+            "",
+        ]
+
+    review_dir = store.parent / "magnolia-review"
+    review_dir.mkdir(parents=True, exist_ok=True)
+    out = review_dir / "promotions.md"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return str(out)
