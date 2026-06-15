@@ -304,12 +304,16 @@ def _today() -> str:
 
 
 def _write_rule(skills_dir: str, drafted: dict[str, Any]) -> str:
-    """Write a drafted rule to <skills_dir>/<name>.md with full frontmatter."""
+    """Write a drafted rule to <skills_dir>/<name>.md with full frontmatter.
+    Refuses to overwrite an existing rule file — a name collision is surfaced as a
+    failed apply (never a silent clobber)."""
     meta = {"name": drafted["name"], "description": drafted.get("description", ""),
             "version": "1.0", "tags": drafted.get("tags") or [],
             "last_verified": _today()}
-    dest = Path(skills_dir) / f"{drafted['name']}.md"
     Path(skills_dir).mkdir(parents=True, exist_ok=True)
+    dest = Path(skills_dir) / f"{drafted['name']}.md"
+    if dest.exists():
+        raise FileExistsError(f"rule already exists: {dest.name}")
     dest.write_text(
         "---\n" + yaml.dump(meta, default_flow_style=False, allow_unicode=True)
         + "---\n\n" + drafted.get("body", "").strip() + "\n", encoding="utf-8")
@@ -356,25 +360,31 @@ def apply_promotions(
     rules: list[str] = []
     raw_n = 0
     failed: list[int] = []
-    for i in (accept or []) + (promote_raw or []):
+    accept_list = accept or []
+    for i in accept_list + (promote_raw or []):
         if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in applied_set or i in rejected_set:
             continue
         p = proposals[i]
         try:
-            if i in (accept or []):
-                rules.append(_write_rule(skills_dir, p["drafted_rule"]))
+            if i in accept_list:
+                path = _write_rule(skills_dir, p["drafted_rule"])
+                is_raw = False
             else:
                 e = parse_frontmatter_file(p["source"])
                 if e is None:
-                    failed.append(i); continue
-                rules.append(_write_rule(skills_dir, {
+                    failed.append(i)
+                    continue
+                path = _write_rule(skills_dir, {
                     "name": _slug(e["meta"].get("name") or e["meta"].get("title", "")),
                     "description": e["meta"].get("description", e["meta"].get("title", "")),
-                    "tags": e["meta"].get("tags") or [], "body": e["body"]}))
-                raw_n += 1
+                    "tags": e["meta"].get("tags") or [], "body": e["body"]})
+                is_raw = True
             _archive_entry(p["source"], store_dir)
             applied_set.add(i)
             _persist()
+            rules.append(path)
+            if is_raw:
+                raw_n += 1
         except Exception as ex:  # noqa: BLE001 - one bad apply must not abort the batch
             print(f"[promotion] apply failed for proposal {i}: {ex}")
             failed.append(i)
