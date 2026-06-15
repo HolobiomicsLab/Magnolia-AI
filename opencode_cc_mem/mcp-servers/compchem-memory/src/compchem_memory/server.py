@@ -719,39 +719,43 @@ def memory_review_consolidation(project_dir: str | None = None) -> str:
 
     Call this at session start when a consolidation proposal exists, or when the
     user asks to review proposed merges."""
-    from compchem_memory.consolidation import render_review_markdown
+    from compchem_memory.consolidation import render_review_markdown, _pending_indices
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
     review_file = render_review_markdown(str(store))
     if not review_file:
         return json.dumps({"status": "no_pending_proposals", "pending": 0})
     data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
-    applied = set(data.get("applied", []))
-    pending = [{"index": i, "confidence": p.get("confidence"),
-                "title": p.get("merged_preview", {}).get("title", "")}
-               for i, p in enumerate(data.get("proposals", [])) if i not in applied]
+    proposals = data.get("proposals", [])
+    pending = [{"index": i, "confidence": proposals[i].get("confidence"),
+                "title": proposals[i].get("merged_preview", {}).get("title", "")}
+               for i in _pending_indices(data)]
     return json.dumps({"status": "review_ready", "pending": len(pending),
                        "review_file": review_file, "proposals": pending}, indent=2)
 
 
 @mcp.tool()
-def memory_apply_consolidation(accept: list[int], project_dir: str | None = None) -> str:
+def memory_apply_consolidation(
+    accept: list[int], reject: list[int] | None = None, project_dir: str | None = None
+) -> str:
     """Apply the accepted consolidation proposals (by index): merge each cluster's
     duplicate findings into one entry, then commit to the versioning repo
-    (reversible via git). Removes the magnolia-review/ dir once all proposals are
-    reviewed.
+    (reversible via git). `reject` durably dismisses proposals so they stop
+    re-surfacing. The magnolia-review/ dir is removed once every proposal has been
+    handled (accepted or rejected).
 
-    Call this after the user confirms which proposals to accept. `accept` is the
-    list of proposal indices to merge; omit/exclude the ones to reject."""
+    Call this after the user confirms which proposals to accept/reject. Pass the
+    accepted indices in `accept` and the explicitly-rejected ones in `reject`."""
     from compchem_memory import consolidation
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
-    result = consolidation.apply_proposals(str(store), accept)
+    result = consolidation.apply_proposals(str(store), accept, reject=reject)
     if result["applied"]:
         _safe_version_commit(store, f"consolidate: {result['applied']} merge(s)")
     artifact = store / "reflex" / "consolidation-proposal.json"
-    data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": []}
-    if len(data.get("applied", [])) >= len(data.get("proposals", [])):
+    data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
+    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
+    if len(handled) >= len(data.get("proposals", [])):
         shutil.rmtree(Path(pd) / "magnolia-review", ignore_errors=True)
     return json.dumps({"status": "applied", **result}, indent=2)
 
