@@ -260,3 +260,39 @@ def test_apply_partial_failure_keeps_earlier(tmp_path, monkeypatch):
     data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
     assert 0 in data["applied"] and 1 not in data["applied"]
     assert 1 in res["failed"]
+
+
+def test_apply_collision_surfaces_failed_and_preserves_source(tmp_path):
+    store = tmp_path / ".magnolia"; entries = store / "entries"; entries.mkdir(parents=True)
+    _entry(entries, "a.md", "Same Name", "first body", ["s1", "s2", "s3"])
+    _entry(entries, "b.md", "Same Name", "second body", ["s1", "s2", "s3"])  # same slug
+    skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+
+    res = apply_promotions(str(store), str(skills), accept=[0, 1])
+
+    assert (skills / "same-name.md").exists()
+    assert res["applied"] == 1                 # only the first succeeded
+    assert res["failed"] == [1]                # collision surfaced, not silent clobber
+    data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert data["applied"] == [0]
+    src1 = data["proposals"][1]["source"]
+    assert Path(src1).exists()                 # losing entry NOT archived — no data loss
+
+
+def test_apply_archive_failure_not_double_counted(tmp_path, monkeypatch):
+    from compchem_memory import promotion
+    store = _store_with_eligible(tmp_path); skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    def boom(source, store_dir):
+        raise RuntimeError("archive failed")
+    monkeypatch.setattr(promotion, "_archive_entry", boom)
+
+    res = apply_promotions(str(store), str(skills), accept=[0])
+
+    assert res["applied"] == 0                  # NOT counted — apply did not complete
+    assert res["failed"] == [0]
+    data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert data["applied"] == []                # mark not persisted
