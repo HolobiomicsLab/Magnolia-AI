@@ -200,8 +200,40 @@ def consolidate_project_findings(
 
     artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text(json.dumps({"proposals": proposals, "applied": [], "rejected": []}, indent=2))
+    # Carry forward prior REJECTIONS by content key: rejection is non-destructive
+    # (the sources stay in staging), so a rejected cluster would otherwise
+    # re-cluster identically on the next sweep and re-surface forever. Positional
+    # index is meaningless across regeneration, so match on the cluster's source
+    # set. (Applied merges removed their sources, so they cannot recur — applied
+    # resets to [].)
+    prior_rejected_keys = _prior_rejected_keys(artifact)
+    rejected = [i for i, p in enumerate(proposals)
+                if _cluster_key(p["sources"]) in prior_rejected_keys]
+    artifact.write_text(json.dumps(
+        {"proposals": proposals, "applied": [], "rejected": rejected}, indent=2))
     return {"clusters": len(proposals), "artifact": str(artifact)}
+
+
+def _cluster_key(sources: list[str]) -> tuple[str, ...]:
+    """Content identity of a cluster — its sorted source basenames. Stable across
+    artifact regeneration, unlike a positional index."""
+    return tuple(sorted(Path(s).name for s in sources))
+
+
+def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
+    """Content keys of proposals rejected in the existing artifact (if any)."""
+    if not artifact.exists():
+        return set()
+    try:
+        prior = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return set()
+    old = prior.get("proposals", [])
+    keys: set[tuple[str, ...]] = set()
+    for idx in prior.get("rejected", []):
+        if isinstance(idx, int) and 0 <= idx < len(old):
+            keys.add(_cluster_key(old[idx].get("sources", [])))
+    return keys
 
 
 def _pending_indices(data: dict[str, Any]) -> list[int]:

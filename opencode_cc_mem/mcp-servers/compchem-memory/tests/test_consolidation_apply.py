@@ -175,3 +175,20 @@ def test_render_uses_tilde_fence_and_marks_truncation(tmp_path):
     md = Path(render_review_markdown(str(store))).read_text()
     assert "~~~~" in md                  # tilde fence won't collide with ``` in the body
     assert "(truncated)" in md
+
+
+def test_reject_survives_consolidation_regeneration(tmp_path):
+    """A rejected cluster that re-clusters on the next sweep must stay dismissed —
+    reject identity is content-based, carried forward across artifact regeneration."""
+    store = tmp_path / ".magnolia"; staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "x.md", "X finding", "body x longer text", "s1")
+    _write(staging, "y.md", "Y finding", "body y", "s2")
+    clusterer = lambda p: [{"ids": ["x.md", "y.md"], "confidence": 0.9, "rationale": "same"}]
+
+    consolidate_project_findings(str(store), clusterer=clusterer)
+    apply_proposals(str(store), [], reject=[0])          # reject (non-destructive: x,y remain)
+    consolidate_project_findings(str(store), clusterer=clusterer)   # next sweep regenerates
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["rejected"] == [0]                       # carried forward by content key
+    assert render_review_markdown(str(store)) is None    # not pending -> no re-nag
