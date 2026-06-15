@@ -129,12 +129,12 @@ def cluster_findings(
     return clusters
 
 
-# Findings are clustered in small title-sorted batches. Reasoning models (e.g.
-# deepseek-v4-flash) spend output budget on reasoning_content that scales with
-# payload size; a single call over a large payload exhausts max_tokens before
-# emitting any answer. Title-sorting puts near-duplicate findings in the same
-# batch, so cross-batch misses are rare.
-_CLUSTER_BATCH = 15
+# Findings are clustered in title-sorted batches (near-duplicates sort adjacent,
+# so cross-batch misses are rare). The clustering call disables thinking and uses
+# temperature 0: deterministic output, and a reasoning model no longer spends its
+# token budget on reasoning_content (which previously starved `content` to empty
+# on large batches, silently dropping clusters).
+_CLUSTER_BATCH = 30
 
 _CLUSTER_SYSTEM = (
     "You consolidate a computational-chemistry project's memory. Given a JSON "
@@ -159,7 +159,8 @@ def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
     clusters: list[dict[str, Any]] = []
     for i in range(0, len(items), _CLUSTER_BATCH):
         batch = items[i:i + _CLUSTER_BATCH]
-        result = call_llm_json(_CLUSTER_SYSTEM, json.dumps(batch), max_tokens=8000)
+        result = call_llm_json(_CLUSTER_SYSTEM, json.dumps(batch), max_tokens=4000,
+                               temperature=0, disable_thinking=True)
         if isinstance(result, dict):
             # `or []` guards against {"clusters": null} — valid JSON the LLM could emit.
             clusters.extend(c for c in (result.get("clusters") or []) if isinstance(c, dict))
