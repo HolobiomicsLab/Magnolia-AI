@@ -106,10 +106,21 @@ def is_llm_available() -> bool:
     return bool(p and _get_api_key(p))
 
 
-def call_llm(system_prompt: str, user_content: str, max_tokens: int = 2000) -> str | None:
+def call_llm(
+    system_prompt: str,
+    user_content: str,
+    max_tokens: int = 2000,
+    *,
+    temperature: float | None = None,
+    disable_thinking: bool = False,
+) -> str | None:
     """Call the resolved LLM provider. Returns text on success or None on
     any failure (no provider configured, missing key, network error,
-    malformed response). NEVER raises."""
+    malformed response). NEVER raises.
+
+    `temperature` (when set) and `disable_thinking` (DeepSeek reasoning models —
+    sends `thinking: {"type": "disabled"}`) make a call deterministic and stop a
+    reasoning model from spending its output budget on reasoning_content."""
     provider = _resolve_provider()
     if not provider:
         return None
@@ -119,44 +130,58 @@ def call_llm(system_prompt: str, user_content: str, max_tokens: int = 2000) -> s
     model = _get_model(provider)
     try:
         if provider == PROVIDER_ANTHROPIC:
-            return _call_anthropic(key, model, system_prompt, user_content, max_tokens)
-        return _call_openai_compat(provider, key, model, system_prompt, user_content, max_tokens)
+            return _call_anthropic(key, model, system_prompt, user_content, max_tokens,
+                                   temperature)
+        return _call_openai_compat(provider, key, model, system_prompt, user_content,
+                                   max_tokens, temperature, disable_thinking)
     except Exception:
         return None
 
 
 def _call_anthropic(
-    key: str, model: str, system_prompt: str, user_content: str, max_tokens: int
+    key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
+    temperature: float | None = None,
 ) -> str | None:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
-    resp = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}],
-    )
+    kwargs: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    resp = client.messages.create(**kwargs)
     if not resp.content:
         return None
     return resp.content[0].text
 
 
 def _call_openai_compat(
-    provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int
+    provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
+    temperature: float | None = None, disable_thinking: bool = False,
 ) -> str | None:
     """DeepSeek + OpenAI both use the OpenAI chat completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
+    body: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+    }
+    if temperature is not None:
+        body["temperature"] = temperature
+    # DeepSeek reasoning models (v4-flash/pro) put output in reasoning_content and
+    # exhaust max_tokens on it; disabling thinking gives a direct, cheaper answer.
+    if disable_thinking and provider == PROVIDER_DEEPSEEK:
+        body["thinking"] = {"type": "disabled"}
     resp = httpx.post(
         url,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "max_tokens": max_tokens,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-        },
+        json=body,
         timeout=60,
     )
     resp.raise_for_status()
@@ -168,10 +193,18 @@ def _call_openai_compat(
     return msg.get("content")
 
 
-def call_llm_json(system_prompt: str, user_content: str, max_tokens: int = 2000) -> dict | list | None:
+def call_llm_json(
+    system_prompt: str,
+    user_content: str,
+    max_tokens: int = 2000,
+    *,
+    temperature: float | None = None,
+    disable_thinking: bool = False,
+) -> dict | list | None:
     """Call LLM and parse JSON from the response. Strips a single
     ```json fenced block if present. Returns None on parse failure."""
-    text = call_llm(system_prompt, user_content, max_tokens)
+    text = call_llm(system_prompt, user_content, max_tokens,
+                    temperature=temperature, disable_thinking=disable_thinking)
     if not text:
         return None
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
