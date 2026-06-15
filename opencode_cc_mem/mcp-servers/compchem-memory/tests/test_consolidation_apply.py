@@ -192,3 +192,18 @@ def test_reject_survives_consolidation_regeneration(tmp_path):
     data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
     assert data["rejected"] == [0]                       # carried forward by content key
     assert render_review_markdown(str(store)) is None    # not pending -> no re-nag
+
+
+def test_consolidation_cleanup_preserves_sibling_review_file(tmp_path, monkeypatch):
+    from compchem_memory import server
+    store, *_ = _store_with_proposal(tmp_path)              # 1 consolidation proposal
+    review_dir = tmp_path / "magnolia-review"; review_dir.mkdir(parents=True, exist_ok=True)
+    (review_dir / "proposals.md").write_text("consolidation review")
+    sibling = review_dir / "promotions.md"; sibling.write_text("promotion review")
+
+    pd = str(tmp_path); monkeypatch.setattr(server, "PROJECT_DIR", pd)
+    apply = getattr(server.memory_apply_consolidation, "fn", server.memory_apply_consolidation)
+    json.loads(apply(accept=[0], project_dir=pd))          # all consolidation handled
+
+    assert not (review_dir / "proposals.md").exists()      # own file removed
+    assert sibling.exists()                                 # promotion review untouched
