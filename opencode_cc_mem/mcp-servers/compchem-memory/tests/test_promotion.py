@@ -199,3 +199,64 @@ def test_render_none_when_no_pending(tmp_path):
     (store / "reflex" / "promotion-proposal.json").write_text(
         '{"proposals": [], "applied": [], "rejected": []}')
     assert render_promotions_markdown(str(store)) is None
+
+
+# ---------------------------------------------------------------------------
+# apply_promotions tests
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import apply_promotions
+
+
+def test_apply_accept_writes_rule_and_archives_entry(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    src = _json.loads((store / "reflex" / "promotion-proposal.json").read_text()
+                      )["proposals"][0]["source"]
+
+    res = apply_promotions(str(store), str(skills), accept=[0])
+
+    assert res["applied"] == 1
+    rule = skills / "alpha-rule.md"
+    assert rule.exists()
+    txt = rule.read_text()
+    assert "last_verified" in txt and "version" in txt
+    assert not Path(src).exists()                              # entry archived out
+    data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert data["applied"] == [0]
+
+
+def test_apply_reject_is_durable(tmp_path):
+    store = _store_with_eligible(tmp_path); skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    res = apply_promotions(str(store), str(skills), reject=[0])
+    assert res["rejected"] == 1
+    data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert data["rejected"] == [0]
+    assert render_promotions_markdown(str(store)) is None      # not pending
+
+
+def test_apply_partial_failure_keeps_earlier(tmp_path, monkeypatch):
+    from compchem_memory import promotion
+    store = tmp_path / ".magnolia"; entries = store / "entries"; entries.mkdir(parents=True)
+    _entry(entries, "a.md", "Aaa", "x", ["s1", "s2", "s3"])
+    _entry(entries, "b.md", "Bbb", "y", ["s1", "s2", "s3"])
+    skills = tmp_path / "rules"; skills.mkdir()
+    propose_promotions(str(store), skills_dir=str(skills),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    real = promotion._write_rule
+    calls = {"n": 0}
+    def flaky(skills_dir, drafted):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("boom")
+        return real(skills_dir, drafted)
+    monkeypatch.setattr(promotion, "_write_rule", flaky)
+
+    res = apply_promotions(str(store), str(skills), accept=[0, 1])   # must not raise
+
+    data = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert 0 in data["applied"] and 1 not in data["applied"]
+    assert 1 in res["failed"]
