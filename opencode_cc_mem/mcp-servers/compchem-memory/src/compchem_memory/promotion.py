@@ -135,3 +135,51 @@ def draft_rule(
         "tags": d.get("tags") or entry["meta"].get("tags") or [],
         "body": d.get("body") or entry["body"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Consistency check vs existing skill-tier rules
+# ---------------------------------------------------------------------------
+
+_CONSISTENCY_SYSTEM = (
+    "Given a DRAFT rule and a list of EXISTING rules (name + description), decide "
+    "whether the draft duplicates or contradicts any existing rule. Return JSON: "
+    '{"status": "ok"|"duplicate"|"conflict", "related_rule": name|null, '
+    '"note": one line}.'
+)
+
+
+def _existing_rule_summaries(skills_dir: str) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    d = Path(skills_dir)
+    if not d.exists():
+        return out
+    for f in sorted(d.glob("*.md")):
+        e = parse_frontmatter_file(f)
+        if e:
+            out.append({"name": e["meta"].get("name", f.stem),
+                        "description": e["meta"].get("description", "")})
+    return out
+
+
+def _default_checker(drafted, rules):
+    from compchem_memory.llm import call_llm_json
+    payload = {"draft": {"name": drafted["name"], "description": drafted["description"]},
+               "existing": rules}
+    return call_llm_json(_CONSISTENCY_SYSTEM, json.dumps(payload), max_tokens=300,
+                         temperature=0)
+
+
+def check_consistency(
+    drafted: dict[str, Any], rules: list[dict[str, str]],
+    checker: Callable[[dict, list], dict | None] | None = None,
+) -> dict[str, Any]:
+    """Flag duplicate/conflict vs existing rules. duplicate/conflict are SURFACED,
+    never auto-dropped. Defaults to 'ok' if the checker fails."""
+    checker = checker or _default_checker
+    res = checker(drafted, rules) or {}
+    status = res.get("status")
+    if status not in ("ok", "duplicate", "conflict"):
+        status = "ok"
+    return {"status": status, "related_rule": res.get("related_rule"),
+            "note": res.get("note", "")}
