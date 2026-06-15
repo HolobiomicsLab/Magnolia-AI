@@ -202,3 +202,46 @@ def consolidate_project_findings(
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_text(json.dumps({"proposals": proposals, "applied": []}, indent=2))
     return {"clusters": len(proposals), "artifact": str(artifact)}
+
+
+def _parse_entry(path: str | Path) -> dict[str, Any] | None:
+    """Load one staging entry as {"id","path","meta","body"}, or None if missing."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    text = p.read_text(encoding="utf-8", errors="replace")
+    meta, body = {}, text
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            try:
+                meta = yaml.safe_load(parts[1]) or {}
+            except yaml.YAMLError:
+                meta = {}
+            body = parts[2]
+    return {"id": p.name, "path": str(p), "meta": meta, "body": body.strip()}
+
+
+def apply_merge(source_paths: list[str]) -> dict[str, Any]:
+    """Apply one consolidation: re-read the still-present sources, merge them, write
+    the merged entry OVER the canonical file, and remove the other sources. Re-reads
+    from disk (authoritative — tolerates sources changed/removed since the proposal).
+    Requires >=2 surviving sources, else skips. Returns
+    {"merged": path|None, "removed": [...], "skipped": bool}."""
+    entries = [e for e in (_parse_entry(p) for p in source_paths) if e]
+    if len(entries) < 2:
+        return {"merged": None, "removed": [], "skipped": True}
+    merged = merge_entries(entries)
+    canonical = merged["canonical"]
+    Path(canonical).write_text(
+        "---\n"
+        + yaml.dump(merged["meta"], default_flow_style=False, allow_unicode=True)
+        + "---\n\n" + merged["body"].strip() + "\n",
+        encoding="utf-8",
+    )
+    removed = []
+    for e in entries:
+        if e["path"] != canonical:
+            Path(e["path"]).unlink(missing_ok=True)
+            removed.append(e["path"])
+    return {"merged": canonical, "removed": removed, "skipped": False}
