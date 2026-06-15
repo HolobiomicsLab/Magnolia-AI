@@ -68,3 +68,28 @@ def test_panel_handles_none_vote_as_reject(tmp_path):
     res = run_panel(entry, judge=lambda e, lens_idx: None)   # all passes fail
     assert res["approvals"] == 0
     assert res["survives"] is False
+
+
+# ---------------------------------------------------------------------------
+# draft_rule tests
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import draft_rule
+
+
+def test_draft_rule_uses_drafter_and_fills_defaults():
+    entry = {"id": "e.md", "meta": {"title": "AIR-free scoring", "tags": ["haddock"]},
+             "body": "use AIR-free scores"}
+    drafted = draft_rule(entry, drafter=lambda e: {
+        "name": "air-free-scoring", "description": "Use AIR-free scores",
+        "tags": ["haddock", "scoring"], "body": "Always use AIR-free scores."})
+    assert drafted["name"] == "air-free-scoring"
+    assert drafted["tags"] == ["haddock", "scoring"]
+    assert drafted["body"]
+
+
+def test_draft_rule_falls_back_on_drafter_failure():
+    entry = {"id": "e.md", "meta": {"title": "T", "tags": ["x"]}, "body": "raw body"}
+    drafted = draft_rule(entry, drafter=lambda e: None)   # LLM failed
+    assert drafted["name"]                                 # derived from title
+    assert drafted["body"] == "raw body"                   # falls back to entry body
+    assert drafted["tags"] == ["x"]

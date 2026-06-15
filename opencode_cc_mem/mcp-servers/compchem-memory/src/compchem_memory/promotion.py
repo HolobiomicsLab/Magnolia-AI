@@ -90,3 +90,48 @@ def run_panel(
         "survives": approvals >= _PROMOTION_PANEL_APPROVE,
         "correctness_flag": correctness_flag,
     }
+
+
+# ---------------------------------------------------------------------------
+# Rule drafting
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_DRAFT_SYSTEM = (
+    "Rewrite ONE project learning as a durable RULE for a computational-chemistry "
+    "agent. Keep it faithful to the source — do not invent facts. Make it "
+    "prescriptive and general. Return JSON: {\"name\": kebab-case slug, "
+    "\"description\": one line, \"tags\": [str], \"body\": markdown guidance}."
+)
+
+
+def _slug(text: str) -> str:
+    s = _re.sub(r"[^a-z0-9]+", "-", (text or "rule").lower()).strip("-")
+    return s or "rule"
+
+
+def _default_drafter(entry: dict[str, Any]) -> dict[str, Any] | None:
+    from compchem_memory.llm import call_llm_json
+    payload = {"title": entry["meta"].get("title", ""), "body": entry["body"],
+               "tags": entry["meta"].get("tags") or []}
+    res = call_llm_json(_DRAFT_SYSTEM, json.dumps(payload), max_tokens=1200,
+                        temperature=0)
+    return res if isinstance(res, dict) else None
+
+
+def draft_rule(
+    entry: dict[str, Any],
+    drafter: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    """Draft a rule preview from a project entry. On drafter failure, fall back to
+    a faithful copy (title→name, entry body verbatim) so a proposal still forms."""
+    drafter = drafter or _default_drafter
+    d = drafter(entry) or {}
+    title = entry["meta"].get("title", "")
+    return {
+        "name": _slug(d.get("name") or title),
+        "description": d.get("description") or title,
+        "tags": d.get("tags") or entry["meta"].get("tags") or [],
+        "body": d.get("body") or entry["body"],
+    }
