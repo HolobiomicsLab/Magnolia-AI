@@ -121,3 +121,55 @@ def test_check_consistency_defaults_ok_on_checker_failure():
     drafted = {"name": "n", "description": "d", "tags": [], "body": "b"}
     res = check_consistency(drafted, [], checker=lambda d, rules: None)
     assert res == {"status": "ok", "related_rule": None, "note": ""}
+
+
+# ---------------------------------------------------------------------------
+# propose_promotions orchestrator tests
+# ---------------------------------------------------------------------------
+import json as _json
+from compchem_memory.promotion import propose_promotions, _entry_key
+
+
+def _approve_all(entry, lens_idx):
+    return {"approve": True, "correctness_concern": None, "generality_concern": None}
+
+
+def _draft_stub(entry):
+    return {"name": entry["meta"]["title"], "description": "d", "tags": [], "body": "B"}
+
+
+def _ok_checker(drafted, rules):
+    return {"status": "ok", "related_rule": None, "note": ""}
+
+
+def _store_with_eligible(tmp_path):
+    store = tmp_path / ".magnolia"; entries = store / "entries"; entries.mkdir(parents=True)
+    _entry(entries, "a.md", "Alpha rule", "use alpha", ["s1", "s2", "s3"])
+    _entry(entries, "b.md", "too few", "x", ["s1", "s2"])     # ineligible
+    return store
+
+
+def test_propose_writes_survivors_only(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    res = propose_promotions(str(store), skills_dir=str(tmp_path / "rules"),
+                             judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    art = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert res["candidates"] == 1
+    assert len(art["proposals"]) == 1
+    assert art["proposals"][0]["entry_title"] == "Alpha rule"
+    assert art["proposals"][0]["drafted_rule"]["name"] == "alpha-rule"
+    assert art["applied"] == [] and art["rejected"] == []
+
+
+def test_propose_carries_rejection_forward(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    args = dict(skills_dir=str(tmp_path / "rules"), judge=_approve_all,
+                drafter=_draft_stub, checker=_ok_checker)
+    propose_promotions(str(store), **args)
+    # reject index 0 by hand, then regenerate
+    art_path = store / "reflex" / "promotion-proposal.json"
+    data = _json.loads(art_path.read_text()); data["rejected"] = [0]
+    art_path.write_text(_json.dumps(data))
+    propose_promotions(str(store), **args)                    # a.md still eligible
+    data = _json.loads(art_path.read_text())
+    assert data["rejected"] == [0]                            # carried forward by key
