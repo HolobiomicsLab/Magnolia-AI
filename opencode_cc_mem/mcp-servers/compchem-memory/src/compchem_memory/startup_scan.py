@@ -114,11 +114,29 @@ def _commit_after_sweep(store: Path, result: dict) -> None:
         print(f"[versioning] commit skipped: {e}")
 
 
+def _has_pending_consolidation(store: Path) -> bool:
+    """True if the consolidation artifact has proposals not yet applied or
+    rejected. Freezes regeneration while a human review is outstanding so the
+    review→apply contract (keyed by positional index) can't be invalidated by a
+    concurrent sweep regenerating the artifact in a different order."""
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return False
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    from compchem_memory.consolidation import _pending_indices
+    return bool(_pending_indices(data))
+
+
 def _maybe_consolidate(store: Path) -> None:
     """Gated, proposal-only finding consolidation. Never breaks the sweep."""
     try:
         if not is_llm_available():
             return
+        if _has_pending_consolidation(store):
+            return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.consolidation import _load_findings, consolidate_project_findings
         if len(_load_findings(store / "staging")) < _CONSOLIDATION_MIN_FINDINGS:
             return
