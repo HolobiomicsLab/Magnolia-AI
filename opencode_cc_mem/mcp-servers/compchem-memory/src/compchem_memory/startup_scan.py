@@ -115,11 +115,28 @@ def _commit_after_sweep(store: Path, result: dict) -> None:
         print(f"[versioning] commit skipped: {e}")
 
 
+def _has_pending_review(artifact: Path) -> bool:
+    """True if the proposal artifact has proposals not yet applied or rejected.
+    Freezes regeneration while a human review is outstanding so the review→apply
+    contract (keyed by positional index) can't be invalidated by a concurrent
+    sweep regenerating the artifact in a different order."""
+    if not artifact.exists():
+        return False
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    from compchem_memory.reflex_common import pending_indices
+    return bool(pending_indices(data))
+
+
 def _maybe_promote(store: Path) -> None:
     """Gated, proposal-only project→skill promotion. Never breaks the sweep."""
     try:
         if not is_llm_available():
             return
+        if _has_pending_review(store / "reflex" / "promotion-proposal.json"):
+            return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.promotion import propose_promotions, eligible_entries
         from compchem_memory.server import SKILLS_DIR
         if not eligible_entries(str(store)):
@@ -134,6 +151,8 @@ def _maybe_consolidate(store: Path) -> None:
     try:
         if not is_llm_available():
             return
+        if _has_pending_review(store / "reflex" / "consolidation-proposal.json"):
+            return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.consolidation import _load_findings, consolidate_project_findings
         if len(_load_findings(store / "staging")) < _CONSOLIDATION_MIN_FINDINGS:
             return
