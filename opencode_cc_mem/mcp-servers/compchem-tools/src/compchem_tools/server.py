@@ -713,5 +713,67 @@ def run_shell(cmd: str, cwd: str | None = None, project_dir: str | None = None) 
 from compchem_tools.tools import poller as _poller
 _poller.run_poll_timer_background(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
 
+
+def _is_client_disconnect(exc: BaseException) -> bool:
+    """True iff every leaf of ``exc`` is a benign client-disconnect.
+
+    When opencode aborts/cancels a tool call (or the connection drops) while a
+    tool is still running, the tool's response is later written to a stream the
+    peer has already closed. anyio raises ``ClosedResourceError`` /
+    ``BrokenResourceError`` / ``EndOfStream`` deep inside the MCP request
+    TaskGroup, surfacing as a (possibly nested) ``ExceptionGroup``. Those are
+    benign — the peer is simply gone. A group containing ANY other exception
+    returns ``False`` so genuine bugs still crash loudly. An empty leaf set
+    returns ``False`` (never treat "nothing" as a disconnect)."""
+    import anyio
+
+    disconnect = (anyio.ClosedResourceError, anyio.BrokenResourceError, anyio.EndOfStream)
+
+    def _leaves(e: BaseException):
+        if isinstance(e, BaseExceptionGroup):
+            for sub in e.exceptions:
+                yield from _leaves(sub)
+        else:
+            yield e
+
+    leaves = list(_leaves(exc))
+    return bool(leaves) and all(isinstance(leaf, disconnect) for leaf in leaves)
+
+
+def _serve_resilient(run_fn=None, *, monotonic=None) -> None:
+    """Run the MCP server, surviving a client disconnect mid-request.
+
+    Unhandled, a disconnect-induced ``ClosedResourceError`` propagates out of
+    ``mcp.run()`` and kills the whole process — taking the background job poller
+    (a daemon thread) down with it. We swallow ONLY disconnect-shaped exception
+    groups (see ``_is_client_disconnect``); anything else re-raises so real bugs
+    are not masked.
+
+    On a full connection close (stdin EOF) the next ``run_fn()`` returns
+    immediately and the loop exits cleanly. If only a single request was
+    cancelled, the connection is still live and serving resumes. A bound on
+    consecutive *fast* failures prevents a hot loop if the stream is wedged."""
+    import time
+
+    run_fn = run_fn or mcp.run
+    monotonic = monotonic or time.monotonic
+    consecutive_fast_failures = 0
+    while True:
+        started = monotonic()
+        try:
+            run_fn()
+            return  # clean shutdown: client closed, nothing in flight
+        except BaseException as exc:  # noqa: BLE001 — non-disconnects re-raised below
+            if not _is_client_disconnect(exc):
+                raise
+            if monotonic() - started < 1.0:
+                consecutive_fast_failures += 1
+            else:
+                consecutive_fast_failures = 0
+            if consecutive_fast_failures >= 3:
+                return  # stream wedged/EOF — stop cleanly instead of hot-looping
+            # else: connection may still be alive (single request cancelled) — resume
+
+
 if __name__ == "__main__":
-    mcp.run()
+    _serve_resilient()
