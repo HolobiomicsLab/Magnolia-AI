@@ -81,6 +81,15 @@ energy differences, RMSD deltas) must be verified by a script or explicit
 step-by-step arithmetic before appearing in a table. Never present a value
 computed mentally — write the calculation out or run a one-liner.
 
+**Parameter recommendations must be grounded in prior runs for the same tool
+and project.** Before recommending a numeric parameter (sampling, ncores,
+timelimit, etc.), check at least one prior run result to support the value.
+For example, before proposing a HADDOCK3 sampling level, check the cluster
+sizes from past runs — if 10000 models gave n=4 clusters, recommending 2000
+without citing that fact is speculation, not a recommendation. State the
+prior result explicitly: "At s10000 we got n=4, so s5000 is a reasonable
+starting point."
+
 When in doubt, under-claim and name the missing analysis.
 
 ## Shell commands
@@ -109,8 +118,9 @@ Refer to `AGENTS.md` for when to call each memory tool. The key points:
 
 ## Long-running jobs
 
-Long-running jobs (>30 min) should be submitted via `submit_job` (local or
-Slurm) rather than run in the foreground.
+Long-running jobs (>30 min) MUST be submitted via `submit_job` (local or
+Slurm) rather than run in the foreground. See `rules/job_execution.md` for
+mandatory output directory conventions and the prohibition on raw `ssh sbatch`.
 
 **Before every `submit_job` call, run the checks in `rules/prejob_check.md`.**
 This is mandatory — never skip input verification before submitting.
@@ -120,6 +130,7 @@ partition choice, Slurm patterns — see `rules/hpc_azzurra.md`.
 
 ## Project structure
 
+- All run output goes to `runs/YYYY-MM-DD_name/`. See `rules/job_execution.md`.
 - Keep all inputs, runs, and memory inside `projects/<name>/`.
 - Use `softwares/bin/` wrappers for tool invocation.
 - Respect the `.gitignore` boundaries: do not track heavy environments or caches.
