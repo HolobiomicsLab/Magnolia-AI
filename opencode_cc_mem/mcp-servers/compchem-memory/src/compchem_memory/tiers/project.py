@@ -11,6 +11,20 @@ import yaml
 from compchem_memory.atomic_io import atomic_write_text
 from compchem_memory.storage import backup_file
 
+
+def _keyword_score(haystack_lower: str, keyword: str) -> int:
+    """Relevance score of a keyword query against already-lowercased text: the
+    number of distinct query tokens that appear as substrings. An empty keyword
+    scores 1 (matches everything, so tag-only / list queries still work).
+    Multi-word queries match on ANY token — not the whole phrase as a single
+    substring — so a natural-language query finds entries containing its terms,
+    and callers can rank by the score."""
+    if not keyword or not keyword.strip():
+        return 1
+    tokens = {t for t in keyword.lower().split() if t}
+    return sum(1 for t in tokens if t in haystack_lower)
+
+
 ENTRY_TYPES = (
     "success_pattern",
     "error_resolution",
@@ -200,20 +214,20 @@ class ProjectManager:
         self, project_dir: str, keyword: str = "", tags: list[str] | None = None
     ) -> list[dict[str, Any]]:
         entries = self.list_entries(project_dir)
-        results: list[dict[str, Any]] = []
+        scored: list[tuple[int, dict[str, Any]]] = []
         for entry in entries:
             text_content = self.get_entry(project_dir, entry["name"]) or ""
-            match = True
-            if keyword:
-                match = keyword.lower() in (text_content + str(entry)).lower()
-            if match and tags:
+            score = _keyword_score((text_content + " " + str(entry)).lower(), keyword)
+            if score == 0:
+                continue
+            if tags:
                 entry_tags_lower = [t.lower() for t in entry.get("tags", [])]
                 if not any(t.lower() in entry_tags_lower for t in tags):
-                    match = False
-            if match:
-                entry["tier"] = "project"
-                results.append(entry)
-        return results
+                    continue
+            entry["tier"] = "project"
+            scored.append((score, entry))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [e for _, e in scored]
 
     def search_staging(
         self, project_dir: str, keyword: str = "", tags: list[str] | None = None
@@ -224,9 +238,9 @@ class ProjectManager:
         lessons be found instead of being invisible until promotion ("flag, don't
         hide")."""
         staging_dir = self._staging_dir(project_dir)
-        results: list[dict[str, Any]] = []
+        scored: list[tuple[int, dict[str, Any]]] = []
         if not staging_dir.exists():
-            return results
+            return []
         for f in sorted(staging_dir.glob("*.md")):
             if f.name == "INDEX.md":
                 continue
@@ -235,29 +249,29 @@ class ProjectManager:
             except OSError:
                 continue
             meta = self._parse_frontmatter(text)
-            match = True
-            if keyword:
-                match = keyword.lower() in text.lower()
-            if match and tags:
+            score = _keyword_score(text.lower(), keyword)
+            if score == 0:
+                continue
+            if tags:
                 entry_tags_lower = [t.lower() for t in meta.get("tags", [])]
                 if not any(t.lower() in entry_tags_lower for t in tags):
-                    match = False
-            if match:
-                results.append({
-                    "name": f.name,
-                    "title": meta.get("title", f.stem),
-                    "type": meta.get("type", "note"),
-                    "date": meta.get("date", ""),
-                    "tags": meta.get("tags", []),
-                    "tools": meta.get("tools", []),
-                    "confidence": meta.get("confidence", 0.5),
-                    "observation_count": meta.get("observation_count", 0),
-                    "source": meta.get("source", ""),
-                    "path": str(f),
-                    "tier": "staging",
-                    "provisional": True,
-                })
-        return results
+                    continue
+            scored.append((score, {
+                "name": f.name,
+                "title": meta.get("title", f.stem),
+                "type": meta.get("type", "note"),
+                "date": meta.get("date", ""),
+                "tags": meta.get("tags", []),
+                "tools": meta.get("tools", []),
+                "confidence": meta.get("confidence", 0.5),
+                "observation_count": meta.get("observation_count", 0),
+                "source": meta.get("source", ""),
+                "path": str(f),
+                "tier": "staging",
+                "provisional": True,
+            }))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [e for _, e in scored]
 
     def promote_to_skill(
         self, project_dir: str, entry_name: str, skills_dir: str
