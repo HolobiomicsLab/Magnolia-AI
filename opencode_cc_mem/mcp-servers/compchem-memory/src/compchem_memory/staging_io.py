@@ -6,7 +6,7 @@ on-disk shape of a staging entry has exactly one definition.
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,9 +31,37 @@ def save_candidate(
     staging.mkdir(parents=True, exist_ok=True)
 
     title = candidate.get("title", "untitled")
+
+    # Dedup: if a genuinely-similar staging entry already exists, bump it (append
+    # this observation) instead of writing a near-duplicate. Re-distilling the
+    # same finding across sessions must not multiply entries — the dedup that
+    # memory_record_learning already does, applied to the distillation path too.
+    # Best-effort: any failure falls through to writing a fresh entry.
+    try:
+        from compchem_memory.tiers.project import ProjectManager
+        _pm = ProjectManager(global_base=Path.home() / ".magnolia")
+        _project_dir = str(store.parent)
+        _similar = _pm.find_similar_staging(
+            _project_dir, title, candidate.get("tags", []) or [],
+            entry_type=candidate.get("type", "note"),
+        )
+        if _similar:
+            _pm.bump_observation_count(
+                _project_dir, _similar,
+                session_id=opencode_session_id,
+                content=candidate.get("content", ""),
+            )
+            return str(staging / _similar)
+    except Exception:
+        pass  # dedup is best-effort; never block a distillation save
+
     slug = re.sub(r"[^a-zA-Z0-9]+", "_", title)[:60].strip("_")
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    now = datetime.now(timezone.utc).isoformat()
+    # System local time (timezone-aware), so filenames/timestamps match the
+    # operator's wall clock. .astimezone() keeps it tz-aware (explicit offset),
+    # so downstream date math (.date(), fromisoformat) stays correct.
+    local_now = datetime.now().astimezone()
+    ts = local_now.strftime("%Y%m%d_%H%M%S_%f")
+    now = local_now.isoformat()
     fpath = staging / f"{ts}_{slug}.md"
 
     fm: dict[str, Any] = {
