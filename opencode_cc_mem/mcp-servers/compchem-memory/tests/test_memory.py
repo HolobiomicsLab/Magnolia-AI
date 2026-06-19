@@ -104,6 +104,21 @@ class TestProjectManager:
         assert mgr.search_staging(str(project_dir), tags=["docking"])
         assert mgr.search_staging(str(project_dir), keyword="nomatch-zzz") == []
 
+    def test_search_entries_multiword_matches_any_token(self, project_dir):
+        mgr = ProjectManager(project_dir)
+        mgr.create_entry(str(project_dir), "RKALQ Finding", "RKALQ register shift detail")
+        # multi-word natural-language query; only 'RKALQ' is in the entry — must
+        # still match (tokenized), not require the whole phrase as one substring.
+        results = mgr.search_entries(str(project_dir), keyword="RKALQ extension scan best")
+        assert len(results) == 1
+
+    def test_search_staging_multiword_matches_any_token(self, project_dir):
+        mgr = ProjectManager(project_dir)
+        mgr.create_entry(str(project_dir), "TGFMALQ Staged", "TGFMALQ best binder", staging=True)
+        results = mgr.search_staging(str(project_dir), keyword="TGFMALQ extension scan")
+        assert len(results) == 1
+        assert results[0]["provisional"] is True
+
     def test_staging_and_confirm(self, project_dir):
         mgr = ProjectManager(project_dir)
         path = mgr.create_entry(
