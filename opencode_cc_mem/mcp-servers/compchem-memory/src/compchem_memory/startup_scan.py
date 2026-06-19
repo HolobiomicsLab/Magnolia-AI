@@ -41,6 +41,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     else:
         result = _distill_tool_events(pd)
     _maybe_consolidate(store)
+    _surface_pending_consolidation(project_dir, store)
     _commit_after_sweep(store, result)
     return result
 
@@ -143,3 +144,32 @@ def _maybe_consolidate(store: Path) -> None:
         consolidate_project_findings(str(store))
     except Exception as e:  # noqa: BLE001 - consolidation must never break the sweep
         print(f"[consolidation] skipped: {e}")
+
+
+def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
+    """Push a notice when consolidation proposals are pending review.
+
+    Without this the loop silently stalls: pending proposals freeze regeneration
+    (see _has_pending_consolidation) and nothing else surfaces them, so the
+    review->apply contract never runs. The notice rides the existing
+    .distill-notices queue, drained by the @captured decorator onto the next
+    memory tool result. Runs every sweep (startup + timer) so it re-nudges until
+    the proposals are handled. Never raises — surfacing must not break the sweep.
+    """
+    try:
+        artifact = store / "reflex" / "consolidation-proposal.json"
+        if not artifact.exists():
+            return
+        from compchem_memory.consolidation import _pending_indices
+        data = json.loads(artifact.read_text())
+        n = len(_pending_indices(data))
+        if not n:
+            return
+        from compchem_memory import distill_log
+        distill_log.push_distill_notice(
+            project_dir,
+            quote="call memory_review_consolidation to review/apply or reject",
+            summary=f"⚖️ {n} consolidation proposal(s) pending review",
+        )
+    except Exception as e:  # noqa: BLE001 - surfacing must never break the sweep
+        print(f"[consolidation] surface skipped: {e}")
