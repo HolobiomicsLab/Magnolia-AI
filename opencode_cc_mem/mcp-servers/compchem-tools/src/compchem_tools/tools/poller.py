@@ -92,22 +92,12 @@ def capture_failure(
             },
         },
     )
-    title = f"job-failure: {tool} {run_id} ({state})"
-    head = err_tail or out_tail
-    summary = "\n".join(head.splitlines()[:10]) if head else "(no log output)"
-    body = (
-        f"Tool: {tool}\nRun: {run_id}\nState: {state}\nExit: {exit_code}\n"
-        f"Captured: {captured_at}\n\nLog head:\n```\n{summary}\n```\n"
-    )
-    project_mgr.create_entry(
-        project_dir,
-        title=title,
-        content=body,
-        tags=[tool, "job-failure", state.lower()],
-        source="poller",
-        staging=True,
-        entry_type="note",
-    )
+    # The failure is captured in the run record (remote.failure) above — its
+    # authoritative home, surfaced by check_run_status / memory_get_run_history.
+    # Do NOT also write it to staging as a "learning": a raw job-failure status
+    # dump is run-lifecycle data, not a distilled lesson, so it only pollutes the
+    # learning tier with machine-generated noise (and is never read back). The
+    # genuine lesson from a failure comes from the distillation / assess paths.
 
 
 from compchem_memory.learning.orchestrator import assess_and_record  # noqa: E402
