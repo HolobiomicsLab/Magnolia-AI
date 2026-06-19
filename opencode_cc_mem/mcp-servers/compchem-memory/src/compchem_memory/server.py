@@ -334,7 +334,13 @@ def memory_search(
     results.extend(proj_m.search_staging(pd, keyword=keyword, tags=tags))
 
     sess_m = _get_session_mgr(pd)
-    session_matches = sess_m.search(keyword)
+    # Drop self-referential noise: tool_call events are invocation logs (e.g. this
+    # very memory_search call, whose args contain the keyword) — not memory content.
+    # Filter BEFORE capping so real hits aren't crowded out by the log entries.
+    session_matches = [
+        sm for sm in sess_m.search(keyword)
+        if sm.get("event_type") != "tool_call"
+    ]
     for sm in session_matches[:5]:
         sm["tier"] = "session"
         sm["confidence"] = 0.5
