@@ -93,6 +93,11 @@ EXTRACTION_SYSTEM_PROMPT = """You are extracting durable learnings from a comput
 session. Return a JSON array of entries; each has {type, title, content, tags, tools, confidence}.
 Skip routine or trivial events — aim for fewer, denser entries.
 
+DO NOT extract learnings ABOUT the memory/knowledge system itself (memory_search,
+memory_get_context, consolidation/proposals, distillation, promotion, staging,
+scan_headers, pending-proposal notices). That is the system's own plumbing, not a
+scientific finding. Genuine errors/fixes in the SCIENCE tools remain in scope.
+
 REQUIREMENTS for `content`:
 
 1. Quantitative grounding. Include specific numbers, identifiers, parameters, and
@@ -156,6 +161,13 @@ interpretations, decisions, and conclusions. Extract THOSE.
 
 Return a JSON array of entries; each has {type, title, content, tags, tools, confidence}.
 Fewer, denser entries. Skip greetings, chit-chat, and routine status.
+
+DO NOT extract learnings ABOUT the memory/knowledge system itself. Ignore the agent's
+use of memory_search, memory_get_context, consolidation / merge proposals, distillation,
+promotion, staging, scan_headers, or the pending-proposal notices — that is the system's
+own plumbing, not a scientific or computational finding, and recording it makes the
+memory learn about itself. (Genuine errors/fixes in the SCIENCE tools — haddock3, p2rank,
+gromacs, xtb, bindcraft, etc. — remain in scope.)
 
 PRIORITIZE capturing:
 - Scientific findings and RELATIONSHIPS stated or concluded in the conversation
