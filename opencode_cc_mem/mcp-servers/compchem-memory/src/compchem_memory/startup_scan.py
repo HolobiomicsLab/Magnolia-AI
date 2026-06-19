@@ -166,10 +166,19 @@ def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
         if not n:
             return
         from compchem_memory import distill_log
+        # Plain-language wording: a non-expert user (and the agent relaying to
+        # them) must understand it without knowing the term "consolidation".
         distill_log.push_distill_notice(
             project_dir,
-            quote="call memory_review_consolidation to review/apply or reject",
-            summary=f"⚖️ {n} consolidation proposal(s) pending review",
+            quote=(
+                "Explain this to the user in plain words and ask if they want to "
+                "review — nothing is applied without their approval. Run "
+                "memory_review_consolidation to show the list."
+            ),
+            summary=(
+                f"Memory cleanup ready: {n} set(s) of duplicate lessons can be "
+                "merged into single clean entries (keeps recall accurate)."
+            ),
         )
     except Exception as e:  # noqa: BLE001 - surfacing must never break the sweep
         print(f"[consolidation] surface skipped: {e}")
