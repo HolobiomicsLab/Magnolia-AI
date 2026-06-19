@@ -215,6 +215,50 @@ class ProjectManager:
                 results.append(entry)
         return results
 
+    def search_staging(
+        self, project_dir: str, keyword: str = "", tags: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Search the staging tier (unconfirmed entries). Same keyword/tag match as
+        search_entries, but each hit is tagged tier='staging' and provisional=True
+        so callers know it is not yet promoted/vetted. Lets useful-but-unpromoted
+        lessons be found instead of being invisible until promotion ("flag, don't
+        hide")."""
+        staging_dir = self._staging_dir(project_dir)
+        results: list[dict[str, Any]] = []
+        if not staging_dir.exists():
+            return results
+        for f in sorted(staging_dir.glob("*.md")):
+            if f.name == "INDEX.md":
+                continue
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            meta = self._parse_frontmatter(text)
+            match = True
+            if keyword:
+                match = keyword.lower() in text.lower()
+            if match and tags:
+                entry_tags_lower = [t.lower() for t in meta.get("tags", [])]
+                if not any(t.lower() in entry_tags_lower for t in tags):
+                    match = False
+            if match:
+                results.append({
+                    "name": f.name,
+                    "title": meta.get("title", f.stem),
+                    "type": meta.get("type", "note"),
+                    "date": meta.get("date", ""),
+                    "tags": meta.get("tags", []),
+                    "tools": meta.get("tools", []),
+                    "confidence": meta.get("confidence", 0.5),
+                    "observation_count": meta.get("observation_count", 0),
+                    "source": meta.get("source", ""),
+                    "path": str(f),
+                    "tier": "staging",
+                    "provisional": True,
+                })
+        return results
+
     def promote_to_skill(
         self, project_dir: str, entry_name: str, skills_dir: str
     ) -> str:

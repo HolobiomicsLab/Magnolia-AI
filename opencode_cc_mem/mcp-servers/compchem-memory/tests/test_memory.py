@@ -90,6 +90,20 @@ class TestProjectManager:
         results = mgr.search_entries(str(project_dir), keyword="HADDOCK")
         assert len(results) == 1
 
+    def test_search_staging(self, project_dir):
+        mgr = ProjectManager(project_dir)
+        mgr.create_entry(
+            str(project_dir), "Staged Finding", "RKALQ register shift uniqkw42",
+            staging=True, tags=["docking"],
+        )
+        results = mgr.search_staging(str(project_dir), keyword="uniqkw42")
+        assert len(results) == 1
+        assert results[0]["tier"] == "staging"
+        assert results[0]["provisional"] is True
+        # tag filter works too
+        assert mgr.search_staging(str(project_dir), tags=["docking"])
+        assert mgr.search_staging(str(project_dir), keyword="nomatch-zzz") == []
+
     def test_staging_and_confirm(self, project_dir):
         mgr = ProjectManager(project_dir)
         path = mgr.create_entry(
