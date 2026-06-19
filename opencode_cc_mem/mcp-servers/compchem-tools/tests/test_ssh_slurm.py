@@ -18,7 +18,10 @@ def test_cluster_config_has_azzurra():
     cfg = ssh_slurm.CLUSTER_CONFIG["azzurra"]
     assert cfg["ssh_host"] == "azzurra"
     assert cfg["default_account"] == "spectrometry"
-    assert cfg["default_qos"] == "qos_spectrometry"
+    # default_qos is intentionally empty (commit ad2aa09): Slurm auto-assigns QOS
+    # from the association; passing --qos=qos_spectrometry triggers QOSGrpCpuLimit
+    # (see rules/hpc_azzurra.md).
+    assert cfg["default_qos"] == ""
     assert cfg["default_partition"] == "cpucourt"
     assert cfg["tunnel_script"] == "hpc_tunnel.sh"
 
@@ -589,10 +592,9 @@ def test_cancel_job_dispatches_ssh_slurm_to_module(fake_subprocess, tmp_path):
 
 def test_fetch_job_results_mcp_tool_returns_json(fake_subprocess, tmp_path):
     from compchem_tools.server import fetch_job_results as fetch_mcp_tool
-    # FastMCP wraps @mcp.tool()-decorated functions in FunctionTool; the
-    # underlying callable is exposed as .fn (same drift the pre-existing
-    # test_phase{3,4,5}_tools_return_json failures hit).
-    fetch_mcp = fetch_mcp_tool.fn
+    # FastMCP 3.2's @mcp.tool() returns the underlying (captured-wrapped)
+    # function directly, callable as-is — there is no .fn wrapper.
+    fetch_mcp = fetch_mcp_tool
     project_dir = tmp_path / "p"
     (project_dir / ".magnolia" / "runs").mkdir(parents=True)
     local_run_dir = project_dir / "runs" / "x"
