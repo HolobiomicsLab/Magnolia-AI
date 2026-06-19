@@ -313,8 +313,9 @@ def memory_search(
     tags: list[str] | None = None,
     project_dir: str | None = None,
 ) -> str:
-    """Keyword + tag search across all tiers. Returns matching entries with
-    tier label, date, confidence. Uses semantic scoring for project tier.
+    """Keyword + tag search across all tiers (skill, project, staging, session).
+    Returns matches with a tier label; staging hits are marked provisional=True
+    (unconfirmed) and ranked below the durable skill/project tiers.
 
     Call this when: you suspect a relevant entry exists but did not surface in memory_get_context."""
     pd = _resolve_project_store(project_dir)
@@ -326,6 +327,11 @@ def memory_search(
     proj_m = _get_project_mgr()
     entries = proj_m.search_entries(pd, keyword=keyword, tags=tags)
     results.extend(entries)
+
+    # Staging: unconfirmed entries, tagged provisional and ranked below the durable
+    # tiers (appended after them). Without this, useful un-promoted lessons are
+    # invisible to search ("flag, don't hide").
+    results.extend(proj_m.search_staging(pd, keyword=keyword, tags=tags))
 
     sess_m = _get_session_mgr(pd)
     session_matches = sess_m.search(keyword)
@@ -767,18 +773,25 @@ def memory_scan_headers(
     tier: str = "project",
 ) -> str:
     """Fast header scan of memory entries (frontmatter only, no full content).
-    Returns catalogue of titles, types, tags, tools for selection.
+    Returns catalogue of titles, types, tags, tools for selection. `tier` is one
+    of 'project' (default), 'staging', 'all' (project+staging), or 'skill'.
 
-    Call this when: enumerating project-tier entry headers without loading bodies."""
+    Call this when: enumerating entry headers (any tier) without loading bodies."""
     pd = _resolve_project_store(project_dir)
 
     if tier == "project":
-        entries_dir = Path(pd) / ".magnolia" / "entries"
-        headers = scan_memory_headers(entries_dir)
+        headers = scan_memory_headers(Path(pd) / ".magnolia" / "entries")
+    elif tier == "staging":
+        headers = scan_memory_headers(Path(pd) / ".magnolia" / "staging")
+    elif tier == "all":
+        headers = (scan_memory_headers(Path(pd) / ".magnolia" / "entries")
+                   + scan_memory_headers(Path(pd) / ".magnolia" / "staging"))
     elif tier == "skill":
         headers = scan_skills_headers(SKILLS_DIR)
     else:
-        return json.dumps({"error": f"Unknown tier: {tier}. Use 'project' or 'skill'."})
+        return json.dumps(
+            {"error": f"Unknown tier: {tier}. Use 'project', 'staging', 'all', or 'skill'."}
+        )
 
     manifest = format_manifest(headers)
     return json.dumps(
