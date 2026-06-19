@@ -79,7 +79,7 @@ class _RecordingMgr:
         return f"/fake/staging/{title}.md"
 
 
-def test_capture_failure_writes_yaml_patch_and_staging_entry(tmp_path):
+def test_capture_failure_writes_run_record_not_staging(tmp_path):
     run_dir = tmp_path / "rd"
     run_dir.mkdir()
     (run_dir / "job.err").write_text("\n".join(f"err line {i}" for i in range(80)) + "\n")
@@ -104,13 +104,9 @@ def test_capture_failure_writes_yaml_patch_and_staging_entry(tmp_path):
     assert "err line 79" in fail["err_tail"]  # last lines kept
     assert "out line 79" in fail["out_tail"]
     assert fail["captured_at"]
-    # Staging entry
-    assert len(mgr.entries) == 1
-    entry = mgr.entries[0]
-    assert entry["staging"] is True
-    assert "r1" in entry["title"]
-    assert "FAILED" in entry["content"]
-    assert "xtb" in entry["tags"]
+    # No staging entry: a job failure is run-record data, not a distilled
+    # learning. It lives in remote.failure (asserted above), never in staging.
+    assert mgr.entries == []
 
 
 def test_capture_failure_handles_missing_log_files(tmp_path):
@@ -185,9 +181,9 @@ def test_dispatch_failed_calls_fetch_then_capture(tmp_path, monkeypatch):
                                     "terminal": True, "lifecycle": "failed"},
                               project_dir=str(tmp_path / "proj"), project_mgr=mgr)
     assert ssh.fetch_calls == ["777"]
-    # capture_failure → one update + one staging entry
+    # capture_failure → run-record failure patch, no staging entry
     assert any(u["patch"].get("remote", {}).get("failure") for u in mgr.updates)
-    assert len(mgr.entries) == 1
+    assert mgr.entries == []
 
 
 def test_dispatch_node_fail_no_fetch_flags_retry(tmp_path, monkeypatch):
@@ -227,7 +223,9 @@ def test_dispatch_unknown_state_treated_as_science_failure(tmp_path, monkeypatch
                                     "terminal": True, "lifecycle": "failed"},
                               project_dir=str(tmp_path / "proj"), project_mgr=mgr)
     assert ssh.fetch_calls == ["777"]  # conservative: fetch + capture
-    assert len(mgr.entries) == 1
+    # captured as a run-record failure, not a staging "learning"
+    assert any(u["patch"].get("remote", {}).get("failure") for u in mgr.updates)
+    assert mgr.entries == []
 
 
 def test_poll_jobs_polls_each_active_run(tmp_path, monkeypatch):
