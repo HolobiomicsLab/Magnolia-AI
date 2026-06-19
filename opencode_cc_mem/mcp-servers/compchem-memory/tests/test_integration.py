@@ -504,8 +504,9 @@ class TestRunOutcomeScoring:
         runs_dir = store / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
         import yaml as _yaml
-        (runs_dir / "20260422_fail1.yaml").write_text(
-            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": "2026-04-22", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        today = datetime.now(timezone.utc)  # relative date: must stay within the 30-day window
+        (runs_dir / f"{today.strftime('%Y%m%d')}_fail1.yaml").write_text(
+            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": today.strftime("%Y-%m-%d"), "metrics": {}, "quality_flags": [], "errors_solved": []})
         )
 
         error_entry = {
@@ -535,8 +536,9 @@ class TestRunOutcomeScoring:
         runs_dir = store / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
         import yaml as _yaml
-        (runs_dir / "20260422_fail1.yaml").write_text(
-            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": "2026-04-22", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        today = datetime.now(timezone.utc)  # relative date: must stay within the 30-day window
+        (runs_dir / f"{today.strftime('%Y%m%d')}_fail1.yaml").write_text(
+            _yaml.dump({"run_id": "fail1", "tool": "haddock3", "status": "fail", "date": today.strftime("%Y-%m-%d"), "metrics": {}, "quality_flags": [], "errors_solved": []})
         )
 
         success_entry = {
@@ -810,9 +812,10 @@ class TestToolNameCaseNormalization:
         runs_dir = store / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
         import yaml as _yaml
-        # Write run with mixed-case tool name
-        (runs_dir / "20260423_upper.yaml").write_text(
-            _yaml.dump({"run_id": "upper", "tool": "Haddock3", "status": "fail", "date": "2026-04-23", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        # Write run with mixed-case tool name (relative date: within the 30-day window)
+        today = datetime.now(timezone.utc)
+        (runs_dir / f"{today.strftime('%Y%m%d')}_upper.yaml").write_text(
+            _yaml.dump({"run_id": "upper", "tool": "Haddock3", "status": "fail", "date": today.strftime("%Y-%m-%d"), "metrics": {}, "quality_flags": [], "errors_solved": []})
         )
 
         entry = {
@@ -924,14 +927,15 @@ class TestMaxRunsLimit:
         runs_dir.mkdir(parents=True, exist_ok=True)
         import yaml as _yaml
 
-        # 19 passes, 1 fail (most recent)
+        # 19 passes (1..19 days ago), 1 fail today — most recent, within the window
+        today = datetime.now(timezone.utc)
         for i in range(19):
-            day = f"{23 - i:02d}"
-            (runs_dir / f"202604{day}_pass{i}.yaml").write_text(
-                _yaml.dump({"run_id": f"pass{i}", "tool": "haddock3", "status": "pass", "date": f"2026-04-{day}", "metrics": {}, "quality_flags": [], "errors_solved": []})
+            d = today - timedelta(days=i + 1)
+            (runs_dir / f"{d.strftime('%Y%m%d')}_pass{i}.yaml").write_text(
+                _yaml.dump({"run_id": f"pass{i}", "tool": "haddock3", "status": "pass", "date": d.strftime("%Y-%m-%d"), "metrics": {}, "quality_flags": [], "errors_solved": []})
             )
-        (runs_dir / "20260423_fail.yaml").write_text(
-            _yaml.dump({"run_id": "fail", "tool": "haddock3", "status": "fail", "date": "2026-04-23", "metrics": {}, "quality_flags": [], "errors_solved": []})
+        (runs_dir / f"{today.strftime('%Y%m%d')}_fail.yaml").write_text(
+            _yaml.dump({"run_id": "fail", "tool": "haddock3", "status": "fail", "date": today.strftime("%Y-%m-%d"), "metrics": {}, "quality_flags": [], "errors_solved": []})
         )
 
         from compchem_memory.retrieval import _load_recent_run_outcomes
