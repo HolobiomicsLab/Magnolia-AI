@@ -56,3 +56,68 @@ def test_read_block_present_renders(store):
 def test_read_block_empty_file_returns_none(store):
     (store / hv.HANDOVER_STATE_FILE).write_text("   \n")
     assert hv.read_handover_block(store) is None
+
+
+# ---- generate_handover ------------------------------------------------------
+
+def _write_mapping(store, ids):
+    p = store / "opencode-sessions.jsonl"
+    p.write_text("".join(json.dumps({"opencode_session_id": i, "ts": str(n)}) + "\n"
+                         for n, i in enumerate(ids)))
+
+
+def _msg(mid, role, text):
+    return {"info": {"id": mid, "role": role}, "parts": [{"type": "text", "text": text}]}
+
+
+def test_generate_first_run_writes_state_and_cursor(store):
+    _write_mapping(store, ["ses_a"])
+    export = {"info": {"id": "ses_a"},
+              "messages": [_msg("m1", "user", "dock KILDQ"), _msg("m2", "assistant", "cluster 2 best")]}
+    captured = {}
+
+    def fake_llm(system, user, max_tokens=2000, **kw):
+        captured["user"] = user
+        return "## Done\n- docked KILDQ, cluster 2 best\n"
+
+    path = hv.generate_handover(str(store.parent), exporter=lambda s: export, llm=fake_llm)
+    assert path is not None
+    assert "docked KILDQ" in (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "dock KILDQ" in captured["user"]          # transcript fed to LLM
+    assert "(none yet" in captured["user"]            # empty base announced
+    cur = json.loads((store / hv.HANDOVER_CURSOR_FILE).read_text())
+    assert cur["sid"] == "ses_a" and cur["cursor"] == "m2"
+
+
+def test_generate_no_new_messages_is_noop(store):
+    _write_mapping(store, ["ses_a"])
+    export = {"info": {"id": "ses_a"}, "messages": [_msg("m1", "user", "hi")]}
+    (store / hv.HANDOVER_CURSOR_FILE).write_text(json.dumps({"sid": "ses_a", "cursor": "m1"}))
+    called = {"llm": False}
+
+    def fake_llm(*a, **k):
+        called["llm"] = True
+        return "x"
+
+    assert hv.generate_handover(str(store.parent), exporter=lambda s: export, llm=fake_llm) is None
+    assert called["llm"] is False                    # never reached the LLM
+    assert not (store / hv.HANDOVER_STATE_FILE).exists()
+
+
+def test_generate_llm_failure_leaves_state_untouched(store):
+    _write_mapping(store, ["ses_a"])
+    (store / hv.HANDOVER_STATE_FILE).write_text("## Done\n- prior\n")
+    export = {"info": {"id": "ses_a"}, "messages": [_msg("m1", "user", "new work")]}
+
+    assert hv.generate_handover(str(store.parent), exporter=lambda s: export, llm=lambda *a, **k: None) is None
+    assert (store / hv.HANDOVER_STATE_FILE).read_text() == "## Done\n- prior\n"   # unchanged
+    assert not (store / hv.HANDOVER_CURSOR_FILE).exists()                          # cursor not advanced
+
+
+def test_generate_export_failure_is_noop(store):
+    _write_mapping(store, ["ses_a"])
+    assert hv.generate_handover(str(store.parent), exporter=lambda s: None, llm=lambda *a, **k: "x") is None
+
+
+def test_generate_no_mapping_is_noop(store):
+    assert hv.generate_handover(str(store.parent), exporter=lambda s: {}, llm=lambda *a, **k: "x") is None
