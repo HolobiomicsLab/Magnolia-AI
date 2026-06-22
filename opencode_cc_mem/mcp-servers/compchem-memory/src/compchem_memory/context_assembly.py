@@ -138,6 +138,17 @@ def assemble_context(
 
 
 def _get_session_context(store: Path, budget: int) -> str | None:
+    # Prefer the rolling LLM handover; fall back to the raw recent-events dump
+    # when no handover has been generated yet (first session / no LLM).
+    from compchem_memory.handover import read_handover_block
+
+    block = read_handover_block(store)
+    if block:
+        return f"[SESSION HANDOVER]\n{block}"[: budget * 4]
+    return _get_recent_events_dump(store, budget)
+
+
+def _get_recent_events_dump(store: Path, budget: int) -> str | None:
     sessions_dir = store / "sessions"
     if not sessions_dir.exists():
         return None
