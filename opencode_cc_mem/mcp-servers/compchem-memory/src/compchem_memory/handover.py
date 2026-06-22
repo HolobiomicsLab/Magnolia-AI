@@ -5,8 +5,9 @@ Replaces the raw-events "session context" block with an LLM-written handover
 session transcript. State persists in `.magnolia/.handover-state.md` (machine-
 owned, never hand-edited); `assemble_context` inlines a rendered view of it.
 
-Defensive by design: generate_handover returns None on any failure and never
-raises, so it is safe as a boot-worker step.
+Defensive by design: generate_handover returns None on any no-op/failure logic
+path; the boot worker additionally wraps each step in try/except, so even a hard
+filesystem error in the final write cannot crash the launch.
 """
 
 import json
@@ -111,7 +112,9 @@ def generate_handover(
     Reuses the distillation transcript pipeline (export -> reconstruct -> scrub)
     and the project's per-project session mapping. Returns the state-file path on
     a write, or None on any no-op/failure (no mapping, export failed, nothing new,
-    empty transcript, LLM unavailable/failed). Never raises.
+    empty transcript, LLM unavailable/failed). Does not raise on any logic path;
+    the only residual raise is a hard filesystem failure in the final atomic
+    write, which the boot worker contains by wrapping each step in try/except.
     """
     from compchem_memory.opencode_ingest import (
         export_session, reconstruct_transcript, scrub_secrets,
