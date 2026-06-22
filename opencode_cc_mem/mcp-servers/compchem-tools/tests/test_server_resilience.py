@@ -80,3 +80,54 @@ def test_real_exception_propagates():
 
     with pytest.raises(BaseExceptionGroup):
         _serve_resilient(run_fn=run_fn)
+
+
+def test_legitimate_rapid_cancels_do_not_kill_server():
+    """Several disconnects that each take REAL time (a cancelled in-flight request,
+    not a wedged stream) must NOT trip the hot-loop guard.
+
+    Regression for the 2026-06-20 incident (run 75a322b6): run_shell calls
+    cancelled a few seconds apart killed the server because the 1.0s "fast
+    failure" window misread legitimate short-request cancels as a wedged stream
+    and exited the serve loop. opencode does not respawn a dropped local MCP
+    server, so all 35 tools vanished for the rest of the session.
+    """
+    attempts = {"n": 0}
+
+    def run_fn():
+        attempts["n"] += 1
+        if attempts["n"] <= 5:
+            # A real in-flight request that opencode cancelled mid-flight.
+            raise ExceptionGroup("transport", [anyio.ClosedResourceError()])
+        return  # 6th call: stream cleanly EOFs -> normal shutdown
+
+    # Clock advances 0.3s of real "work" per monotonic() call. Each failing
+    # iteration calls monotonic() twice (start, then post-failure check), so each
+    # cancel registers ~0.3s elapsed — clearly NOT an instant no-work hot loop.
+    clock = {"t": 0.0}
+
+    def fake_monotonic():
+        t = clock["t"]
+        clock["t"] += 0.3
+        return t
+
+    _serve_resilient(run_fn=run_fn, monotonic=fake_monotonic)
+    assert attempts["n"] == 6  # resumed through all 5 cancels, then clean shutdown
+
+
+def test_serve_loop_is_observable():
+    """The loop must log every swallowed disconnect AND the give-up, so a crash is
+    diagnosable. Regression: the loop was a silent black hole — opencode does not
+    persist the server's stderr, so each death left no trace to debug."""
+    logs = []
+
+    def run_fn():
+        raise ExceptionGroup("transport", [anyio.ClosedResourceError()])
+
+    def fake_monotonic():
+        return 0.0  # every failure instant -> fast -> trips the give-up guard
+
+    _serve_resilient(run_fn=run_fn, monotonic=fake_monotonic, log=logs.append)
+
+    assert any("resuming" in m for m in logs), "should log each swallowed disconnect"
+    assert any("wedged" in m for m in logs), "should log the give-up decision"

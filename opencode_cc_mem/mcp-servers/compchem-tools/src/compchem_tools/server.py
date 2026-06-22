@@ -740,7 +740,54 @@ def _is_client_disconnect(exc: BaseException) -> bool:
     return bool(leaves) and all(isinstance(leaf, disconnect) for leaf in leaves)
 
 
-def _serve_resilient(run_fn=None, *, monotonic=None) -> None:
+# A wedged/EOF stream makes ``mcp.run()`` fail in ~microseconds, repeatedly —
+# the only thing the hot-loop guard must catch. A *legitimately cancelled*
+# in-flight request, by contrast, did real work first (received, processed,
+# then the peer vanished), so it takes meaningfully longer. The discriminator
+# is therefore "did this iteration do essentially zero work", i.e. a tiny
+# epsilon — NOT a full second. The original 1.0s window misread short-request
+# cancels (a few hundred ms, fired seconds apart) as a wedged stream and exited
+# the serve loop; opencode never respawns a dropped local MCP server, so all
+# tools vanished for the session. Reproduced live 2026-06-20 (run 75a322b6).
+_HOT_LOOP_FAST_SECONDS = 0.05
+_HOT_LOOP_LIMIT = 3
+
+
+def _serve_log_path() -> str:
+    """Durable, server-wide diagnostic log for the serve loop.
+
+    opencode pipes the server's stderr back over a socket but does NOT persist
+    it anywhere greppable (verified 2026-06-20), so stderr-only logging is a
+    black hole. We additionally append to a file under ``MAGNOLIA_ROOT`` so a
+    server death actually leaves a trace."""
+    import os
+
+    root = os.environ.get("MAGNOLIA_ROOT") or os.getcwd()
+    return os.path.join(root, "opencode_cc_mem", "logs", "compchem-tools-serve.log")
+
+
+def _default_serve_log(msg: str) -> None:
+    """Emit a serve-loop diagnostic to stderr AND a durable file. Never raises —
+    logging must not be able to take down the loop it is trying to make safe."""
+    import sys
+
+    line = f"[compchem-tools] serve loop: {msg}"
+    try:
+        print(line, file=sys.stderr, flush=True)
+    except Exception:
+        pass
+    try:
+        import os
+
+        path = _serve_log_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _serve_resilient(run_fn=None, *, monotonic=None, log=None) -> None:
     """Run the MCP server, surviving a client disconnect mid-request.
 
     Unhandled, a disconnect-induced ``ClosedResourceError`` propagates out of
@@ -752,11 +799,16 @@ def _serve_resilient(run_fn=None, *, monotonic=None) -> None:
     On a full connection close (stdin EOF) the next ``run_fn()`` returns
     immediately and the loop exits cleanly. If only a single request was
     cancelled, the connection is still live and serving resumes. A bound on
-    consecutive *fast* failures prevents a hot loop if the stream is wedged."""
+    consecutive *near-instant* (``< _HOT_LOOP_FAST_SECONDS``) failures prevents a
+    hot loop if the stream is genuinely wedged, without misclassifying ordinary
+    short-request cancellations as such. Every swallow/give-up is logged (stderr
+    + durable file via ``_default_serve_log``) so this loop is observable instead
+    of a silent black hole. ``log`` is injectable for tests."""
     import time
 
     run_fn = run_fn or mcp.run
     monotonic = monotonic or time.monotonic
+    log = log or _default_serve_log
     consecutive_fast_failures = 0
     while True:
         started = monotonic()
@@ -766,13 +818,19 @@ def _serve_resilient(run_fn=None, *, monotonic=None) -> None:
         except BaseException as exc:  # noqa: BLE001 — non-disconnects re-raised below
             if not _is_client_disconnect(exc):
                 raise
-            if monotonic() - started < 1.0:
+            elapsed = monotonic() - started
+            if elapsed < _HOT_LOOP_FAST_SECONDS:
                 consecutive_fast_failures += 1
             else:
                 consecutive_fast_failures = 0
-            if consecutive_fast_failures >= 3:
+            if consecutive_fast_failures >= _HOT_LOOP_LIMIT:
+                log(
+                    f"{consecutive_fast_failures} consecutive near-instant disconnects "
+                    f"(<{_HOT_LOOP_FAST_SECONDS}s) — stream wedged, exiting cleanly."
+                )
                 return  # stream wedged/EOF — stop cleanly instead of hot-looping
-            # else: connection may still be alive (single request cancelled) — resume
+            # connection may still be alive (single request cancelled) — resume
+            log(f"swallowed client disconnect after {elapsed:.3f}s; resuming.")
 
 
 if __name__ == "__main__":
