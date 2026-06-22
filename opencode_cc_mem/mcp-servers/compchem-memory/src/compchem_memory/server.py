@@ -44,20 +44,30 @@ PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
 
-def _run_startup_scan_background():
-    """Run scan_and_distill, boot_context, audit, then write .current-session-id."""
-    import threading
-    import datetime
+def _build_boot_steps(project_dir, skills_dir):
+    """Ordered boot-worker steps. Handover runs after distillation (so the just-
+    ended session is captured) and before boot-context (so assemble_context sees
+    the fresh handover). Extracted as a function so the ordering is testable."""
     from compchem_memory.startup_scan import scan_and_distill
+    from compchem_memory.handover import generate_handover
     from compchem_memory.boot_context import regenerate_boot_context
     from compchem_memory.audit import run_audit
 
+    return [
+        ("startup_scan", lambda: scan_and_distill(project_dir)),
+        ("handover", lambda: generate_handover(project_dir)),
+        ("boot_context", lambda: regenerate_boot_context(project_dir, skills_dir=str(skills_dir))),
+        ("audit", lambda: run_audit(project_dir)),
+    ]
+
+
+def _run_startup_scan_background():
+    """Run startup_scan, handover, boot_context, audit, then write .current-session-id."""
+    import threading
+    import datetime
+
     def _worker():
-        for step_name, step_fn in [
-            ("startup_scan", lambda: scan_and_distill(PROJECT_DIR)),
-            ("boot_context", lambda: regenerate_boot_context(PROJECT_DIR, skills_dir=str(SKILLS_DIR))),
-            ("audit", lambda: run_audit(PROJECT_DIR)),
-        ]:
+        for step_name, step_fn in _build_boot_steps(PROJECT_DIR, SKILLS_DIR):
             try:
                 step_fn()
             except Exception as e:
