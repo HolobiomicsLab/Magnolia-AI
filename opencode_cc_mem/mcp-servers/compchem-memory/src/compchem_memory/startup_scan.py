@@ -42,6 +42,8 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
         result = _distill_tool_events(pd)
     _maybe_consolidate(store)
     _surface_pending_consolidation(project_dir, store)
+    _maybe_promote(store)
+    _surface_pending_promotion(project_dir, store)
     _commit_after_sweep(store, result)
     return result
 
@@ -115,20 +117,35 @@ def _commit_after_sweep(store: Path, result: dict) -> None:
         print(f"[versioning] commit skipped: {e}")
 
 
-def _has_pending_consolidation(store: Path) -> bool:
-    """True if the consolidation artifact has proposals not yet applied or
-    rejected. Freezes regeneration while a human review is outstanding so the
-    review→apply contract (keyed by positional index) can't be invalidated by a
-    concurrent sweep regenerating the artifact in a different order."""
-    artifact = store / "reflex" / "consolidation-proposal.json"
+def _has_pending_review(artifact: Path) -> bool:
+    """True if the proposal artifact has proposals not yet applied or rejected.
+    Freezes regeneration while a human review is outstanding so the review→apply
+    contract (keyed by positional index) can't be invalidated by a concurrent
+    sweep regenerating the artifact in a different order."""
     if not artifact.exists():
         return False
     try:
         data = json.loads(artifact.read_text())
     except (json.JSONDecodeError, OSError):
         return False
-    from compchem_memory.consolidation import _pending_indices
-    return bool(_pending_indices(data))
+    from compchem_memory.reflex_common import pending_indices
+    return bool(pending_indices(data))
+
+
+def _maybe_promote(store: Path) -> None:
+    """Gated, proposal-only project→skill promotion. Never breaks the sweep."""
+    try:
+        if not is_llm_available():
+            return
+        if _has_pending_review(store / "reflex" / "promotion-proposal.json"):
+            return  # don't regenerate while a review is pending — keeps [i] stable
+        from compchem_memory.promotion import propose_promotions, eligible_entries
+        from compchem_memory.server import SKILLS_DIR
+        if not eligible_entries(str(store)):
+            return
+        propose_promotions(str(store), skills_dir=str(SKILLS_DIR))
+    except Exception as e:  # noqa: BLE001 - promotion must never break the sweep
+        print(f"[promotion] skipped: {e}")
 
 
 def _maybe_consolidate(store: Path) -> None:
@@ -136,7 +153,7 @@ def _maybe_consolidate(store: Path) -> None:
     try:
         if not is_llm_available():
             return
-        if _has_pending_consolidation(store):
+        if _has_pending_review(store / "reflex" / "consolidation-proposal.json"):
             return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.consolidation import _load_findings, consolidate_project_findings
         if len(_load_findings(store / "staging")) < _CONSOLIDATION_MIN_FINDINGS:
@@ -150,7 +167,7 @@ def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
     """Push a notice when consolidation proposals are pending review.
 
     Without this the loop silently stalls: pending proposals freeze regeneration
-    (see _has_pending_consolidation) and nothing else surfaces them, so the
+    (see _has_pending_review) and nothing else surfaces them, so the
     review->apply contract never runs. The notice rides the existing
     .distill-notices queue, drained by the @captured decorator onto the next
     memory tool result. Runs every sweep (startup + timer) so it re-nudges until
@@ -160,9 +177,9 @@ def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
         artifact = store / "reflex" / "consolidation-proposal.json"
         if not artifact.exists():
             return
-        from compchem_memory.consolidation import _pending_indices
+        from compchem_memory.reflex_common import pending_indices
         data = json.loads(artifact.read_text())
-        n = len(_pending_indices(data))
+        n = len(pending_indices(data))
         if not n:
             return
         from compchem_memory import distill_log
@@ -182,3 +199,42 @@ def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
         )
     except Exception as e:  # noqa: BLE001 - surfacing must never break the sweep
         print(f"[consolidation] surface skipped: {e}")
+
+
+def _surface_pending_promotion(project_dir: str, store: Path) -> None:
+    """Push a notice when project→skill rule-elevation proposals are pending review.
+
+    Mirror of _surface_pending_consolidation for the promotion tier. Without this
+    the promotion loop silently stalls: pending proposals freeze regeneration
+    (see _maybe_promote / _has_pending_review) and nothing else surfaces them, so
+    the review->apply contract never runs. The notice rides the existing
+    .distill-notices queue, drained by the @captured decorator onto the next
+    memory tool result. Runs every sweep so it re-nudges until the proposals are
+    handled. Never raises — surfacing must not break the sweep.
+    """
+    try:
+        artifact = store / "reflex" / "promotion-proposal.json"
+        if not artifact.exists():
+            return
+        from compchem_memory.reflex_common import pending_indices
+        data = json.loads(artifact.read_text())
+        n = len(pending_indices(data))
+        if not n:
+            return
+        from compchem_memory import distill_log
+        # Plain-language wording: a non-expert user (and the agent relaying to
+        # them) must understand it without knowing the term "promotion".
+        distill_log.push_distill_notice(
+            project_dir,
+            quote=(
+                "Explain this to the user in plain words and ask if they want to "
+                "review — nothing is applied without their approval. Run "
+                "memory_review_promotions to show the list."
+            ),
+            summary=(
+                f"Rule elevation ready: {n} repeated lesson(s) qualify to become "
+                "durable skill rule(s) (seen across enough sessions to trust)."
+            ),
+        )
+    except Exception as e:  # noqa: BLE001 - surfacing must never break the sweep
+        print(f"[promotion] surface skipped: {e}")
