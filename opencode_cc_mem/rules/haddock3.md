@@ -58,6 +58,25 @@ haddock3-score complex.pdb                 # Quick score
 haddock3-pp protein.pdb > clean.pdb       # Preprocess PDB
 ```
 
+## Memory Allocation (Slurm)
+
+**HADDOCK3 launches up to `ncores` concurrent CNS workers**, each ~2 GB peak
+RSS during refinement (`flexref`, `emref`, `mdref` with water). A 32-core job
+needs **at least 64 GB total** (`--mem=64G` or `--mem-per-cpu=2G`).
+
+| ncores | Minimum `--mem` |
+|--------|----------------|
+| 16     | 32 GB          |
+| 32     | 64 GB          |
+| 40     | 80 GB          |
+
+- Rigid-body only (no refinement modules): 1 GB/core suffices.
+- Full protocol with `mdref` + `solvent = "water"`: use 2 GB/core minimum.
+- Larger receptors (>500 residues) may need more — Hsc70 full-length (~650 res) confirmed at 2 GB/core.
+- **Never inherit the `submit_job` default** for HADDOCK3 — pass `memory=` explicitly. The default `4GB` is a per-node total, not per-core; it caused 4 OOM-killed runs in June 2026. (The `submit_job` dispatcher now auto-bumps HADDOCK3 to the 2 GB/core floor as a safety net, but explicit is still correct.)
+
+**Failure mode with insufficient memory:** job runs for seconds to hours, then Slurm reports `OUT_OF_MEMORY` (exit `0:125`) with `oom_kill` events. CNS workers don't log anything — the kernel kills the cgroup before HADDOCK3 notices.
+
 ## Module Categories
 
 - **Topology**: topoaa (always first)
