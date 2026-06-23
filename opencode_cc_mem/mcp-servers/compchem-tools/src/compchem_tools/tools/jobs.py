@@ -2,18 +2,26 @@
 
 import json
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from compchem_memory.tiers.project import ProjectManager
+from compchem_tools.tools._resources import apply_tool_memory_floor
 
 _PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
 
 
 def _generate_run_id(tool: str) -> str:
-    """Generate a unique run_id: <tool>_<YYYYMMDD_HHMMSS> in UTC."""
-    return f"{tool}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    """Generate a unique run_id: <tool>_<YYYYMMDD_HHMMSS>_<6hex> in UTC.
+
+    The 6-hex suffix disambiguates parallel submissions that land in the same
+    second. Without it, concurrent submit_job calls produce identical run_ids.
+    """
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    suffix = uuid.uuid4().hex[:6]
+    return f"{tool}_{ts}_{suffix}"
 
 
 def submit_job(
@@ -36,6 +44,10 @@ def submit_job(
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details."""
     scheduler = scheduler.lower()
+
+    # Enforce per-tool minimum memory (e.g., HADDOCK3 needs >=2GB/core).
+    # Bumps `memory` in-place if below floor; no-op for tools without a floor.
+    memory = apply_tool_memory_floor(tool, ncores, memory)
 
     if scheduler == "ssh-slurm":
         from compchem_tools.tools import ssh_slurm
