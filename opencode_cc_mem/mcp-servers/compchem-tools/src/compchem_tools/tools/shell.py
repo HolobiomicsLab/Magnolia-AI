@@ -27,6 +27,35 @@ def _truncate(s: str | bytes | None) -> str:
     return s[-_OUTPUT_TAIL:]
 
 
+def _build_local_redirect(cmd: str, cwd: str | None, timeout: int) -> dict[str, Any]:
+    """Fields to merge into a timeout result that redirect a long foreground
+    command to submit_job(scheduler="local").
+
+    Pure apart from the os.getcwd() fallback when cwd is None. `timeout` is
+    passed in (not read from the module constant) so the message and tests stay
+    in lockstep under monkeypatch.
+    """
+    working_dir = cwd or os.getcwd()
+    return {
+        "error": (
+            f"command exceeded the {timeout}s foreground limit. Long runs — "
+            "including batches of many small jobs, e.g. a docking loop — must "
+            'run in the background via submit_job(scheduler="local"). Do NOT '
+            "re-run this via run_shell; it will time out again. Relaunch using "
+            "the suggested_action below; set ncores/memory appropriate to the "
+            "workload."
+        ),
+        "suggested_action": {
+            "tool": "submit_job",
+            "args": {
+                "command": cmd,
+                "working_dir": working_dir,
+                "scheduler": "local",
+            },
+        },
+    }
+
+
 def run_shell(
     cmd: str,
     cwd: str | None = None,
