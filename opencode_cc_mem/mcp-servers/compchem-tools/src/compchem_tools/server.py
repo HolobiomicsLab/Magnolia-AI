@@ -549,6 +549,7 @@ def submit_job(
     # restart/resume an existing run in its remote dir (ssh-slurm only)
     restart_of: str | None = None,
     remote_precommand: str | None = None,
+    acknowledge: bool = False,
 ) -> str:
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details.
@@ -560,11 +561,13 @@ def submit_job(
     gromacs -cpi): pass restart_of=<prior run_id> and the resume command; it
     reuses that run's remote dir (preserving partial output) and run record
     instead of starting fresh. Use remote_precommand to clean an incomplete
-    step first (e.g. "rm -rf output/04_flexref")."""
+    step first (e.g. "rm -rf output/04_flexref").
+    acknowledge: set True to proceed past a recall-gate hold after reviewing the
+    surfaced pitfalls (resubmit with any parameter changes you decided on)."""
     result = _submit_job(
         command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition,
         project_dir=project_dir, cluster=cluster, account=account, qos=qos, tool=tool,
-        restart_of=restart_of, remote_precommand=remote_precommand,
+        restart_of=restart_of, remote_precommand=remote_precommand, acknowledge=acknowledge,
     )
     return json.dumps(result, indent=2)
 
