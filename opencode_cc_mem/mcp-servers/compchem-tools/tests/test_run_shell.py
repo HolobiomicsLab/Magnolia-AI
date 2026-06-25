@@ -99,3 +99,28 @@ def test_stdout_truncated_to_4kb(monkeypatch):
     out = run_shell("anything")
     assert len(out["stdout"]) == 4096
     assert out["stdout"] == big[-4096:]  # tail kept
+
+
+from compchem_tools.tools.shell import _build_local_redirect
+
+
+def test_build_local_redirect_shape_and_content():
+    out = _build_local_redirect("python analyze.py", "/runs/dock1", 600)
+    # actionable error mentions the limit and the right tool, and warns off re-running
+    assert "600s" in out["error"]
+    assert "submit_job" in out["error"]
+    assert "run_shell" in out["error"]  # the "do NOT re-run via run_shell" warning
+    # structured, ready-to-issue call
+    sa = out["suggested_action"]
+    assert sa["tool"] == "submit_job"
+    assert sa["args"]["command"] == "python analyze.py"
+    assert sa["args"]["working_dir"] == "/runs/dock1"
+    assert sa["args"]["scheduler"] == "local"
+    # ncores/memory deliberately omitted — agent sets them per workload
+    assert "ncores" not in sa["args"]
+
+
+def test_build_local_redirect_cwd_none_falls_back_to_getcwd(monkeypatch):
+    monkeypatch.setattr("compchem_tools.tools.shell.os.getcwd", lambda: "/here")
+    out = _build_local_redirect("ls", None, 600)
+    assert out["suggested_action"]["args"]["working_dir"] == "/here"
