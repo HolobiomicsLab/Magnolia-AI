@@ -9,6 +9,7 @@ from typing import Any
 
 from compchem_memory.tiers.project import ProjectManager
 from compchem_tools.tools._resources import apply_tool_memory_floor
+from compchem_tools.tools.recall_gate import recall_gate
 
 _PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
 
@@ -40,6 +41,7 @@ def submit_job(
     tool: str | None = None,
     restart_of: str | None = None,
     remote_precommand: str | None = None,
+    acknowledge: bool = False,
 ) -> dict[str, Any]:
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details."""
@@ -48,6 +50,12 @@ def submit_job(
     # Enforce per-tool minimum memory (e.g., HADDOCK3 needs >=2GB/core).
     # Bumps `memory` in-place if below floor; no-op for tools without a floor.
     memory = apply_tool_memory_floor(tool, ncores, memory)
+
+    # Pre-launch recall gate: hold once if memory has tool-scoped pitfalls,
+    # unless the caller has acknowledged. Fail-open (recall_gate never raises).
+    held = recall_gate(tool, command, project_dir, acknowledge)
+    if held is not None:
+        return held
 
     if scheduler == "ssh-slurm":
         from compchem_tools.tools import ssh_slurm
