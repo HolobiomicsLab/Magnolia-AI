@@ -313,15 +313,20 @@ class ProjectManager:
                     "summary": meta.get("description", "") or meta.get("title", ""),
                     "source": meta.get("source", "") or f.name,
                     "path": str(f),
-                    "date": meta.get("date", ""),
+                    "_sort_date": meta.get("date", ""),  # internal sort key, stripped before return
                 })
             return out
 
         promoted = _scan(self._entries_dir(project_dir), False)
         staging = _scan(self._staging_dir(project_dir), True)
-        promoted.sort(key=lambda e: e.get("date", ""), reverse=True)
-        staging.sort(key=lambda e: e.get("date", ""), reverse=True)
-        return (promoted + staging)[:limit]
+        # Sort by date defensively: convert None to empty string to avoid TypeError
+        promoted.sort(key=lambda e: str(e.get("_sort_date") or ""), reverse=True)
+        staging.sort(key=lambda e: str(e.get("_sort_date") or ""), reverse=True)
+        # Strip internal _sort_date key before returning
+        result = promoted + staging
+        for entry in result:
+            entry.pop("_sort_date", None)
+        return result[:limit]
 
     def promote_to_skill(
         self, project_dir: str, entry_name: str, skills_dir: str
