@@ -98,13 +98,16 @@ def run_shell(
             timeout=_DEFAULT_TIMEOUT,
         )
     except subprocess.TimeoutExpired as e:
-        return {
+        result = {
             "exit_code": -1,
             "stdout": _truncate(e.stdout),
             "stderr": _truncate(e.stderr),
             "error_kind": "timeout",
-            "error": f"command timed out after {_DEFAULT_TIMEOUT}s",
         }
+        # Turn the dead-end timeout into an actionable redirect: long runs
+        # belong in the background via submit_job(scheduler="local").
+        result.update(_build_local_redirect(cmd, cwd, _DEFAULT_TIMEOUT))
+        return result
     except OSError as e:
         return {
             "exit_code": -1,
