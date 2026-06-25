@@ -273,6 +273,56 @@ class ProjectManager:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [e for _, e in scored]
 
+    _WARNING_TYPES = ("failure_pattern", "error_resolution")
+
+    def select_warnings_for_tool(
+        self, project_dir: str, tool: str, limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Keyword-free, tool-indexed recall of warning entries for a tool.
+
+        Returns failure_pattern / error_resolution entries whose frontmatter
+        `tools` includes `tool` (case-insensitive), from promoted entries AND
+        staging. Staging hits are flagged provisional=True. Ordered
+        promoted-before-staging, then by `date` descending. Capped at `limit`.
+        """
+        if not tool:
+            return []
+        tl = tool.lower()
+
+        def _scan(directory, provisional):
+            out = []
+            if not directory.exists():
+                return out
+            for f in sorted(directory.glob("*.md")):
+                if f.name == "INDEX.md":
+                    continue
+                try:
+                    meta = self._parse_frontmatter(
+                        f.read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    continue
+                if meta.get("type") not in self._WARNING_TYPES:
+                    continue
+                entry_tools = [str(t).lower() for t in meta.get("tools", [])]
+                if tl not in entry_tools:
+                    continue
+                out.append({
+                    "title": meta.get("title", f.stem),
+                    "type": meta.get("type"),
+                    "provisional": provisional,
+                    "summary": meta.get("description", "") or meta.get("title", ""),
+                    "source": meta.get("source", "") or f.name,
+                    "path": str(f),
+                    "date": meta.get("date", ""),
+                })
+            return out
+
+        promoted = _scan(self._entries_dir(project_dir), False)
+        staging = _scan(self._staging_dir(project_dir), True)
+        promoted.sort(key=lambda e: e.get("date", ""), reverse=True)
+        staging.sort(key=lambda e: e.get("date", ""), reverse=True)
+        return (promoted + staging)[:limit]
+
     def promote_to_skill(
         self, project_dir: str, entry_name: str, skills_dir: str
     ) -> str:
