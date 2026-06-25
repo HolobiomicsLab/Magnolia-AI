@@ -7,7 +7,7 @@ timeout. These tests pin the no-raise contract.
 """
 import subprocess
 from compchem_tools.tools import shell as shell_mod
-from compchem_tools.tools.shell import run_shell
+from compchem_tools.tools.shell import run_shell, _build_local_redirect
 
 
 def test_happy_path_returns_success_dict(monkeypatch, tmp_path):
@@ -49,6 +49,30 @@ def test_timeout_with_bytes_partial_output_decodes(monkeypatch):
     assert out["error_kind"] == "timeout"
     assert "good" in out["stdout"]  # decoded with errors='replace'
     assert out["stderr"] == ""
+
+
+def test_timeout_returns_submit_job_redirect(monkeypatch):
+    """On timeout, run_shell must redirect to submit_job(scheduler=local)
+    while preserving the timeout schema and never raising."""
+    def fake_run(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=600, output="partial", stderr="")
+    monkeypatch.setattr(shell_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(shell_mod.shutil, "which", lambda _: "/fake/magnolia-run")
+    monkeypatch.setattr(shell_mod.os.path, "isfile", lambda _: True)
+
+    out = run_shell("python big_analysis.py", cwd="/runs/x")
+
+    # schema preserved
+    assert out["exit_code"] == -1
+    assert out["error_kind"] == "timeout"
+    assert out["stdout"] == "partial"
+    assert "600s" in out["error"]  # keeps existing consumers happy
+    # new redirect
+    sa = out["suggested_action"]
+    assert sa["tool"] == "submit_job"
+    assert sa["args"]["command"] == "python big_analysis.py"
+    assert sa["args"]["working_dir"] == "/runs/x"
+    assert sa["args"]["scheduler"] == "local"
 
 
 def test_magnolia_run_missing_returns_dict_does_not_raise(monkeypatch):
@@ -99,9 +123,6 @@ def test_stdout_truncated_to_4kb(monkeypatch):
     out = run_shell("anything")
     assert len(out["stdout"]) == 4096
     assert out["stdout"] == big[-4096:]  # tail kept
-
-
-from compchem_tools.tools.shell import _build_local_redirect
 
 
 def test_build_local_redirect_shape_and_content():
