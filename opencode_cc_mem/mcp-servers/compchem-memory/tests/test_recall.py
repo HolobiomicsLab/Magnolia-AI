@@ -82,3 +82,43 @@ def test_module_wrapper_returns_plain_list(project_dir, monkeypatch):
     out = recall.warnings_for_tool("haddock3", str(project_dir))
     assert isinstance(out, list) and len(out) == 1
     assert recall.warnings_for_tool("") == []
+
+
+def test_returned_keys_exactly_six_no_date(project_dir):
+    """Regression: returned dicts must NOT contain 'date' key.
+    Contract is exactly: title, type, provisional, summary, source, path.
+    """
+    mgr = _mgr(project_dir)
+    pd = str(project_dir)
+    mgr.create_entry(pd, "test warn", "test content",
+                     entry_type="failure_pattern", tools=["haddock3"])
+    hits = mgr.select_warnings_for_tool(pd, "haddock3")
+    assert len(hits) == 1
+    hit = hits[0]
+    expected_keys = {"title", "type", "provisional", "summary", "source", "path"}
+    assert set(hit.keys()) == expected_keys, f"got keys {set(hit.keys())}, expected {expected_keys}"
+
+
+def test_null_date_does_not_raise_and_entry_returned(project_dir):
+    """Regression: null/None frontmatter date should not raise TypeError.
+    Entry with null date should still be returned and sorted correctly.
+    """
+    mgr = _mgr(project_dir)
+    pd = str(project_dir)
+    # Create an entry
+    path = mgr.create_entry(pd, "null date entry", "content",
+                            entry_type="failure_pattern", tools=["gromacs"])
+    # Overwrite the date: line to be empty in frontmatter
+    entry_text = Path(path).read_text()
+    lines = entry_text.split("\n")
+    # Find and empty the date: line
+    for i, line in enumerate(lines):
+        if line.startswith("date:"):
+            lines[i] = "date:"
+            break
+    Path(path).write_text("\n".join(lines))
+
+    # This should not raise TypeError about comparing None with str
+    hits = mgr.select_warnings_for_tool(pd, "gromacs")
+    assert len(hits) == 1
+    assert hits[0]["title"] == "null date entry"
