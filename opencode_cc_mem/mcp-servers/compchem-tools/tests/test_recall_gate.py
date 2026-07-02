@@ -63,6 +63,7 @@ def test_no_warnings_no_similar_proceeds(monkeypatch):
 
 
 def test_acknowledge_skips_similar(monkeypatch):
+    monkeypatch.setattr(rg_mod, "_warnings_for_tool", lambda *a, **k: [_hit()])
     monkeypatch.setattr(rg_mod, "_similar_runs", lambda *a, **k: [_sim()])
     assert recall_gate("haddock3", "cmd", "/proj", True, system_tags=["peptide"]) is None
 
