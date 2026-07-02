@@ -24,3 +24,15 @@ def warnings_for_tool(
     ensure_project_store(pd)
     mgr = ProjectManager(GLOBAL_BASE)
     return mgr.select_warnings_for_tool(pd, tool, limit=limit)
+
+
+def similar_runs(
+    tool: str, system_tags: list[str], project_dir: str | None = None, limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Resolve store + manager, delegate to ProjectManager.similar_runs.
+    Returns [] on falsy tool/tags."""
+    if not tool or not system_tags:
+        return []
+    pd = resolve_project_dir(project_dir, os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
+    ensure_project_store(pd)
+    return ProjectManager(GLOBAL_BASE).similar_runs(pd, tool, system_tags, limit=limit)
