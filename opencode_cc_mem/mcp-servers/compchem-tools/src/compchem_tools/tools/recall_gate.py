@@ -58,6 +58,6 @@ def recall_gate(
             "similar_runs": similar,
             "instruction": _INSTRUCTION.format(tool=tool),
         }
-    except Exception as e:  # fail-open
+    except Exception as e:  # fail-open: a memory glitch must never block a submission
         log.warning("recall_gate failed open: %s", e)
         return None
