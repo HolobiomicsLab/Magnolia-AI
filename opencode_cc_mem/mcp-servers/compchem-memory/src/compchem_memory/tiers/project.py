@@ -664,7 +664,12 @@ class ProjectManager:
         for f in sorted(runs_dir.glob("*.yaml")):
             if f.name == "INDEX.yaml":
                 continue
-            record = yaml.safe_load(f.read_text())
+            try:
+                record = yaml.safe_load(f.read_text())
+            except (yaml.YAMLError, OSError):
+                continue
+            if not isinstance(record, dict):
+                continue
             record["path"] = str(f)
             results.append(record)
         return results
