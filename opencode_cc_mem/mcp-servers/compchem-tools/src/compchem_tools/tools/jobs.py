@@ -42,6 +42,7 @@ def submit_job(
     restart_of: str | None = None,
     remote_precommand: str | None = None,
     acknowledge: bool = False,
+    system_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details."""
@@ -53,7 +54,7 @@ def submit_job(
 
     # Pre-launch recall gate: hold once if memory has tool-scoped pitfalls,
     # unless the caller has acknowledged. Fail-open (recall_gate never raises).
-    held = recall_gate(tool, command, project_dir, acknowledge)
+    held = recall_gate(tool, command, project_dir, acknowledge, system_tags)
     if held is not None:
         return held
 
@@ -74,6 +75,7 @@ def submit_job(
             tool=tool,
             restart_of=restart_of,
             remote_precommand=remote_precommand,
+            system_tags=system_tags,
         )
 
     wdir = Path(working_dir)
