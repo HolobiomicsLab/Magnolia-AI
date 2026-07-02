@@ -1,78 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.egg
-dist/
-build/
-
-# Test / cache
-.pytest_cache/
-.pytest_cache
-
-# IDE
-.vscode/
-.idea/
-
-# Environment
+# venv + transient/rendered/config
 .venv/
-venv/
-.env
-
-# Logs / generated tool artifacts (e.g. AmberTools teLeap leap.log)
-*.log
-
-# Magnolia runtime data
-.magnolia/
-
-# Reference files
-old_files/
-
-# OpenCode CC mem — local project workspaces
-opencode_cc_mem/projects/
-
-# Software environments and caches (heavy, local-only)
-#opencode_cc_mem/softwares/*/.venv/
-#opencode_cc_mem/softwares/*/env/
-#opencode_cc_mem/softwares/*/cache/
-#opencode_cc_mem/softwares/*/lib/
-#opencode_cc_mem/softwares/*/*.tar.gz
-#opencode_cc_mem/softwares/*/*.zip
-#opencode_cc_mem/softwares/*/*.sif
-opencode_cc_mem/softwares/*
-!opencode_cc_mem/softwares/bin/
-opencode_cc_mem/softwares/bin/*
-!opencode_cc_mem/softwares/bin/magnolia-*
-!opencode_cc_mem/softwares/bin/magnolia
-!opencode_cc_mem/softwares/bin/hpc_tunnel.sh
-!opencode_cc_mem/softwares/bin/tests/
-!opencode_cc_mem/softwares/bin/tests/*.sh
-
-# Track only Magnolia infrastructure scripts under softwares
-#!opencode_cc_mem/softwares/bin/
-#opencode_cc_mem/softwares/bin/*
-#!opencode_cc_mem/softwares/bin/magnolia-*
-
-# Codegraph index (local dev tooling)
-.codegraph/
-
-# Magnolia memory pipeline state (runtime, local)
-extraction-state.yaml
-**/extraction-state.yaml
-
-# v1
-opencode_3_tier_mem/
-
-# design docs
-docs/cybernetics_assessment.md
-docs/superpowers/*
-todo.md
-*.md
-!AGENTS.md
-!README.md
-!docs/azzurra-setup.md
-!opencode_cc_mem/rules/*.md
-opencode_cc_mem/rules/hpc_azzurra.md
-.worktrees/
-
 opencode_cc_mem/opencode.json
+# user research data (scaffolded per launch; never the 111G originals)
+opencode_cc_mem/projects/
+# heavy re-installable local tool binaries/weights
+opencode_cc_mem/softwares/boltzgen/cache/
+opencode_cc_mem/softwares/namd/
+opencode_cc_mem/softwares/p2rank_2.5.1/
+# caches / logs
+__pycache__/
+*.pyc
+*.log
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/

@@ -1,0 +1,50 @@
+# Project Magnolia - Shared Software Manifest
+# Registry of computational chemistry tools available to the agent
+
+boltzgen:
+  type: uv_venv
+  version: "0.3.1"
+  wrapper: softwares/bin/boltzgen
+  venv_path: softwares/boltzgen/.venv
+  actual_venv_path: /home/tjiang/.local/share/magnolia/softwares/boltzgen/.venv
+  cache_path: softwares/boltzgen/cache
+  gpu_required: true
+  python_version: "3.12"
+  install_command: "uv pip install boltzgen"
+  version_check: "boltzgen --version"
+  description: "Generative binder design using BoltzGen"
+  protocols:
+    - protein-anything
+    - peptide-anything
+    - protein-small_molecule
+    - antibody-anything
+    - nanobody-anything
+    - protein-redesign
+
+haddock3:
+  type: conda_env_wrapper
+  wrapper: softwares/bin/haddock3
+  conda_env: haddock3-py311
+  description: "Molecular docking and scoring"
+  commands:
+    - haddock3
+    - haddock3-restraints
+    - haddock3-pp
+  install_command: "conda install -c conda-forge -c bioconda haddock3"
+
+magnolia-memory:
+  type: python_package
+  wrapper: softwares/bin/magnolia-run
+  install_command: "pip install -e mcp-servers/compchem-memory"
+  commands:
+    - magnolia-memory log-bash
+    - magnolia-memory log-event
+    - magnolia-memory sync-queue
+    - magnolia-memory compact-session
+  description: "Project-local memory logging (bash + HPC event queue)"
+
+magnolia-selfreflex:
+  type: script
+  wrapper: softwares/bin/magnolia-selfreflex
+  description: "Automatic memory self-reflex (吾日三省吾身) — compacts sessions, distills learnings, syncs HPC queues"
+  schedule: "daily cron recommended"

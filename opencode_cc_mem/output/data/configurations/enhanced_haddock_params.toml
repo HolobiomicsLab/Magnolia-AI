@@ -1,0 +1,53 @@
+cns_exec = ""
+ncores = 16
+max_cpus = true
+mode = "local"
+batch_type = "slurm"
+queue = ""
+queue_limit = 100
+concat = 1
+self_contained = false
+clean = false
+offline = false
+debug = false
+preprocess = false
+postprocess = true
+gen_archive = false
+run_dir = "output"
+molecules = [ "complex.pdb",]
+
+["topoaa.1"]
+molecules = [ "complex.pdb",]
+autohis = true
+delenph = true
+log_level = "quiet"
+iniseed = 917
+ligand_param_fname = ""
+ligand_top_fname = ""
+limit = true
+set_bfactor = true
+tolerance = 0
+cyclicpept_dist = 2.0
+disulphide_dist = 2.2
+
+["alascan.1"]
+resdic_B = [ 2, 3, 4, 5, 6, 7, 8, 9, 10,]
+chains = [ "A", "B",]
+scan_residue = "ALA"
+int_cutoff = 5.0
+resdic_ = []
+output_bfactor = false
+plot = false
+output_mutants = false
+ligand_param_fname = ""
+ligand_top_fname = ""
+
+["topoaa.1".mol1]
+cyclicpept = false
+nhisd = 0
+hisd_1 = nan
+nhise = 0
+hise_1 = nan
+charged_nter = false
+charged_cter = false
+5_phosphate = false

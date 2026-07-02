@@ -1,0 +1,3 @@
+#!/bin/bash
+export LD_LIBRARY_PATH="/home/tjiang/anaconda3/envs/haddock3-agent/lib/python3.11/site-packages/nvidia/cudnn/lib:/home/tjiang/anaconda3/lib/python3.12/site-packages/nvidia/cublas/lib:/home/tjiang/anaconda3/lib/python3.12/site-packages/nvidia/cusparse/lib:/home/tjiang/anaconda3/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/home/tjiang/anaconda3/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib:/home/tjiang/anaconda3/lib/python3.12/site-packages/nvidia/nvjitlink/lib:${LD_LIBRARY_PATH}"
+exec /home/tjiang/software/gnina "$@"

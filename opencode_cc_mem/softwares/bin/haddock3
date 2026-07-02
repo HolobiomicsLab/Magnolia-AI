@@ -1,0 +1,4 @@
+#!/bin/bash
+# HADDOCK3 wrapper — uses the existing conda environment
+export PATH="/home/tjiang/anaconda3/envs/haddock3-py311/bin:$PATH"
+exec haddock3 "$@"
