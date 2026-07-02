@@ -550,6 +550,7 @@ def submit_job(
     restart_of: str | None = None,
     remote_precommand: str | None = None,
     acknowledge: bool = False,
+    system_tags: list[str] | None = None,
 ) -> str:
     """Submit a job to Slurm, PBS, ssh-slurm, or run locally.
     Returns job ID and submission details.
@@ -563,11 +564,14 @@ def submit_job(
     instead of starting fresh. Use remote_precommand to clean an incomplete
     step first (e.g. "rm -rf output/04_flexref").
     acknowledge: set True to proceed past a recall-gate hold after reviewing the
-    surfaced pitfalls (resubmit with any parameter changes you decided on)."""
+    surfaced pitfalls (resubmit with any parameter changes you decided on).
+    system_tags: short descriptors of the system (e.g. ["peptide","6mer","hsc70"])
+      used to recall the most similar past run before launch."""
     result = _submit_job(
         command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition,
         project_dir=project_dir, cluster=cluster, account=account, qos=qos, tool=tool,
         restart_of=restart_of, remote_precommand=remote_precommand, acknowledge=acknowledge,
+        system_tags=system_tags,
     )
     return json.dumps(result, indent=2)
 
