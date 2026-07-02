@@ -82,3 +82,33 @@ def test_module_wrapper_similar_runs(project_dir, monkeypatch):
     out = recall.similar_runs("haddock3", ["peptide", "6mer"], str(project_dir))
     assert len(out) == 1 and out[0]["run_dir"] == "/runs/a"
     assert recall.similar_runs("haddock3", []) == []
+
+
+def test_similar_runs_skips_corrupt_run_file(project_dir):
+    """Corrupt YAML should be skipped, not raise. similar_runs should still return valid runs."""
+    mgr = ProjectManager(project_dir)
+    pd = str(project_dir)
+    # Seed a valid run
+    _seed(mgr, pd, "valid", "haddock3", "pass", ["peptide", "6mer"], "/runs/valid", "2026-06-01")
+    # Write a corrupt YAML file
+    runs_dir = mgr._runs_dir(pd)
+    corrupt_path = runs_dir / "20260601_corrupt.yaml"
+    corrupt_path.write_text(":\n  bad: [unclosed")
+    # similar_runs should not raise and should return the valid run
+    hits = mgr.similar_runs(pd, "haddock3", ["peptide", "6mer"])
+    assert len(hits) == 1
+    assert hits[0]["run_id"] == "valid"
+
+
+def test_similar_runs_date_desc_tiebreak(project_dir):
+    """When multiple runs have equal tag overlap, sort by date descending (most recent first)."""
+    mgr = ProjectManager(project_dir)
+    pd = str(project_dir)
+    # Create 3 runs with same tool, same tag overlap, but different dates
+    _seed(mgr, pd, "a", "haddock3", "pass", ["peptide", "6mer"], "/runs/a", "2026-06-01")
+    _seed(mgr, pd, "b", "haddock3", "pass", ["peptide", "6mer"], "/runs/b", "2026-06-03")
+    _seed(mgr, pd, "c", "haddock3", "pass", ["peptide", "6mer"], "/runs/c", "2026-06-02")
+    # similar_runs should return them ordered by date descending
+    hits = mgr.similar_runs(pd, "haddock3", ["peptide", "6mer"], limit=3)
+    assert len(hits) == 3
+    assert [h["run_id"] for h in hits] == ["b", "c", "a"]  # dates: 06-03, 06-02, 06-01
