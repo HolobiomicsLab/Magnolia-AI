@@ -206,6 +206,7 @@ def submit(
     tool: str | None = None,
     restart_of: str | None = None,
     remote_precommand: str | None = None,
+    system_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Submit a job to the cluster via SSH-driven Slurm.
 
@@ -306,6 +307,7 @@ def submit(
             status=None,
             lifecycle="submitting",
             remote=remote_fields,
+            system_tags=system_tags,
         )
 
     push = _rsync_push(local_run_dir, cluster, remote_run_dir)

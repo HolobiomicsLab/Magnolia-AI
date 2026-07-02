@@ -5,7 +5,7 @@ from compchem_tools.tools.jobs import submit_job
 def _force_hold(monkeypatch):
     monkeypatch.setattr(
         jobs_mod, "recall_gate",
-        lambda tool, command, project_dir, acknowledge:
+        lambda tool, command, project_dir, acknowledge, system_tags=None:
             None if acknowledge else {"success": False, "held": True,
                                        "reason": "recall_gate", "tool": tool,
                                        "pitfalls": [{"title": "x"}],
@@ -75,3 +75,19 @@ def test_acknowledged_ssh_slurm_submit_launches(monkeypatch, tmp_path):
                      tool="haddock3", acknowledge=True)
     assert called["ssh_slurm_submit"] is True
     assert out.get("success") is True
+
+
+def test_system_tags_forwarded_and_held(monkeypatch, tmp_path):
+    seen = {}
+    def fake_gate(tool, command, project_dir, acknowledge, system_tags=None):
+        seen["tags"] = system_tags
+        return {"held": True, "success": False} if not acknowledge else None
+    monkeypatch.setattr(jobs_mod, "recall_gate", fake_gate)
+    called = {"local": False}
+    monkeypatch.setattr(jobs_mod, "_submit_local",
+                        lambda *a, **k: called.__setitem__("local", True) or {"success": True})
+    out = submit_job("cmd", str(tmp_path), scheduler="local", tool="haddock3",
+                     system_tags=["peptide", "6mer"])
+    assert out["held"] is True
+    assert called["local"] is False
+    assert seen["tags"] == ["peptide", "6mer"]  # forwarded into the gate
