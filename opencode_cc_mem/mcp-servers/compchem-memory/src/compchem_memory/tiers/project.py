@@ -484,6 +484,7 @@ class ProjectManager:
         *,
         lifecycle: str | None = None,
         remote: dict[str, Any] | None = None,
+        system_tags: list[str] | None = None,
     ) -> str:
         runs_dir = self._runs_dir(project_dir)
         record: dict[str, Any] = {
@@ -491,6 +492,7 @@ class ProjectManager:
             "tool": tool,
             "status": status,
             "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "system_tags": system_tags or [],
             "metrics": metrics or {},
             "quality_flags": quality_flags or [],
             "errors_solved": errors_solved or [],
