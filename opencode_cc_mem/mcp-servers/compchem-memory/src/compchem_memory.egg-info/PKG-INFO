@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: compchem-memory
+Version: 0.1.0
+Summary: Three-tier memory MCP server for computational chemistry
+Requires-Python: >=3.11
+Requires-Dist: fastmcp>=2.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: anthropic>=0.40.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21; extra == "dev"

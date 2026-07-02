@@ -1,0 +1,9 @@
+#!/bin/bash
+# BoltzGen wrapper - activates isolated venv and sets cache dir
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+source "$SCRIPT_DIR/../.venv/bin/activate"
+export HF_HOME="$SCRIPT_DIR/../cache"
+# Fix PyPI CUDA library loading for nvrtc
+VENV_LIB="$SCRIPT_DIR/../.venv/lib/python3.12/site-packages/nvidia"
+export LD_LIBRARY_PATH="$VENV_LIB/cu13/lib:$VENV_LIB/cuda_nvrtc/lib:$VENV_LIB/cudnn/lib:$LD_LIBRARY_PATH"
+exec boltzgen "$@"
