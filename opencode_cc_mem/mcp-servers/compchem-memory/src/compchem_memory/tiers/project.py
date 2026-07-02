@@ -669,6 +669,41 @@ class ProjectManager:
             results.append(record)
         return results
 
+    _SUCCESS_STATUS = ("pass", "success", "warning")
+
+    def similar_runs(
+        self, project_dir: str, tool: str, system_tags: list[str], limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Past successful runs of `tool` ranked by system-tag overlap. Index
+        model: returns run-dir pointers, not config copies. Empty on falsy
+        tool/tags or no overlap."""
+        if not tool or not system_tags:
+            return []
+        want = {str(t).lower() for t in system_tags}
+        tl = tool.lower()
+        scored: list[tuple[int, str, dict[str, Any]]] = []
+        for rec in self.get_run_history(project_dir):
+            if str(rec.get("tool", "")).lower() != tl:
+                continue
+            if rec.get("status") not in self._SUCCESS_STATUS:
+                continue
+            rec_tags = {str(t).lower() for t in (rec.get("system_tags") or [])}
+            overlap = len(want & rec_tags)
+            if overlap == 0:
+                continue
+            run_dir = (rec.get("remote") or {}).get("local_run_dir", "") or ""
+            date = str(rec.get("date", "") or "")
+            scored.append((overlap, date, {
+                "run_id": rec.get("run_id"),
+                "run_dir": run_dir,
+                "system_tags": sorted(rec_tags),
+                "date": date,
+                "status": rec.get("status"),
+                "score": overlap,
+            }))
+        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        return [d for _, _, d in scored[:limit]]
+
     @staticmethod
     def _split_frontmatter(text: str) -> tuple[str, str] | None:
         """Return (frontmatter_yaml, body) or None if there is no frontmatter.
