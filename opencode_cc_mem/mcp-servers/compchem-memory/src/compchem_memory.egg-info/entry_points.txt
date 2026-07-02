@@ -1,0 +1,2 @@
+[console_scripts]
+magnolia-memory = compchem_memory.cli:main
