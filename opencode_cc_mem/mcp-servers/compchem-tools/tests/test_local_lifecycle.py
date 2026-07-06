@@ -48,3 +48,29 @@ def test_submit_local_relative_wdir_still_writes_sentinel(tmp_path, monkeypatch)
     # exit_sentinel path must be absolute (so poller can read it from any cwd)
     assert Path(res["exit_sentinel"]).is_absolute(), \
         f"exit_sentinel must be absolute, got: {res['exit_sentinel']}"
+
+
+import yaml
+from compchem_tools.tools.jobs import submit_job
+
+
+def test_local_submit_records_remote_block_and_tags(tmp_path, monkeypatch):
+    # isolate the run store to tmp
+    import compchem_tools.tools.jobs as jobs_mod
+    from compchem_memory.tiers.project import ProjectManager
+    monkeypatch.setattr(jobs_mod, "_PROJECT_MANAGER", ProjectManager(tmp_path))
+    proj = tmp_path / "proj"; proj.mkdir()
+
+    out = submit_job("sh -c 'exit 0'", str(proj), scheduler="local",
+                     tool="haddock3", project_dir=str(proj),
+                     system_tags=["peptide", "6mer"], acknowledge=True)
+    assert out["success"] is True
+    runs = list((ProjectManager(tmp_path)._runs_dir(str(proj))).glob("*.yaml"))
+    runs = [r for r in runs if r.name != "INDEX.yaml"]
+    rec = yaml.safe_load(runs[0].read_text())
+    assert rec["remote"]["scheduler"] == "local"
+    assert rec["remote"]["local_run_dir"] == str(proj)
+    assert rec["remote"]["job_id"].startswith("local_")
+    assert rec["remote"]["exit_sentinel"].endswith("local_exit_code")
+    assert rec["system_tags"] == ["peptide", "6mer"]
+    assert rec["lifecycle"] == "running"

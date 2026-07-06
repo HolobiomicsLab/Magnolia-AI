@@ -101,6 +101,14 @@ def submit_job(
     if result.get("success") and project_dir:
         run_id = _generate_run_id(tool or "job")
         lifecycle = "running" if scheduler == "local" else "submitted"
+        remote_block = None
+        if scheduler == "local":
+            remote_block = {
+                "scheduler": "local",
+                "job_id": result.get("job_id"),
+                "local_run_dir": result.get("local_run_dir", str(wdir)),
+                "exit_sentinel": result.get("exit_sentinel"),
+            }
         try:
             _PROJECT_MANAGER.record_run(
                 project_dir=str(project_dir),
@@ -108,6 +116,8 @@ def submit_job(
                 tool=tool or "raw",
                 status=None,
                 lifecycle=lifecycle,
+                remote=remote_block,
+                system_tags=system_tags,
             )
             result["run_id"] = run_id
         except Exception:
