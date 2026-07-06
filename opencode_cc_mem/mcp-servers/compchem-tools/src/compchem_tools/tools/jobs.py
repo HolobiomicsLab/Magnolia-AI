@@ -1,6 +1,7 @@
 """Job management tools: submit, check, and cancel jobs on Slurm, PBS, or local."""
 
 import json
+import shlex
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -552,21 +553,31 @@ def _submit_local(
     job_name: str,
     ncores: int,
 ) -> dict[str, Any]:
-    """Run command locally in background."""
+    """Run command locally in background; write its exit code to a sentinel so
+    the poller can determine terminal state + success without the Popen object."""
     import os
     import uuid
 
     try:
         log_out = wdir / f"{job_name}.out"
         log_err = wdir / f"{job_name}.err"
+        magnolia_dir = wdir / ".magnolia"
+        magnolia_dir.mkdir(parents=True, exist_ok=True)
+        sentinel = magnolia_dir / "local_exit_code"
+
+        # Run the command, capture its exit code, write it to the sentinel.
+        # `rc=$?` is captured immediately after the command so a compound
+        # command's own last-statement status is what gets recorded.
+        wrapped = f"{command}\nrc=$?\necho $rc > {shlex.quote(str(sentinel))}"
 
         with open(log_out, "w") as out_f, open(log_err, "w") as err_f:
             proc = subprocess.Popen(
-                command,
+                wrapped,
                 shell=True,
                 cwd=str(wdir),
                 stdout=out_f,
                 stderr=err_f,
+                start_new_session=True,  # detach from the MCP server's group
                 env={**os.environ, "OMP_NUM_THREADS": str(ncores)},
             )
 
@@ -577,6 +588,8 @@ def _submit_local(
             "pid": proc.pid,
             "scheduler": "local",
             "working_dir": str(wdir),
+            "local_run_dir": str(wdir),
+            "exit_sentinel": str(sentinel),
             "stdout_log": str(log_out),
             "stderr_log": str(log_err),
         }
