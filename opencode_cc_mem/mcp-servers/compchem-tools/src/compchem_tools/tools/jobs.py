@@ -243,10 +243,19 @@ def _status_from_record(record: dict[str, Any], rdir: Path) -> dict[str, Any]:
         result["results_local"] = True
     elif lifecycle == "completed":
         result["completed"] = True
-        result["note"] = (
-            "Job completed on the cluster but results are not fetched locally "
-            "yet; call fetch_job_results to pull them."
-        )
+        if remote.get("scheduler") == "local":
+            # A local run's results are already on disk — there is no fetch
+            # step (unlike ssh-slurm), so treat this like "fetched".
+            local = _status_from_local_files(rdir)
+            result["modules"] = local.get("modules", [])
+            if "log_last_line" in local:
+                result["log_last_line"] = local["log_last_line"]
+            result["results_local"] = True
+        else:
+            result["note"] = (
+                "Job completed on the cluster but results are not fetched "
+                "locally yet; call fetch_job_results to pull them."
+            )
     elif lifecycle == "cancelled":
         result["cancelled"] = True
         result["note"] = "Job was cancelled on the cluster."
