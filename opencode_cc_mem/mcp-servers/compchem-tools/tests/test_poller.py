@@ -373,3 +373,35 @@ def test_dispatch_success_passes_run_id_explicitly(tmp_path, monkeypatch):
                               project_dir=str(tmp_path / "proj"), project_mgr=mgr)
     # The explicit run_id must be the magnolia-generated one, not basename(local_run_dir)
     assert captured_run_ids == ["xtb_20260530_003349"]
+
+
+def _local_rec(sentinel=None, job_id="local_999999_ab"):
+    return {"run_id": "L1", "tool": "haddock3", "lifecycle": "running",
+            "remote": {"scheduler": "local", "job_id": job_id,
+                       "local_run_dir": "/some/dir", "exit_sentinel": sentinel}}
+
+
+def test_check_local_terminal_sentinel_zero(tmp_path):
+    s = tmp_path / "local_exit_code"; s.write_text("0\n")
+    out = poller._check_local_terminal(_local_rec(str(s)))
+    assert out == {"success": True, "terminal": True, "state": "COMPLETED", "exit_code": 0}
+
+
+def test_check_local_terminal_sentinel_nonzero(tmp_path):
+    s = tmp_path / "local_exit_code"; s.write_text("5\n")
+    out = poller._check_local_terminal(_local_rec(str(s)))
+    assert out["terminal"] is True and out["state"] == "FAILED" and out["exit_code"] == 5
+
+
+def test_check_local_terminal_no_sentinel_pid_alive(tmp_path, monkeypatch):
+    monkeypatch.setattr(poller.os, "kill", lambda pid, sig: None)  # alive
+    out = poller._check_local_terminal(_local_rec(str(tmp_path / "nope")))
+    assert out == {"success": True, "terminal": False}
+
+
+def test_check_local_terminal_no_sentinel_pid_dead(tmp_path, monkeypatch):
+    def _dead(pid, sig):
+        raise ProcessLookupError()
+    monkeypatch.setattr(poller.os, "kill", _dead)
+    out = poller._check_local_terminal(_local_rec(str(tmp_path / "nope")))
+    assert out["terminal"] is True and out["state"] == "CRASHED"

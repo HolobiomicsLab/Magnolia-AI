@@ -294,6 +294,35 @@ def run_poll_timer_background(project_dir: str) -> None:
     t.start()
 
 
+def _check_local_terminal(record: dict[str, Any]) -> dict[str, Any]:
+    """Terminal check for a local run. Authoritative signal is the exit-code
+    sentinel; PID liveness is only a secondary 'still running' hint. Never
+    raises — returns {success: False, ...} on unexpected error so the poller
+    counts it and moves on."""
+    remote = record.get("remote") or {}
+    sentinel = remote.get("exit_sentinel")
+    try:
+        if sentinel and Path(sentinel).exists():
+            raw = Path(sentinel).read_text().strip()
+            try:
+                n = int(raw)
+            except ValueError:
+                return {"success": True, "terminal": False}  # partial write; retry
+            return {"success": True, "terminal": True,
+                    "state": "COMPLETED" if n == 0 else "FAILED", "exit_code": n}
+        # No sentinel yet: is the process still alive?
+        pid = int(str(remote.get("job_id", "")).split("_")[1])
+        try:
+            os.kill(pid, 0)
+            return {"success": True, "terminal": False}
+        except PermissionError:
+            return {"success": True, "terminal": False}
+        except ProcessLookupError:
+            return {"success": True, "terminal": True, "state": "CRASHED", "exit_code": 1}
+    except Exception as e:  # never raise into the sweep
+        return {"success": False, "error": str(e)}
+
+
 def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
     """Return ssh-slurm runs in lifecycle ∈ {submitted, running} with a job_id.
 
