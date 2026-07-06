@@ -147,9 +147,11 @@ def dispatch_terminal(
     remote = run_record.get("remote") or {}
     job_id = remote.get("job_id")
     local_run_dir = Path(remote.get("local_run_dir", ""))
+    is_local = remote.get("scheduler") == "local"
 
     if category == "success":
-        ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+        if not is_local:
+            ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
         assess_and_record(
             run_dir=str(local_run_dir),
             tool=tool,
@@ -158,8 +160,12 @@ def dispatch_terminal(
             project_mgr=project_mgr,
             run_id=run_id,
         )
+        if is_local:
+            project_mgr.update_run(
+                project_dir, run_id, {"lifecycle": "completed"})
     elif category == "science_failure":
-        ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+        if not is_local:
+            ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
         capture_failure(
             project_dir=project_dir, run_id=run_id, tool=tool,
             local_run_dir=local_run_dir,
@@ -199,9 +205,12 @@ def poll_jobs(project_dir: str) -> dict[str, Any]:
             job_id = remote.get("job_id")
             cluster = remote.get("cluster", "azzurra")
             try:
-                check_result = ssh_slurm.check(
-                    job_id=job_id, cluster=cluster, project_dir=project_dir,
-                )
+                if remote.get("scheduler") == "local":
+                    check_result = _check_local_terminal(rec)
+                else:
+                    check_result = ssh_slurm.check(
+                        job_id=job_id, cluster=cluster, project_dir=project_dir,
+                    )
             except Exception as e:
                 log.warning("poll_jobs: check failed for %s (job %s): %s",
                             run_id, job_id, e)
@@ -346,7 +355,7 @@ def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
             log.warning("poller: skip non-dict %s", f.name)
             continue
         remote = data.get("remote") or {}
-        if remote.get("scheduler") != "ssh-slurm":
+        if remote.get("scheduler") not in ("ssh-slurm", "local"):
             continue
         if data.get("lifecycle") not in ("submitted", "running"):
             continue
