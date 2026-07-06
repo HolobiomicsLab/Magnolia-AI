@@ -165,6 +165,35 @@ def test_failed_remote_run_reports_failed(tmp_path):
     assert res["failed"] is True
 
 
+def test_local_completed_run_reports_results_local_no_fetch_note(tmp_path):
+    """A tracked LOCAL run (remote.scheduler == 'local') that has reached
+    lifecycle == 'completed' has its results on disk already — unlike a
+    remote/ssh-slurm run in the same lifecycle state, which still needs an
+    explicit fetch_job_results pull. The completed branch must not treat a
+    local run as an unfetched remote job."""
+    project_dir, run_dir, pm = _make_project(tmp_path, "2026-06-03_LOC_s5000")
+    _finished_output(run_dir)
+    _write_record(
+        project_dir,
+        "20260603_haddock3_loc.yaml",
+        {
+            "run_id": "haddock3_loc",
+            "lifecycle": "completed",
+            "remote": {
+                "scheduler": "local",
+                "local_run_dir": str(run_dir),
+                "job_id": "local_12345_ab",
+                "exit_sentinel": str(run_dir / ".magnolia" / "local_exit_code"),
+            },
+        },
+    )
+    res = jobs.check_run_status(str(run_dir))
+    assert res["source"] == "run_record"
+    assert res["completed"] is True
+    assert res["results_local"] is True
+    assert "note" not in res or "fetch" not in res.get("note", "").lower()
+
+
 def test_local_only_run_falls_back_to_local_files(tmp_path):
     """No matching remote record -> inspect local files (old behavior)."""
     project_dir, run_dir, pm = _make_project(tmp_path, "2026-06-03_LOCAL")

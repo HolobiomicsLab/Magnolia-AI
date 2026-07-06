@@ -152,6 +152,12 @@ def dispatch_terminal(
     if category == "success":
         if not is_local:
             ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
+        if is_local:
+            # Set the terminal lifecycle BEFORE assessing: if assess_and_record
+            # raises, the run is still marked completed and _scan_active_runs
+            # will not keep re-picking it up (which would re-assess forever).
+            project_mgr.update_run(
+                project_dir, run_id, {"lifecycle": "completed"})
         assess_and_record(
             run_dir=str(local_run_dir),
             tool=tool,
@@ -160,9 +166,6 @@ def dispatch_terminal(
             project_mgr=project_mgr,
             run_id=run_id,
         )
-        if is_local:
-            project_mgr.update_run(
-                project_dir, run_id, {"lifecycle": "completed"})
     elif category == "science_failure":
         if not is_local:
             ssh_slurm.fetch(job_id=job_id, project_dir=project_dir)
@@ -333,7 +336,8 @@ def _check_local_terminal(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _scan_active_runs(project_dir: str) -> list[dict[str, Any]]:
-    """Return ssh-slurm runs in lifecycle ∈ {submitted, running} with a job_id.
+    """Return ssh-slurm and local runs in lifecycle ∈ {submitted, running} with
+    a job_id.
 
     Defensive: a corrupt or non-dict YAML is skipped-and-logged. A run with
     no job_id (e.g. a 'submitting' breadcrumb) is also skipped — only
