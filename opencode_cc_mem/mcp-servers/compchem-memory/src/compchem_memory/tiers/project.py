@@ -626,11 +626,13 @@ class ProjectManager:
         ``local_run_dir`` (path-resolved), or None.
 
         This is the only reliable run_dir -> record mapping: a run dir's
-        basename does not embed the run_id, but ssh-slurm records pin their
-        local dir in ``remote.local_run_dir``. Used by ``check_run_status`` to
-        read the authoritative lifecycle/slurm state instead of guessing from
-        local output files. Purely-local runs have no ``remote`` block and so
-        never match (callers fall back to local-file inspection)."""
+        basename does not embed the run_id, but ssh-slurm AND local records
+        alike pin their local dir in ``remote.local_run_dir``. Used by
+        ``check_run_status`` to read the authoritative lifecycle/slurm state
+        instead of guessing from local output files. Only runs with no
+        ``remote`` block at all (e.g. legacy records predating this field)
+        fail to match here; those callers fall back to local-file
+        inspection."""
         runs_dir = self._project_store(project_dir) / "runs"
         if not runs_dir.is_dir():
             return None

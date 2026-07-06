@@ -5,6 +5,7 @@ import yaml
 import pytest
 
 from compchem_tools.tools import poller
+from compchem_memory.tiers.project import ProjectManager
 
 
 def _write_run(runs_dir: Path, run_id: str, *, lifecycle: str | None,
@@ -474,3 +475,57 @@ def test_dispatch_local_failure_capture_no_fetch(tmp_path, monkeypatch):
                                          "terminal": True},
                                    project_dir=str(tmp_path), project_mgr=_FakeMgr())
     assert cat == "science_failure" and calls.get("cap") is True
+
+
+def test_poll_jobs_local_e2e_completes_and_does_not_reloop(tmp_path, monkeypatch):
+    """Drives the whole local chain through poll_jobs() with no stubbed
+    dispatch_terminal: scan -> local terminal check (sentinel) -> dispatch ->
+    terminal-lifecycle write. Pins two guarantees end-to-end:
+      1. a completed local run's on-disk YAML ends up lifecycle == "completed"
+         (proving the chain wires together and check_run_status will trust it,
+         per FIX 1), and
+      2. a second poll_jobs() sweep does NOT re-invoke assess_and_record,
+         because the now-completed run is excluded by _scan_active_runs — the
+         no-re-loop guarantee FIX 2 protects, verified end-to-end rather than
+         only at the dispatch_terminal unit level."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    run_dir = tmp_path / "rundir"
+    run_dir.mkdir()
+    sentinel = run_dir / "local_exit_code"
+    sentinel.write_text("0")
+
+    pm = ProjectManager(global_base=tmp_path / ".global")
+    run_id = "haddock3_e2e_1"
+    pm.record_run(
+        project_dir=str(project_dir),
+        run_id=run_id,
+        tool="haddock3",
+        status=None,
+        lifecycle="running",
+        remote={
+            "scheduler": "local",
+            "job_id": "local_999999_x",
+            "local_run_dir": str(run_dir),
+            "exit_sentinel": str(sentinel),
+        },
+    )
+
+    monkeypatch.setattr(poller, "_PROJECT_MANAGER", pm)
+    assess_calls: list[dict] = []
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **kw: assess_calls.append(kw))
+
+    summary = poller.poll_jobs(str(project_dir))
+    assert summary["polled"] == 1
+    assert summary["transitioned"] == 1
+    assert len(assess_calls) == 1
+
+    rec = pm.get_run(str(project_dir), run_id)
+    assert rec["lifecycle"] == "completed"
+
+    # Second sweep: the run is now terminal, so _scan_active_runs must
+    # exclude it — no re-check, no re-dispatch, no re-assess.
+    summary2 = poller.poll_jobs(str(project_dir))
+    assert summary2["polled"] == 0
+    assert len(assess_calls) == 1
