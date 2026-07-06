@@ -405,3 +405,72 @@ def test_check_local_terminal_no_sentinel_pid_dead(tmp_path, monkeypatch):
     monkeypatch.setattr(poller.os, "kill", _dead)
     out = poller._check_local_terminal(_local_rec(str(tmp_path / "nope")))
     assert out["terminal"] is True and out["state"] == "CRASHED"
+
+
+def test_check_local_terminal_garbled_sentinel(tmp_path):
+    # Partial-write race: sentinel file exists but content isn't a full int
+    # yet. Must be treated as "not terminal yet" (retry), not a crash.
+    s = tmp_path / "local_exit_code"; s.write_text("notanumber")
+    out = poller._check_local_terminal(_local_rec(str(s)))
+    assert out == {"success": True, "terminal": False}
+
+
+def _fail_if_called(*a, **k):
+    raise AssertionError("ssh_slurm.fetch must NOT be called for a local run")
+
+
+class _FakeMgr:
+    """Records update_run patches so tests can assert the terminal lifecycle."""
+    def __init__(self):
+        self.patches = []
+    def update_run(self, project_dir, run_id, patch):
+        self.patches.append(patch)
+
+
+def test_scan_active_includes_local_running(tmp_path):
+    pd = tmp_path; runs = pd / ".magnolia" / "runs"; runs.mkdir(parents=True)
+    _write_run(runs, "r_ssh", lifecycle="running", scheduler="ssh-slurm", job_id="100")
+    _write_run(runs, "r_loc", lifecycle="running", scheduler="local", job_id="local_1_ab")
+    ids = {r["run_id"] for r in poller._scan_active_runs(str(pd))}
+    assert {"r_ssh", "r_loc"} <= ids
+
+
+def test_scan_active_excludes_terminal_local(tmp_path):
+    # A completed local run (lifecycle not in {submitted,running}) must NOT be
+    # re-scanned — otherwise the poller re-assesses it every tick.
+    pd = tmp_path; runs = pd / ".magnolia" / "runs"; runs.mkdir(parents=True)
+    _write_run(runs, "r_done", lifecycle="completed", scheduler="local", job_id="local_1_ab")
+    assert [r for r in poller._scan_active_runs(str(pd)) if r["run_id"] == "r_done"] == []
+
+
+def test_dispatch_local_success_assess_sets_lifecycle_no_fetch(tmp_path, monkeypatch):
+    ssh = type("S", (), {"fetch": staticmethod(lambda **k: _fail_if_called())})()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    calls = {}
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **k: calls.update(assessed=True))
+    mgr = _FakeMgr()
+    rec = {"run_id": "L1", "tool": "haddock3",
+           "remote": {"scheduler": "local", "job_id": "local_1_ab",
+                      "local_run_dir": str(tmp_path)}}
+    cat = poller.dispatch_terminal(rec, {"state": "COMPLETED", "exit_code": 0,
+                                         "terminal": True},
+                                   project_dir=str(tmp_path), project_mgr=mgr)
+    assert cat == "success"
+    assert calls.get("assessed") is True
+    # a terminal lifecycle was written so the run stops being re-scanned
+    assert any(p.get("lifecycle") == "completed" for p in mgr.patches)
+
+
+def test_dispatch_local_failure_capture_no_fetch(tmp_path, monkeypatch):
+    ssh = type("S", (), {"fetch": staticmethod(lambda **k: _fail_if_called())})()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    calls = {}
+    monkeypatch.setattr(poller, "capture_failure", lambda **k: calls.update(cap=True))
+    rec = {"run_id": "L1", "tool": "haddock3",
+           "remote": {"scheduler": "local", "job_id": "local_1_ab",
+                      "local_run_dir": str(tmp_path)}}
+    cat = poller.dispatch_terminal(rec, {"state": "FAILED", "exit_code": 5,
+                                         "terminal": True},
+                                   project_dir=str(tmp_path), project_mgr=_FakeMgr())
+    assert cat == "science_failure" and calls.get("cap") is True
