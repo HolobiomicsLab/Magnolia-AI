@@ -559,6 +559,12 @@ def _submit_local(
     import uuid
 
     try:
+        # Resolve wdir to absolute path so derived paths (sentinel, logs, cwd) and
+        # returned exit_sentinel are all absolute and consistent. If wdir is relative,
+        # the child shell would re-resolve the sentinel path against its own cwd,
+        # producing a double-nested path that was never created.
+        wdir = Path(wdir).resolve()
+
         log_out = wdir / f"{job_name}.out"
         log_err = wdir / f"{job_name}.err"
         magnolia_dir = wdir / ".magnolia"
