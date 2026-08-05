@@ -18,7 +18,8 @@ from typing import Callable, Optional
 from compchem_memory.atomic_io import atomic_write_text
 
 HANDOVER_STATE_FILE = ".handover-state.md"
-HANDOVER_CURSOR_FILE = ".handover-cursor.json"
+HANDOVER_CURSOR_FILE = ".handover-cursor.json"       # legacy single-cursor file (migrated away)
+HANDOVER_CURSORS_DIR = ".handover-cursors"           # per-session cursors: <sid>.json
 TOMBSTONE_HEADING = "## Won't-do / Archived"
 
 HANDOVER_MERGE_PROMPT = """You maintain a ROLLING HANDOVER for a computational-chemistry
@@ -87,18 +88,39 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _read_cursor(store: Path) -> dict | None:
+def _read_session_cursor(store: Path, sid: str) -> str | None:
+    """Per-session cursor: the last-merged message id for this session, or None
+    if this session has never been merged into the handover."""
+    p = Path(store) / HANDOVER_CURSORS_DIR / f"{sid}.json"
     try:
-        return json.loads((Path(store) / HANDOVER_CURSOR_FILE).read_text())
+        return json.loads(p.read_text()).get("cursor")
     except (OSError, json.JSONDecodeError):
         return None
 
 
-def _write_cursor(store: Path, sid: str, cursor: str | None) -> None:
+def _write_session_cursor(store: Path, sid: str, cursor: str | None) -> None:
+    d = Path(store) / HANDOVER_CURSORS_DIR
+    d.mkdir(parents=True, exist_ok=True)
     atomic_write_text(
-        Path(store) / HANDOVER_CURSOR_FILE,
-        json.dumps({"sid": sid, "cursor": cursor, "updated": _now_iso()}) + "\n",
+        d / f"{sid}.json",
+        json.dumps({"cursor": cursor, "updated": _now_iso()}) + "\n",
     )
+
+
+def _migrate_legacy_cursor(store: Path) -> None:
+    """One-time: fold the old single `.handover-cursor.json` into the per-session
+    model, then remove it. Idempotent — a no-op once the old file is gone."""
+    old = Path(store) / HANDOVER_CURSOR_FILE
+    if not old.exists():
+        return
+    try:
+        data = json.loads(old.read_text())
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    sid = data.get("sid")
+    if sid:
+        _write_session_cursor(store, sid, data.get("cursor"))
+    old.unlink()
 
 
 def generate_handover(
@@ -107,18 +129,25 @@ def generate_handover(
     exporter: Optional[Callable[[str], Optional[dict]]] = None,
     llm: Optional[Callable[..., Optional[str]]] = None,
 ) -> str | None:
-    """Merge the project's latest-session transcript into the rolling handover.
+    """Merge every not-yet-merged session's transcript into the rolling handover,
+    in mapping order, with per-session cursors.
+
+    Replaces the single-`_latest_sid` design, which could skip a just-completed
+    session when the current (near-empty) session was already appended to the
+    mapping at boot. Iterating all mapped sessions past their own cursor
+    guarantees no completed session is ever bypassed, regardless of capture-plugin
+    registration timing.
 
     Reuses the distillation transcript pipeline (export -> reconstruct -> scrub)
-    and the project's per-project session mapping. Returns the state-file path on
-    a write, or None on any no-op/failure (no mapping, export failed, nothing new,
-    empty transcript, LLM unavailable/failed). Does not raise on any logic path;
-    the only residual raise is a hard filesystem failure in the final atomic
-    write, which the boot worker contains by wrapping each step in try/except.
+    and the project's per-project session mapping. Returns the state-file path if
+    any session was merged, else None (no mapping, no sessions, nothing new
+    anywhere, LLM unavailable). Does not raise on any logic path; the only
+    residual raise is a hard filesystem failure in an atomic write, which the boot
+    worker contains by wrapping each step in try/except.
     """
     from compchem_memory.opencode_ingest import (
         export_session, reconstruct_transcript, scrub_secrets,
-        _latest_sid, _messages_after_cursor, _last_message_id,
+        _read_mapping_ids, _messages_after_cursor, _last_message_id,
     )
     from compchem_memory.llm import call_llm
 
@@ -129,41 +158,47 @@ def generate_handover(
     mapping = store / "opencode-sessions.jsonl"
     if not mapping.exists():
         return None
-    sid = _latest_sid(mapping)
-    if not sid:
+
+    _migrate_legacy_cursor(store)
+
+    sids = _read_mapping_ids(mapping)
+    if not sids:
         return None
 
-    cur = _read_cursor(store)
-    cursor = cur.get("cursor") if (cur and cur.get("sid") == sid) else None
-
-    export = exporter(sid)
-    if not export:
-        return None
-    new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
-    if not new_msgs:
-        return None
-    transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
-    if not transcript.strip():
-        return None
-
-    base = ""
     state_path = store / HANDOVER_STATE_FILE
+    base = ""
     if state_path.exists():
         try:
             base = state_path.read_text()
         except OSError:
             base = ""
 
-    user_content = (
-        "=== CURRENT HANDOVER (base to update) ===\n"
-        + (base.strip() or "(none yet — create the first handover)")
-        + "\n\n=== NEW SESSION TRANSCRIPT (since last handover) ===\n"
-        + transcript
-    )
-    merged = llm(HANDOVER_MERGE_PROMPT, user_content, max_tokens=3000)
-    if not merged or not merged.strip():
-        return None
+    wrote = False
+    for sid in sids:
+        cursor = _read_session_cursor(store, sid)
+        export = exporter(sid)
+        if not export:
+            continue                     # export failed — retry this session next boot
+        new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
+        if not new_msgs:
+            continue
+        transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
+        if not transcript.strip():
+            continue
 
-    atomic_write_text(state_path, merged.strip() + "\n")
-    _write_cursor(store, sid, _last_message_id(new_msgs) or cursor)
-    return str(state_path)
+        user_content = (
+            "=== CURRENT HANDOVER (base to update) ===\n"
+            + (base.strip() or "(none yet — create the first handover)")
+            + "\n\n=== NEW SESSION TRANSCRIPT (since last handover) ===\n"
+            + transcript
+        )
+        merged = llm(HANDOVER_MERGE_PROMPT, user_content, max_tokens=3000)
+        if not merged or not merged.strip():
+            break        # LLM failed — stop; state + cursors for prior sessions stay consistent
+
+        base = merged.strip()
+        atomic_write_text(state_path, base + "\n")
+        _write_session_cursor(store, sid, _last_message_id(new_msgs) or cursor)
+        wrote = True
+
+    return str(state_path) if wrote else None
