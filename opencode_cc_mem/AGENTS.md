@@ -39,6 +39,28 @@ Call `memory_record_learning` with `entry_type="success_pattern"` or
   mode, which protocol. Without this section, the entry will mislead future
   work that assumes the finding generalizes.
 
+## When you change a job parameter from its default or prior value
+
+Whenever you submit a run with a **non-default parameter, or one that differs
+from a prior comparable run** — sampling level, ncores, walltime, memory,
+restraint scheme, receptor/ligand choice — call
+`memory_record_learning(entry_type="parameter_guidance")` **at the time you
+choose the value**, not later. Required content:
+
+- **Value chosen**, and the value it replaces (the default, or the prior run's
+  value).
+- **Why:** which prior result or reasoning motivated the change.
+
+This is mandatory and is *not* covered by "after a significant scientific
+result." Parameter rationales are **cross-run inferences** (e.g. "s10000 gave
+n=4, so use s20000"), not error/success events — the auto-extractor cannot
+capture them, and a staging `parameter_guidance` is never surfaced by
+`memory_get_context`. If you don't write and promote it at decision time, a
+future session will see the parameter with no rationale and may revert it to the
+value that caused the original problem. (Promote critical parameter rationales
+to the project tier via `memory_confirm`, or fold them into a rule, so they
+surface.)
+
 ## After discovering an approach does NOT work
 
 Call `memory_record_learning` with `entry_type="failure_pattern"`. Negative
