@@ -85,8 +85,8 @@ def test_generate_first_run_writes_state_and_cursor(store):
     assert "docked KILDQ" in (store / hv.HANDOVER_STATE_FILE).read_text()
     assert "dock KILDQ" in captured["user"]          # transcript fed to LLM
     assert "(none yet" in captured["user"]            # empty base announced
-    cur = json.loads((store / hv.HANDOVER_CURSOR_FILE).read_text())
-    assert cur["sid"] == "ses_a" and cur["cursor"] == "m2"
+    cur = json.loads((store / hv.HANDOVER_CURSORS_DIR / "ses_a.json").read_text())
+    assert cur["cursor"] == "m2"
 
 
 def test_generate_no_new_messages_is_noop(store):
@@ -121,3 +121,118 @@ def test_generate_export_failure_is_noop(store):
 
 def test_generate_no_mapping_is_noop(store):
     assert hv.generate_handover(str(store.parent), exporter=lambda s: {}, llm=lambda *a, **k: "x") is None
+
+
+# ---- generate_handover: per-session cursor model (multi-session) -------------
+
+_NEW_SEP = "\n\n=== NEW SESSION TRANSCRIPT (since last handover) ===\n"
+_BASE_HDR = "=== CURRENT HANDOVER (base to update) ===\n"
+_CURSORS_DIR = ".handover-cursors"
+
+
+def _merge_echo(system, user, max_tokens=2000, **kw):
+    """Fake merge LLM: accumulate the new transcript onto the running base.
+    generate_handover feeds the growing base back in on each session, so the
+    final state accumulates every merged session's text."""
+    base_part, new_part = user.split(_NEW_SEP, 1)
+    base_part = base_part[len(_BASE_HDR):].strip()
+    if base_part.startswith("(none yet"):
+        base_part = ""
+    parts = [base_part] if base_part else []
+    parts.append(new_part.strip())
+    return "\n".join(parts)
+
+
+def _exporter(exports):
+    return lambda sid: exports.get(sid)
+
+
+def _session_cursor(store, sid):
+    return json.loads((store / _CURSORS_DIR / f"{sid}.json").read_text())["cursor"]
+
+
+def test_generate_multi_session_both_merged(store):
+    _write_mapping(store, ["ses_a", "ses_b"])
+    exports = {
+        "ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "dock KILDQ")]},
+        "ses_b": {"info": {"id": "ses_b"}, "messages": [_msg("b1", "user", "run MD on WNPFF")]},
+    }
+    path = hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=_merge_echo)
+    assert path is not None
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "dock KILDQ" in state and "run MD on WNPFF" in state
+    assert _session_cursor(store, "ses_a") == "a1"      # each cursor advanced
+    assert _session_cursor(store, "ses_b") == "b1"      # independently
+
+
+def test_generate_regression_just_completed_session_not_skipped(store):
+    """The July-8/13 bug: the current near-empty session is already appended to
+    the mapping at boot; old _latest_sid picks it and skips the just-completed
+    session. That session's content MUST still be merged."""
+    _write_mapping(store, ["ses_old", "ses_new"])
+    exports = {
+        "ses_old": {"info": {"id": "ses_old"},
+                    "messages": [_msg("o1", "user", "fixed fle_end_2 sacct parsing")]},
+        "ses_new": {"info": {"id": "ses_new"},
+                    "messages": [_msg("n1", "user", "boot")]},   # near-empty live session
+    }
+    path = hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=_merge_echo)
+    assert path is not None
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "fixed fle_end_2 sacct parsing" in state     # <-- old code skips this
+
+
+def test_generate_cursor_persists_across_boots(store):
+    _write_mapping(store, ["ses_a"])
+    exports = {"ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "dock KILDQ")]}}
+    hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=_merge_echo)
+
+    # second boot: ses_a unchanged, ses_b newly appended
+    _write_mapping(store, ["ses_a", "ses_b"])
+    exports["ses_b"] = {"info": {"id": "ses_b"}, "messages": [_msg("b1", "user", "run MD on WNPFF")]}
+    calls = []
+
+    def counting_llm(system, user, **kw):
+        calls.append(user)
+        return _merge_echo(system, user, **kw)
+
+    hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=counting_llm)
+
+    assert len(calls) == 1                                       # ses_a had nothing new
+    assert "run MD on WNPFF" in calls[0].split(_NEW_SEP, 1)[1]   # ses_b fed as new
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "dock KILDQ" in state and "run MD on WNPFF" in state  # base carried + new merged
+    assert _session_cursor(store, "ses_a") == "a1"               # both cursors tracked
+    assert _session_cursor(store, "ses_b") == "b1"               # independently, across boots
+
+
+def test_generate_migrates_legacy_cursor(store):
+    _write_mapping(store, ["ses_a"])
+    # legacy single global cursor from the pre-fix model
+    (store / hv.HANDOVER_CURSOR_FILE).write_text(json.dumps({"sid": "ses_a", "cursor": "a1"}))
+    # no messages past a1 → nothing to merge → migrated cursor value is preserved
+    exports = {"ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "old")]}}
+    hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=_merge_echo)
+
+    assert not (store / hv.HANDOVER_CURSOR_FILE).exists()        # legacy file removed
+    assert _session_cursor(store, "ses_a") == "a1"              # folded into per-session model
+
+
+def test_generate_llm_failure_midloop_keeps_prior_session(store):
+    _write_mapping(store, ["ses_a", "ses_b"])
+    exports = {
+        "ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "dock KILDQ")]},
+        "ses_b": {"info": {"id": "ses_b"}, "messages": [_msg("b1", "user", "run MD on WNPFF")]},
+    }
+
+    def flaky_llm(system, user, **kw):
+        if "run MD on WNPFF" in user:
+            return None                     # fail on ses_b
+        return _merge_echo(system, user, **kw)
+
+    hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=flaky_llm)
+
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "dock KILDQ" in state and "run MD on WNPFF" not in state
+    assert _session_cursor(store, "ses_a") == "a1"                     # ses_a advanced
+    assert not (store / _CURSORS_DIR / "ses_b.json").exists()          # ses_b NOT advanced
