@@ -1,5 +1,6 @@
 ---
 name: nature-skills
+source: authored_rule
 description: How to use the nature-skills repo (https://github.com/Yuan1z0825/nature-skills) for Magnolia communication tasks — manuscript drafting, prose polishing, figure generation, and paper-to-presentation conversion.
 version: 1.0
 last_verified: 2026-06-13

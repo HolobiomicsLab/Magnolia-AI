@@ -1,5 +1,6 @@
 ---
 name: perspicacite
+source: authored_rule
 description: How to use Perspicacité v2 for scientific literature search, paper retrieval, and knowledge-base-building RAG queries.
 version: 1.0
 last_verified: 2026-06-09
@@ -173,13 +174,27 @@ curl -s -X POST http://localhost:8000/api/chat \
 
 ## Currently available KBs
 
-These are built and ready — no need to recreate:
+**This static table goes stale — always verify live before relying on it:**
 
-| KB | Papers | Topic |
-|----|--------|-------|
-| `OBP5NGH_research` | 0 (DOI ingestion failed) | OBP3/5NGH literature — **needs rebuilding** |
-| `AI_scientist` | 15 | AI for science |
-| `Computational_metabolomics` | 11 | Metabolomics |
+```bash
+curl -s http://localhost:8000/api/kb                    # authoritative KB list + paper counts
+curl -s http://localhost:8000/api/kb/<name>/papers      # papers + whether full-text ingested
+```
+
+**Before any literature query, check `/api/kb` live AND `memory_search` for a project KB.** Do not conclude "no KB exists" from this table alone. (A June 2026 session did exactly that: it trusted this list, missed the `Hsc70_peptide_binding` KB built earlier, and wasted a query on an abstract-only live search.)
+
+Snapshot (verify live — counts and ingest status change over time):
+
+| KB | Papers | Topic | Ingest status |
+|----|--------|-------|---------------|
+| `Hsc70_peptide_binding` | 16 | Hsc70/Hsp70 peptide binding (4PO2, BiPPred, Sahu&M 2025, Torielli, DnaK lid) + 8 CMA-degrader papers | **abstract-only** — a prior memory entry claimed "5 full-text PDFs" but all 16 retrieve as `[abs]` (full-text ingest failed). Does NOT cover NBD, co-chaperones, or the allosteric cycle |
+| `AI_scientist` | 15 | AI for science | — |
+| `Computational_metabolomics` | 11 | Metabolomics | — |
+| `agent_memory` | ? | (verify live) | — |
+| `Agentic_system_for_scientific_research` | ? | (verify live) | — |
+| `OBP5NGH_research` | 0 (ingestion failed) | OBP3/5NGH | **needs rebuilding** |
+
+For topics the relevant KB excludes (e.g. the Hsp70 allosteric cycle / interdomain interface), run a live `agentic` database search — the KB and live search are **complementary**, not interchangeable.
 
 ## Server management
 

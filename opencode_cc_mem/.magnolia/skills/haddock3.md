@@ -1,6 +1,8 @@
 ---
 name: haddock3
+source: authored_rule
 description: Critical rules, common mistakes, module parameters, and troubleshooting for HADDOCK3 molecular docking.
+tags: [haddock3, docking, protein-peptide, protein-protein, restraints, caprieval, ambig]
 version: 1.2
 last_verified: 2026-06-18
 ---

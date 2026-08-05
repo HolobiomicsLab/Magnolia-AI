@@ -1,7 +1,9 @@
 ---
 name: boltzgen
+source: authored_rule
 version: 1.0
 description: Practical guide for running BoltzGen protein design workflows, managing runs, and handling interruptions.
+tags: [boltzgen, protein-design, generative, structure-generation]
 last_verified: 2026-04-16
 ---
 

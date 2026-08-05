@@ -1,5 +1,6 @@
 ---
 name: gromacs
+source: authored_rule
 description: GROMACS molecular dynamics setup, execution, and analysis rules.
 version: 1.0
 last_verified: 2026-04-01

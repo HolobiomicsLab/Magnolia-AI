@@ -1,5 +1,6 @@
 ---
 name: qm
+source: authored_rule
 description: Critical rules, common mistakes, input parameters, and troubleshooting for QM calculations with ORCA and Gaussian.
 version: 1.0
 last_verified: 2026-04-01

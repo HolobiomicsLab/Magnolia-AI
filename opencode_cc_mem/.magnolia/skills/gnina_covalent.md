@@ -1,5 +1,6 @@
 ---
 name: gnina_covalent
+source: authored_rule
 description: Gnina covalent docking workflow with alkyne warheads
 version: 1.0
 last_verified: 2026-03-31

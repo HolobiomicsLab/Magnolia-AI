@@ -1,6 +1,7 @@
 ---
 name: p2rank
-description: P2Rank pocket prediction: parameters, output formats, and best practices.
+source: authored_rule
+description: "P2Rank pocket prediction: parameters, output formats, and best practices."
 version: 1.0
 last_verified: 2026-04-01
 tags: [p2rank, pocket-prediction, binding-site]
