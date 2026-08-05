@@ -102,6 +102,37 @@ def _ensure_tunnel(tunnel_script: str = "hpc_tunnel.sh") -> None:
         )
 
 
+def _ensure_master(cluster: str) -> None:
+    """Verify an authenticated SSH ControlMaster is alive for the cluster.
+
+    2FA is enforced on Azzurra (verified 2026-07-08): publickey succeeds
+    with partial success, then keyboard-interactive (phone TOTP) is
+    required, so non-interactive ssh (the BatchMode=yes calls made by
+    _ssh and by rsync) can only succeed by piggybacking on a master a
+    human opened interactively. If no master is alive, raise RuntimeError
+    carrying the exact command the user must run.
+
+    `ssh -O check` talks only to the local control socket — no auth, no
+    2FA prompt, returns instantly (measured: exit 0 when alive, exit 255
+    in ~6 ms when no socket). Safe to call on every remote operation.
+    """
+    cfg = CLUSTER_CONFIG[cluster]
+    result = subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", "-O", "check", cfg["ssh_host"]],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"No live SSH ControlMaster for {cfg['ssh_host']} (2FA is "
+            f"enforced on Azzurra). Open one in your own terminal, then "
+            f"retry — it prompts for your phone 2FA code once and the "
+            f"master persists ~10h via ControlPersist:\n"
+            f"    ssh {cfg['ssh_host']} hostname"
+        )
+
+
 _SBATCH_JOBID_RE = re.compile(r"Submitted batch job (\d+)")
 
 
@@ -226,6 +257,10 @@ def submit(
         _ensure_tunnel(cfg["tunnel_script"])
     except RuntimeError as e:
         return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+    try:
+        _ensure_master(cluster)
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "master_down", "error": str(e)}
 
     local_run_dir = Path(working_dir)
     local_run_dir.mkdir(parents=True, exist_ok=True)
@@ -439,6 +474,10 @@ def check(
         _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
     except RuntimeError as e:
         return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+    try:
+        _ensure_master(cluster)
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "master_down", "error": str(e)}
 
     sa = _ssh(cluster, f"sacct -j {job_id} -X -P -n --format={_SACCT_FORMAT}")
     sacct = _parse_sacct(sa.stdout)
@@ -516,6 +555,10 @@ def cancel(
         _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
     except RuntimeError as e:
         return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+    try:
+        _ensure_master(cluster)
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "master_down", "error": str(e)}
     sc = _ssh(cluster, f"scancel {job_id}")
     if sc.returncode != 0:
         return {"success": False, "error_kind": "ssh_failed",
@@ -568,6 +611,10 @@ def fetch(
         _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
     except RuntimeError as e:
         return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
+    try:
+        _ensure_master(cluster)
+    except RuntimeError as e:
+        return {"success": False, "error_kind": "master_down", "error": str(e)}
 
     pull = _rsync_pull(cluster, remote_run_dir, local_run_dir)
     if pull.returncode != 0:
