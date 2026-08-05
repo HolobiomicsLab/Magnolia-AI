@@ -81,6 +81,32 @@ def test_ensure_tunnel_failure_raises(fake_subprocess):
         ssh_slurm._ensure_tunnel()
 
 
+def test_ensure_master_success(fake_subprocess):
+    fake_subprocess.canned["-O check"] = CompletedProcess(
+        args=[], returncode=0, stdout="", stderr="Master running (pid=31938)\n"
+    )
+    ssh_slurm._ensure_master("azzurra")  # should not raise
+    call = fake_subprocess.calls[0]
+    assert call[0] == "ssh"
+    assert "-O" in call and "check" in call
+    assert "BatchMode=yes" in call
+    assert "azzurra" in call
+
+
+def test_ensure_master_failure_raises_with_fix_command(fake_subprocess):
+    # Tunnel up but no live SSH master (2FA enforced on Azzurra).
+    fake_subprocess.canned["-O check"] = CompletedProcess(
+        args=[], returncode=255, stdout="",
+        stderr="Control socket connect(/...): No such file or directory\n",
+    )
+    with pytest.raises(RuntimeError) as ei:
+        ssh_slurm._ensure_master("azzurra")
+    msg = str(ei.value)
+    # The error must tell the user exactly what to run (light user action):
+    assert "ssh azzurra hostname" in msg
+    assert "2FA" in msg
+
+
 def test_write_sbatch_script_generates_expected_directives(tmp_path):
     local_run_dir = tmp_path / "myrun"
     local_run_dir.mkdir()
@@ -229,6 +255,30 @@ def test_submit_tunnel_failure_returns_tunnel_failed(fake_subprocess, tmp_path):
     )
     assert result["success"] is False
     assert result["error_kind"] == "tunnel_failed"
+
+
+def test_submit_master_down_returns_master_down(fake_subprocess, tmp_path):
+    project_dir, local_run_dir = _make_project(tmp_path)
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    # Tunnel up but no live SSH master (2FA enforced) -> -O check fails fast
+    # before any rsync/sbatch is attempted.
+    fake_subprocess.canned["-O check"] = CompletedProcess(
+        [], 255, "", "Control socket connect: No such file or directory\n"
+    )
+    result = ssh_slurm.submit(
+        command="echo hi",
+        working_dir=str(local_run_dir),
+        project_dir=str(project_dir),
+        cluster="azzurra",
+        tool=None,
+    )
+    assert result["success"] is False
+    assert result["error_kind"] == "master_down"
+    assert "ssh azzurra hostname" in result["error"]
+    # No rsync/sbatch should have been attempted once the master is down.
+    cmds = [" ".join(c) for c in fake_subprocess.calls]
+    assert not any("rsync" in c for c in cmds)
+    assert not any("sbatch" in c for c in cmds)
 
 
 def test_submit_unknown_cluster_returns_unknown_cluster(fake_subprocess, tmp_path):
