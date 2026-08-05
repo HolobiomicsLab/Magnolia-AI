@@ -29,6 +29,12 @@
         "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
         "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
       }
+    },
+    "perspicacite": {
+      "type": "remote",
+      "url": "http://localhost:8000/mcp",
+      "timeout": 660000,
+      "enabled": true
     }
   },
   "instructions": [
