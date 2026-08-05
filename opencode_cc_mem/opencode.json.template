@@ -4,6 +4,7 @@
   "logLevel": "INFO",
   "plugin": [
     ".opencode/plugins/magnolia-session-capture.ts",
+    ".opencode/plugins/magnolia-auto-retrieval.ts",
     ".opencode/plugins/claim-critic.ts"
   ],
   "mcp": {
