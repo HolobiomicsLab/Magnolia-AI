@@ -205,17 +205,20 @@ def consolidate_project_findings(
 
     artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    # Carry forward prior REJECTIONS by content key: rejection is non-destructive
-    # (the sources stay in staging), so a rejected cluster would otherwise
-    # re-cluster identically on the next sweep and re-surface forever. Positional
-    # index is meaningless across regeneration, so match on the cluster's source
-    # set. (Applied merges removed their sources, so they cannot recur — applied
-    # resets to [].)
+    # Carry forward prior REJECTIONS durably: rejection is non-destructive (the
+    # sources stay in staging), so a rejected cluster would otherwise re-cluster
+    # on a later sweep and re-surface forever. Rejected keys persist in the
+    # artifact's `rejected_keys` across regenerations (the legacy index-only
+    # scheme carried them just one sweep deep, so a rejected pair re-appeared
+    # every other batch). A new proposal is auto-rejected when it CONTAINS a
+    # previously rejected pair. (Applied merges removed their sources, so they
+    # cannot recur — applied resets to [].)
     prior_rejected_keys = _prior_rejected_keys(artifact)
     rejected = [i for i, p in enumerate(proposals)
-                if _cluster_key(p["sources"]) in prior_rejected_keys]
+                if _contains_rejected_pair(p["sources"], prior_rejected_keys)]
     artifact.write_text(json.dumps(
-        {"proposals": proposals, "applied": [], "rejected": rejected}, indent=2))
+        {"proposals": proposals, "applied": [], "rejected": rejected,
+         "rejected_keys": _serialize_keys(prior_rejected_keys)}, indent=2))
     return {"clusters": len(proposals), "artifact": str(artifact)}
 
 
@@ -225,16 +228,35 @@ def _cluster_key(sources: list[str]) -> tuple[str, ...]:
     return tuple(sorted(Path(s).name for s in sources))
 
 
+def _serialize_keys(keys: set[tuple[str, ...]]) -> list[list[str]]:
+    """JSON-serializable, deterministically ordered form of a key set."""
+    return sorted(list(k) for k in keys if len(k) >= 2)
+
+
+def _contains_rejected_pair(sources: list[str], rejected_keys: set[tuple[str, ...]]) -> bool:
+    """True if the proposed cluster CONTAINS any durably-rejected pair. Subset
+    semantics: 'these sources do not belong together' holds however the clusterer
+    re-groups them — including larger supersets that add a third member."""
+    key_set = set(_cluster_key(sources))
+    return any(set(k) <= key_set for k in rejected_keys if len(k) >= 2)
+
+
 def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
-    """Content keys of proposals rejected in the existing artifact (if any)."""
+    """Content keys of durably rejected clusters. Reads the artifact's
+    `rejected_keys` (persistent across regenerations); also folds in the legacy
+    index-based `rejected` list so artifacts written before `rejected_keys`
+    existed still contribute their rejections."""
     if not artifact.exists():
         return set()
     try:
         prior = json.loads(artifact.read_text())
     except (json.JSONDecodeError, OSError):
         return set()
-    old = prior.get("proposals", [])
     keys: set[tuple[str, ...]] = set()
+    for k in prior.get("rejected_keys", []):
+        if isinstance(k, list) and len(k) >= 2:
+            keys.add(tuple(sorted(k)))
+    old = prior.get("proposals", [])
     for idx in prior.get("rejected", []):
         if isinstance(idx, int) and 0 <= idx < len(old):
             keys.add(_cluster_key(old[idx].get("sources", [])))
@@ -259,16 +281,24 @@ def apply_proposals(
     proposals = data.get("proposals", [])
     already = set(data.get("applied", []))
     rejected_set = set(data.get("rejected", []))
+    rejected_keys: set[tuple[str, ...]] = set()
+    for k in data.get("rejected_keys", []):
+        if isinstance(k, list) and len(k) >= 2:
+            rejected_keys.add(tuple(sorted(k)))
 
     def _persist():
         data["applied"] = sorted(already)
         data["rejected"] = sorted(rejected_set)
+        data["rejected_keys"] = _serialize_keys(rejected_keys)
         artifact.write_text(json.dumps(data, indent=2))
 
     rejected_count = 0
     for i in reject or []:
         if isinstance(i, int) and 0 <= i < len(proposals) and i not in already and i not in rejected_set:
             rejected_set.add(i)
+            key = _cluster_key(proposals[i].get("sources", []))
+            if len(key) >= 2:
+                rejected_keys.add(key)
             rejected_count += 1
 
     merged_paths: list[str] = []

@@ -427,7 +427,7 @@ def memory_consolidate(
     tier: str = "project",
     project_dir: str | None = None,
     stale_days: int = 90,
-    max_entries: int = 50,
+    max_entries: int = 200,
 ) -> str:
     """Merge duplicates, expire stale entries, trim to budget within one tier.
     Can be called on-demand or scheduled.
