@@ -7,6 +7,18 @@ opencode_cc_mem/projects/
 opencode_cc_mem/softwares/boltzgen/cache/
 opencode_cc_mem/softwares/namd/
 opencode_cc_mem/softwares/p2rank_2.5.1/
+# Ad Verum: whitelist softwares/ — everything untracked (envs/, gnina/, gnina,
+# manifest state, installed tool wrappers) is machine-local; only the small
+# infra scripts under bin/ belong in git (mirrors outer ad_verum/.gitignore)
+opencode_cc_mem/softwares/*
+!opencode_cc_mem/softwares/bin/
+opencode_cc_mem/softwares/bin/*
+!opencode_cc_mem/softwares/bin/hpc_tunnel.sh
+!opencode_cc_mem/softwares/bin/magnolia
+!opencode_cc_mem/softwares/bin/magnolia-run
+!opencode_cc_mem/softwares/bin/magnolia-selfreflex
+!opencode_cc_mem/softwares/bin/tests/
+!opencode_cc_mem/softwares/bin/tests/**
 # caches / logs
 __pycache__/
 *.pyc
@@ -19,5 +31,5 @@ node_modules/
 # Ad Verum: machine-local runtime state, never commit
 .magnolia/
 **/.magnolia/
-opencode_cc_mem/mcp-servers/compchem-memory/extraction-state.yaml
-opencode_cc_mem/mcp-servers/compchem-memory/extraction-state.yaml
+extraction-state.yaml
+**/extraction-state.yaml
