@@ -304,5 +304,20 @@ if [ "$CRITIC" = "1" ]; then
     echo "claim-critic enabled (flag-only): verdicts → projects/$PROJECT/.magnolia/claim-critic/" >&2
 fi
 
+# Exempt Kimi from the HTTP proxy when one is set. With a Clash/FlClash proxy
+# (HTTPS_PROXY=127.0.0.1:7890), Kimi's auth/api traffic is forced through it
+# and fails two ways: the proxy is dead when the VPN is off (Connect Timeout on
+# the managed:kimi-code OAuth refresh), and even when on, Clash drops Kimi's
+# long-lived streaming socket. Kimi is a directly-reachable CN edge that does
+# NOT need the proxy; overseas hosts still do. Idempotent — mirrors
+# start-adverum.sh. Applies to opencode, its MCP servers, and the OAuth refresh.
+if [ -n "${HTTPS_PROXY:-}${https_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]; then
+  case "${NO_PROXY:-}${no_proxy:-}" in
+    *kimi.com*) ;;  # already exempt
+    *) export NO_PROXY="${NO_PROXY:+$NO_PROXY,}api.kimi.com,.kimi.com"
+       export no_proxy="${no_proxy:+$no_proxy,}api.kimi.com,.kimi.com" ;;
+  esac
+fi
+
 cd "$OPENCODE_DIR"
 exec opencode
