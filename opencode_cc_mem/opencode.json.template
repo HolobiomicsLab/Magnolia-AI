@@ -15,15 +15,10 @@
   ],
   "mcp": {
     "compchem-tools": {
-      "type": "local",
-      "command": ["@@PYTHON@@", "-m", "compchem_tools.server"],
+      "type": "remote",
+      "url": "http://127.0.0.1:8001/mcp",
       "timeout": 660000,
-      "enabled": true,
-      "environment": {
-        "MAGNOLIA_ROOT": "@@MAGNOLIA_ROOT@@",
-        "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
-        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
-      }
+      "enabled": true
     },
     "compchem-memory": {
       "type": "local",
