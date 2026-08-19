@@ -19,3 +19,4 @@ node_modules/
 # Ad Verum: machine-local runtime state, never commit
 .magnolia/
 **/.magnolia/
+opencode_cc_mem/mcp-servers/compchem-memory/extraction-state.yaml
