@@ -194,6 +194,48 @@ def test_reject_survives_consolidation_regeneration(tmp_path):
     assert render_review_markdown(str(store)) is None    # not pending -> no re-nag
 
 
+def test_reject_persists_across_two_regenerations(tmp_path):
+    """Regression: a rejection must survive MORE than one artifact regeneration.
+    Legacy behavior carried rejections only one sweep deep — a rejected pair that
+    skipped one batch re-surfaced in the next."""
+    store = tmp_path / ".magnolia"; staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "x.md", "X finding", "body x longer text", "s1")
+    _write(staging, "y.md", "Y finding", "body y", "s2")
+    xy = lambda p: [{"ids": ["x.md", "y.md"], "confidence": 0.9, "rationale": "same"}]
+
+    consolidate_project_findings(str(store), clusterer=xy)
+    apply_proposals(str(store), [], reject=[0])
+    consolidate_project_findings(str(store), clusterer=lambda p: [])   # pair absent this sweep
+    consolidate_project_findings(str(store), clusterer=xy)             # pair re-appears
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["rejected"] == [0]                       # still dismissed two sweeps later
+    assert render_review_markdown(str(store)) is None
+
+
+def test_rejected_pair_blocks_superset_cluster(tmp_path):
+    """A proposal containing a durably-rejected pair is auto-rejected even when the
+    clusterer adds a third member (subset semantics); a genuinely different pair
+    in the same batch stays pending."""
+    store = tmp_path / ".magnolia"; staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "x.md", "X finding", "body x longer text", "s1")
+    _write(staging, "y.md", "Y finding", "body y", "s2")
+    _write(staging, "z.md", "Z finding", "body z", "s3")
+
+    consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["x.md", "y.md"], "confidence": 0.9, "rationale": "same"}])
+    apply_proposals(str(store), [], reject=[0])
+    consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["x.md", "y.md", "z.md"], "confidence": 0.9, "rationale": "same + z"},
+        {"ids": ["y.md", "z.md"], "confidence": 0.9, "rationale": "different pair"}])
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["rejected"] == [0]                       # {x,y,z} contains rejected {x,y}
+    md = render_review_markdown(str(store))              # {y,z} is pending, not rejected
+    assert md is not None
+    assert "[1]" in Path(md).read_text()
+
+
 def test_consolidation_cleanup_preserves_sibling_review_file(tmp_path, monkeypatch):
     from compchem_memory import server
     store, *_ = _store_with_proposal(tmp_path)              # 1 consolidation proposal
