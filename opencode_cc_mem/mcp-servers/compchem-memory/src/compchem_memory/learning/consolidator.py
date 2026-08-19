@@ -12,7 +12,7 @@ def consolidate_tier(
     tier: str,
     base_dir: str,
     stale_days: int = 90,
-    max_entries: int = 50,
+    max_entries: int = 200,
     skills_dir: str | None = None,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
