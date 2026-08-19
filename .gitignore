@@ -35,3 +35,4 @@ extraction-state.yaml
 **/extraction-state.yaml
 # Agent session process docs (plans/specs), never track
 opencode_cc_mem/docs/superpowers/
+opencode_cc_mem/docs/INFRASTRUCTURE_ASSESSMENT*
