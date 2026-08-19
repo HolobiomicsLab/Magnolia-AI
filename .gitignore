@@ -37,3 +37,13 @@ extraction-state.yaml
 docs/superpowers/
 opencode_cc_mem/docs/superpowers/
 opencode_cc_mem/docs/INFRASTRUCTURE_ASSESSMENT*
+
+# Pure magnolia side
+old_files/
+opencode_3_tier_mem/
+todo.md
+.codegraph/
+settings.json
+memory-learning-flow.md
+plans/
+HANDOVER.md
