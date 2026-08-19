@@ -729,13 +729,23 @@ def _generate_session_id() -> str:
 
 
 @mcp.tool()
-def run_shell(cmd: str, cwd: str | None = None, project_dir: str | None = None) -> dict:
+def run_shell(
+    cmd: str,
+    cwd: str | None = None,
+    project_dir: str | None = None,
+    timeout: int | None = None,
+    background: bool = False,
+) -> dict:
     """Run a shell command via magnolia-run. magnolia-run writes the JSONL — this
     proxy intentionally does NOT use @captured to avoid double-logging.
 
+    Foreground calls are capped at 110 s (default 90 s) so the server always
+    answers before the MCP client aborts the call. For anything long-running use
+    background=True (detached; returns pid + log_file immediately) or submit_job.
+
     Call this when: you need to invoke any shell command (gnina, gmx, ls, etc.).
     """
-    return _run_shell(cmd, cwd=cwd, project_dir=project_dir)
+    return _run_shell(cmd, cwd=cwd, project_dir=project_dir, timeout=timeout, background=background)
 
 
 # Start the async-lifecycle poller timer. Daemon thread; dies cleanly when
@@ -864,4 +874,16 @@ def _serve_resilient(run_fn=None, *, monotonic=None, log=None) -> None:
 
 
 if __name__ == "__main__":
-    _serve_resilient()
+    # Transport selection: stdio (opencode-spawned, legacy) or streamable-http
+    # (supervised daemon). The HTTP daemon decouples server lifetime from the
+    # opencode session — client aborts become dropped HTTP requests instead of
+    # wedged-stdio exits. See softwares/bin/compchem-tools-daemon.sh.
+    transport = os.environ.get("COMPCHEM_TOOLS_TRANSPORT", "stdio")
+    if transport == "http":
+        host = os.environ.get("COMPCHEM_TOOLS_HOST", "127.0.0.1")
+        port = int(os.environ.get("COMPCHEM_TOOLS_PORT", "8001"))
+        _serve_resilient(
+            run_fn=lambda: mcp.run(transport="streamable-http", host=host, port=port)
+        )
+    else:
+        _serve_resilient()

@@ -10,9 +10,17 @@ with it. Every error path returns a structured dict with `error_kind` set.
 import os
 import shutil
 import subprocess
+import time
+import uuid
 from typing import Any
 
-_DEFAULT_TIMEOUT = 600
+# Foreground commands must return BEFORE the MCP client's own call-abort fires
+# (~2 min in opencode), otherwise the abort surfaces as a client disconnect and
+# can wedge/kill the serve loop. The default and the hard cap both stay below
+# that window. Anything longer must use background=True or submit_job.
+_DEFAULT_TIMEOUT = 90
+_HARD_CAP_TIMEOUT = 110
+_BG_LOG_DIR = "/tmp/magnolia-shell-bg"
 _OUTPUT_TAIL = 4096
 
 
@@ -40,9 +48,11 @@ def _build_local_redirect(cmd: str, cwd: str | None, timeout: int) -> dict[str, 
         "error": (
             f"command exceeded the {timeout}s foreground limit. Long runs — "
             "including batches of many small jobs, e.g. a docking loop — must "
-            'run in the background via submit_job(scheduler="local"). Do NOT '
-            "re-run this via run_shell; it will time out again. Relaunch using "
-            "the suggested_action below; set ncores/memory appropriate to the "
+            "not block the tool call. Either re-run with background=True "
+            "(detached, log at /tmp/magnolia-shell-bg/) or submit via "
+            'submit_job(scheduler="local"). Do NOT re-run this via run_shell '
+            "in the foreground; it will time out again. Relaunch using the "
+            "suggested_action below; set ncores/memory appropriate to the "
             "workload."
         ),
         "suggested_action": {
@@ -60,9 +70,20 @@ def run_shell(
     cmd: str,
     cwd: str | None = None,
     project_dir: str | None = None,
+    timeout: int | None = None,
+    background: bool = False,
 ) -> dict[str, Any]:
     """Run a shell command via magnolia-run. magnolia-run writes the JSONL entries
     (single-writer invariant). This tool is a thin proxy.
+
+    ``timeout`` caps the foreground wall-clock; values above 110 s are clamped
+    (the MCP client aborts calls around 2 min, so the server must answer first).
+    Default is 90 s.
+
+    ``background=True`` detaches the command (new session, own process group),
+    redirects stdout/stderr to a log file under ``/tmp/magnolia-shell-bg/``, and
+    returns immediately with ``{"background": true, "pid": ..., "log_file": ...}``.
+    Use it for anything long-running instead of blocking the call.
 
     Returns on success: ``{"exit_code": int, "stdout": str (<=4KB tail), "stderr": str (<=4KB tail)}``.
 
@@ -70,7 +91,7 @@ def run_shell(
         ``{"exit_code": -1, "stdout": <partial>, "stderr": <partial>, "error_kind": <str>, "error": <str>}``
         where ``error_kind`` is one of:
             - ``"file_not_found"`` — magnolia-run wrapper is missing
-            - ``"timeout"``        — command exceeded the timeout (default 600s)
+            - ``"timeout"``        — command exceeded the timeout (default 90s)
             - ``"oserror"``        — subprocess invocation failed (e.g. spawn error)
             - ``"exception"``      — any other unhandled exception
 
@@ -88,16 +109,63 @@ def run_shell(
         }
 
     env = os.environ.copy()
+    argv = [magnolia_run] + ["bash", "-c", cmd]
+
+    if background:
+        try:
+            os.makedirs(_BG_LOG_DIR, exist_ok=True)
+            log_file = os.path.join(
+                _BG_LOG_DIR,
+                f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.log",
+            )
+            with open(log_file, "w") as lf:
+                proc = subprocess.Popen(
+                    argv,
+                    cwd=cwd or os.getcwd(),
+                    env=env,
+                    start_new_session=True,
+                    stdout=lf,
+                    stderr=subprocess.STDOUT,
+                )
+        except Exception as e:
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": "",
+                "error_kind": "exception",
+                "error": f"{type(e).__name__}: {e}",
+            }
+        return {
+            "background": True,
+            "pid": proc.pid,
+            "log_file": log_file,
+            "note": (
+                "Detached; stdout/stderr stream to log_file. Check progress by "
+                "reading the log file (tail). The process is in its own session "
+                "and survives this call."
+            ),
+        }
+
+    effective_timeout = min(timeout if timeout is not None else _DEFAULT_TIMEOUT, _HARD_CAP_TIMEOUT)
     try:
-        proc = subprocess.run(
-            [magnolia_run] + ["bash", "-c", cmd],
+        # Popen + communicate (not subprocess.run) so the pid is available for
+        # process-group kill on timeout: magnolia-run spawns `bash -c`, and the
+        # group kill ensures the whole tree dies, not just the wrapper.
+        proc = subprocess.Popen(
+            argv,
             cwd=cwd or os.getcwd(),
             env=env,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=_DEFAULT_TIMEOUT,
+            start_new_session=True,
         )
+        stdout, stderr = proc.communicate(timeout=effective_timeout)
     except subprocess.TimeoutExpired as e:
+        try:
+            os.killpg(proc.pid, 9)
+        except Exception:
+            pass
         result = {
             "exit_code": -1,
             "stdout": _truncate(e.stdout),
@@ -105,8 +173,9 @@ def run_shell(
             "error_kind": "timeout",
         }
         # Turn the dead-end timeout into an actionable redirect: long runs
-        # belong in the background via submit_job(scheduler="local").
-        result.update(_build_local_redirect(cmd, cwd, _DEFAULT_TIMEOUT))
+        # belong in the background via submit_job(scheduler="local") or
+        # background=True on this tool.
+        result.update(_build_local_redirect(cmd, cwd, effective_timeout))
         return result
     except OSError as e:
         return {
@@ -127,6 +196,6 @@ def run_shell(
 
     return {
         "exit_code": proc.returncode,
-        "stdout": _truncate(proc.stdout),
-        "stderr": _truncate(proc.stderr),
+        "stdout": _truncate(stdout),
+        "stderr": _truncate(stderr),
     }

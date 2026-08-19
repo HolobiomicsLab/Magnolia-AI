@@ -99,12 +99,22 @@ it invokes `magnolia-run`, which logs the command, exit code, and working
 directory to `.magnolia/sessions/` and fires auto-assessment for recognized
 scientific tools.
 
+**Foreground calls are capped at 110 s (default 90 s)** — the server always
+answers before the MCP client aborts the call. Never run anything that may
+block longer in the foreground; use one of:
+
+- `background=True` — detaches the command and returns `pid` + `log_file`
+  immediately (log under `/tmp/magnolia-shell-bg/`). Poll by reading the log.
+- `submit_job(scheduler="local")` — tracked lifecycle, for real workloads.
+- Long HPC work → `submit_job(scheduler="ssh-slurm")` per `rules/job_execution.md`.
+
 **Examples:**
 
 ```python
 compchem-tools_run_shell(cmd="haddock3 config.cfg")
 compchem-tools_run_shell(cmd="gmx mdrun -deffnm md")
 compchem-tools_run_shell(cmd="ls runs/")
+compchem-tools_run_shell(cmd="sleep 600 && echo done", background=True)
 ```
 
 ## Memory

@@ -313,10 +313,22 @@ fi
 # start-adverum.sh. Applies to opencode, its MCP servers, and the OAuth refresh.
 if [ -n "${HTTPS_PROXY:-}${https_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]; then
   case "${NO_PROXY:-}${no_proxy:-}" in
-    *kimi.com*) ;;  # already exempt
-    *) export NO_PROXY="${NO_PROXY:+$NO_PROXY,}api.kimi.com,.kimi.com"
-       export no_proxy="${no_proxy:+$no_proxy,}api.kimi.com,.kimi.com" ;;
+    *kimi.com*|*127.0.0.1*|*localhost*) ;;  # already exempt
+    *) export NO_PROXY="${NO_PROXY:+$NO_PROXY,}api.kimi.com,.kimi.com,127.0.0.1,localhost"
+       export no_proxy="${no_proxy:+$no_proxy,}api.kimi.com,.kimi.com,127.0.0.1,localhost" ;;
   esac
+fi
+
+# Ensure the compchem-tools MCP daemon is up before opencode connects to it.
+# Idempotent: returns immediately when already running. The daemon inherits
+# this process's MAGNOLIA_PROJECT_DIR (exported above) for its background
+# poller default. Non-fatal by design — opencode still launches if the daemon
+# can't start; the MCP server will simply be unreachable until it does.
+if [ -f "$SCRIPT_DIR/compchem-tools-daemon.sh" ]; then
+    bash "$SCRIPT_DIR/compchem-tools-daemon.sh" start >&2 \
+        || echo "warning: compchem-tools daemon failed to start — MCP tools may be unavailable" >&2
+else
+    echo "warning: compchem-tools-daemon.sh missing — compchem-tools MCP tools unavailable" >&2
 fi
 
 cd "$OPENCODE_DIR"
