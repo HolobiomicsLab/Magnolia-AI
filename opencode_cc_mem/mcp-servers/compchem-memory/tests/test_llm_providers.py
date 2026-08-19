@@ -21,6 +21,9 @@ def _clean_env(monkeypatch):
         "DEEPSEEK_BASE_URL",
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
+        "KIMI_PLAN_MAGNOLIA_API_KEY",
+        "KIMI_API_KEY",
+        "KIMI_BASE_URL",
     ]:
         monkeypatch.delenv(k, raising=False)
 
@@ -317,3 +320,111 @@ def test_thinking_not_sent_by_default(monkeypatch):
     llm.call_llm_json("sys", "user")
     assert "thinking" not in captured["body"]
     assert "temperature" not in captured["body"]
+
+
+
+# ============ kimi provider =============
+
+def test_resolve_explicit_kimi(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "kimi")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    assert llm._resolve_provider() == "kimi"
+
+
+def test_resolve_autodetect_kimi_when_only_kimi_key(monkeypatch):
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km")
+    assert llm._resolve_provider() == "kimi"
+
+
+def test_resolve_autodetect_kimi_via_generic_key(monkeypatch):
+    monkeypatch.setenv("KIMI_API_KEY", "kk")
+    assert llm._resolve_provider() == "kimi"
+
+
+def test_resolve_autodetect_kimi_is_last(monkeypatch):
+    """A Kimi key alone never hijacks an existing deepseek/anthropic/openai setup."""
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km")
+    monkeypatch.setenv("OPENAI_API_KEY", "op")
+    assert llm._resolve_provider() == "openai"
+
+
+def test_get_api_key_kimi_prefers_plan_magnolia_var(monkeypatch):
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km-plan")
+    monkeypatch.setenv("KIMI_API_KEY", "kk-generic")
+    assert llm._get_api_key("kimi") == "km-plan"
+
+
+def test_get_api_key_kimi_falls_back_to_generic_var(monkeypatch):
+    monkeypatch.setenv("KIMI_API_KEY", "kk-generic")
+    assert llm._get_api_key("kimi") == "kk-generic"
+
+
+def test_get_model_default_kimi():
+    assert llm._get_model("kimi") == "k3"
+
+
+def test_get_base_url_default_kimi():
+    assert llm._get_base_url("kimi") == "https://api.kimi.com/coding/v1"
+
+
+def test_get_base_url_kimi_env_override_without_v1_appends(monkeypatch):
+    monkeypatch.setenv("KIMI_BASE_URL", "https://kimi-proxy.example.com/coding")
+    assert llm._get_base_url("kimi") == "https://kimi-proxy.example.com/coding/v1"
+
+
+def test_call_llm_kimi_posts_anthropic_messages_shape(monkeypatch):
+    """Kimi-for-Coding speaks the Anthropic Messages schema, not chat/completions."""
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km-key-abc")
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {"content": [{"type": "text", "text": "from kimi"}]}
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    out = llm.call_llm("you are a helper", "what is 2+2?", max_tokens=42)
+    assert out == "from kimi"
+    assert captured["url"] == "https://api.kimi.com/coding/v1/messages"
+    assert captured["headers"]["x-api-key"] == "km-key-abc"
+    assert captured["headers"]["Authorization"] == "Bearer km-key-abc"
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    assert captured["json"]["model"] == "k3"
+    assert captured["json"]["max_tokens"] == 42
+    assert captured["json"]["thinking"] == {"type": "disabled"}  # always off: small budgets
+    assert captured["json"]["system"] == "you are a helper"
+    assert captured["json"]["messages"] == [{"role": "user", "content": "what is 2+2?"}]
+
+
+def test_call_llm_kimi_skips_non_text_blocks(monkeypatch):
+    """Thinking models may lead with a thinking block; the first text block wins."""
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km")
+
+    def fake_post(url, **kw):
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {"content": [
+            {"type": "thinking", "thinking": "hmm"},
+            {"type": "text", "text": "real answer"},
+        ]}
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    assert llm.call_llm("s", "u") == "real answer"
+
+
+def test_call_llm_kimi_returns_none_when_no_text_block(monkeypatch):
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km")
+
+    def fake_post(url, **kw):
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {"content": []}
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    assert llm.call_llm("s", "u") is None

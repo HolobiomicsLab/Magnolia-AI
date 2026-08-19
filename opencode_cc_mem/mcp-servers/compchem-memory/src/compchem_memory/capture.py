@@ -1,5 +1,6 @@
 """Shared capture infrastructure: per-project SessionManager registry + decorator (Task 2)."""
 
+import json
 import time
 from functools import wraps
 from pathlib import Path
@@ -49,13 +50,33 @@ def _summarize_result(result: Any) -> str:
 
 def _attach_distill_notices(result: Any, project_dir: str) -> Any:
     """Drain the .distill-notices queue and attach notices to a tool's result so
-    background/inline distillations surface in the dialogue. Never raises."""
+    background/inline distillations surface in the dialogue. Never raises.
+
+    Most @captured tools return ``json.dumps(dict)`` — a JSON *string*. The
+    str path historically appended the notice text to that string, which
+    CORRUPTED the JSON (the gateway's _tool_result then falls back to a
+    ``{_text}`` preview and every structured consumer — the web workbench's
+    show_structure/submit_job/scores projections — silently misses). So for
+    JSON-object strings, re-serialize with a ``_distill_notices`` key instead
+    (the same shape the dict path has always produced). Plain-text strings
+    keep the old concatenated form; the agent model reads both fine."""
     try:
         notices = distill_log.drain_distill_notices(project_dir)
         if not notices:
             return result
         notice_text = "\n".join(notices)
         if isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                parsed["_distill_notices"] = notices
+                return json.dumps(parsed, indent=2)
+            if parsed is not None:
+                # JSON but not an object (array/number/…) — wrap so the
+                # original value survives alongside the notices.
+                return json.dumps({"_result": parsed, "_distill_notices": notices}, indent=2)
             return result + "\n\n" + notice_text
         if isinstance(result, dict):
             enriched = dict(result)
