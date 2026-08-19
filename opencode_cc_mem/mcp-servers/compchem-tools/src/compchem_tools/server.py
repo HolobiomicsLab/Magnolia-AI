@@ -652,6 +652,29 @@ def poll_jobs(project_dir: str | None = None) -> str:
     return json.dumps(summary, indent=2)
 
 
+@mcp.tool()
+@captured(source="compchem-tools")
+def show_structure(
+    path: str,
+    residues: list[str] | None = None,
+    project_dir: str | None = None,
+) -> str:
+    """Display a structure in the user's workbench viewer (no computation).
+
+    `path` is project-relative or absolute (must live inside the active
+    project). `residues` optionally names residues to show as ball-and-stick,
+    e.g. ["PRO155", "LYS135", "A:MET156"] (NAME+number, optional "CHAIN:"
+    prefix). Residues are validated against the file — a wrong number returns
+    an error so you can correct it.
+
+    Call this when: the user asks to see/show/view/inspect a structure, a
+    pose, a design, or specific residues ("show me the best pose with
+    PRO155/LYS135 in ball and stick")."""
+    from compchem_tools.tools.view import show_structure as _show_structure
+    result = _show_structure(path, residues=residues, project_dir=project_dir)
+    return json.dumps(result, indent=2)
+
+
 # ── v2 Session Management Tools ──────────────────────────────────────────────
 
 
