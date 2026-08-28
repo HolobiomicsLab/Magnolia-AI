@@ -35,7 +35,14 @@ The **provider is derived from the model name** (`deepseek-*` → deepseek,
 `--provider` is only for proxy/OpenAI-compatible endpoints where the name
 doesn't identify the vendor. Do not ask the user for a provider.
 
-## When a user says "set up memory"
+## When memory setup is needed
+
+Two triggers lead here — the flow below is the same for both:
+
+1. **Automatic (the normal path)**: the memory-setup gate in AGENTS.md makes
+   the agent check its tool list in its first response; missing
+   `compchem-memory` tools → proactively offer setup, then follow this rule.
+2. The user says "set up memory" (or `magnolia setup` deferred step 2).
 
 1. **Explain the roles** (table above) in one short paragraph — cheap model
    for memory, smart model for the agent — and state the default
