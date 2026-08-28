@@ -11,6 +11,7 @@
   "plugin": [
     ".opencode/plugins/magnolia-session-capture.ts",
     ".opencode/plugins/magnolia-auto-retrieval.ts",
+    ".opencode/plugins/magnolia-action-retrieval.ts",
     ".opencode/plugins/claim-critic.ts"
   ],
   "mcp": {
