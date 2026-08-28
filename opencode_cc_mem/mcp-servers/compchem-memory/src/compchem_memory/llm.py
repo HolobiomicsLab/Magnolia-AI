@@ -37,6 +37,10 @@ the heuristic fallback then flooded staging with content-free entries
 import json
 import os
 import re
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -103,8 +107,22 @@ def _get_api_key(provider: str) -> str | None:
     return None
 
 
+# Unrendered-template and stub values. A past opencode.json shipped with
+# "@@DISTILL_MODEL@@" left unrendered (2026-08-27 diagnosis): _get_model then
+# returned the literal string, every LLM call 400'd, and handover/distill/
+# re-ranking silently degraded to heuristics for weeks. Guard: treat such
+# values as unset and fall back to the provider default.
+_PLACEHOLDER_RE = re.compile(r"@@|\{\{|PLACEHOLDER|TBD_|_TBD|YOUR_|DISTILL_MODEL")
+
+
 def _get_model(provider: str) -> str:
-    return os.environ.get("MAGNOLIA_LLM_MODEL") or _DEFAULT_MODEL[provider]
+    model = (os.environ.get("MAGNOLIA_LLM_MODEL") or "").strip()
+    if not model or _PLACEHOLDER_RE.search(model):
+        if model:
+            print(f"[llm] MAGNOLIA_LLM_MODEL={model!r} looks like an unrendered "
+                  f"placeholder; using {_DEFAULT_MODEL[provider]}", file=sys.stderr)
+        return _DEFAULT_MODEL[provider]
+    return model
 
 
 def _get_base_url(provider: str) -> str:
@@ -122,6 +140,28 @@ def is_llm_available() -> bool:
     return bool(p and _get_api_key(p))
 
 
+def _record_timing(provider: str | None, model: str | None, ms: float,
+                   outcome: str, **extra) -> None:
+    """Append one telemetry row per call_llm attempt. Best-effort: telemetry
+    must never break (or slow down) the call it measures. Location mirrors the
+    project-pinned convention: <MAGNOLIA_PROJECT_DIR>/.magnolia/llm-timing.jsonl."""
+    try:
+        base = Path(os.environ.get("MAGNOLIA_PROJECT_DIR", ".")) / ".magnolia"
+        base.mkdir(parents=True, exist_ok=True)
+        row = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "provider": provider,
+            "model": model,
+            "ms": round(ms),
+            "outcome": outcome,   # ok | empty | no_provider | no_key | error
+            **extra,
+        }
+        with open(base / "llm-timing.jsonl", "a") as f:
+            f.write(json.dumps(row) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def call_llm(
     system_prompt: str,
     user_content: str,
@@ -137,24 +177,36 @@ def call_llm(
     `temperature` (when set) and `disable_thinking` (DeepSeek reasoning models —
     sends `thinking: {"type": "disabled"}`) make a call deterministic and stop a
     reasoning model from spending its output budget on reasoning_content. Kimi
-    always sends thinking-disabled (see _call_kimi), so the flag is a no-op there."""
+    always sends thinking-disabled (see _call_kimi), so the flag is a no-op there.
+
+    Every attempt appends a timing row (see _record_timing) so slow or silently
+    failing calls are decomposable after the fact instead of invisible."""
     provider = _resolve_provider()
     if not provider:
+        _record_timing(None, None, 0, "no_provider")
         return None
     key = _get_api_key(provider)
     if not key:
+        _record_timing(provider, None, 0, "no_key")
         return None
     model = _get_model(provider)
+    t0 = time.monotonic()
     try:
         if provider == PROVIDER_ANTHROPIC:
-            return _call_anthropic(key, model, system_prompt, user_content, max_tokens,
-                                   temperature)
-        if provider == PROVIDER_KIMI:
-            return _call_kimi(key, model, system_prompt, user_content, max_tokens,
-                              temperature)
-        return _call_openai_compat(provider, key, model, system_prompt, user_content,
-                                   max_tokens, temperature, disable_thinking)
-    except Exception:
+            out = _call_anthropic(key, model, system_prompt, user_content, max_tokens,
+                                  temperature)
+        elif provider == PROVIDER_KIMI:
+            out = _call_kimi(key, model, system_prompt, user_content, max_tokens,
+                             temperature)
+        else:
+            out = _call_openai_compat(provider, key, model, system_prompt, user_content,
+                                      max_tokens, temperature, disable_thinking)
+        _record_timing(provider, model, (time.monotonic() - t0) * 1000,
+                       "ok" if out else "empty", chars=len(out) if out else 0)
+        return out
+    except Exception as e:  # noqa: BLE001 - contract: never raise
+        _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
+                       error=type(e).__name__)
         return None
 
 
