@@ -13,7 +13,7 @@ from compchem_memory.context_assembly import assemble_context
 def regenerate_boot_context(
     project_dir: str,
     skills_dir: str | None = None,
-    token_budget: int = 4000,
+    token_budget: int = 6000,
 ) -> str:
     """Write .magnolia/boot-context.md with prerendered project memory.
     Returns the path of the written file."""
