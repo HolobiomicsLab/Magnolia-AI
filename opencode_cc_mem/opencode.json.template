@@ -25,13 +25,11 @@
       "type": "local",
       "command": ["@@PYTHON@@", "-m", "compchem_memory.server"],
       "timeout": 660000,
-      "enabled": true,
+      "enabled": @@MEMORY_ENABLED@@,
       "environment": {
         "MAGNOLIA_ROOT": "@@MAGNOLIA_ROOT@@",
         "MAGNOLIA_SKILLS_DIR": ".magnolia/skills",
-        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@",
-        "MAGNOLIA_LLM_PROVIDER": "@@DISTILL_PROVIDER@@",
-        "MAGNOLIA_LLM_MODEL": "@@DISTILL_MODEL@@"
+        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
       }
     },
     "perspicacite": {
