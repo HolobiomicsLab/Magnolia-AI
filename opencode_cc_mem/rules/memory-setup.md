@@ -9,7 +9,8 @@ tags: [setup, llm, memory-model, onboarding]
 # Memory Model Setup (agent-driven step 2)
 
 Magnolia uses **two LLM roles**, set in ONE place (`.magnolia/llm-setup.json`,
-injected into `opencode.json` by the `magnolia` launcher on every launch):
+injected into `opencode.json` as `MAGNOLIA_MEMORY_MODEL` / `MAGNOLIA_MEMORY_PROVIDER`
+by the `magnolia` launcher on every launch):
 
 | Role | What it does | Guidance |
 |---|---|---|
