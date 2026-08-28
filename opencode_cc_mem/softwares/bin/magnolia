@@ -26,6 +26,21 @@ CONFIG="$OPENCODE_DIR/opencode.json"
 PROJECTS_DIR="$OPENCODE_DIR/projects"
 VENV_PY="$REPO_ROOT/.venv/bin/python3"
 
+# Machine-local LLM setup side file (gitignored via **/.magnolia/). The
+# launcher re-renders opencode.json from the template on EVERY launch, so
+# LLM choices must persist here — never in the volatile opencode.json.
+# Shape: {"main_model": "...", "memory_model": "...",
+#         "memory_provider": "...", "memory_enabled": true}
+LLM_SETUP="$OPENCODE_DIR/.magnolia/llm-setup.json"
+ACTIVE_PROJECT_FILE="$OPENCODE_DIR/.magnolia/.active-project"
+
+# Python for config rendering + LLM probes (venv preferred, PATH fallback).
+if [ -x "$VENV_PY" ]; then
+    PYTHON_CMD="$VENV_PY"
+else
+    PYTHON_CMD="python"
+fi
+
 # Subdirs created under <project>/.magnolia/ for every new project. Matches
 # the layout that ProjectManager + the auto-extractor + the poller all
 # expect; pre-creating avoids first-write races and silent fallbacks.
@@ -33,10 +48,22 @@ MAGNOLIA_SUBDIRS=(entries staging runs sessions queue archive backups session-no
 
 usage() {
     cat <<EOF
-Usage: magnolia [--critic] <project>
+Usage: magnolia [setup] [--critic] <project>
+       magnolia memory set <model> [--provider P]
+       magnolia memory status
 
 Launch opencode for the given Magnolia project. If the project does not
 exist, prompts to scaffold it under $PROJECTS_DIR/.
+
+Setup (two-step, run once):
+  setup            Step 1: configure + verify the MAIN model (the agent you
+                   talk to). Step 2: configure + verify the MEMORY model
+                   (background: distillation, handover, re-ranking). Memory
+                   stays disabled until verified. Step 2 can be deferred —
+                   start opencode and tell the agent "set up memory" (see
+                   rules/memory-setup.md). Choices persist in
+                   .magnolia/llm-setup.json and are re-injected into
+                   opencode.json on every launch.
 
 Options:
   --critic  Enable the flag-only claim-vs-action critic for this session.
@@ -45,7 +72,9 @@ Options:
             <project>/.magnolia/claim-critic/ and shown as toasts. Changes nothing.
 
 Examples:
+  magnolia setup hsc70_peptides
   magnolia hsc70_peptides
+  magnolia memory set deepseek-v4-flash
   magnolia --critic hsc70_peptides
 
 Available projects:
@@ -217,17 +246,253 @@ prompt_create_project() {
     echo >&2
 }
 
+# Read one key from the setup side file ("" when unset/missing).
+setup_get() {
+    [ -f "$LLM_SETUP" ] || return 0
+    MAG_SETUP="$LLM_SETUP" "$PYTHON_CMD" -c '
+import json, os
+try:
+    d = json.load(open(os.environ["MAG_SETUP"]))
+    v = d.get("'"$1"'", "")
+    print(v if isinstance(v, str) else "")
+except Exception:
+    pass
+' 2>/dev/null
+}
+
+# Merge key=value pairs into the setup side file ("true"/"false" → bool).
+setup_set() {
+    MAG_SETUP="$LLM_SETUP" "$PYTHON_CMD" - "$@" <<'PY'
+import json, os, pathlib, sys
+sp = pathlib.Path(os.environ["MAG_SETUP"])
+d = {}
+if sp.exists():
+    try:
+        d = json.loads(sp.read_text())
+    except (OSError, json.JSONDecodeError):
+        d = {}
+for kv in sys.argv[1:]:
+    k, _, v = kv.partition("=")
+    if v in ("true", "false"):
+        v = (v == "true")
+    d[k] = v
+sp.parent.mkdir(parents=True, exist_ok=True)
+sp.write_text(json.dumps(d, indent=2) + "\n")
+PY
+}
+
+# Render opencode.json: template substitutions + side-file LLM policy.
+# Memory MCP stays DISABLED until a memory model is configured and verified —
+# a half-configured memory server silently degrades (the 2026-08 freeze).
+# Echoes "on"/"off" so callers can report the resulting memory state.
+render_config() {
+    local project="$1"
+    MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
+    MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
+    "$PYTHON_CMD" - <<'PY'
+import json, os, pathlib
+setup = {}
+sp = pathlib.Path(os.environ["MAG_SETUP"])
+if sp.exists():
+    try:
+        setup = json.loads(sp.read_text())
+    except (OSError, json.JSONDecodeError):
+        setup = {}
+mem_on = bool(setup.get("memory_enabled")) and bool(setup.get("memory_model"))
+cfg = pathlib.Path(os.environ["MAG_TPL"]).read_text()
+cfg = (cfg.replace("@@PROJECT@@", os.environ["MAG_PROJ"])
+          .replace("@@MAGNOLIA_ROOT@@", os.environ["MAG_ROOT"])
+          .replace("@@PYTHON@@", os.environ["MAG_PY"])
+          .replace("@@MEMORY_ENABLED@@", "true" if mem_on else "false"))
+cfg = json.loads(cfg)
+if setup.get("main_model"):
+    cfg["model"] = setup["main_model"]
+if mem_on:
+    env = cfg["mcp"]["compchem-memory"]["environment"]
+    env["MAGNOLIA_LLM_MODEL"] = setup["memory_model"]
+    if setup.get("memory_provider"):
+        env["MAGNOLIA_LLM_PROVIDER"] = setup["memory_provider"]
+out = pathlib.Path(os.environ["MAG_CFG"])
+tmp = out.with_name(out.name + ".tmp")
+tmp.write_text(json.dumps(cfg, indent=2) + "\n")
+os.replace(tmp, out)
+print("on" if mem_on else "off")
+PY
+}
+
+# One real call_llm round-trip against a candidate (model, provider).
+# Fresh subprocess — the running MCP server's stale env can't mask a bad
+# config. Exit 0 + "MEMORY_OK" only on a genuinely working combination.
+probe_memory() {
+    local model="$1" provider="${2:-}"
+    MAGNOLIA_LLM_MODEL="$model" MAGNOLIA_LLM_PROVIDER="$provider" \
+    MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
+    "$PYTHON_CMD" - <<'PY'
+import os, sys
+sys.path.insert(0, os.environ["MEM_SRC"])
+from compchem_memory.llm import call_llm, _resolve_call
+provider, model = _resolve_call()
+if not provider:
+    print("NO_PROVIDER: no API key found (export DEEPSEEK_API_KEY / "
+          "ANTHROPIC_API_KEY / OPENAI_API_KEY / KIMI_API_KEY)", file=sys.stderr)
+    sys.exit(1)
+sys.stderr.write(f"probe: provider={provider} model={model}\n")
+out = call_llm("You are a connectivity probe. Reply with exactly: MEMORY_OK",
+               "ping", max_tokens=200, temperature=0, disable_thinking=True)
+sys.exit(0 if (out and "MEMORY_OK" in out) else 1)
+PY
+}
+
+# Re-render for the active project if one is known (best-effort).
+render_active_project() {
+    [ -s "$ACTIVE_PROJECT_FILE" ] || return 0
+    render_config "$(cat "$ACTIVE_PROJECT_FILE")" >/dev/null
+}
+
+cmd_memory_set() {
+    local model="" provider=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --provider) provider="$2"; shift 2 ;;
+            --*) echo "error: unknown option '$1'" >&2; exit 1 ;;
+            *) model="$1"; shift ;;
+        esac
+    done
+    if [ -z "$model" ]; then
+        echo "usage: magnolia memory set <model> [--provider P]" >&2
+        exit 1
+    fi
+    echo "verifying memory model '$model' with one real call…"
+    if ! probe_memory "$model" "$provider"; then
+        echo "verification FAILED — nothing written." >&2
+        echo "hints: wrong model id? missing API key for that provider? network?" >&2
+        exit 1
+    fi
+    setup_set "memory_model=$model" "memory_provider=$provider" "memory_enabled=true"
+    render_active_project
+    echo "memory model set: $model (enabled). Restart opencode to activate."
+}
+
+cmd_memory_status() {
+    echo "setup side file: $LLM_SETUP"
+    if [ -f "$LLM_SETUP" ]; then
+        cat "$LLM_SETUP"
+    else
+        echo "  (absent — memory MCP will be rendered disabled)"
+    fi
+    if [ -s "$ACTIVE_PROJECT_FILE" ]; then
+        local proj
+        proj="$(cat "$ACTIVE_PROJECT_FILE")"
+        echo "active project: $proj"
+        "$PYTHON_CMD" -c '
+import json
+cfg = json.load(open("'"$CONFIG"'"))
+m = cfg["mcp"]["compchem-memory"]
+print("rendered opencode.json: memory enabled =", m.get("enabled"),
+      "| model =", m.get("environment", {}).get("MAGNOLIA_LLM_MODEL", "(default)"))
+' 2>/dev/null || true
+    fi
+}
+
+# Interactive two-step setup (step 2 can also be done later via the agent
+# + `magnolia memory set` — see rules/memory-setup.md).
+setup_run() {
+    echo "=== Magnolia setup ==="
+
+    # Migration: adopt real values from a legacy opencode.json, if any.
+    if [ ! -f "$LLM_SETUP" ] && [ -f "$CONFIG" ]; then
+        local legacy
+        legacy="$(MAG_CFG="$CONFIG" "$PYTHON_CMD" -c '
+import json, os
+try:
+    e = json.load(open(os.environ["MAG_CFG"]))["mcp"]["compchem-memory"].get("environment", {})
+    m, p = e.get("MAGNOLIA_LLM_MODEL", ""), e.get("MAGNOLIA_LLM_PROVIDER", "")
+    print((m if m and not m.startswith("@@") else "") + "\t" + (p if p and not p.startswith("@@") else ""))
+except Exception:
+    print("\t")
+' 2>/dev/null || true)"
+        local legacy_model="${legacy%%$'\t'*}" legacy_provider="${legacy##*$'\t'}"
+        if [ -n "$legacy_model" ]; then
+            setup_set "memory_model=$legacy_model" "memory_provider=$legacy_provider" "memory_enabled=true"
+            echo "migrated existing memory config: $legacy_model (enabled)"
+        fi
+    fi
+
+    echo
+    echo "Step 1 — main model (drives the agent you talk to)."
+    local cur_main
+    cur_main="$(setup_get main_model)"
+    echo "  opencode model id, e.g. deepseek/deepseek-v4-pro. Enter = keep ${cur_main:-opencode default}."
+    local ans
+    ans="$(_read_from_tty "  main model: " || true)"
+    if [ -n "$ans" ]; then
+        echo "  verifying with one real round-trip (may take ~1 min)…"
+        if timeout 180 opencode run -m "$ans" 'Reply with exactly: MAIN_MODEL_OK' 2>&1 | grep -q MAIN_MODEL_OK; then
+            setup_set "main_model=$ans"
+            echo "  OK — main model verified."
+        else
+            echo "  FAILED to verify '$ans'." >&2
+            echo "  hints: 'opencode auth login' for your provider; id must be provider/model; check network." >&2
+            exit 1
+        fi
+    else
+        echo "  keeping ${cur_main:-opencode default}."
+    fi
+
+    echo
+    echo "Step 2 — memory model (background only: distillation, handover, re-ranking)."
+    echo "  Cheap is recommended; the provider is derived from the model name."
+    local cur_mem def_mem
+    cur_mem="$(setup_get memory_model)"
+    def_mem="${cur_mem:-deepseek-v4-flash}"
+    ans="$(_read_from_tty "  memory model [$def_mem]: " || true)"
+    local mem="${ans:-$def_mem}"
+    echo "  verifying with one real call…"
+    if probe_memory "$mem" ""; then
+        setup_set "memory_model=$mem" "memory_enabled=true"
+        echo "  OK — memory verified and enabled."
+    else
+        setup_set "memory_model=$mem" "memory_enabled=false"
+        echo "  verification FAILED — memory left OFF (main model still works)." >&2
+        echo "  Fix the key/model and re-run setup, or ask your agent: \"set up memory\"." >&2
+    fi
+
+    render_active_project
+    echo
+    if [ "$(setup_get memory_enabled)" = "true" ]; then
+        echo "Setup complete: main model + memory model configured."
+    else
+        echo "Setup complete for the MAIN model. Memory is OFF."
+        echo "Start opencode and tell your agent: \"set up memory\"."
+    fi
+}
+
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     usage
     exit 0
 fi
 
-# Parse flags (currently just --critic) plus the single project positional.
+# Subcommand dispatch: `magnolia memory …` configures and exits (no launch).
+if [ "${1:-}" = "memory" ]; then
+    shift
+    case "${1:-}" in
+        set) shift; cmd_memory_set "$@"; exit 0 ;;
+        status) cmd_memory_status; exit 0 ;;
+        *)
+            echo "usage: magnolia memory set <model> [--provider P]   |   magnolia memory status" >&2
+            exit 1
+            ;;
+    esac
+fi
+
+# Parse flags (--critic, setup) plus the single project positional.
 CRITIC=0
+SETUP=0
 PROJECT=""
 for arg in "$@"; do
     case "$arg" in
         --critic) CRITIC=1 ;;
+        setup) SETUP=1 ;;
         -h|--help) usage; exit 0 ;;
         --*) echo "error: unknown option '$arg'" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
@@ -261,23 +526,21 @@ if ! command -v opencode >/dev/null 2>&1; then
     exit 1
 fi
 
-# Prefer the repo's venv python if present; fall back to PATH `python`.
-if [ -x "$VENV_PY" ]; then
-    PYTHON_CMD="$VENV_PY"
-else
-    PYTHON_CMD="python"
-    echo "warning: venv python not found at $VENV_PY; using 'python' from PATH" >&2
+# Two-step interactive setup (step 2 can be deferred to the agent).
+if [ "$SETUP" = "1" ]; then
+    setup_run
+    if [ -z "$PROJECT" ]; then
+        echo
+        echo "Launch a project with: magnolia <project>"
+        exit 0
+    fi
+    echo
+    echo "Continuing to launch '$PROJECT'…"
+    echo
 fi
 
-# Render template → opencode.json atomically (tmp + mv same-dir).
-TMP="$(mktemp "$CONFIG.tmp.XXXXXX")"
-trap 'rm -f "$TMP"' EXIT
-sed -e "s|@@PROJECT@@|$PROJECT|g" \
-    -e "s|@@MAGNOLIA_ROOT@@|$REPO_ROOT|g" \
-    -e "s|@@PYTHON@@|$PYTHON_CMD|g" \
-    "$TEMPLATE" > "$TMP"
-mv "$TMP" "$CONFIG"
-trap - EXIT
+# Render template + LLM policy → opencode.json (atomic; echoes on/off).
+MEMORY_STATE="$(render_config "$PROJECT")"
 
 # Wrapper argument wins over any pre-set env var.
 export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
