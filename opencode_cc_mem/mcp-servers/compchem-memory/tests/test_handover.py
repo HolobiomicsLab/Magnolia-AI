@@ -133,14 +133,15 @@ _CURSORS_DIR = ".handover-cursors"
 def _merge_echo(system, user, max_tokens=2000, **kw):
     """Fake merge LLM: accumulate the new transcript onto the running base.
     generate_handover feeds the growing base back in on each session, so the
-    final state accumulates every merged session's text."""
+    final state accumulates every merged session's text. Output is prefixed
+    '## ' to satisfy the handover-output validation contract."""
     base_part, new_part = user.split(_NEW_SEP, 1)
     base_part = base_part[len(_BASE_HDR):].strip()
     if base_part.startswith("(none yet"):
         base_part = ""
     parts = [base_part] if base_part else []
     parts.append(new_part.strip())
-    return "\n".join(parts)
+    return "## Done\n" + "\n".join(parts)
 
 
 def _exporter(exports):
@@ -236,3 +237,38 @@ def test_generate_llm_failure_midloop_keeps_prior_session(store):
     assert "dock KILDQ" in state and "run MD on WNPFF" not in state
     assert _session_cursor(store, "ses_a") == "a1"                     # ses_a advanced
     assert not (store / _CURSORS_DIR / "ses_b.json").exists()          # ses_b NOT advanced
+
+
+def test_generate_rejects_roleplay_output_then_succeeds_on_retry(store):
+    """deepseek-v4-flash sometimes role-plays the transcript (no '## ' header).
+    The merge must be rejected, retried once, and accepted when the retry is
+    a valid handover."""
+    _write_mapping(store, ["ses_a"])
+    exports = {"ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "dock KILDQ")]}}
+    calls = []
+
+    def garbage_then_valid(system, user, **kw):
+        calls.append(user)
+        if len(calls) == 1:
+            return "USER: and then I ran the docking again..."   # role-play corruption
+        return "## Done\nmerged"
+
+    path = hv.generate_handover(str(store.parent), exporter=_exporter(exports), llm=garbage_then_valid)
+    assert path is not None
+    assert len(calls) == 2                                         # exactly one retry
+    assert "## Done" in (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert _session_cursor(store, "ses_a") == "a1"
+
+
+def test_generate_persistent_corruption_writes_nothing(store):
+    """If every attempt returns non-handover output, nothing enters the rolling
+    state and no cursor advances — the corruption cannot leak in."""
+    _write_mapping(store, ["ses_a"])
+    exports = {"ses_a": {"info": {"id": "ses_a"}, "messages": [_msg("a1", "user", "dock KILDQ")]}}
+    path = hv.generate_handover(
+        str(store.parent), exporter=_exporter(exports),
+        llm=lambda s, u, **k: "TOOL_CALL: gnina_dock(...)",
+    )
+    assert path is None
+    assert not (store / hv.HANDOVER_STATE_FILE).exists()
+    assert not (store / _CURSORS_DIR / "ses_a.json").exists()
