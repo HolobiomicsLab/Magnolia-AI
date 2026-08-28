@@ -80,6 +80,55 @@ def test_resolve_returns_none_when_no_keys():
     assert llm._resolve_provider() is None
 
 
+# ============ model-name prefix routing (_resolve_call) =============
+
+def test_provider_for_model_prefixes():
+    assert llm._provider_for_model("deepseek-v4-flash") == "deepseek"
+    assert llm._provider_for_model("DeepSeek-V4-Pro") == "deepseek"   # case-insensitive
+    assert llm._provider_for_model("claude-haiku-4-5-20251001") == "anthropic"
+    assert llm._provider_for_model("gpt-5-mini") == "openai"
+    assert llm._provider_for_model("o4-mini") == "openai"
+    assert llm._provider_for_model("kimi-k2.5") == "kimi"
+    assert llm._provider_for_model("k3") == "kimi"
+    assert llm._provider_for_model("llama-3-local") is None
+
+
+def test_resolve_call_model_prefix_beats_key_autodetect(monkeypatch):
+    """A claude-* model name must route to Anthropic even with a DeepSeek key."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "claude-haiku-4-5-20251001")
+    assert llm._resolve_call() == ("anthropic", "claude-haiku-4-5-20251001")
+
+
+def test_resolve_call_explicit_provider_beats_model_prefix(monkeypatch):
+    """Proxy case: an OpenAI-compatible endpoint serving a deepseek-named model."""
+    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "deepseek-v4-flash")
+    assert llm._resolve_call() == ("openai", "deepseek-v4-flash")
+
+
+def test_resolve_call_unknown_model_falls_back_to_key_autodetect(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "my-private-finetune")
+    assert llm._resolve_call() == ("deepseek", "my-private-finetune")
+
+
+def test_resolve_call_no_model_uses_provider_default(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    assert llm._resolve_call() == ("deepseek", "deepseek-v4-flash")
+
+
+def test_resolve_call_placeholder_model_ignored(monkeypatch):
+    """The 2026-08 freeze: an unrendered @@...@@ model must act as unset."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "@@DISTILL_MODEL@@")
+    assert llm._resolve_call() == ("deepseek", "deepseek-v4-flash")
+
+
+def test_resolve_call_nothing_configured(monkeypatch):
+    assert llm._resolve_call() == (None, None)
+
+
 # ============ _get_api_key =============
 
 def test_get_api_key_anthropic_prefers_magnolia_var(monkeypatch):
