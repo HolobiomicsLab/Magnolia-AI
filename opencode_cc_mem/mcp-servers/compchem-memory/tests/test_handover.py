@@ -32,6 +32,58 @@ def test_render_no_tombstone_section_returns_all():
     assert "a" in out and "b" in out
 
 
+# ---- budget_handover_block (section-aware, tail-preserving) ------------------
+
+def _big_block(items: int = 6) -> str:
+    done = "\n".join(
+        f"- item{i}: " + "x" * 200 + f" (result {i})" for i in range(1, items + 1)
+    )
+    return (
+        f"## Done\n{done}\n\n"
+        "## In progress\n- actively tuning fle_sta_2 for the 6-mer\n\n"
+        "## To do\n- run caprieval on cluster2\n\n"
+        "## Key files\n- runs/2026-06-15_kferq/\n"
+    )
+
+
+def test_budget_block_passthrough_under_budget():
+    block = _big_block()
+    assert hv.budget_handover_block(block, len(block) + 1) == block
+
+
+def test_budget_block_keeps_priority_sections_and_newest_done():
+    block = _big_block()
+    out = hv.budget_handover_block(block, 800)
+    assert "In progress" in out and "actively tuning fle_sta_2" in out
+    assert "To do" in out and "caprieval" in out
+    assert "Key files" in out
+    assert "elided" in out               # elision marker present
+    assert "item6" in out                # newest Done items survive
+    assert "item5" in out
+    assert "item1" not in out            # OLDEST dropped, not newest
+    assert "item2" not in out
+
+
+def test_budget_block_pathological_tail_slice():
+    # Priority sections alone exceed the budget → tail-slice (keep newest
+    # chars) rather than the old head-slice that cut the newest work.
+    block = (
+        "## Done\n- old done thing\n\n"
+        "## In progress\n" + "\n".join(f"- line{i}: " + "y" * 60 for i in range(30))
+        + "\n\n## To do\n- final next step\n"
+    )
+    out = hv.budget_handover_block(block, 400)
+    assert len(out) <= 400
+    assert out.rstrip().endswith("final next step")   # tail preserved
+
+
+def test_merge_prompt_has_size_and_stale_expiry_rules():
+    """Contract: the merge LLM is told to compress old Done items and to
+    expire twice-stale items to tombstones (anti-windup, 2026-08-28)."""
+    assert "ONE line" in hv.HANDOVER_MERGE_PROMPT
+    assert "STALE EXPIRY" in hv.HANDOVER_MERGE_PROMPT
+
+
 # ---- read_handover_block ----------------------------------------------------
 
 @pytest.fixture

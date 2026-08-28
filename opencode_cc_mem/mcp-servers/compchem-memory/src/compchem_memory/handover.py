@@ -47,6 +47,13 @@ MERGE RULES:
   Default is keep, never silently delete.
 - If an item has been carried across sessions with no activity, move it to '## Stale?' with a
   short "(no activity)" note — surface it, do not delete it.
+- STALE EXPIRY: an item already in '## Stale?' that this transcript AGAIN shows no activity
+  for → move it to '## Won't-do / Archived' (append "(stale, archived)"). Tombstones never
+  re-enter the working sections. This is how the handover prunes itself.
+- SIZE: keep the handover compact — it must stay well under ~150 lines. In '## Done', full
+  detail (numbers, paths, IDs) ONLY for items this transcript worked on; compress every other
+  Done item to ONE line ("what — key result"). The details live in the distilled memory
+  entries; the handover needs the outcome, not the story.
 - NEVER re-add anything listed under '## Won't-do / Archived'. Preserve that section as-is.
 - Ground items in specifics (residues, scores, IDs, run directories, file paths), not vague summaries.
 
@@ -70,6 +77,85 @@ def render_for_boot_context(state_text: str) -> str:
         if not skipping:
             out.append(line)
     return "\n".join(out).strip()
+
+
+# Sections that ARE the actionable recap — a budget cut must never touch them.
+_PRIORITY_SECTIONS = ("## In progress", "## To do", "## Stale?", "## Key files")
+
+
+def budget_handover_block(block: str, char_budget: int) -> str:
+    """Section-aware, tail-preserving compression of the handover view.
+
+    A naive head-slice (the old behavior) lost exactly the NEWEST content —
+    Done is chronological, so its tail is last session's work, and it was cut
+    mid-sentence (observed 2026-08-28). Here the priority sections are kept
+    whole and '## Done' is elided from the FRONT: oldest history goes first,
+    newest work survives."""
+    if len(block) <= char_budget:
+        return block
+
+    # Split into (header, body-including-header) preserving order.
+    parts: list[list[str]] = []
+    cur: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("## "):
+            if cur:
+                parts.append(cur)
+            cur = [line]
+        else:
+            cur.append(line)
+    if cur:
+        parts.append(cur)
+
+    def _body(p: list[str]) -> str:
+        return "\n".join(p).strip()
+
+    non_done = [_body(p) for p in parts if p[0].strip() != "## Done"]
+    non_done_total = sum(len(b) + 2 for b in non_done if b)
+
+    if non_done_total >= char_budget:
+        # Pathological: even without Done we're over — tail-slice the whole
+        # block (newest content last) rather than head-slice.
+        return block[-char_budget:]
+
+    elision = ("*(older Done items elided to fit the boot budget — "
+               "full history in .magnolia/.handover-state.md)*")
+    avail = char_budget - non_done_total - len(elision) - 2
+
+    done = next((_body(p) for p in parts if p[0].strip() == "## Done"), "")
+    if done:
+        lines = done.splitlines()
+        header, items = lines[0], lines[1:]
+        # Items = bullet blocks: a "- "/"* " line starts a new item; blank
+        # lines are separators (adjacent bullets must not fuse into one
+        # un-splittable chunk); continuation lines extend the current item.
+        chunks: list[str] = []
+        chunk: list[str] = []
+        for line in items:
+            s = line.strip()
+            if not s:
+                continue
+            if s.startswith(("- ", "* ")) and chunk:
+                chunks.append("\n".join(chunk))
+                chunk = [line]
+            else:
+                chunk.append(line)
+        if chunk:
+            chunks.append("\n".join(chunk))
+        kept: list[str] = []
+        used = 0
+        for c in reversed(chunks):
+            if used + len(c) + 2 > avail:
+                break
+            kept.append(c)
+            used += len(c) + 2
+        kept.reverse()
+        done = "\n".join([header, elision, *kept]).strip()
+
+    out = [b for b in non_done if b]
+    if done:
+        out.append(done)
+    return "\n\n".join(out)
 
 
 def read_handover_block(store: Path) -> str | None:

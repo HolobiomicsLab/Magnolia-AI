@@ -140,11 +140,16 @@ def assemble_context(
 def _get_session_context(store: Path, budget: int) -> str | None:
     # Prefer the rolling LLM handover; fall back to the raw recent-events dump
     # when no handover has been generated yet (first session / no LLM).
-    from compchem_memory.handover import read_handover_block
+    # The handover is budgeted section-aware and tail-preserving: actionable
+    # sections (In progress / To do / Stale? / Key files) stay whole and the
+    # OLDEST Done items are elided — a naive head-slice here used to cut the
+    # newest work mid-sentence (observed 2026-08-28).
+    from compchem_memory.handover import budget_handover_block, read_handover_block
 
     block = read_handover_block(store)
     if block:
-        return f"[SESSION HANDOVER]\n{block}"[: budget * 4]
+        prefix = "[SESSION HANDOVER]\n"
+        return prefix + budget_handover_block(block, budget * 4 - len(prefix))
     return _get_recent_events_dump(store, budget)
 
 
