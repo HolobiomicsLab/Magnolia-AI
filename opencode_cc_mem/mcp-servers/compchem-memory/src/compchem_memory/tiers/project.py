@@ -225,6 +225,7 @@ class ProjectManager:
                 if not any(t.lower() in entry_tags_lower for t in tags):
                     continue
             entry["tier"] = "project"
+            entry["score"] = score
             scored.append((score, entry))
         scored.sort(key=lambda x: x[0], reverse=True)
         return [e for _, e in scored]
@@ -268,6 +269,7 @@ class ProjectManager:
                 "source": meta.get("source", ""),
                 "path": str(f),
                 "tier": "staging",
+                "score": score,
                 "provisional": True,
             }))
         scored.sort(key=lambda x: x[0], reverse=True)
