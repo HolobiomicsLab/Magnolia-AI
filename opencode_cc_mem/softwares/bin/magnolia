@@ -105,6 +105,11 @@ create_project_structure() {
     for sub in "${MAGNOLIA_SUBDIRS[@]}"; do
         mkdir -p "$magdir/$sub"
     done
+    # opencode.json's instructions array references these two files; stub
+    # them so a brand-new project never references missing files. Memory
+    # takes them over once configured and enabled.
+    [ -f "$magdir/boot-context.md" ] || touch "$magdir/boot-context.md"
+    [ -f "$magdir/audit-report.md" ] || touch "$magdir/audit-report.md"
     echo "  created: $root/.magnolia/{$(IFS=,; echo "${MAGNOLIA_SUBDIRS[*]}")}"
 }
 
@@ -542,6 +547,9 @@ fi
 
 # Render template + LLM policy → opencode.json (atomic; echoes on/off).
 MEMORY_STATE="$(render_config "$PROJECT")"
+if [ "$MEMORY_STATE" = "off" ]; then
+    echo "note: memory is NOT configured — the agent will offer setup when opencode starts." >&2
+fi
 
 # Wrapper argument wins over any pre-set env var.
 export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"

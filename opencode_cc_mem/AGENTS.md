@@ -3,6 +3,21 @@
 This file is loaded by opencode at session start. It defines when to call memory
 tools so the project actually learns from each session.
 
+## First response: memory setup gate
+
+Before anything else in your FIRST response of a session, check whether the
+`compchem-memory` tools (e.g. `memory_get_context`) are present in your tool
+list.
+
+- **Present** → memory is configured; continue normally (call
+  `memory_get_context` before any task, see below).
+- **Absent** → memory is NOT configured yet. Do not wait to be asked:
+  proactively tell the user, in 2-3 plain sentences, that (a) Magnolia has a
+  memory system that distills sessions into reusable learnings, (b) it needs
+  a cheap background model (default `deepseek-v4-flash`) to run, and (c) you
+  can set it up right now. Then follow `rules/memory-setup.md`. If the user
+  declines, proceed without memory and do not nag again this session.
+
 ## Before any task
 
 Call `memory_get_context(task_description=<your task in a sentence>)` as your
