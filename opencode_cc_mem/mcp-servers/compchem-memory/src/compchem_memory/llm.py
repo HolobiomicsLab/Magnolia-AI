@@ -9,16 +9,24 @@ the heuristic fallback then flooded staging with content-free entries
 
 ## Resolution order
 
-1. `MAGNOLIA_LLM_PROVIDER` (`deepseek`/`anthropic`/`openai`/`kimi`) — explicit override.
-2. `MAGNOLIA_LLM_API_KEY` set → `anthropic` (backward-compat: this was the
-   old hardcoded path, and an operator who deliberately set it likely meant
-   "use this Anthropic key").
-3. Autodetect by first key present, in order: `DEEPSEEK_API_KEY` →
-   `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Kimi (`KIMI_PLAN_MAGNOLIA_API_KEY`
-   / `KIMI_API_KEY`). DeepSeek-first is intentional: it's the cheapest and
-   the most commonly-configured key in the Magnolia user environment. Kimi
-   is last so adding a Kimi key never hijacks an existing setup — select it
-   explicitly via `MAGNOLIA_LLM_PROVIDER=kimi`.
+The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
+*derived from the model name* (step 2) and normally never configured.
+
+1. `MAGNOLIA_LLM_PROVIDER` (`deepseek`/`anthropic`/`openai`/`kimi`) —
+   explicit override, for proxy/OpenAI-compatible endpoints where the model
+   name does not identify the vendor. Not part of normal setup.
+2. Model-name prefix: `deepseek-*` → deepseek, `claude*` → anthropic,
+   `gpt-*`/`o1-*`/`o3-*`/`o4-*`/`chatgpt*` → openai, `kimi*`/`k3*`/
+   `moonshot*` → kimi.
+3. Autodetect by first key present, in order: `MAGNOLIA_LLM_API_KEY`
+   (backward-compat: this was the old hardcoded Anthropic path) →
+   `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Kimi
+   (`KIMI_PLAN_MAGNOLIA_API_KEY` / `KIMI_API_KEY`). DeepSeek-first is
+   intentional: it's the cheapest and the most commonly-configured key in
+   the Magnolia user environment. Kimi is last so adding a Kimi key never
+   hijacks an existing setup — select it explicitly via `MAGNOLIA_LLM_PROVIDER=kimi`
+   or a `kimi-*` model name.
+4. No `MAGNOLIA_LLM_MODEL` → the per-provider default model.
 
 ## Configuration
 
@@ -75,12 +83,16 @@ _BASE_URL_ENV = {
 }
 
 
-def _resolve_provider() -> str | None:
-    """Pick a provider per the order documented at module top.
-    Returns None if no usable provider is configured."""
+def _explicit_provider() -> str | None:
+    """A valid MAGNOLIA_LLM_PROVIDER, else None (invalid values fall through)."""
     explicit = (os.environ.get("MAGNOLIA_LLM_PROVIDER") or "").strip().lower()
     if explicit in _VALID_PROVIDERS:
         return explicit
+    return None
+
+
+def _autodetect_provider() -> str | None:
+    """Provider from whichever API key is present (back-compat order)."""
     if os.environ.get("MAGNOLIA_LLM_API_KEY"):
         return PROVIDER_ANTHROPIC
     if os.environ.get("DEEPSEEK_API_KEY"):
@@ -92,6 +104,11 @@ def _resolve_provider() -> str | None:
     if os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY"):
         return PROVIDER_KIMI
     return None
+
+
+def _resolve_provider() -> str | None:
+    """Pick a provider ignoring any model-name signal (back-compat helper)."""
+    return _explicit_provider() or _autodetect_provider()
 
 
 def _get_api_key(provider: str) -> str | None:
@@ -114,15 +131,61 @@ def _get_api_key(provider: str) -> str | None:
 # values as unset and fall back to the provider default.
 _PLACEHOLDER_RE = re.compile(r"@@|\{\{|PLACEHOLDER|TBD_|_TBD|YOUR_|DISTILL_MODEL")
 
+# Model-name prefix → provider. The model name is the single setup knob;
+# the vendor follows from it (deepseek-* is obviously DeepSeek's, etc.).
+_MODEL_PREFIX_PROVIDERS: tuple[tuple[str, str], ...] = (
+    ("deepseek", PROVIDER_DEEPSEEK),
+    ("claude", PROVIDER_ANTHROPIC),
+    ("gpt-", PROVIDER_OPENAI),
+    ("o1", PROVIDER_OPENAI),
+    ("o3", PROVIDER_OPENAI),
+    ("o4", PROVIDER_OPENAI),
+    ("chatgpt", PROVIDER_OPENAI),
+    ("kimi", PROVIDER_KIMI),
+    ("k3", PROVIDER_KIMI),
+    ("moonshot", PROVIDER_KIMI),
+)
+
+
+def _provider_for_model(model: str) -> str | None:
+    m = model.strip().lower()
+    for prefix, provider in _MODEL_PREFIX_PROVIDERS:
+        if m.startswith(prefix):
+            return provider
+    return None
+
+
+def _requested_model() -> str | None:
+    """MAGNOLIA_LLM_MODEL with the placeholder guard applied.
+
+    Returns None when unset or placeholder-looking (caller then uses the
+    provider default) — an unrendered '@@...@@' must never reach an API call
+    (it 400s every call and silently degrades memory work; 2026-08 freeze)."""
+    model = (os.environ.get("MAGNOLIA_LLM_MODEL") or "").strip()
+    if model and _PLACEHOLDER_RE.search(model):
+        print(f"[llm] MAGNOLIA_LLM_MODEL={model!r} looks like an unrendered "
+              f"placeholder; ignoring it", file=sys.stderr)
+        return None
+    return model or None
+
+
+def _resolve_call() -> tuple[str | None, str | None]:
+    """Full (provider, model) resolution per the documented order:
+    explicit provider → model-name prefix → key autodetect; default model
+    when none requested. (None, None) when nothing is configured."""
+    model = _requested_model()
+    provider = (
+        _explicit_provider()
+        or (model and _provider_for_model(model))
+        or _autodetect_provider()
+    )
+    if not provider:
+        return None, None
+    return provider, (model or _DEFAULT_MODEL[provider])
+
 
 def _get_model(provider: str) -> str:
-    model = (os.environ.get("MAGNOLIA_LLM_MODEL") or "").strip()
-    if not model or _PLACEHOLDER_RE.search(model):
-        if model:
-            print(f"[llm] MAGNOLIA_LLM_MODEL={model!r} looks like an unrendered "
-                  f"placeholder; using {_DEFAULT_MODEL[provider]}", file=sys.stderr)
-        return _DEFAULT_MODEL[provider]
-    return model
+    return _requested_model() or _DEFAULT_MODEL[provider]
 
 
 def _get_base_url(provider: str) -> str:
@@ -181,7 +244,7 @@ def call_llm(
 
     Every attempt appends a timing row (see _record_timing) so slow or silently
     failing calls are decomposable after the fact instead of invisible."""
-    provider = _resolve_provider()
+    provider, model = _resolve_call()
     if not provider:
         _record_timing(None, None, 0, "no_provider")
         return None
@@ -189,7 +252,6 @@ def call_llm(
     if not key:
         _record_timing(provider, None, 0, "no_key")
         return None
-    model = _get_model(provider)
     t0 = time.monotonic()
     try:
         if provider == PROVIDER_ANTHROPIC:
