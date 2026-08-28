@@ -12,9 +12,11 @@ import pytest
 
 
 _LLM_ENV_VARS = (
-    "MAGNOLIA_LLM_PROVIDER",
+    "MAGNOLIA_MEMORY_PROVIDER",
+    "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_LLM_PROVIDER",   # deprecated alias, still read
+    "MAGNOLIA_LLM_MODEL",      # deprecated alias, still read
     "MAGNOLIA_LLM_API_KEY",
-    "MAGNOLIA_LLM_MODEL",
     "ANTHROPIC_API_KEY",
     "DEEPSEEK_API_KEY",
     "DEEPSEEK_BASE_URL",

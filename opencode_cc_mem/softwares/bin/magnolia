@@ -135,9 +135,9 @@ EOF
 
     # Try LLM expansion. Defer the "is the LLM available + which model"
     # decision to compchem_memory.llm — it knows the full resolution order
-    # (MAGNOLIA_LLM_PROVIDER → MAGNOLIA_LLM_API_KEY → DEEPSEEK → ANTHROPIC →
-    # OPENAI). Anything that's not "got useful text back" → fall through
-    # to the minimal template.
+    # (MAGNOLIA_MEMORY_PROVIDER → model-name prefix → keys → DEEPSEEK →
+    # ANTHROPIC → OPENAI). Anything that's not "got useful text back" → fall
+    # through to the minimal template.
     if [ -x "$VENV_PY" ]; then
         local system_prompt user_content
         system_prompt="You are scaffolding GOAL.md for a computational-chemistry project named '$proj' in a Magnolia memory-backed agent system. Generate a concise markdown GOAL.md (about 200-400 words) with these sections:
@@ -309,9 +309,9 @@ if setup.get("main_model"):
     cfg["model"] = setup["main_model"]
 if mem_on:
     env = cfg["mcp"]["compchem-memory"]["environment"]
-    env["MAGNOLIA_LLM_MODEL"] = setup["memory_model"]
+    env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
     if setup.get("memory_provider"):
-        env["MAGNOLIA_LLM_PROVIDER"] = setup["memory_provider"]
+        env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
 out = pathlib.Path(os.environ["MAG_CFG"])
 tmp = out.with_name(out.name + ".tmp")
 tmp.write_text(json.dumps(cfg, indent=2) + "\n")
@@ -325,7 +325,7 @@ PY
 # config. Exit 0 + "MEMORY_OK" only on a genuinely working combination.
 probe_memory() {
     local model="$1" provider="${2:-}"
-    MAGNOLIA_LLM_MODEL="$model" MAGNOLIA_LLM_PROVIDER="$provider" \
+    MAGNOLIA_MEMORY_MODEL="$model" MAGNOLIA_MEMORY_PROVIDER="$provider" \
     MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
     "$PYTHON_CMD" - <<'PY'
 import os, sys
@@ -389,7 +389,8 @@ import json
 cfg = json.load(open("'"$CONFIG"'"))
 m = cfg["mcp"]["compchem-memory"]
 print("rendered opencode.json: memory enabled =", m.get("enabled"),
-      "| model =", m.get("environment", {}).get("MAGNOLIA_LLM_MODEL", "(default)"))
+      "| model =", m.get("environment", {}).get("MAGNOLIA_MEMORY_MODEL",
+              m.get("environment", {}).get("MAGNOLIA_LLM_MODEL", "(default)")))
 ' 2>/dev/null || true
     fi
 }
@@ -406,7 +407,7 @@ setup_run() {
 import json, os
 try:
     e = json.load(open(os.environ["MAG_CFG"]))["mcp"]["compchem-memory"].get("environment", {})
-    m, p = e.get("MAGNOLIA_LLM_MODEL", ""), e.get("MAGNOLIA_LLM_PROVIDER", "")
+    m, p = e.get("MAGNOLIA_MEMORY_MODEL", e.get("MAGNOLIA_LLM_MODEL", "")), e.get("MAGNOLIA_MEMORY_PROVIDER", e.get("MAGNOLIA_LLM_PROVIDER", ""))
     print((m if m and not m.startswith("@@") else "") + "\t" + (p if p and not p.startswith("@@") else ""))
 except Exception:
     print("\t")

@@ -30,7 +30,13 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
 
 ## Configuration
 
-- `MAGNOLIA_LLM_MODEL` overrides the per-provider default model.
+- `MAGNOLIA_MEMORY_MODEL` — the only user-facing knob: which model does the
+  memory/background work. (The old name `MAGNOLIA_LLM_MODEL` still works but
+  warns once — it read as "the LLM model", ambiguous with the main agent
+  model configured in opencode.)
+- `MAGNOLIA_MEMORY_PROVIDER` — explicit provider override for proxy /
+  OpenAI-compatible endpoints where the model name doesn't identify the
+  vendor. (Legacy `MAGNOLIA_LLM_PROVIDER` still honored, warns once.)
 - `DEEPSEEK_BASE_URL` / `OPENAI_BASE_URL` / `KIMI_BASE_URL` override the API
   base URL; `/v1` is appended automatically if missing (DeepSeek's docs show
   both forms).
@@ -84,10 +90,17 @@ _BASE_URL_ENV = {
 
 
 def _explicit_provider() -> str | None:
-    """A valid MAGNOLIA_LLM_PROVIDER, else None (invalid values fall through)."""
-    explicit = (os.environ.get("MAGNOLIA_LLM_PROVIDER") or "").strip().lower()
-    if explicit in _VALID_PROVIDERS:
-        return explicit
+    """A valid MAGNOLIA_MEMORY_PROVIDER, else None (invalid values fall
+    through). Legacy MAGNOLIA_LLM_PROVIDER still honored with a warning."""
+    raw = (os.environ.get("MAGNOLIA_MEMORY_PROVIDER") or "").strip().lower()
+    if not raw:
+        legacy = (os.environ.get("MAGNOLIA_LLM_PROVIDER") or "").strip()
+        if legacy:
+            print("[llm] MAGNOLIA_LLM_PROVIDER is deprecated; "
+                  "rename it to MAGNOLIA_MEMORY_PROVIDER", file=sys.stderr)
+            raw = legacy.lower()
+    if raw in _VALID_PROVIDERS:
+        return raw
     return None
 
 
@@ -156,17 +169,25 @@ def _provider_for_model(model: str) -> str | None:
 
 
 def _requested_model() -> str | None:
-    """MAGNOLIA_LLM_MODEL with the placeholder guard applied.
+    """The memory model from the environment, placeholder-guard applied.
 
-    Returns None when unset or placeholder-looking (caller then uses the
-    provider default) — an unrendered '@@...@@' must never reach an API call
-    (it 400s every call and silently degrades memory work; 2026-08 freeze)."""
-    model = (os.environ.get("MAGNOLIA_LLM_MODEL") or "").strip()
-    if model and _PLACEHOLDER_RE.search(model):
-        print(f"[llm] MAGNOLIA_LLM_MODEL={model!r} looks like an unrendered "
+    MAGNOLIA_MEMORY_MODEL is the name; legacy MAGNOLIA_LLM_MODEL still works
+    but warns once. Returns None when unset or placeholder-looking (caller
+    then uses the provider default) — an unrendered '@@...@@' must never
+    reach an API call (it 400s every call and silently degrades memory work;
+    2026-08 freeze)."""
+    raw = (os.environ.get("MAGNOLIA_MEMORY_MODEL") or "").strip()
+    if not raw:
+        legacy = (os.environ.get("MAGNOLIA_LLM_MODEL") or "").strip()
+        if legacy:
+            print("[llm] MAGNOLIA_LLM_MODEL is deprecated; "
+                  "rename it to MAGNOLIA_MEMORY_MODEL", file=sys.stderr)
+            raw = legacy
+    if raw and _PLACEHOLDER_RE.search(raw):
+        print(f"[llm] memory model {raw!r} looks like an unrendered "
               f"placeholder; ignoring it", file=sys.stderr)
         return None
-    return model or None
+    return raw or None
 
 
 def _resolve_call() -> tuple[str | None, str | None]:

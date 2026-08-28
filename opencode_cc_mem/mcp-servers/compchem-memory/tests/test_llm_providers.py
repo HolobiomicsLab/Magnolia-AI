@@ -13,9 +13,11 @@ import pytest
 def _clean_env(monkeypatch):
     """Clear every env var the resolver looks at, before each test."""
     for k in [
-        "MAGNOLIA_LLM_PROVIDER",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_LLM_PROVIDER",   # deprecated alias, still read
+        "MAGNOLIA_LLM_MODEL",      # deprecated alias, still read
         "MAGNOLIA_LLM_API_KEY",
-        "MAGNOLIA_LLM_MODEL",
         "ANTHROPIC_API_KEY",
         "DEEPSEEK_API_KEY",
         "DEEPSEEK_BASE_URL",
@@ -34,20 +36,20 @@ from compchem_memory import llm  # noqa: E402
 # ============ _resolve_provider =============
 
 def test_resolve_explicit_override_wins(monkeypatch):
-    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openai")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-key")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "an-key")
     assert llm._resolve_provider() == "openai"
 
 
 def test_resolve_explicit_override_case_insensitive(monkeypatch):
-    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "DeepSeek")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "DeepSeek")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "an-key")
     assert llm._resolve_provider() == "deepseek"
 
 
 def test_resolve_explicit_override_invalid_falls_through(monkeypatch):
-    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "bogus")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "bogus")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-key")
     assert llm._resolve_provider() == "deepseek"
 
@@ -96,20 +98,20 @@ def test_provider_for_model_prefixes():
 def test_resolve_call_model_prefix_beats_key_autodetect(monkeypatch):
     """A claude-* model name must route to Anthropic even with a DeepSeek key."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
-    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "claude-haiku-4-5-20251001")
     assert llm._resolve_call() == ("anthropic", "claude-haiku-4-5-20251001")
 
 
 def test_resolve_call_explicit_provider_beats_model_prefix(monkeypatch):
     """Proxy case: an OpenAI-compatible endpoint serving a deepseek-named model."""
-    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "openai")
-    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openai")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "deepseek-v4-flash")
     assert llm._resolve_call() == ("openai", "deepseek-v4-flash")
 
 
 def test_resolve_call_unknown_model_falls_back_to_key_autodetect(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
-    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "my-private-finetune")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "my-private-finetune")
     assert llm._resolve_call() == ("deepseek", "my-private-finetune")
 
 
@@ -119,10 +121,19 @@ def test_resolve_call_no_model_uses_provider_default(monkeypatch):
 
 
 def test_resolve_call_placeholder_model_ignored(monkeypatch):
-    """The 2026-08 freeze: an unrendered @@...@@ model must act as unset."""
+    """The 2026-08 freeze: an unrendered @@...@@ model must act as unset
+    (exercised via the legacy env name — it reads through the same guard)."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
     monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "@@DISTILL_MODEL@@")
     assert llm._resolve_call() == ("deepseek", "deepseek-v4-flash")
+
+
+def test_resolve_call_legacy_env_names_still_honored(monkeypatch):
+    """Old MAGNOLIA_LLM_MODEL/MAGNOLIA_LLM_PROVIDER keep working (warn once)
+    so pre-rename rendered configs don't break before the next re-render."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "kimi-k2.5")
+    assert llm._resolve_call() == ("kimi", "kimi-k2.5")
 
 
 def test_resolve_call_nothing_configured(monkeypatch):
@@ -161,7 +172,7 @@ def test_get_model_defaults(monkeypatch):
 
 
 def test_get_model_env_override_applies_to_all_providers(monkeypatch):
-    monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "deepseek-reasoner")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "deepseek-reasoner")
     assert llm._get_model("deepseek") == "deepseek-reasoner"
     assert llm._get_model("anthropic") == "deepseek-reasoner"  # caller's responsibility to use sensibly
 
@@ -325,7 +336,7 @@ def test_disable_thinking_and_temperature_sent_for_deepseek(monkeypatch):
     """call_llm_json(disable_thinking=True, temperature=0) must send DeepSeek's
     thinking-disabled param and temperature in the request body."""
     from compchem_memory import llm
-    monkeypatch.delenv("MAGNOLIA_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("MAGNOLIA_MEMORY_PROVIDER", raising=False)
     monkeypatch.delenv("MAGNOLIA_LLM_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -352,7 +363,7 @@ def test_disable_thinking_and_temperature_sent_for_deepseek(monkeypatch):
 
 def test_thinking_not_sent_by_default(monkeypatch):
     from compchem_memory import llm
-    monkeypatch.delenv("MAGNOLIA_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("MAGNOLIA_MEMORY_PROVIDER", raising=False)
     monkeypatch.delenv("MAGNOLIA_LLM_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -375,7 +386,7 @@ def test_thinking_not_sent_by_default(monkeypatch):
 # ============ kimi provider =============
 
 def test_resolve_explicit_kimi(monkeypatch):
-    monkeypatch.setenv("MAGNOLIA_LLM_PROVIDER", "kimi")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "kimi")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
     assert llm._resolve_provider() == "kimi"
 
