@@ -24,6 +24,11 @@ Call `memory_get_context(task_description=<your task in a sentence>)` as your
 **first action**. The boot-context.md already loaded gives project-level memory;
 this call gets task-specific reranked memory for what you're about to do.
 
+**Recap exception:** if the request is a pure recap ("where were we?", "any
+pending tasks?", "status?"), answer directly from the SESSION HANDOVER already
+in boot-context — do NOT call `memory_get_context`. The handover is already in
+context; the call re-fetches it at multi-second latency.
+
 ## After resolving a tool error
 
 Call `memory_record_learning` with `entry_type="error_resolution"`. Structure
