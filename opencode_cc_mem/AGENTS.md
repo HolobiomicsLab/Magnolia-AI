@@ -110,6 +110,40 @@ Call `memory_confirm` to promote useful staging entries to the durable project
 tier. The staging area is a low-pass filter; without confirmation, useful
 learnings stay below the surface.
 
+## Knowledge placement — three homes, one rule
+
+Magnolia has exactly three knowledge homes. Choose by content class:
+
+1. **`AGENTS.md` + `rules/*.md`** — always-on doctrine, injected in full every
+   session: behavior discipline and never-skip gates only. Every line is paid
+   every session — keep it small.
+2. **`.opencode/skills/<name>/SKILL.md`** — task-shaped protocols (how to run
+   haddock3, how to run an adversarial review, how to draft a manuscript).
+   Loaded on demand when the task matches the description; bodies cost nothing
+   until then. These are authored, git-tracked documents; the git review is
+   the gate. Before doing a task that matches a skill's description, load it
+   with the `skill` tool.
+3. **`.magnolia/` memory tiers** — learned knowledge (session → staging →
+   project entries). Surfaced by boot-context, `memory_get_context`, and the
+   action-retrieval plugin.
+
+Never put a protocol in the memory tiers or a learning in `.opencode/skills/`.
+
+## Promotion is editorial, not a file copy
+
+When a project-tier entry proves itself and should become durable doctrine or
+protocol:
+
+- **Do not** copy the entry verbatim into a skill/rules directory — a copied
+  entry keeps its learning schema (id, observation counts, Symptoms-Cause-Fix
+  body) and is alien among protocol docs.
+- Instead: draft the distilled rule into the target skill or rules file (a
+  pitfall row, a "Common mistakes" line, or a new section), with a pointer
+  back to the source entry id. The source entry stays in its project tier as
+  the evidence base.
+- The `memory_review_promotions` / `memory_apply_promotions` flow implements
+  this draft-and-review path; prefer it over raw `memory_promote`.
+
 ## Reviewing consolidation proposals
 
 If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposals
