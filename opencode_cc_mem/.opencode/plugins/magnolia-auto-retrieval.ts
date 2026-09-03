@@ -44,7 +44,9 @@ const DISABLED = ["0", "off", "false", "no"].includes(
 const DIRECTIVE =
   "\n\n[Magnolia · auto-memory] Before acting on this request, your FIRST tool " +
   "call must be `memory_get_context(task_description=\"<one-line summary of this " +
-  "request>\")`. Use the returned project entries and skill-tier rules to " +
+  "request>\")`. Exception: for a pure recap request (status / pending tasks / " +
+  "where were we), answer from the SESSION HANDOVER already in your context and " +
+  "skip the call. Otherwise the returned project entries and skill-tier rules " +
   "inform your approach — accumulated learnings often hold the fix, the right " +
   "parameters, or a known pitfall for this exact task, and the longer the project " +
   "runs the more likely that is. (This call is read-only and safe even if the " +
