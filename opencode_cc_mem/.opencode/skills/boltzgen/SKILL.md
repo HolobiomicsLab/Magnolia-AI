@@ -1,10 +1,10 @@
 ---
 name: boltzgen
-source: authored_rule
-version: 1.0
-description: Practical guide for running BoltzGen protein design workflows, managing runs, and handling interruptions.
-tags: [boltzgen, protein-design, generative, structure-generation]
-last_verified: 2026-04-16
+description: "BoltzGen protein/peptide binder design: design YAML spec, 6-step pipeline, --reuse + skip_existing resume recipe, GPU time expectations, verification checklist. Use when running or resuming BoltzGen design jobs (design.yaml, final_ranked_designs, intermediate_designs_inverse_folded). Do NOT use for pure structure prediction without design."
+metadata:
+  version: "1.0"
+  last_verified: "2026-04-16"
+  tags: "[boltzgen, protein-design, generative, structure-generation]"
 ---
 
 # BoltzGen Practical Guide

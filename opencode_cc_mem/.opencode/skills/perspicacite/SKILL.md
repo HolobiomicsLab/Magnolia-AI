@@ -1,10 +1,10 @@
 ---
 name: perspicacite
-source: authored_rule
-description: How to use Perspicacité v2 for scientific literature search, paper retrieval, and knowledge-base-building RAG queries.
-version: 1.0
-last_verified: 2026-06-09
-tags: [literature, search, rag, perspicacite, papers, academic]
+description: "Perspicacite v2 literature RAG (localhost:8000): agentic/literature_survey modes, knowledge-base workflow, DOI ingest pitfalls, server lifecycle. Use for literature search, paper discovery, building/querying paper KBs, field surveys. Do NOT use for paywalled full-text or supplements; use institutional access or Sci-Hub instead."
+metadata:
+  version: "1.0"
+  last_verified: "2026-06-09"
+  tags: "[literature, search, rag, perspicacite, papers, academic]"
 ---
 
 # Perspicacité v2 — Scientific Literature RAG

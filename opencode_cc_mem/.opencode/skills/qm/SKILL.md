@@ -1,10 +1,10 @@
 ---
 name: qm
-source: authored_rule
-description: Critical rules, common mistakes, input parameters, and troubleshooting for QM calculations with ORCA and Gaussian.
-version: 1.0
-last_verified: 2026-04-01
-tags: [qm, orca, gaussian, dft, scf, job-management]
+description: "ORCA/Gaussian/xTB quantum chemistry: input setup, method/basis choice table, charge and multiplicity, SCF convergence fixes, job-submission resources, parsing energies/HOMO-LUMO/frequencies. Use for orca_setup/run/parse, gaussian_setup/run/parse, xtb_*, DFT/SP/OPT/FREQ tasks, .inp/.com/.out/.log files. Do NOT use for MD or docking."
+metadata:
+  version: "1.0"
+  last_verified: "2026-04-01"
+  tags: "[qm, orca, gaussian, dft, scf, job-management]"
 ---
 
 # QM Calculation Rules

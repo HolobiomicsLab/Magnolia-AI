@@ -1,10 +1,10 @@
 ---
 name: gromacs
-source: authored_rule
-description: GROMACS molecular dynamics setup, execution, and analysis rules.
-version: 1.0
-last_verified: 2026-04-01
-tags: [gromacs, molecular-dynamics, md-simulation]
+description: "GROMACS MD rules: setup (pdb2gmx, box, solvate, ions), minimization/NVT/NPT/production, force-field and box choice, analysis (gmx energy/rms/gyrate/rmsf), stage gates. Use when preparing or running GROMACS simulations (gromacs_setup, gromacs_run, gmx, .mdp/.tpr/.gro/.edr files). Do NOT use for docking or QM."
+metadata:
+  version: "1.0"
+  last_verified: "2026-04-01"
+  tags: "[gromacs, molecular-dynamics, md-simulation]"
 ---
 
 # GROMACS Rules

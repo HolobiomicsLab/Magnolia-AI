@@ -1,10 +1,10 @@
 ---
 name: nature-skills
-source: authored_rule
-description: How to use the nature-skills repo (https://github.com/Yuan1z0825/nature-skills) for Magnolia communication tasks — manuscript drafting, prose polishing, figure generation, and paper-to-presentation conversion.
-version: 1.0
-last_verified: 2026-06-13
-tags: [communication, writing, figure, presentation, nature]
+description: "Router to the nature-skills repo (~/ai-skills/nature-skills) for Nature-style scientific writing: manuscript drafting, polishing, figures, paper-to-slides, mock review, citations. Use for communication tasks (manuscript sections, prose polishing, publication figures, .pptx decks). Always loads skill fragments from disk per manifest, never from memory."
+metadata:
+  version: "1.0"
+  last_verified: "2026-06-13"
+  tags: "[communication, writing, figure, presentation, nature]"
 ---
 
 # Nature-Skills Integration

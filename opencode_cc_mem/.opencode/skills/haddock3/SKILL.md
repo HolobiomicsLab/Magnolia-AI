@@ -1,10 +1,10 @@
 ---
 name: haddock3
-source: authored_rule
-description: Critical rules, common mistakes, module parameters, and troubleshooting for HADDOCK3 molecular docking.
-tags: [haddock3, docking, protein-peptide, protein-protein, restraints, caprieval, ambig]
-version: 1.2
-last_verified: 2026-06-18
+description: "HADDOCK3 docking rules: self-contained run dirs, config.cfg modules, restraints (ambig.tbl, actpass), Slurm memory sizing (2 GB/core), caprieval scoring incl. AIR-free formula, contact-map interaction typing. Use when preparing, running, or analyzing HADDOCK3 protein-protein/peptide/ligand docking (haddock3_run, config.cfg, caprieval, seletopclusts, contactmap, ambig.tbl). Do NOT use for gnina small-molecule docking or GROMACS MD."
+metadata:
+  version: "1.2"
+  last_verified: "2026-06-18"
+  tags: "[haddock3, docking, protein-peptide, protein-protein, restraints, caprieval, ambig]"
 ---
 
 # HADDOCK3 Rules
@@ -122,6 +122,8 @@ caprieval at each pipeline stage will have different w_air:
 
 **Formula:** `AIR-free = score − w_air × air`
 
+(Evidence for this section: memory entry `air-free-score-calculation-error-fixed-by-documented-formula-and-verification-rule`, hsc70_new project tier — three real misreport incidents.)
+
 Read `score` and `air` from `capri_clt.tsv`. Read `w_air` from
 `<caprieval_dir>/weights_params.json` in the same directory — do NOT assume a
 default value. For the final caprieval (after refinement stages), w_air is
@@ -172,6 +174,8 @@ score [X] − w_air × air [Y] = [RESULT]
 
 ## Contact Map Analysis
 
+(Evidence for this section: memory entry `20260602_124049_333361`, hsc70_new project tier — false pi-stacking claim from contact-type labels, salt bridges invisible in heavyatoms file.)
+
 The `contactmap` module produces `output/NN_contactmap/` with per-cluster TSV and HTML files.
 
 ### Critical: heavyatoms file excludes hydrogen
@@ -205,6 +209,30 @@ models (`11_seletopclusts/cluster_N_model_1.pdb.gz`) and measure atom-level
 distances with a script. The TSV files are per-run summaries; cross-run
 comparison requires consistent atom-level measurement to identify which
 interactions are gained, lost, or shifted.
+
+## Peptide Construction (tleap)
+
+Build peptides with AMBER's **tleap** (conda env `ambertools`), never hand-written
+coordinates — approximate PDBs fail topoaa parameterization.
+
+```bash
+conda activate ambertools
+tleap
+```
+```
+source leaprc.protein.ff14SB
+peptide = sequence { HIS ALA MET ASN GLY }
+savepdb peptide /path/to/output.pdb
+quit
+```
+
+- ff14SB gives proper bond lengths, angles, atom naming; protonation at pH 7.4
+- Validated for Hsc70-binding linear peptides (6–10 residues, standard amino acids;
+  used for KILDQ and the KFERQ 6-mer extension series, June 2026)
+- NOT for non-standard residues, PTMs, or cyclic peptides (use ACPYPE or custom
+  topology); ff14SB may not be optimal for other protein targets
+
+(Evidence: memory entry `20260605_082851_898337`, hsc70_new project tier.)
 
 ## Workflow Template
 

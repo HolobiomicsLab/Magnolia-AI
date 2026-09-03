@@ -1,10 +1,10 @@
 ---
 name: p2rank
-source: authored_rule
-description: "P2Rank pocket prediction: parameters, output formats, and best practices."
-version: 1.0
-last_verified: 2026-04-01
-tags: [p2rank, pocket-prediction, binding-site]
+description: "P2Rank binding-pocket prediction: parameters, _predictions.csv output columns, score interpretation, feeding pocket centers/residues into docking setup. Use when identifying druggable pockets on a protein structure before docking (p2rank_predict). Do NOT use for the docking run itself."
+metadata:
+  version: "1.0"
+  last_verified: "2026-04-01"
+  tags: "[p2rank, pocket-prediction, binding-site]"
 ---
 
 # P2Rank Rules

@@ -1,10 +1,10 @@
 ---
-name: gnina_covalent
-source: authored_rule
-description: Gnina covalent docking workflow with alkyne warheads
-version: 1.0
-last_verified: 2026-03-31
-tags: [gnina, covalent-docking, alkyne, vinyl]
+name: gnina-covalent
+description: "Gnina small-molecule docking incl. covalent alkyne warheads: Z/E vinyl isomer generation, SMARTS validation, covalent flags, CNN scoring, exhaustiveness. Use for gnina_dock, alkyne_to_vinyl, smarts_validate, gnina_parse_results, CNNscore/CNNaffinity. Do NOT use for HADDOCK3 protein docking."
+metadata:
+  version: "1.0"
+  last_verified: "2026-03-31"
+  tags: "[gnina, covalent-docking, alkyne, vinyl]"
 ---
 
 # Gnina Covalent Docking

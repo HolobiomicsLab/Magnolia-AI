@@ -14,6 +14,7 @@ opencode_cc_mem/softwares/*
 !opencode_cc_mem/softwares/bin/
 opencode_cc_mem/softwares/bin/*
 !opencode_cc_mem/softwares/bin/hpc_tunnel.sh
+!opencode_cc_mem/softwares/bin/debate.sh
 !opencode_cc_mem/softwares/bin/magnolia
 !opencode_cc_mem/softwares/bin/magnolia-run
 !opencode_cc_mem/softwares/bin/magnolia-selfreflex
