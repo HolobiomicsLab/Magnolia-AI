@@ -155,7 +155,21 @@ Below is a realistic conversation between a researcher and Magnolia. The **struc
 5. **Use the notebook.** Ask *"What did we learn from the last run?"* or *"Has this error happened before?"*
 6. **Build habits together.** The first session may feel slow as you establish folder structures and rules. After that, the assistant works faster because it remembers.
 7. **Manage the pace.** Different LLMs behave differently — some wait patiently, others jump into action at the first sign of a task. If you're still explaining your project and don't want calculations to start yet, say so: *"Don't run anything yet, I'm still giving you context."* or *"Wait for my go-ahead before starting any runs."*
-8. **Codify what you learn into rules.** After a few runs with a new tool — especially one you haven't used before — ask Magnolia to write a rule file capturing the correct workflow, common pitfalls, and the fixes that worked. For example: *"We've now run BoltzGen three times and hit several errors. Write a rule file in `rules/` so future sessions get it right the first time."* This is how individual debugging sessions turn into lasting institutional knowledge.
+8. **Codify what you learn.** After a few runs with a new tool — especially one you haven't used before — ask Magnolia to write a rule file capturing the correct workflow, common pitfalls, and the fixes that worked. For example: *"We've now run BoltzGen three times and hit several errors. Write this up as a skill so future sessions get it right the first time."* This is how individual debugging sessions turn into lasting institutional knowledge.
+
+   Say which of the three homes you mean, because they are read at different times and the wrong one is either ignored or expensive:
+
+   - **`rules/`** — doctrine, read at the start of *every* session. Standing procedure and never-skip gates. Every line is paid in every session, so keep it short.
+   - **`.opencode/skills/<name>/SKILL.md`** — task protocols, loaded only when the task matches the skill's description. A tool-specific guide like the BoltzGen example above belongs here: it costs nothing until BoltzGen actually comes up.
+   - **`.magnolia/`** — the memory tiers, which Magnolia writes itself. Learned notes, not authored documents; you review what it proposes rather than filing things here by hand.
+
+   The dividing line is content, not length: doctrine and protocols are authored and reviewed through git, learnings are observed and proposed.
+
+9. **Review the rules Magnolia proposes.** You are not the only one watching for this. Once a note in the project notebook has held up across three separate sessions, Magnolia nominates it to become a rule, checks it, drafts the text — and then waits for you. It never writes a rule you have not agreed to, so proposals simply pile up if nobody looks. Ask now and again:
+
+   > *"Are there any proposed rules waiting for review?"*
+
+   Magnolia lays out each candidate in `magnolia-review/promotions.md` — where the note came from, how the review passes voted, and the drafted rule — and writes only the ones you accept, into `rules/`. Since that directory is under version control, an accepted rule shows up as a reviewable diff you can revert. "From a note to a rule" in [`README.md`](README.md) explains what is checked before a proposal reaches you.
 
 ---
 

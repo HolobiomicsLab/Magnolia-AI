@@ -9,6 +9,13 @@ metadata:
 
 # BoltzGen Practical Guide
 
+> **How BoltzGen is invoked.** Unlike HADDOCK3, GROMACS, gnina, p2rank, xtb, ORCA and Gaussian,
+> BoltzGen has no `compchem-tools` MCP tool — there is no `boltzgen_*` tool to call. It is driven
+> through the general `run_shell` tool, or through `magnolia-run` so the invocation is logged to
+> the session log. The `softwares/boltzgen/bin/boltzgen` launcher referred to below is a shell
+> script that sets up CUDA libraries, not an MCP tool. Every command here is written accordingly.
+> If an MCP tool is added later, this note should go.
+
 ## Installation
 
 BoltzGen is installed in an isolated `uv` virtual environment at `softwares/boltzgen/`.
