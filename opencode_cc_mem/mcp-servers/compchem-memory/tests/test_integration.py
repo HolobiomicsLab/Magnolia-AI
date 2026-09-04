@@ -4,7 +4,7 @@ Tests cover the issues found by the independent code review:
 - P0: context_assembly loads entries from .magnolia/ (not root)
 - P1: CLI cmd_assess uses correct paths and quality_flags
 - P1: Archive cap updates INDEX.md
-- P1: Skill floor is enforced
+- P1 (retired 2026-09): skill floor removed with the skill tier
 - P2: Goal set/get symmetry
 - P2: failure_pattern in extraction and distillation
 - P2: Confidence decay affects scoring
@@ -24,7 +24,6 @@ from compchem_memory.learning.consolidator import consolidate_tier, _archive_exc
 from compchem_memory.extraction import AutomaticMemoryExtractor
 from compchem_memory.retrieval import _score_entry
 from compchem_memory.tiers.project import ProjectManager
-from compchem_memory.tiers.skill import SkillManager
 from compchem_memory.storage import ensure_project_store
 
 
@@ -77,7 +76,6 @@ class TestPathConventions:
         result = assemble_context(
             task_description="docking result",
             project_dir=str(project_dir),
-            skills_dir=str(skills_dir),
             token_budget=8000,
         )
         project_sources = [s for s in result.sources if s["tier"] == "project"]
@@ -100,7 +98,6 @@ class TestPathConventions:
         result = assemble_context(
             task_description="haddock3 run",
             project_dir=str(project_dir),
-            skills_dir=str(skills_dir),
             token_budget=8000,
         )
         session_sources = [s for s in result.sources if s["tier"] == "session"]
@@ -131,7 +128,6 @@ class TestGoalManagement:
         result = assemble_context(
             task_description="anything",
             project_dir=str(project_dir),
-            skills_dir=str(skills_dir),
             token_budget=8000,
         )
         assert result.sources[0]["tier"] == "goal", (
@@ -230,44 +226,8 @@ class TestArchiveCap:
         assert post_text.count("Same Title") < pre_text.count("Same Title")
 
 
-# ── Skill floor enforcement ───────────────────────────────────────────────
-
-
-class TestSkillFloor:
-    def test_skill_floor_preserves_budget(self, project_dir, skills_dir):
-        """When skills return nothing, 30% of budget should be held.
-
-        Without the floor, project entries could consume the entire budget.
-        The floor ensures non-skill content stays within 70% of budget.
-        """
-        ensure_project_store(str(project_dir))
-
-        # Create lots of project entries that could consume all budget
-        mgr = ProjectManager(Path.home() / ".magnolia")
-        for i in range(10):
-            mgr.create_entry(
-                str(project_dir),
-                f"Big Entry {i}",
-                "x" * 500,  # ~125 tokens each
-                tags=["test"],
-            )
-
-        budget = 2000
-        result = assemble_context(
-            task_description="test query",
-            project_dir=str(project_dir),
-            skills_dir=str(skills_dir),  # empty skills dir
-            token_budget=budget,
-        )
-
-        # Verify the floor is enforced: total tokens should not exceed 70%
-        # because 30% is reserved for skills (even though none exist).
-        skill_floor = int(budget * 0.30)
-        max_non_skill = budget - skill_floor
-        assert result.tokens_used <= max_non_skill, (
-            f"Expected tokens_used <= {max_non_skill} (budget - floor), "
-            f"got {result.tokens_used}. Skill floor not enforced."
-        )
+# (TestSkillFloor removed 2026-09 with the skill tier; project entries now
+# fill up to 70% of the budget — see allocate_budget.)
 
 
 # ── Confidence decay ──────────────────────────────────────────────────────
@@ -417,7 +377,6 @@ class TestConversationHistory:
         result = assemble_context(
             task_description="docking",
             project_dir=str(project_dir),
-            skills_dir=str(skills_dir),
             token_budget=8000,
             conversation_history=history,
         )

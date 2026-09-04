@@ -20,16 +20,8 @@ import os
 import sys
 from pathlib import Path
 
-from compchem_memory.tiers.project import ProjectManager, _keyword_score
-from compchem_memory.tiers.skill import SkillManager
-from compchem_memory.storage import SKILLS_DIR as _DEFAULT_SKILLS_DIR, resolve_project_dir
-
-
-def _skills_dir() -> Path:
-    """Resolve like server.py does: MAGNOLIA_SKILLS_DIR verbatim, relative paths
-    against the process CWD (the opencode plugin passes cwd = project dir, which
-    is exactly how the live MCP server resolves it)."""
-    return Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_DEFAULT_SKILLS_DIR))).expanduser()
+from compchem_memory.tiers.project import ProjectManager
+from compchem_memory.storage import resolve_project_dir
 
 
 def _gist(text: str, limit: int = 180) -> str:
@@ -68,31 +60,10 @@ def main() -> int:
     except Exception as e:  # noqa: BLE001
         print(f"[quick_search] staging tier skipped: {e}", file=sys.stderr)
 
-    # Skill tier: search_skills is a whole-query substring filter (dead for
-    # multi-token queries), so iterate skills and rescore with the same
-    # token-overlap metric over (name, description, body).
-    try:
-        import yaml
+    # (The skill tier was retired 2026-09; rules/ doctrine is git-tracked and
+    # loaded via AGENTS.md, not searched here.)
 
-        skill_m = SkillManager(_skills_dir())
-        for e in skill_m.list_skills():
-            try:
-                text = Path(e["path"]).read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                text = ""
-            desc = str(e.get("description", "") or "")
-            e["score"] = _keyword_score(
-                (e.get("name", "") + " " + e.get("tool", "") + " " + desc + " " + text).lower(),
-                query)
-            e["title"] = e.get("tool") or e.get("name", "")
-            e["description"] = desc
-            e["tier"] = "skill"
-            e["type"] = "rule"
-            results.append(e)
-    except Exception as e:  # noqa: BLE001
-        print(f"[quick_search] skill tier skipped: {e}", file=sys.stderr)
-
-    tier_weight = {"skill": 3, "project": 2, "staging": 1}
+    tier_weight = {"project": 2, "staging": 1}
     results.sort(key=lambda e: (e.get("score", 0), tier_weight.get(e.get("tier", ""), 0)),
                  reverse=True)
 

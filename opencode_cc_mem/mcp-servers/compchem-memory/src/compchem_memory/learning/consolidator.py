@@ -13,7 +13,6 @@ def consolidate_tier(
     base_dir: str,
     stale_days: int = 90,
     max_entries: int = 200,
-    skills_dir: str | None = None,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
         "tier": tier,
@@ -51,13 +50,6 @@ def consolidate_tier(
         # Refresh INDEX.md whenever entries were modified
         if merged or expired or archived:
             _refresh_index(entries_dir)
-
-    elif tier == "skill":
-        if skills_dir:
-            skill_path = Path(skills_dir)
-            if skill_path.exists():
-                files = list(skill_path.glob("*.md"))
-                report["remaining"] = len(files)
 
     return report
 

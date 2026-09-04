@@ -7,7 +7,12 @@ from pathlib import Path
 
 GLOBAL_BASE = Path.home() / ".magnolia"
 PROJECTS_DIR = GLOBAL_BASE / "projects"
-SKILLS_DIR = GLOBAL_BASE / "skills"
+# Elevated rules live in the repo's git-tracked rules/ directory (loaded every
+# session as doctrine); this global fallback only applies when the server runs
+# outside an opencode workspace that sets MAGNOLIA_RULES_DIR. The skill tier
+# (formerly ~/.magnolia/skills) was retired 2026-09: protocols moved to
+# .opencode/skills/, learnings stay in the memory tiers.
+RULES_DIR = GLOBAL_BASE / "rules"
 
 
 def ensure_project_store(project_dir: str) -> Path:
