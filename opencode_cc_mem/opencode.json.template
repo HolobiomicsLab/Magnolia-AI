@@ -29,7 +29,7 @@
       "environment": {
         "MAGNOLIA_ROOT": "@@MAGNOLIA_ROOT@@",
         "MAGNOLIA_RULES_DIR": "rules",
-        "MAGNOLIA_PROJECT_DIR": "projects/@@PROJECT@@"
+        "MAGNOLIA_PROJECT_DIR": "@@MAGNOLIA_ROOT@@/opencode_cc_mem/projects/@@PROJECT@@"
       }
     },
     "perspicacite": {
