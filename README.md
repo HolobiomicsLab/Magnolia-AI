@@ -55,7 +55,7 @@ Every project has its own notebook at `projects/<name>/.magnolia/`. Magnolia wri
 - Which experiments you ran
 - Scores and results
 - Errors you hit and how they were fixed
-- Rules that worked (for example: *"p2rank pocket restraints are better than manual restraints for this protein"*)
+- What worked and what did not (for example: *"p2rank pocket restraints are better than manual restraints for this protein"*)
 
 Because the notebook lives inside your project folder, you can move the project to another computer and the assistant still knows everything.
 
@@ -68,6 +68,32 @@ You can also add your own annotations — just tell Magnolia:
 These become permanent entries alongside the auto-generated ones.
 
 Commands that run through `magnolia-run` are automatically logged to the session log, so even bash-driven scientific workflows are captured for later review.
+
+#### From a note to a rule: the three levels
+
+Not everything Magnolia notices deserves to be remembered forever, so notes move up through three levels and each step asks for more evidence than the last. The first two are the assistant's own notebook; the third is a document in this repository, which is the point — the last step is where a machine observation becomes something you have signed off on:
+
+| Level | Where it lives | What it holds |
+|---|---|---|
+| **1. Draft notes** | `.magnolia/staging/` | Something noticed in a single session, not yet committed to |
+| **2. Project notes** | `.magnolia/entries/` | Findings about *this* project that have held up more than once |
+| **3. Rules** | `rules/` | Lessons durable enough to apply on *every* project — read at every session start |
+
+**Level 1 → 2 happens on its own.** A draft becomes a project note once the same observation has come up in **at least two different sessions** and Magnolia is confident in it. One enthusiastic session is not enough — that is exactly what the two-session requirement is there to prevent.
+
+**Level 2 → 3 is proposed by Magnolia and decided by you.** Once a project note has held up across **three different sessions**, Magnolia nominates it to become a rule. Before the nomination reaches you it is reviewed three times by independent passes of the model, any of which can veto it on scientific grounds, and at least two must approve. It is also compared against the rules you already have, so a candidate that contradicts one is flagged rather than quietly filed. Magnolia then drafts the rule text — and stops.
+
+What it drafts is a *rule*, not a copy of the note. A project note carries the shape of the observation that produced it — how often it was seen, the symptom that prompted it, the fix. A rule states the resulting instruction and points back at the note as its evidence. Elevation is therefore an editorial act, which is the other reason a person is asked to sign it off.
+
+**Nothing is written until you say so.** The proposal waits in `.magnolia/reflex/promotion-proposal.json`, and Magnolia raises it again at the start of every session until you deal with it. To see what is pending, just ask:
+
+> *"Are there any proposed rules waiting for review?"*
+
+Magnolia writes a readable summary to `magnolia-review/promotions.md` — the `memory_review_promotions` tool — listing each candidate, how many sessions it came from, what the review passes said, and the drafted rule. Tell it which to accept and which to reject (`memory_apply_promotions`) and only the accepted ones are written into `rules/`, as ordinary Markdown files you can edit or delete like any other. Because `rules/` is tracked by this repository, an accepted rule arrives as a reviewable change rather than an invisible one — you can read the diff, and `git revert` it if it turns out to be wrong. The source note is archived rather than deleted, so the evidence behind the rule survives it. Rejected proposals are dismissed for good and will not come back.
+
+You do not have to wait to be asked. If you already know you want a rule, say so — see tip 8 in [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md).
+
+**Why you are in the loop.** Magnolia is good at noticing that something has become a habit. It is in no position to judge whether that habit is good science. So the system nominates and a person decides — a deliberate boundary, not an unfinished feature.
 
 #### Self-reflex: automatic memory consolidation
 Magnolia can also review its own notes while you are away. A small script called `magnolia-selfreflex` compacts old session logs, distills new learnings, and syncs any results sent back from HPC jobs. It is designed to run on a schedule — for example, every morning at 11 AM via cron:
@@ -90,7 +116,9 @@ That second path is the more valuable one, and it has a quality ceiling set by y
 A planned improvement is to **chunk** long transcripts and distill each piece within the effective window, then merge — so recall stays high regardless of session length. Until then: for sessions where you reach important conclusions, the most reliable capture is to say so explicitly (*"note that down: …"*), which records the finding immediately and independently of the distiller.
 
 ### 3. The Tools
-Scientific programs like **HADDOCK3**, **BoltzGen**, and **GROMACS** live in a `softwares/` folder. Magnolia knows how to call them, but it installs them in isolated "fenced yards" so they don't interfere with each other. You don't need to memorize command lines.
+Scientific programs like **HADDOCK3**, **GROMACS** and **BoltzGen** live in a `softwares/` folder. Magnolia knows how to call them, but it installs them in isolated "fenced yards" so they don't interfere with each other. You don't need to memorize command lines.
+
+Most of these have a dedicated connector of their own. A few — BoltzGen among them — are driven through the general command runner instead. From your side this makes no difference; it only means they do not appear as separate entries in the tool list.
 
 ---
 
@@ -99,7 +127,9 @@ Scientific programs like **HADDOCK3**, **BoltzGen**, and **GROMACS** live in a `
 ```
 project_magnolia/
 ├── opencode_cc_mem/          # The "brain" and training of the assistant
-│   ├── rules/                # Lab protocols the assistant follows
+│   ├── rules/                # Standing instructions, read at every session start —
+│   │                         #   both hand-written and elevated from project notebooks
+│   ├── .opencode/skills/     # Task protocols, loaded on demand when a task matches
 │   ├── mcp-servers/          # Connectors for memory and tools
 │   └── projects/             # Your actual science projects
 │       └── my_project/   # Example project
@@ -178,10 +208,12 @@ python3 -m venv .venv
 **Verify it worked:** Run this command — if it prints the message below, you're all set:
 
 ```bash
-.venv/bin/python3 -c "import compchem_tools, compchem_memory; print('Helper programs are ready.')"
+.venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
 ```
 
 You should see: `Helper programs are ready.`
+
+If instead you see a `ModuleNotFoundError`, the install did not finish and Magnolia will not be able to run tools or take notes. Do not carry on to step 4 — re-run step 3, and if it still fails, report the error message as an issue. (This command deliberately loads the two programs themselves rather than just checking that their folders are on the path, so a broken install is caught here rather than in your first session.)
 
 ---
 
@@ -255,3 +287,11 @@ If something goes wrong, just tell Magnolia:
 > *"That didn't work. Can you check the error and try again?"*
 
 Because of the memory system, it will often know exactly what went wrong and how to fix it.
+
+---
+
+## Licence
+
+Magnolia is released under the **MIT License with a Non-Military Clause** — see [`LICENSE`](LICENSE). Clause 2 forbids use for the development, production or operation of weapons or military systems, or for any application that causes harm to civilian populations.
+
+Because that clause restricts a field of use, this is **not** the unmodified MIT licence and is not an OSI-approved open-source licence. The source is available under the terms above; please do not describe the project as MIT-licensed or as open source.
