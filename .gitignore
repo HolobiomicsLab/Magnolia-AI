@@ -51,3 +51,6 @@ HANDOVER.md
 
 # Root-level docs/ holds machine-local setup runbooks (credentials-adjacent); never track
 /docs/
+
+# Personal cluster runbook (UniCA/Azzurra specifics, username examples) — machine-local only
+opencode_cc_mem/rules/hpc_azzurra.md
