@@ -151,7 +151,7 @@ def _store_with_eligible(tmp_path):
 
 def test_propose_writes_survivors_only(tmp_path):
     store = _store_with_eligible(tmp_path)
-    res = propose_promotions(str(store), skills_dir=str(tmp_path / "rules"),
+    res = propose_promotions(str(store), rules_dir=str(tmp_path / "rules"),
                              judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     art = _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
     assert res["candidates"] == 1
@@ -163,7 +163,7 @@ def test_propose_writes_survivors_only(tmp_path):
 
 def test_propose_carries_rejection_forward(tmp_path):
     store = _store_with_eligible(tmp_path)
-    args = dict(skills_dir=str(tmp_path / "rules"), judge=_approve_all,
+    args = dict(rules_dir=str(tmp_path / "rules"), judge=_approve_all,
                 drafter=_draft_stub, checker=_ok_checker)
     propose_promotions(str(store), **args)
     # reject index 0 by hand, then regenerate
@@ -183,7 +183,7 @@ from compchem_memory.promotion import render_promotions_markdown
 
 def test_render_lists_pending_with_flags(tmp_path):
     store = _store_with_eligible(tmp_path)
-    propose_promotions(str(store), skills_dir=str(tmp_path / "rules"),
+    propose_promotions(str(store), rules_dir=str(tmp_path / "rules"),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     path = render_promotions_markdown(str(store))
     assert path == str(tmp_path / "magnolia-review" / "promotions.md")
@@ -210,7 +210,7 @@ from compchem_memory.promotion import apply_promotions
 def test_apply_accept_writes_rule_and_archives_entry(tmp_path):
     store = _store_with_eligible(tmp_path)
     skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     src = _json.loads((store / "reflex" / "promotion-proposal.json").read_text()
                       )["proposals"][0]["source"]
@@ -229,7 +229,7 @@ def test_apply_accept_writes_rule_and_archives_entry(tmp_path):
 
 def test_apply_reject_is_durable(tmp_path):
     store = _store_with_eligible(tmp_path); skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     res = apply_promotions(str(store), str(skills), reject=[0])
     assert res["rejected"] == 1
@@ -244,7 +244,7 @@ def test_apply_partial_failure_keeps_earlier(tmp_path, monkeypatch):
     _entry(entries, "a.md", "Aaa", "x", ["s1", "s2", "s3"])
     _entry(entries, "b.md", "Bbb", "y", ["s1", "s2", "s3"])
     skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     real = promotion._write_rule
     calls = {"n": 0}
@@ -267,7 +267,7 @@ def test_apply_collision_surfaces_failed_and_preserves_source(tmp_path):
     _entry(entries, "a.md", "Same Name", "first body", ["s1", "s2", "s3"])
     _entry(entries, "b.md", "Same Name", "second body", ["s1", "s2", "s3"])  # same slug
     skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
 
     res = apply_promotions(str(store), str(skills), accept=[0, 1])
@@ -284,7 +284,7 @@ def test_apply_collision_surfaces_failed_and_preserves_source(tmp_path):
 def test_apply_archive_failure_not_double_counted(tmp_path, monkeypatch):
     from compchem_memory import promotion
     store = _store_with_eligible(tmp_path); skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
     def boom(source, store_dir):
         raise RuntimeError("archive failed")
@@ -303,12 +303,12 @@ def test_review_and_apply_tools_end_to_end(tmp_path, monkeypatch):
     store = tmp_path / ".magnolia"; entries = store / "entries"; entries.mkdir(parents=True)
     _entry(entries, "a.md", "Alpha rule", "use alpha", ["s1", "s2", "s3"])
     skills = tmp_path / "rules"; skills.mkdir()
-    propose_promotions(str(store), skills_dir=str(skills),
+    propose_promotions(str(store), rules_dir=str(skills),
                        judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
 
     pd = str(tmp_path)
     monkeypatch.setattr(server, "PROJECT_DIR", pd)
-    monkeypatch.setattr(server, "SKILLS_DIR", skills)
+    monkeypatch.setattr(server, "RULES_DIR", skills)
     review = getattr(server.memory_review_promotions, "fn", server.memory_review_promotions)
     apply = getattr(server.memory_apply_promotions, "fn", server.memory_apply_promotions)
 

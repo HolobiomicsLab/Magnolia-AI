@@ -12,25 +12,9 @@ class MemoryIndex:
         self.global_base = global_base
 
     def build_index(
-        self, project_dir: str | None = None, skills_dir: str | None = None
+        self, project_dir: str | None = None
     ) -> list[dict[str, Any]]:
         entries = []
-        if skills_dir:
-            skills_path = Path(skills_dir)
-            if skills_path.exists():
-                for f in skills_path.glob("*.md"):
-                    text = f.read_text()
-                    meta = self._parse_frontmatter(text)
-                    entries.append(
-                        {
-                            "tier": "skill",
-                            "name": f.name,
-                            "tool": meta.get("name", f.stem),
-                            "tags": meta.get("tags", []),
-                            "date": meta.get("last_verified", ""),
-                            "path": str(f),
-                        }
-                    )
         if project_dir:
             entries_dir = Path(project_dir) / ".magnolia" / "entries"
             if entries_dir.exists():

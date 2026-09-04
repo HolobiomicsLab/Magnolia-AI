@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from compchem_memory.scanning import scan_memory_headers, scan_skills_headers
+from compchem_memory.scanning import scan_memory_headers
 from compchem_memory.llm import is_llm_available, call_llm_json
 
 # Staging-exposure (phase 1): warning-type learnings are surfaced from staging
@@ -120,61 +120,6 @@ def select_relevant_entries(
         if used_tokens + tokens > budget:
             continue
         results.append({**h, "content": content, "relevance_score": round(_score_entry(h, task_lower, task_words, run_outcomes=run_outcomes), 2)})
-        used_tokens += tokens
-    return results
-
-
-def select_relevant_skills(
-    task_description: str,
-    skills_dir: str,
-    budget: int = 8000,
-) -> list[dict[str, Any]]:
-    headers = scan_skills_headers(Path(skills_dir))
-    task_lower = task_description.lower()
-    task_words = set(task_lower.split())
-    scored: list[tuple[float, dict[str, Any]]] = []
-    for h in headers:
-        score = 0.0
-        tool_name = h.get("tool", "")
-        desc = h.get("description", "").lower()
-        for word in task_words:
-            if word in tool_name.lower():
-                score += 5.0
-            if word in desc:
-                score += 2.0
-        if score > 0:
-            scored.append((score, h))
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    # Phase 2: LLM picks if available
-    top_candidates = [h for _, h in scored[:15]]
-    selected_filenames = None
-    if is_llm_available() and top_candidates:
-        selected_filenames = llm_select_memories(task_description, top_candidates, max_selections=5)
-
-    if selected_filenames:
-        fname_to_h = {h["filename"]: h for h in top_candidates}
-        final_headers = [fname_to_h[fn] for fn in selected_filenames if fn in fname_to_h]
-    else:
-        final_headers = top_candidates
-
-    results: list[dict[str, Any]] = []
-    used_tokens = 0
-    for h in final_headers:
-        if used_tokens >= budget:
-            break
-        path = Path(h["path"])
-        content = _load_entry_content(path)
-        if content is None:
-            continue
-        tokens = _estimate_tokens(content)
-        if used_tokens + tokens > budget:
-            content = content[: (budget - used_tokens) * 4]
-            tokens = _estimate_tokens(content)
-        results.append({**h, "content": content, "relevance_score": round(
-            sum(5.0 if w in h.get("tool", "").lower() else 0 for w in task_words) +
-            sum(2.0 if w in h.get("description", "").lower() else 0 for w in task_words), 2
-        )})
         used_tokens += tokens
     return results
 

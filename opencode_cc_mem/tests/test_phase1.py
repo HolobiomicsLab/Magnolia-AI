@@ -130,12 +130,14 @@ class TestMCPServerStartup:
             "memory_search",
             "memory_get_run_history",
             "memory_record_run",
-            "memory_promote",
             "memory_consolidate",
             "post_run_assess",
             "memory_confirm",
         ]:
             assert name in tool_names, f"Missing tool: {name}"
+
+        # skill tier retired 2026-09: raw-copy promotion tool is gone
+        assert "memory_promote" not in tool_names
 
     def test_tools_server_tool_list(self):
         import asyncio
@@ -277,26 +279,24 @@ class TestPostRunAssess:
 
 
 class TestMemoryGetContext:
-    def test_returns_skill_for_haddock3(self, test_root):
-        _, skills_dir, _ = test_root
-        from compchem_memory.tiers.skill import SkillManager
+    def test_skill_tier_retired_rules_home_exists(self, test_root):
+        """The skill tier was retired 2026-09: importing it fails, and protocols
+        now live as authored SKILL.md docs in .opencode/skills/."""
+        import importlib
 
-        mgr = SkillManager(skills_dir)
-        content = mgr.get_skill("haddock3")
-        assert content is not None
-        assert "HADDOCK3" in content
-        assert "Common Mistakes" in content
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("compchem_memory.tiers.skill")
+        skill_md = Path(__file__).resolve().parent.parent / (
+            ".opencode/skills/haddock3/SKILL.md"
+        )
+        assert skill_md.exists(), "haddock3 protocol doc missing from .opencode/skills/"
+        assert "HADDOCK3" in skill_md.read_text()
 
     def test_context_assembly(self, test_root):
         _, skills_dir, project_dir = test_root
-        from compchem_memory.tiers.skill import SkillManager
         from compchem_memory.tiers.project import ProjectManager
 
-        skill_mgr = SkillManager(skills_dir)
         project_mgr = ProjectManager(Path("/tmp"))
-
-        skills = skill_mgr.search_skills(keyword="docking")
-        assert len(skills) >= 1
 
         project_mgr.create_entry(
             str(project_dir),
@@ -465,7 +465,6 @@ class TestEndToEndWorkflow:
 
         from compchem_memory.tiers.session import SessionManager
         from compchem_memory.tiers.project import ProjectManager
-        from compchem_memory.tiers.skill import SkillManager
         from compchem_memory.learning.assessor import assess_run
         from compchem_tools.tools.preprocess import preprocess_pdb, validate_structure
         from compchem_tools.gates.docking import docking_inputs_ready
@@ -475,11 +474,14 @@ class TestEndToEndWorkflow:
         session_mgr = SessionManager(sessions_dir)
         session_mgr.start_new_session()
         project_mgr = ProjectManager(Path("/tmp"))
-        skill_mgr = SkillManager(skills_dir)
 
-        # Step 1: Load context
-        skill_content = skill_mgr.get_skill("haddock3")
-        assert skill_content is not None, "No HADDOCK3 skill found"
+        # Step 1: Load context (protocol doc from .opencode/skills/, the
+        # post-retirement home of task-shaped knowledge)
+        skill_content = (
+            Path(__file__).resolve().parent.parent
+            / ".opencode/skills/haddock3/SKILL.md"
+        ).read_text()
+        assert "HADDOCK3" in skill_content, "No HADDOCK3 protocol found"
         session_mgr.record("memory_get_context", {"tool": "haddock3", "loaded": True})
 
         # Step 2: Set up run directory

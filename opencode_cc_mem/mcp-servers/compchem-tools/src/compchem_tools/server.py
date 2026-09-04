@@ -73,9 +73,6 @@ from compchem_tools.tools.shell import run_shell as _run_shell
 from compchem_tools.gates import GATE_REGISTRY
 from compchem_tools.progress import parse_haddock_progress
 
-SKILLS_DIR = os.environ.get(
-    "MAGNOLIA_SKILLS_DIR", os.path.expanduser("~/.magnolia/skills")
-)
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 
 mcp = FastMCP("compchem-tools")
