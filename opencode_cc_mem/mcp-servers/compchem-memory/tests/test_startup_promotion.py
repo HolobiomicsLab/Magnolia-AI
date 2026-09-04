@@ -27,7 +27,7 @@ def test_maybe_promote_runs_when_llm_available(tmp_path, monkeypatch):
     _entry(entries, "a.md", "Alpha", ["s1", "s2", "s3"])
     monkeypatch.setattr(startup_scan, "is_llm_available", lambda: True)
     called = {}
-    def fake_propose(store_dir, *, skills_dir):
+    def fake_propose(store_dir, *, rules_dir):
         called["store"] = store_dir; return {"candidates": 0}
     monkeypatch.setattr("compchem_memory.promotion.propose_promotions", fake_propose)
 
@@ -61,7 +61,7 @@ def test_maybe_promote_regenerates_when_nothing_pending(tmp_path, monkeypatch):
     _proposal_artifact(store, "promotion-proposal.json", pending=False)  # all handled
     monkeypatch.setattr(startup_scan, "is_llm_available", lambda: True)
     calls = {"n": 0}
-    def fake(store_dir, *, skills_dir):
+    def fake(store_dir, *, rules_dir):
         calls["n"] += 1; return {"candidates": 0}
     monkeypatch.setattr("compchem_memory.promotion.propose_promotions", fake)
     startup_scan._maybe_promote(store)

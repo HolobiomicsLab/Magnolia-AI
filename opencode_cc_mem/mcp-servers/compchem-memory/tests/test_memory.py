@@ -1,4 +1,4 @@
-"""Tests for compchem-memory: session, project, skill tiers."""
+"""Tests for compchem-memory: session and project tiers."""
 
 import json
 import os
@@ -10,7 +10,6 @@ import yaml
 
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
-from compchem_memory.tiers.skill import SkillManager
 from compchem_memory.learning.assessor import assess_run
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.index import MemoryIndex
@@ -28,12 +27,6 @@ def project_dir(tmp_dir):
     pd.mkdir()
     return pd
 
-
-@pytest.fixture
-def skills_dir(tmp_dir):
-    sd = tmp_dir / "skills"
-    sd.mkdir()
-    return sd
 
 
 class TestSessionManager:
@@ -147,33 +140,6 @@ class TestProjectManager:
         assert history[0]["run_id"] == "test_001"
 
 
-class TestSkillManager:
-    def test_list_skills(self, skills_dir):
-        (skills_dir / "HADDOCK3_SKILL.md").write_text(
-            "---\nname: haddock3\nversion: 1.0\n---\n# HADDOCK3 Skill\n"
-        )
-        mgr = SkillManager(skills_dir)
-        skills = mgr.list_skills()
-        assert len(skills) == 1
-        assert skills[0]["tool"] == "haddock3"
-
-    def test_get_skill(self, skills_dir):
-        (skills_dir / "HADDOCK3_SKILL.md").write_text(
-            "---\nname: haddock3\n---\n# Content here\n"
-        )
-        mgr = SkillManager(skills_dir)
-        content = mgr.get_skill("haddock3")
-        assert content is not None
-        assert "Content here" in content
-
-    def test_search_skills(self, skills_dir):
-        (skills_dir / "GNINA_SKILL.md").write_text(
-            "---\nname: gnina\ntags: [covalent, docking]\n---\n# Gnina covalent docking\n"
-        )
-        mgr = SkillManager(skills_dir)
-        results = mgr.search_skills(keyword="covalent")
-        assert len(results) == 1
-
 
 class TestAssessor:
     def test_assess_missing_dir(self):
@@ -203,20 +169,15 @@ class TestConsolidator:
 
 
 class TestMemoryIndex:
-    def test_build_index(self, project_dir, skills_dir):
-        (skills_dir / "HADDOCK3_SKILL.md").write_text(
-            "---\nname: haddock3\n---\nContent\n"
-        )
+    def test_build_index(self, project_dir):
         mgr = ProjectManager(project_dir)
         mgr.create_entry(str(project_dir), "Test", "Content")
 
         idx = MemoryIndex(project_dir)
-        entries = idx.build_index(
-            project_dir=str(project_dir), skills_dir=str(skills_dir)
-        )
-        assert len(entries) == 2
+        entries = idx.build_index(project_dir=str(project_dir))
+        assert len(entries) == 1
         tiers = {e["tier"] for e in entries}
-        assert tiers == {"skill", "project"}
+        assert tiers == {"project"}
 
 
 class TestExtendedCreateEntry:

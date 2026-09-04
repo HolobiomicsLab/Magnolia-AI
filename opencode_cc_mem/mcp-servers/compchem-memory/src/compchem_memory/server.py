@@ -1,4 +1,9 @@
-"""compchem-memory MCP server: Enhanced three-tier memory store for computational chemistry."""
+"""compchem-memory MCP server: memory-backed store for computational chemistry.
+
+Tier model since 2026-09: session + project/staging memory tiers in .magnolia/,
+with elevation to durable doctrine via the git-tracked rules/ directory (the
+former .magnolia/skills skill tier was retired; protocols live in
+.opencode/skills/, loaded on demand by the agent)."""
 
 import json
 import os
@@ -10,14 +15,11 @@ from fastmcp import FastMCP
 from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
-from compchem_memory.tiers.skill import SkillManager
 from compchem_memory.learning.consolidator import consolidate_tier
-from compchem_memory.index import MemoryIndex
 from compchem_memory.context_assembly import assemble_context, _memory_store
-from compchem_memory.retrieval import select_relevant_entries, select_relevant_skills
+from compchem_memory.retrieval import select_relevant_entries
 from compchem_memory.scanning import (
     scan_memory_headers,
-    scan_skills_headers,
     format_manifest,
 )
 from compchem_memory.extraction import AutomaticMemoryExtractor
@@ -29,7 +31,7 @@ from compchem_memory.compaction import (
 from compchem_memory.health import run_health_check
 from compchem_memory.notebook import generate_notebook
 from compchem_memory.storage import (
-    SKILLS_DIR as _SKILLS_DIR,
+    RULES_DIR as _RULES_DIR,
     ensure_project_store,
     resolve_project_dir,
 )
@@ -38,12 +40,12 @@ from compchem_memory.startup_scan import scan_and_distill, _opencode_available
 from compchem_memory.llm import is_llm_available
 from compchem_memory.opencode_ingest import _latest_sid, distill_session_transcript
 
-SKILLS_DIR = Path(os.environ.get("MAGNOLIA_SKILLS_DIR", str(_SKILLS_DIR)))
+RULES_DIR = Path(os.environ.get("MAGNOLIA_RULES_DIR", str(_RULES_DIR)))
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
 
-def _build_boot_steps(project_dir, skills_dir):
+def _build_boot_steps(project_dir):
     """Ordered boot-worker steps. Handover runs after distillation (so the just-
     ended session is captured) and before boot-context (so assemble_context sees
     the fresh handover). Extracted as a function so the ordering is testable."""
@@ -55,7 +57,7 @@ def _build_boot_steps(project_dir, skills_dir):
     return [
         ("startup_scan", lambda: scan_and_distill(project_dir)),
         ("handover", lambda: generate_handover(project_dir)),
-        ("boot_context", lambda: regenerate_boot_context(project_dir, skills_dir=str(skills_dir))),
+        ("boot_context", lambda: regenerate_boot_context(project_dir)),
         ("audit", lambda: run_audit(project_dir)),
     ]
 
@@ -66,7 +68,7 @@ def _run_startup_scan_background():
     import datetime
 
     def _worker():
-        for step_name, step_fn in _build_boot_steps(PROJECT_DIR, SKILLS_DIR):
+        for step_name, step_fn in _build_boot_steps(PROJECT_DIR):
             try:
                 step_fn()
             except Exception as e:
@@ -131,8 +133,6 @@ _run_distill_timer_background()
 mcp = FastMCP("compchem-memory")
 
 project_mgr: ProjectManager | None = None
-skill_mgr: SkillManager | None = None
-memory_idx: MemoryIndex | None = None
 _extractor: AutomaticMemoryExtractor | None = None
 
 
@@ -145,20 +145,6 @@ def _get_project_mgr() -> ProjectManager:
     if project_mgr is None:
         project_mgr = ProjectManager(GLOBAL_BASE)
     return project_mgr
-
-
-def _get_skill_mgr() -> SkillManager:
-    global skill_mgr
-    if skill_mgr is None:
-        skill_mgr = SkillManager(SKILLS_DIR)
-    return skill_mgr
-
-
-def _get_index() -> MemoryIndex:
-    global memory_idx
-    if memory_idx is None:
-        memory_idx = MemoryIndex(GLOBAL_BASE)
-    return memory_idx
 
 
 def _get_extractor(project_dir: str | None = None) -> AutomaticMemoryExtractor:
@@ -221,7 +207,7 @@ def memory_get_context(
     conversation_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """Multi-stage context assembly pipeline. Retrieves relevant entries from
-    all three tiers (session, project, skill) with token budget management.
+    the session and project/staging tiers with token budget management.
     Applies semantic scoring to select the most relevant project-tier entries.
     Optionally pass conversation_history to improve tool-diversity filtering.
 
@@ -230,7 +216,6 @@ def memory_get_context(
     result = assemble_context(
         task_description=task_description,
         project_dir=pd,
-        skills_dir=str(SKILLS_DIR),
         token_budget=token_budget,
         conversation_history=conversation_history,
     )
@@ -333,16 +318,13 @@ def memory_search(
     tags: list[str] | None = None,
     project_dir: str | None = None,
 ) -> str:
-    """Keyword + tag search across all tiers (skill, project, staging, session).
+    """Keyword + tag search across all tiers (project, staging, session).
     Returns matches with a tier label; staging hits are marked provisional=True
-    (unconfirmed) and ranked below the durable skill/project tiers.
+    (unconfirmed) and ranked below the durable project tier.
 
     Call this when: you suspect a relevant entry exists but did not surface in memory_get_context."""
     pd = _resolve_project_store(project_dir)
     results = []
-
-    skill_m = _get_skill_mgr()
-    results.extend(skill_m.search_skills(keyword=keyword, tags=tags))
 
     proj_m = _get_project_mgr()
     entries = proj_m.search_entries(pd, keyword=keyword, tags=tags)
@@ -406,23 +388,6 @@ def memory_record_run(
 
 @mcp.tool()
 @captured(source="compchem-memory")
-def memory_promote(
-    entry_name: str,
-    project_dir: str | None = None,
-    skills_dir: str | None = None,
-) -> str:
-    """Move an entry from project tier to skill tier. Requires explicit invocation
-    (human-gated).
-
-    Call this when: graduating a mature project-tier entry to the shared skill tier (cross-project, durable protocol)."""
-    pd = _resolve_project_store(project_dir)
-    sd = skills_dir or str(SKILLS_DIR)
-    proj_m = _get_project_mgr()
-    return proj_m.promote_to_skill(pd, entry_name, sd)
-
-
-@mcp.tool()
-@captured(source="compchem-memory")
 def memory_consolidate(
     tier: str = "project",
     project_dir: str | None = None,
@@ -439,7 +404,6 @@ def memory_consolidate(
         pd,
         stale_days=stale_days,
         max_entries=max_entries,
-        skills_dir=str(SKILLS_DIR),
     )
     return json.dumps(result, indent=2)
 
@@ -496,7 +460,7 @@ def memory_confirm(
 ) -> str:
     """Confirm a staging entry, moving it to the active project entries.
 
-    Call this when: reviewing staging entries you want to promote to the durable project tier (staging → project; use memory_promote for project → skill)."""
+    Call this when: reviewing staging entries you want to promote to the durable project tier (staging → project; for project → rules elevation use memory_review_promotions/memory_apply_promotions)."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.confirm_staging(pd, entry_name)
@@ -794,7 +758,7 @@ def memory_apply_consolidation(
 
 @mcp.tool()
 def memory_review_promotions(project_dir: str | None = None) -> str:
-    """Render pending project→skill rule-elevation proposals to a visible,
+    """Render pending project→rules rule-elevation proposals to a visible,
     read-only review file at <project>/magnolia-review/promotions.md and report a
     summary. Call this at session start when a promotion proposal exists, or when
     the user asks to review proposed rule elevations."""
@@ -830,7 +794,7 @@ def memory_apply_promotions(
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
     result = promotion.apply_promotions(
-        str(store), str(SKILLS_DIR), accept=accept, reject=reject,
+        str(store), str(RULES_DIR), accept=accept, reject=reject,
         promote_raw=promote_raw)
     if result["applied"] or result["promoted_raw"]:
         n = result["applied"] + result["promoted_raw"]
@@ -851,9 +815,9 @@ def memory_scan_headers(
 ) -> str:
     """Fast header scan of memory entries (frontmatter only, no full content).
     Returns catalogue of titles, types, tags, tools for selection. `tier` is one
-    of 'project' (default), 'staging', 'all' (project+staging), or 'skill'.
+    of 'project' (default), 'staging', or 'all' (project+staging).
 
-    Call this when: enumerating entry headers (any tier) without loading bodies."""
+    Call this when: enumerating entry headers without loading bodies."""
     pd = _resolve_project_store(project_dir)
 
     if tier == "project":
@@ -863,11 +827,9 @@ def memory_scan_headers(
     elif tier == "all":
         headers = (scan_memory_headers(Path(pd) / ".magnolia" / "entries")
                    + scan_memory_headers(Path(pd) / ".magnolia" / "staging"))
-    elif tier == "skill":
-        headers = scan_skills_headers(SKILLS_DIR)
     else:
         return json.dumps(
-            {"error": f"Unknown tier: {tier}. Use 'project', 'staging', 'all', or 'skill'."}
+            {"error": f"Unknown tier: {tier}. Use 'project', 'staging', or 'all'."}
         )
 
     manifest = format_manifest(headers)
@@ -994,16 +956,6 @@ def memory_get_goal(
 
 
 # ── Resources (preserved from v1) ────────────────────────────────────────────
-
-
-@mcp.resource("memory://skills/{tool_name}")
-def get_skill_resource(tool_name: str) -> str:
-    """Full skill file content for a given tool.
-
-    Call this when: retrieving the full protocol document for a specific scientific tool."""
-    skill_m = _get_skill_mgr()
-    content = skill_m.get_skill(tool_name)
-    return content or f"No skill found for {tool_name}"
 
 
 @mcp.resource("memory://project/index")

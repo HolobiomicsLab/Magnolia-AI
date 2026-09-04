@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from compchem_memory.retrieval import select_relevant_entries, select_relevant_skills
+from compchem_memory.retrieval import select_relevant_entries
 
 
 @dataclass
@@ -13,7 +13,6 @@ class BudgetAllocation:
     session_budget: int = 6000
     run_budget: int = 4000
     project_budget: int = 12000
-    skill_budget: int = 8000
 
 
 @dataclass
@@ -24,11 +23,12 @@ class ContextAssembly:
 
 
 def allocate_budget(total: int) -> BudgetAllocation:
+    # The skill tier (30% floor) was retired 2026-09; its budget goes to the
+    # project tier, which now fills up to 70% of the total.
     return BudgetAllocation(
         session_budget=min(int(total * 0.20), 6000),
         run_budget=min(int(total * 0.10), 4000),
-        project_budget=min(int(total * 0.40), 12000),
-        skill_budget=min(int(total * 0.30), 8000),
+        project_budget=min(int(total * 0.70), 12000),
     )
 
 
@@ -45,7 +45,6 @@ def _memory_store(project_dir: str) -> Path:
 def assemble_context(
     task_description: str,
     project_dir: str,
-    skills_dir: str,
     token_budget: int = 8000,
     current_run_id: str | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
@@ -64,38 +63,18 @@ def assemble_context(
         sources.append({"tier": "goal", "id": "GOAL.md"})
         remaining -= _estimate_tokens(goal_ctx)
 
-    # 1. Skills — strategic constraints before tactical data
-    #    Protected floor: 30% of total budget is reserved for skills.
-    skill_floor = int(token_budget * 0.30)
-    skill_entries = select_relevant_skills(
-        task_description,
-        skills_dir,
-        budget=allocation.skill_budget,
-    )
-    skill_tokens = 0
-    for entry in skill_entries:
-        content = entry.get("content", "")
-        tool = entry.get("tool", "")
-        sections.append(f"[SKILL: {tool}]\n{content}")
-        sources.append({"tier": "skill", "id": entry.get("filename", "")})
-        t = _estimate_tokens(content)
-        skill_tokens += t
-        remaining -= t
+    # (The skill tier section — formerly a 30%-protected floor here — was
+    # retired 2026-09; doctrine now travels via the git-tracked rules/ dir
+    # that AGENTS.md loads every session, not via memory context.)
 
-    # Enforce floor: reserve skill_floor tokens for skills.
-    # Non-skill content (goal + session + run + project) must not exceed
-    # budget minus skill_floor. Cap remaining unconditionally.
-    goal_tokens_used = token_budget - remaining - skill_tokens
-    remaining = min(remaining, max(0, token_budget - skill_floor - goal_tokens_used))
-
-    # 2. Session context
+    # 1. Session context
     session_ctx = _get_session_context(store, allocation.session_budget)
     if session_ctx:
         sections.append(session_ctx)
         sources.append({"tier": "session", "id": "recent"})
         remaining -= _estimate_tokens(session_ctx)
 
-    # 3. Current run state
+    # 2. Current run state
     if current_run_id:
         run_ctx = _get_run_state(store, current_run_id, allocation.run_budget)
         if run_ctx:
@@ -103,7 +82,7 @@ def assemble_context(
             sources.append({"tier": "run", "id": current_run_id})
             remaining -= _estimate_tokens(run_ctx)
 
-    # 4. Project entries last — fills whatever budget remains
+    # 3. Project entries last — fills whatever budget remains
     if remaining > 2000:
         recent_tools = (
             _extract_recent_tools(conversation_history) if conversation_history else []

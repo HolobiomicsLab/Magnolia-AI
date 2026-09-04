@@ -39,33 +39,6 @@ def scan_memory_headers(directory: Path, max_files: int = 200) -> list[dict[str,
     return results
 
 
-def scan_skills_headers(skills_dir: Path, max_files: int = 50) -> list[dict[str, Any]]:
-    if not skills_dir.exists():
-        return []
-    results = []
-    md_files = sorted(
-        skills_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True
-    )
-    for f in md_files:
-        if len(results) >= max_files:
-            break
-        meta = _read_frontmatter_only(f)
-        if meta is None:
-            continue
-        results.append(
-            {
-                "filename": f.name,
-                "path": str(f),
-                "tool": meta.get("name", f.stem),
-                "description": meta.get("description", ""),
-                "version": meta.get("version", ""),
-                "tags": meta.get("tags", []),
-                "last_verified": meta.get("last_verified", ""),
-            }
-        )
-    return results
-
-
 def format_manifest(headers: list[dict[str, Any]]) -> str:
     lines = []
     for i, h in enumerate(headers, 1):

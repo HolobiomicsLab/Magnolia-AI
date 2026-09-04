@@ -147,7 +147,11 @@ protocol:
   back to the source entry id. The source entry stays in its project tier as
   the evidence base.
 - The `memory_review_promotions` / `memory_apply_promotions` flow implements
-  this draft-and-review path; prefer it over raw `memory_promote`.
+  this draft-and-review path: accepted drafts are written as standalone rule
+  files into the git-tracked `rules/` directory and the source entry is
+  archived (git-reversible). This is the only elevation path — the raw-copy
+  `memory_promote` tool and the `.magnolia/skills` tier were retired
+  2026-09-04.
 
 ## Reviewing consolidation proposals
 

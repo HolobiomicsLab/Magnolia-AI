@@ -76,7 +76,7 @@ start() {
   # Supervisor loop: restart the server if it ever exits (crash or wedge).
   # Runs as its own session leader so it survives logout. Env is baked into
   # the child-script text (shell functions don't cross into bash -c children).
-  SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_SKILLS_DIR='.magnolia/skills' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
+  SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_RULES_DIR='rules' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
   setsid bash -c "
     echo \"[supervisor] \$(date -Is) start\" >> '$OUT_LOG'
     while true; do

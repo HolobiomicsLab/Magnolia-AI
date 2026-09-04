@@ -102,7 +102,6 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
     ...process.env,
     MAGNOLIA_ROOT: directory,
     MAGNOLIA_PROJECT_DIR: projectDir || process.env.MAGNOLIA_PROJECT_DIR || "projects/xiulian",
-    MAGNOLIA_SKILLS_DIR: ".magnolia/skills",
     PYTHONPATH: join(directory, "mcp-servers/compchem-memory/src"),
   }
 

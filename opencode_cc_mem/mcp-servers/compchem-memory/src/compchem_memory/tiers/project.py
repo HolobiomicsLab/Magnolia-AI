@@ -330,25 +330,6 @@ class ProjectManager:
             entry.pop("_sort_date", None)
         return result[:limit]
 
-    def promote_to_skill(
-        self, project_dir: str, entry_name: str, skills_dir: str
-    ) -> str:
-        entries_dir = self._entries_dir(project_dir)
-        source = None
-        for f in entries_dir.glob("*.md"):
-            if f.name == entry_name or entry_name in f.name:
-                source = f
-                break
-        if not source:
-            raise FileNotFoundError(f"Entry not found: {entry_name}")
-        backup_file(source, project_dir)
-        skills_path = Path(skills_dir)
-        dest = skills_path / source.name
-        dest.write_text(source.read_text())
-        source.unlink()
-        self._update_index(project_dir)
-        return str(dest)
-
     def confirm_staging(self, project_dir: str, entry_name: str) -> str:
         staging = self._staging_dir(project_dir)
         entries = self._entries_dir(project_dir)

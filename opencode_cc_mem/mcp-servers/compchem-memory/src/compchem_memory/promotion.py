@@ -1,10 +1,12 @@
 # src/compchem_memory/promotion.py
-"""Project→skill promotion (self-reflex rule elevation). Proposal-only +
+"""Project→rules promotion (self-reflex rule elevation). Proposal-only +
 human-confirm. Eligibility is deterministic (session count); verification is an
 LLM consensus panel + consistency check; the merged/drafted rule is human-confirmed.
 
 Detect with intelligence, gate with determinism, human-confirm — same contract as
-consolidation, one tier up (project entries → skill rules)."""
+consolidation. Elevated rules land in the git-tracked rules/ directory (always-on
+doctrine, AGENTS.md-loaded); the skill tier was retired 2026-09, so this is the
+only elevation path (the raw-copy memory_promote tool was removed with it)."""
 
 import json
 from datetime import datetime, timezone
@@ -139,7 +141,7 @@ def draft_rule(
 
 
 # ---------------------------------------------------------------------------
-# Consistency check vs existing skill-tier rules
+# Consistency check vs existing rules
 # ---------------------------------------------------------------------------
 
 _CONSISTENCY_SYSTEM = (
@@ -150,9 +152,9 @@ _CONSISTENCY_SYSTEM = (
 )
 
 
-def _existing_rule_summaries(skills_dir: str) -> list[dict[str, str]]:
+def _existing_rule_summaries(rules_dir: str) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
-    d = Path(skills_dir)
+    d = Path(rules_dir)
     if not d.exists():
         return out
     for f in sorted(d.glob("*.md")):
@@ -197,14 +199,14 @@ def _entry_key(proposal: dict[str, Any]) -> str:
 
 
 def propose_promotions(
-    store_dir: str, *, skills_dir: str,
+    store_dir: str, *, rules_dir: str,
     judge=None, drafter=None, checker=None,
 ) -> dict[str, Any]:
     """Gate → panel → draft → consistency. Write survivors to
     reflex/promotion-proposal.json. Proposal-only; mutates no entries.
     Carries prior rejections forward by content key (entry basename)."""
     store = Path(store_dir)
-    rules = _existing_rule_summaries(skills_dir)
+    rules = _existing_rule_summaries(rules_dir)
     proposals: list[dict[str, Any]] = []
     for entry in eligible_entries(store_dir):
         panel = run_panel(entry, judge=judge)
@@ -303,15 +305,15 @@ def _today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def _write_rule(skills_dir: str, drafted: dict[str, Any]) -> str:
-    """Write a drafted rule to <skills_dir>/<name>.md with full frontmatter.
+def _write_rule(rules_dir: str, drafted: dict[str, Any]) -> str:
+    """Write a drafted rule to <rules_dir>/<name>.md with full frontmatter.
     Refuses to overwrite an existing rule file — a name collision is surfaced as a
     failed apply (never a silent clobber)."""
     meta = {"name": drafted["name"], "description": drafted.get("description", ""),
             "version": "1.0", "tags": drafted.get("tags") or [],
             "last_verified": _today()}
-    Path(skills_dir).mkdir(parents=True, exist_ok=True)
-    dest = Path(skills_dir) / f"{drafted['name']}.md"
+    Path(rules_dir).mkdir(parents=True, exist_ok=True)
+    dest = Path(rules_dir) / f"{drafted['name']}.md"
     if dest.exists():
         raise FileExistsError(f"rule already exists: {dest.name}")
     dest.write_text(
@@ -329,7 +331,7 @@ def _archive_entry(source: str, store_dir: str) -> None:
 
 
 def apply_promotions(
-    store_dir: str, skills_dir: str,
+    store_dir: str, rules_dir: str,
     accept: list[int] | None = None, reject: list[int] | None = None,
     promote_raw: list[int] | None = None,
 ) -> dict[str, Any]:
@@ -367,14 +369,14 @@ def apply_promotions(
         p = proposals[i]
         try:
             if i in accept_list:
-                path = _write_rule(skills_dir, p["drafted_rule"])
+                path = _write_rule(rules_dir, p["drafted_rule"])
                 is_raw = False
             else:
                 e = parse_frontmatter_file(p["source"])
                 if e is None:
                     failed.append(i)
                     continue
-                path = _write_rule(skills_dir, {
+                path = _write_rule(rules_dir, {
                     "name": _slug(e["meta"].get("name") or e["meta"].get("title", "")),
                     "description": e["meta"].get("description", e["meta"].get("title", "")),
                     "tags": e["meta"].get("tags") or [], "body": e["body"]})

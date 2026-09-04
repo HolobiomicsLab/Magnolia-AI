@@ -23,12 +23,9 @@ def project_dir(tmp_path):
 
 def test_1_4_anti_windup_budget_respected(project_dir, tmp_path):
     """§1.4: assemble_context must respect the token budget."""
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
     result = assemble_context(
         task_description="test budget",
         project_dir=str(project_dir),
-        skills_dir=str(skills_dir),
         token_budget=4000,
     )
     assert result.tokens_used <= 4000 * 1.05, (
@@ -38,15 +35,12 @@ def test_1_4_anti_windup_budget_respected(project_dir, tmp_path):
 
 def test_2_2_goal_loaded_first(project_dir, tmp_path):
     """§2.2: GOAL.md is loaded before other tiers."""
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
     goal_path = project_dir / ".magnolia" / "GOAL.md"
     goal_path.write_text("# Goal\nFind the best 10-mer peptide.\n")
 
     result = assemble_context(
         task_description="design",
         project_dir=str(project_dir),
-        skills_dir=str(skills_dir),
         token_budget=4000,
     )
     assert "Find the best 10-mer peptide" in result.content

@@ -12,7 +12,6 @@ from compchem_memory.context_assembly import assemble_context
 
 def regenerate_boot_context(
     project_dir: str,
-    skills_dir: str | None = None,
     token_budget: int = 6000,
 ) -> str:
     """Write .magnolia/boot-context.md with prerendered project memory.
@@ -20,7 +19,6 @@ def regenerate_boot_context(
     result = assemble_context(
         task_description="project boot context",
         project_dir=project_dir,
-        skills_dir=skills_dir,
         token_budget=token_budget,
     )
 

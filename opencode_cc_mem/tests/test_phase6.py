@@ -271,8 +271,11 @@ class TestPhase6Features:
             runs_index = project_dir / ".magnolia" / "runs" / "INDEX.yaml"
             assert runs_index.exists()
             data = yaml.safe_load(runs_index.read_text())
-            assert "runs" in data
-            assert "last_updated" in data
+            # INDEX.yaml is a one-line-per-record list (grep-friendly), not a
+            # {"runs": [...]} dict — see ProjectManager._update_runs_index.
+            assert isinstance(data, list)
+            assert any(r.get("run_id") == "test_001" and r.get("tool") == "haddock3"
+                       for r in data)
 
     def test_memory_server_has_phase6_tools(self):
         import asyncio
