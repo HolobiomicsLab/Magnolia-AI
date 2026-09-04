@@ -48,3 +48,6 @@ settings.json
 memory-learning-flow.md
 plans/
 HANDOVER.md
+
+# Root-level docs/ holds machine-local setup runbooks (credentials-adjacent); never track
+/docs/
