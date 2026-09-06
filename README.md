@@ -120,6 +120,8 @@ Scientific programs like **HADDOCK3**, **GROMACS** and **BoltzGen** live in a `s
 
 Most of these have a dedicated connector of their own. A few — BoltzGen among them — are driven through the general command runner instead. From your side this makes no difference; it only means they do not appear as separate entries in the tool list.
 
+Magnolia finds tools through the launchers in `softwares/bin/`, which is on its PATH. Links that point into one computer's own install locations (a locally built p2rank or BoltzGen, say) are created per machine and deliberately left out of the repository — to make a local tool discoverable, place a launcher or symlink for it in `softwares/bin/`.
+
 ---
 
 ## Folder layout (the simple version)
@@ -179,6 +181,8 @@ Magnolia's tools and memory system are powered by two small Python programs that
 
 - **compchem-tools** — runs scientific software (docking, simulation, HPC job management)
 - **compchem-memory** — the lab notebook (remembers results, learns from sessions, tracks what worked)
+
+The two are a single unit: compchem-tools calls into compchem-memory internally, so both must always be installed into the same environment — the commands below do exactly that. Installing compchem-tools on its own is not supported.
 
 Without them installed, Magnolia can chat but can't *do* anything or *remember* anything.
 

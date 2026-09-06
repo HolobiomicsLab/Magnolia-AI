@@ -54,3 +54,8 @@ HANDOVER.md
 
 # Personal cluster runbook (UniCA/Azzurra specifics, username examples) — machine-local only
 opencode_cc_mem/rules/hpc_azzurra.md
+
+# Machine-local tool launchers (absolute-path symlinks, valid on one machine only) — never track
+opencode_cc_mem/softwares/bin/p2rank
+opencode_cc_mem/softwares/bin/boltzgen
+opencode_cc_mem/softwares/boltzgen/.venv
