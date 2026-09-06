@@ -50,7 +50,6 @@ def _patch(monkeypatch, fake):
     monkeypatch.setattr(shell_mod.subprocess, "Popen", fake)
     monkeypatch.setattr(shell_mod.shutil, "which", lambda _: "/fake/magnolia-run")
     monkeypatch.setattr(shell_mod.os.path, "isfile", lambda _: True)
-    monkeypatch.setattr(shell_mod.os, "makedirs", lambda *a, **k: None)
     return fake
 
 
@@ -118,13 +117,20 @@ def test_foreground_timeout_param_is_capped(monkeypatch):
     assert fake.communicate_timeout == _HARD_CAP_TIMEOUT
 
 
-def test_background_returns_pid_and_log_file(monkeypatch):
-    """background=True must detach (start_new_session) and return immediately."""
+def test_background_returns_pid_and_log_file(monkeypatch, tmp_path):
+    """background=True must detach (start_new_session) and return immediately.
+
+    Regression (issue #4): the log dir is redirected to tmp_path. Previously
+    _patch stubbed os.makedirs to a no-op, so the real _BG_LOG_DIR was never
+    created and the test only passed when /tmp/magnolia-shell-bg already
+    existed on the machine.
+    """
+    monkeypatch.setattr(shell_mod, "_BG_LOG_DIR", str(tmp_path / "bg"))
     fake = _patch(monkeypatch, FakeProc())
     out = run_shell("sleep 9999", background=True)
     assert out["background"] is True
     assert out["pid"] == 4242
-    assert out["log_file"].startswith("/tmp/magnolia-shell-bg/")
+    assert out["log_file"].startswith(str(tmp_path))
     assert fake.kwargs["start_new_session"] is True
 
 
@@ -138,6 +144,18 @@ def test_magnolia_run_missing_returns_dict_does_not_raise(monkeypatch):
     assert "magnolia-run not found" in out["error"]
     assert out["stdout"] == ""
     assert out["stderr"] == ""
+
+
+def test_missing_wrapper_not_on_path_and_no_root_returns_dict(monkeypatch):
+    """Regression (issue #3): which() -> None AND MAGNOLIA_ROOT unset left
+    magnolia_run = None, and os.path.isfile(None) raised TypeError straight
+    through the no-raise contract. Must return the file_not_found dict."""
+    monkeypatch.setattr(shell_mod.shutil, "which", lambda _: None)
+    monkeypatch.delenv("MAGNOLIA_ROOT", raising=False)
+    out = run_shell("echo hi")  # must not raise
+    assert out["exit_code"] == -1
+    assert out["error_kind"] == "file_not_found"
+    assert "MAGNOLIA_ROOT" in out["error"]
 
 
 def test_oserror_returns_dict_does_not_raise(monkeypatch):
