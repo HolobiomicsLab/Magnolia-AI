@@ -99,13 +99,22 @@ def run_shell(
     """
     magnolia_root = os.environ.get("MAGNOLIA_ROOT", "")
     magnolia_run = shutil.which("magnolia-run") or (os.path.join(magnolia_root, "softwares/bin/magnolia-run") if magnolia_root else None)
-    if not os.path.isfile(magnolia_run):
+    # Short-circuit on None BEFORE os.path.isfile: when magnolia-run is absent
+    # from PATH and MAGNOLIA_ROOT is unset, magnolia_run is None and
+    # os.path.isfile(None) raises TypeError — which would escape the no-raise
+    # contract this module is built on (issue #3).
+    if not magnolia_run or not os.path.isfile(magnolia_run):
+        detail = (
+            f"magnolia-run not found at {magnolia_run}"
+            if magnolia_run
+            else "magnolia-run not found on PATH and MAGNOLIA_ROOT is unset"
+        )
         return {
             "exit_code": -1,
             "stdout": "",
             "stderr": "",
             "error_kind": "file_not_found",
-            "error": f"magnolia-run not found at {magnolia_run}; cannot execute shell commands.",
+            "error": f"{detail}; cannot execute shell commands.",
         }
 
     env = os.environ.copy()
