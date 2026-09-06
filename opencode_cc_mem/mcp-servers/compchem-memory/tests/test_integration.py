@@ -63,7 +63,10 @@ class TestPathConventions:
         target.mkdir()
         (project_dir / ".magnolia").symlink_to(target)
         store = _memory_store(str(project_dir))
-        assert store == target
+        # Resolve both sides: _memory_store returns a resolved path, and on
+        # macOS /var is itself a symlink to /private/var, so comparing against
+        # the raw tmp_path-derived path never matches (issue #5).
+        assert store.resolve() == target.resolve()
 
     def test_assemble_context_loads_project_entries(self, project_dir, skills_dir):
         """P0 regression: entries stored in .magnolia/entries must appear in context."""
