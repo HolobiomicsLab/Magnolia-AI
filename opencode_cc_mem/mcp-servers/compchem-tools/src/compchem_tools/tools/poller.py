@@ -206,7 +206,9 @@ def poll_jobs(project_dir: str) -> dict[str, Any]:
             run_id = rec["run_id"]
             remote = rec.get("remote") or {}
             job_id = remote.get("job_id")
-            cluster = remote.get("cluster", "azzurra")
+            # No fallback: a record without a cluster is resolved from config
+            # downstream. Guessing here would poll the wrong machine silently.
+            cluster = remote.get("cluster")
             try:
                 if remote.get("scheduler") == "local":
                     check_result = _check_local_terminal(rec)

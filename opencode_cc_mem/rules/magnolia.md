@@ -135,8 +135,11 @@ mandatory output directory conventions and the prohibition on raw `ssh sbatch`.
 **Before every `submit_job` call, run the checks in `rules/prejob_check.md`.**
 This is mandatory — never skip input verification before submitting.
 
-For HPC submission to the Azzurra cluster — VPN setup, SSH conventions,
-partition choice, Slurm patterns — see `rules/hpc_azzurra.md`.
+For HPC submission — VPN setup, SSH conventions, partition choice, Slurm
+patterns — see `rules/slurm.md` for what holds on every cluster, and
+`rules/hpc_<cluster>.md` for one site (e.g. `rules/hpc_azzurra.md`). Those
+per-site files are gitignored; `rules/hpc_cluster.template.md` says how to
+write one, and which values also have to go in `clusters.yaml`.
 
 ## Project structure
 

@@ -1,0 +1,34 @@
+# Site profiles for the ssh-Slurm backend. See clusters.py for the layering rules.
+#
+# Only site facts belong here — an ssh alias, the scratch layout, the group
+# account, whether the login node sits behind a tunnel. Anything that is true of
+# one person rather than of the machine (your username, your personal account)
+# goes in ~/.config/magnolia/clusters.yaml, which overrides this file key by key.
+#
+# Adding a cluster is a config change, not a code change. The minimum is:
+#
+#   clusters:
+#     mycluster:
+#       ssh_host: mycluster-login        # an alias from your ~/.ssh/config
+#       scratch_root: /scratch/{user}/magnolia
+#
+# Everything else defaults to "this site does not have one" and the matching
+# step is skipped: no tunnel_script means no tunnel, an empty default_account
+# means no #SBATCH --account and Slurm picks your default association.
+
+clusters:
+  # Université Côte d'Azur HPC. The specific case that the generic backend must
+  # keep supporting: VPN tunnel, 2FA on the login node, group account.
+  azzurra:
+    ssh_host: azzurra
+    scratch_root: /workspace/{user}/magnolia
+    default_account: spectrometry
+    # Intentionally empty (commit ad2aa09): Slurm auto-assigns QOS from the
+    # association, and passing --qos=qos_spectrometry trips QOSGrpCpuLimit.
+    default_qos: ""
+    default_partition: cpucourt
+    tunnel_script: hpc_tunnel.sh
+    modulefiles_use: $HOME/modulefiles
+    # 2FA is enforced (verified 2026-07-08): non-interactive ssh can only
+    # succeed by piggybacking on a ControlMaster a human opened.
+    requires_control_master: true
