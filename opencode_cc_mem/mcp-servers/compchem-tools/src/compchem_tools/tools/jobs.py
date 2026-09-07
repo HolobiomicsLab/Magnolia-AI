@@ -36,7 +36,7 @@ def submit_job(
     time_limit: str = "24:00:00",
     partition: str | None = None,
     project_dir: str | None = None,
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     account: str | None = None,
     qos: str | None = None,
     tool: str | None = None,
@@ -128,7 +128,7 @@ def check_job(
     job_id: str,
     scheduler: str = "slurm",
     # ssh-slurm-specific kwargs
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> dict[str, Any]:
     """Check job status on Slurm, PBS, ssh-slurm, or local.
@@ -156,7 +156,7 @@ def cancel_job(
     job_id: str,
     scheduler: str = "slurm",
     # ssh-slurm-specific kwargs
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> dict[str, Any]:
     """Cancel a running job on Slurm, PBS, ssh-slurm, or local.

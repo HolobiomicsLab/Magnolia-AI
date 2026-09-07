@@ -21,5 +21,10 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# clusters.yaml is read at runtime via Path(__file__).with_name(...); without
+# this it is missing from any non-editable install and no cluster resolves.
+[tool.setuptools.package-data]
+"compchem_tools.tools" = ["*.yaml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

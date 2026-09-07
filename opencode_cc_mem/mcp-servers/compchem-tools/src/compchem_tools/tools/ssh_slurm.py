@@ -25,19 +25,62 @@ from typing import Any
 
 from compchem_memory.tiers.project import ProjectManager
 
+from compchem_tools.tools import clusters
+from compchem_tools.tools.clusters import ClusterError
 
-CLUSTER_CONFIG: dict[str, dict[str, Any]] = {
-    "azzurra": {
-        "ssh_host": "azzurra",
-        "scratch_root": "/workspace/{user}/magnolia",
-        "default_user": "user",
-        "default_account": "groupaccount",
-        "default_qos": "",  # left empty: auto-assigned by Slurm; explicit qos_groupaccount triggers QOSGrpCpuLimit
-        "default_partition": "cpucourt",
-        "tunnel_script": "hpc_tunnel.sh",
-        "modulefiles_use": "$HOME/modulefiles",
-    },
-}
+# Site profiles, loaded once at import from clusters.yaml plus the per-user
+# overrides. Under the historical name because callers and tests reach for it;
+# call reload_clusters() after editing a config file in a live process.
+CLUSTER_CONFIG: dict[str, dict[str, Any]] = clusters.load()
+
+
+def reload_clusters() -> None:
+    """Re-read the cluster files. Cheap, and the only way to pick up an edit."""
+    global CLUSTER_CONFIG
+    CLUSTER_CONFIG = clusters.load()
+
+
+class PreflightError(RuntimeError):
+    """A cluster could not be resolved or reached. Carries the caller's error_kind."""
+
+    def __init__(self, kind: str, message: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+def _prepare(cluster: str | None) -> tuple[str, dict[str, Any]]:
+    """Resolve the cluster and make it reachable, returning ``(name, settings)``.
+
+    Steps a site does not have are skipped rather than faked: no tunnel_script
+    means no tunnel, and requires_control_master=false means the ssh calls stand
+    on their own — a key and an agent, on a site that does not enforce 2FA. Only
+    Azzurra needs both, which is why both are settings and not code paths.
+    """
+    try:
+        name, cfg = clusters.get(cluster, CLUSTER_CONFIG)
+    except ClusterError as e:
+        raise PreflightError("unknown_cluster", str(e)) from e
+    if cfg.get("tunnel_script"):
+        try:
+            _ensure_tunnel(cfg["tunnel_script"])
+        except RuntimeError as e:
+            raise PreflightError("tunnel_failed", str(e)) from e
+    if cfg.get("requires_control_master", True):
+        try:
+            _ensure_master(name)
+        except RuntimeError as e:
+            raise PreflightError("master_down", str(e)) from e
+    return name, cfg
+
+
+def _cfg(cluster: str) -> dict[str, Any]:
+    """Settings for an already-resolved cluster."""
+    try:
+        return CLUSTER_CONFIG[cluster]
+    except KeyError:
+        raise ClusterError(
+            f"unknown cluster: {cluster} (configured: {', '.join(sorted(CLUSTER_CONFIG))})"
+        ) from None
 
 
 def _ssh(cluster: str, command: str, *, timeout: int = 60) -> CompletedProcess:
@@ -46,7 +89,7 @@ def _ssh(cluster: str, command: str, *, timeout: int = 60) -> CompletedProcess:
     Uses BatchMode=yes so failures (no auth, host-key change) surface
     instead of hanging on a password prompt.
     """
-    cfg = CLUSTER_CONFIG[cluster]
+    cfg = _cfg(cluster)
     return subprocess.run(
         ["ssh", "-o", "BatchMode=yes", cfg["ssh_host"], command],
         capture_output=True,
@@ -60,7 +103,7 @@ def _rsync_push(local: Path, cluster: str, remote: str, *, timeout: int = 600) -
 
     --mkpath creates the remote path components if they don't exist.
     """
-    cfg = CLUSTER_CONFIG[cluster]
+    cfg = _cfg(cluster)
     return subprocess.run(
         ["rsync", "-az", "--mkpath", f"{local}/", f"{cfg['ssh_host']}:{remote}/"],
         capture_output=True,
@@ -75,7 +118,7 @@ def _rsync_pull(cluster: str, remote: str, local: Path, *, timeout: int = 600) -
     --stats yields a summary block at the end of stdout (Number of files,
     Total bytes, etc.) which fetch() parses to count files fetched.
     """
-    cfg = CLUSTER_CONFIG[cluster]
+    cfg = _cfg(cluster)
     return subprocess.run(
         ["rsync", "-az", "--stats", f"{cfg['ssh_host']}:{remote}/", f"{local}/"],
         capture_output=True,
@@ -105,18 +148,19 @@ def _ensure_tunnel(tunnel_script: str = "hpc_tunnel.sh") -> None:
 def _ensure_master(cluster: str) -> None:
     """Verify an authenticated SSH ControlMaster is alive for the cluster.
 
-    2FA is enforced on Azzurra (verified 2026-07-08): publickey succeeds
-    with partial success, then keyboard-interactive (phone TOTP) is
-    required, so non-interactive ssh (the BatchMode=yes calls made by
-    _ssh and by rsync) can only succeed by piggybacking on a master a
-    human opened interactively. If no master is alive, raise RuntimeError
-    carrying the exact command the user must run.
+    Called only for clusters whose profile sets requires_control_master.
+    Azzurra does (verified 2026-07-08): publickey succeeds with partial
+    success, then keyboard-interactive (phone TOTP) is required, so
+    non-interactive ssh (the BatchMode=yes calls made by _ssh and by rsync)
+    can only succeed by piggybacking on a master a human opened
+    interactively. If no master is alive, raise RuntimeError carrying the
+    exact command the user must run.
 
     `ssh -O check` talks only to the local control socket — no auth, no
     2FA prompt, returns instantly (measured: exit 0 when alive, exit 255
     in ~6 ms when no socket). Safe to call on every remote operation.
     """
-    cfg = CLUSTER_CONFIG[cluster]
+    cfg = _cfg(cluster)
     result = subprocess.run(
         ["ssh", "-o", "BatchMode=yes", "-O", "check", cfg["ssh_host"]],
         capture_output=True,
@@ -125,8 +169,8 @@ def _ensure_master(cluster: str) -> None:
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"No live SSH ControlMaster for {cfg['ssh_host']} (2FA is "
-            f"enforced on Azzurra). Open one in your own terminal, then "
+            f"No live SSH ControlMaster for {cfg['ssh_host']} ({cluster} "
+            f"enforces 2FA). Open one in your own terminal, then "
             f"retry — it prompts for your phone 2FA code once and the "
             f"master persists ~10h via ControlPersist:\n"
             f"    ssh {cfg['ssh_host']} hostname"
@@ -162,14 +206,24 @@ def _write_sbatch_script(
     set -euo pipefail, module purge + use + (optionally) load, cd to
     SLURM_SUBMIT_DIR, then the user's command.
     """
-    module_load_line = f"module load {tool}/local" if tool else ""
+    # A site without a group account, a named partition or its own modulefiles
+    # must emit nothing at all for it: an empty "#SBATCH --account=" is rejected
+    # by sbatch, and a bare "module use" fails the script under set -e.
     qos_line = f"#SBATCH --qos={qos}\n" if qos else ""
+    account_line = f"#SBATCH --account={account}\n" if account else ""
+    partition_line = f"#SBATCH --partition={partition}\n" if partition else ""
+    module_lines = "".join(
+        line + "\n" for line in (
+            f"module use {modulefiles_use}" if modulefiles_use else "",
+            f"module load {tool}/local" if tool else "",
+        ) if line
+    )
     script = f"""\
 #!/bin/bash
 #SBATCH --job-name={job_name}
-#SBATCH --account={account}
+{account_line}\
 {qos_line}\
-#SBATCH --partition={partition}
+{partition_line}\
 #SBATCH --time={time_limit}
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -180,8 +234,7 @@ def _write_sbatch_script(
 
 set -euo pipefail
 module purge
-module use {modulefiles_use}
-{module_load_line}
+{module_lines}\
 
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p .magnolia
@@ -216,8 +269,7 @@ def _project_name(project_dir: str) -> str:
 
 def _remote_run_dir(cluster: str, project_dir: str, run_id: str) -> str:
     """Build the canonical remote scratch path for this run."""
-    cfg = CLUSTER_CONFIG[cluster]
-    scratch = cfg["scratch_root"].format(user=cfg["default_user"])
+    scratch = clusters.remote_scratch(_cfg(cluster))
     return f"{scratch}/{_project_name(project_dir)}/runs/{run_id}"
 
 
@@ -226,7 +278,7 @@ def submit(
     command: str,
     working_dir: str,
     project_dir: str,
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     account: str | None = None,
     qos: str | None = None,
     partition: str | None = None,
@@ -241,26 +293,20 @@ def submit(
 ) -> dict[str, Any]:
     """Submit a job to the cluster via SSH-driven Slurm.
 
-    See spec §3.4 for full data flow. Tunnel-up first, generate sbatch,
-    rsync push, ssh sbatch, parse jobid, write runs/*.yaml, return
-    JSON-shaped dict.
+    See spec §3.4 for full data flow. Preflight first (resolve the cluster,
+    tunnel and ControlMaster if the site needs them), generate sbatch, rsync
+    push, ssh sbatch, parse jobid, write runs/*.yaml, return JSON-shaped dict.
+
+    cluster=None resolves from the configuration — $MAGNOLIA_CLUSTER, the
+    profile marked default, or the only one configured.
     """
-    if cluster not in CLUSTER_CONFIG:
-        return {"success": False, "error_kind": "unknown_cluster",
-                "error": f"unknown cluster: {cluster}"}
-    cfg = CLUSTER_CONFIG[cluster]
+    try:
+        cluster, cfg = _prepare(cluster)
+    except PreflightError as e:
+        return {"success": False, "error_kind": e.kind, "error": str(e)}
     account = account or cfg["default_account"]
     qos = qos or cfg["default_qos"]
     partition = partition or cfg["default_partition"]
-
-    try:
-        _ensure_tunnel(cfg["tunnel_script"])
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
-    try:
-        _ensure_master(cluster)
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "master_down", "error": str(e)}
 
     local_run_dir = Path(working_dir)
     local_run_dir.mkdir(parents=True, exist_ok=True)
@@ -384,6 +430,10 @@ def submit(
     return {
         "success": True,
         "scheduler": "ssh-slurm",
+        # Echoed because the caller may not have named it: when cluster is
+        # resolved from configuration, this is the only place the answer
+        # surfaces to whoever has to reproduce the run.
+        "cluster": cluster,
         "job_id": job_id,
         "run_id": run_id,
         "remote_run_dir": remote_run_dir,
@@ -458,7 +508,7 @@ def _find_run_by_job_id(project_dir: str, job_id: str) -> tuple[str, dict] | Non
 def check(
     *,
     job_id: str,
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> dict[str, Any]:
     """Check Slurm state for a job. Returns lifecycle + sacct resource fields.
@@ -468,16 +518,10 @@ def check(
     If project_dir given, persists slurm.* fields and last_polled_at via
     ProjectManager.update_run.
     """
-    if cluster not in CLUSTER_CONFIG:
-        return {"success": False, "error_kind": "unknown_cluster", "error": cluster}
     try:
-        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
-    try:
-        _ensure_master(cluster)
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "master_down", "error": str(e)}
+        cluster, _ = _prepare(cluster)
+    except PreflightError as e:
+        return {"success": False, "error_kind": e.kind, "error": str(e)}
 
     sa = _ssh(cluster, f"sacct -j {job_id} -X -P -n --format={_SACCT_FORMAT}")
     sacct = _parse_sacct(sa.stdout)
@@ -545,20 +589,14 @@ def check(
 def cancel(
     *,
     job_id: str,
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> dict[str, Any]:
     """Cancel a Slurm job via ssh scancel; update yaml to lifecycle=cancelled."""
-    if cluster not in CLUSTER_CONFIG:
-        return {"success": False, "error_kind": "unknown_cluster", "error": cluster}
     try:
-        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
-    try:
-        _ensure_master(cluster)
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "master_down", "error": str(e)}
+        cluster, _ = _prepare(cluster)
+    except PreflightError as e:
+        return {"success": False, "error_kind": e.kind, "error": str(e)}
     sc = _ssh(cluster, f"scancel {job_id}")
     if sc.returncode != 0:
         return {"success": False, "error_kind": "ssh_failed",
@@ -608,13 +646,9 @@ def fetch(
                 "error": f"run {run_id} record is missing cluster/remote_run_dir/local_run_dir"}
     local_run_dir = Path(local_run_dir_str)
     try:
-        _ensure_tunnel(CLUSTER_CONFIG[cluster]["tunnel_script"])
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "tunnel_failed", "error": str(e)}
-    try:
-        _ensure_master(cluster)
-    except RuntimeError as e:
-        return {"success": False, "error_kind": "master_down", "error": str(e)}
+        cluster, _ = _prepare(cluster)
+    except PreflightError as e:
+        return {"success": False, "error_kind": e.kind, "error": str(e)}
 
     pull = _rsync_pull(cluster, remote_run_dir, local_run_dir)
     if pull.returncode != 0:

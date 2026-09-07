@@ -1,6 +1,6 @@
 ---
 name: slurm
-description: Cluster-agnostic Slurm primer — sbatch directives, state machine, sacct semantics, common gotchas. Cluster-specific facts (partition names, account names, modulefiles) live in rules/hpc_<cluster>.md.
+description: Cluster-agnostic Slurm primer — sbatch directives, state machine, sacct semantics, common gotchas. Cluster-specific facts (partition names, account names, modulefiles) live in rules/hpc_<cluster>.md, from the template in rules/hpc_cluster.template.md.
 version: 1.0
 last_verified: 2026-05-28
 tags: [slurm, hpc, scheduler]
@@ -12,6 +12,12 @@ This rule covers **Slurm semantics that are the same on every cluster Magnolia
 operates on**. Per-cluster details — VPN/SSH access, exact partition names,
 account names, module conventions — live in `rules/hpc_<cluster>.md` (e.g.
 `rules/hpc_azzurra.md`).
+
+Those per-cluster files are gitignored, because they fill up with one group's
+account names and login handles. If yours is missing, start from
+`rules/hpc_cluster.template.md`, which also covers the machine-readable half:
+the site profile in `clusters.yaml` that the submission backend actually reads.
+A cluster described in prose but absent from that file cannot be submitted to.
 
 Slurm is the workload manager. You submit a *job script* via `sbatch`; Slurm
 schedules it onto compute nodes based on resource requests; you observe state

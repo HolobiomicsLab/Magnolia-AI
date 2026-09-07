@@ -539,7 +539,7 @@ def submit_job(
     partition: str | None = None,
     # ssh-slurm-specific kwargs
     project_dir: str | None = None,
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     account: str | None = None,
     qos: str | None = None,
     tool: str | None = None,
@@ -554,6 +554,10 @@ def submit_job(
 
     Call this when: submitting a long-running (>30 min) computation to a job
     scheduler instead of running it in the foreground.
+
+    cluster is optional: left unset it resolves from the configured site
+    profiles ($MAGNOLIA_CLUSTER, the profile marked default, or the only one
+    configured). Pass it only when several clusters are configured.
 
     To RESTART/resume an ssh-slurm run in place (e.g. haddock3 --restart N,
     gromacs -cpi): pass restart_of=<prior run_id> and the resume command; it
@@ -579,7 +583,7 @@ def check_job(
     job_id: str,
     scheduler: str = "slurm",
     # ssh-slurm-specific kwargs
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> str:
     """Check job status on Slurm, PBS, or local.
@@ -596,7 +600,7 @@ def cancel_job(
     job_id: str,
     scheduler: str = "slurm",
     # ssh-slurm-specific kwargs
-    cluster: str = "azzurra",
+    cluster: str | None = None,
     project_dir: str | None = None,
 ) -> str:
     """Cancel a running job on Slurm, PBS, or local.
