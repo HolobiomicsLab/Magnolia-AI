@@ -49,8 +49,17 @@ memory-learning-flow.md
 plans/
 HANDOVER.md
 
-# Root-level docs/ holds machine-local setup runbooks (credentials-adjacent); never track
-/docs/
+# Root-level docs/ also holds machine-local setup runbooks (credentials-adjacent).
+# Everything is ignored by default; only the curated documentation set below is
+# tracked, so a new local runbook can never be committed by accident.
+/docs/*
+!/docs/index.md
+!/docs/getting-started.md
+!/docs/use-cases.md
+!/docs/architecture.md
+!/docs/memory.md
+!/docs/hpc.md
+!/docs/tools.md
 
 # Personal cluster runbook (UniCA/Azzurra specifics, username examples) — machine-local only
 opencode_cc_mem/rules/hpc_azzurra.md
