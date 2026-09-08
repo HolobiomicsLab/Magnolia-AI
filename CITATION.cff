@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: >-
+  If Project Magnolia contributes to work you publish, please cite the
+  repository as below, naming the commit or tag you actually used.
+title: "Project Magnolia: an agentic research assistant for computational chemistry"
+abstract: >-
+  Project Magnolia is a conversational research assistant for computational
+  chemistry. It drives pocket prediction, docking, molecular dynamics, quantum
+  chemistry and generative design on a workstation or a Slurm cluster, and keeps
+  a reviewable laboratory notebook of what was run, what resulted, and what was
+  learnt. Observations that recur across sessions are proposed for promotion into
+  version-controlled standing rules, subject to the researcher's approval.
+type: software
+repository-code: "https://github.com/HolobiomicsLab/Magnolia-AI"
+license-url: "https://github.com/HolobiomicsLab/Magnolia-AI/blob/master/LICENSE"
+keywords:
+  - computational chemistry
+  - agentic AI
+  - molecular docking
+  - quantum chemistry
+  - molecular dynamics
+  - laboratory notebook
+  - provenance
+  - reproducibility
+  - Model Context Protocol
+authors:
+  # Add ORCID identifiers and any further authors before the first release.
+  - given-names: Tao
+    family-names: Jiang
+    affiliation: "Université Côte d'Azur, CNRS"
+# The repository carries no tag yet. On the first release, add:
+#   version: "X.Y.Z"
+#   date-released: "YYYY-MM-DD"
