@@ -2,6 +2,10 @@
 
 Project Magnolia is like a **quick-learning research assistant**, not a search engine or a magic button. The more context and direction you give it, the better it performs. This guide shows you how to supervise the assistant effectively during a real research project.
 
+For opening prompts organised by task — docking, quantum chemistry, molecular dynamics, literature
+work, cluster campaigns, writing up — see [`docs/use-cases.md`](docs/use-cases.md). The full
+documentation set is indexed in [`docs/index.md`](docs/index.md).
+
 ---
 
 ## The Golden Rule
@@ -169,7 +173,7 @@ Below is a realistic conversation between a researcher and Magnolia. The **struc
 
    > *"Are there any proposed rules waiting for review?"*
 
-   Magnolia lays out each candidate in `magnolia-review/promotions.md` — where the note came from, how the review passes voted, and the drafted rule — and writes only the ones you accept, into `rules/`. Since that directory is under version control, an accepted rule shows up as a reviewable diff you can revert. "From a note to a rule" in [`README.md`](README.md) explains what is checked before a proposal reaches you.
+   Magnolia lays out each candidate in `magnolia-review/promotions.md` — where the note came from, how the review passes voted, and the drafted rule — and writes only the ones you accept, into `rules/`. Since that directory is under version control, an accepted rule shows up as a reviewable diff you can revert. "From a note to a rule" in [`docs/memory.md`](docs/memory.md#from-a-note-to-a-rule) explains what is checked before a proposal reaches you.
 
 ---
 
