@@ -37,11 +37,11 @@ def test_record_run_with_lifecycle_and_remote_persists_fields(project):
             "scheduler": "ssh-slurm",
             "cluster": "azzurra",
             "job_id": "11331448",
-            "account": "groupaccount",
-            "qos": "qos_groupaccount",
+            "account": "testaccount",
+            "qos": "qos_test",
             "partition": "cpucourt",
             "local_run_dir": "runs/haddock3_20260529_140000",
-            "remote_run_dir": "/workspace/user/magnolia/myproject/runs/haddock3_20260529_140000",
+            "remote_run_dir": "/workspace/testuser/magnolia/myproject/runs/haddock3_20260529_140000",
             "submitted_at": "2026-05-29T14:00:00+00:00",
         },
     )
@@ -84,7 +84,7 @@ def test_update_run_deep_merges_patch(project):
         remote={
             "cluster": "azzurra",
             "job_id": "11331448",
-            "account": "groupaccount",
+            "account": "testaccount",
         },
     )
     pm.update_run(
@@ -101,7 +101,7 @@ def test_update_run_deep_merges_patch(project):
     yaml_files = list((Path(project_dir) / ".magnolia" / "runs").glob("*_haddock3_20260529_140000.yaml"))
     record = yaml.safe_load(yaml_files[0].read_text())
     assert record["lifecycle"] == "running"
-    assert record["remote"]["account"] == "groupaccount"
+    assert record["remote"]["account"] == "testaccount"
     assert record["remote"]["cluster"] == "azzurra"
     assert record["remote"]["job_id"] == "11331448"
     assert record["remote"]["last_polled_at"] == "2026-05-29T14:01:00+00:00"

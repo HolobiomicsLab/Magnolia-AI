@@ -48,6 +48,10 @@ settings.json
 memory-learning-flow.md
 plans/
 HANDOVER.md
+# local git worktree mount points
+.worktrees/
+# exported session transcripts (full tool logs + chat) — machine-local artifacts
+opencode_cc_mem/session-ses_*.md
 
 # Root-level docs/ also holds machine-local setup runbooks (credentials-adjacent).
 # Everything is ignored by default; only the curated documentation set below is

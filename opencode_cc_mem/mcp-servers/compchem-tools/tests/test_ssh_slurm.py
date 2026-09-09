@@ -10,17 +10,21 @@ from pathlib import Path
 from subprocess import CompletedProcess
 import json
 import pytest
-from compchem_tools.tools import ssh_slurm
+import yaml
+from compchem_tools.tools import clusters, ssh_slurm
 
 
 def test_cluster_config_has_azzurra():
-    assert "azzurra" in ssh_slurm.CLUSTER_CONFIG
-    cfg = ssh_slurm.CLUSTER_CONFIG["azzurra"]
+    # Read the PACKAGED profile, not the merged view: a developer machine's
+    # ~/.config/magnolia/clusters.yaml legitimately overrides the account.
+    cfg = yaml.safe_load(clusters.PACKAGED_CLUSTERS.read_text())["clusters"]["azzurra"]
     assert cfg["ssh_host"] == "azzurra"
-    assert cfg["default_account"] == "groupaccount"
+    # The packaged profile carries no group account (public repo); the real
+    # account lives in ~/.config/magnolia/clusters.yaml on each user's machine.
+    assert cfg["default_account"] == ""
     # default_qos is intentionally empty (commit ad2aa09): Slurm auto-assigns QOS
-    # from the association; passing --qos=qos_groupaccount triggers QOSGrpCpuLimit
-    # (see rules/hpc_azzurra.md).
+    # from the association; passing an explicit --qos can trip QOSGrpCpuLimit
+    # on this site (see rules/hpc_cluster.template.md).
     assert cfg["default_qos"] == ""
     assert cfg["default_partition"] == "cpucourt"
     assert cfg["tunnel_script"] == "hpc_tunnel.sh"
@@ -44,22 +48,22 @@ def test_ssh_builds_argv_with_batchmode_and_alias(fake_subprocess):
 def test_rsync_push_builds_argv_with_mkpath(fake_subprocess, tmp_path):
     local = tmp_path / "myrun"
     local.mkdir()
-    ssh_slurm._rsync_push(local, "azzurra", "/workspace/user/test")
+    ssh_slurm._rsync_push(local, "azzurra", "/workspace/testuser/test")
     call = fake_subprocess.calls[0]
     assert call[0] == "rsync"
     assert "-az" in call
     assert "--mkpath" in call
     assert call[-2] == f"{local}/"
-    assert call[-1] == "azzurra:/workspace/user/test/"
+    assert call[-1] == "azzurra:/workspace/testuser/test/"
 
 
 def test_rsync_pull_builds_argv_with_stats(fake_subprocess, tmp_path):
     local = tmp_path / "myrun"
-    ssh_slurm._rsync_pull("azzurra", "/workspace/user/test", local)
+    ssh_slurm._rsync_pull("azzurra", "/workspace/testuser/test", local)
     call = fake_subprocess.calls[0]
     assert call[0] == "rsync"
     assert "--stats" in call
-    assert call[-2] == "azzurra:/workspace/user/test/"
+    assert call[-2] == "azzurra:/workspace/testuser/test/"
     assert call[-1] == f"{local}/"
 
 
@@ -113,8 +117,8 @@ def test_write_sbatch_script_generates_expected_directives(tmp_path):
     ssh_slurm._write_sbatch_script(
         local_run_dir,
         job_name="test_job",
-        account="groupaccount",
-        qos="qos_groupaccount",
+        account="testaccount",
+        qos="qos_test",
         partition="cpucourt",
         time_limit="00:30:00",
         ncores=4,
@@ -126,8 +130,8 @@ def test_write_sbatch_script_generates_expected_directives(tmp_path):
     script = (local_run_dir / "job.slurm").read_text()
     for line in [
         "#SBATCH --job-name=test_job",
-        "#SBATCH --account=groupaccount",
-        "#SBATCH --qos=qos_groupaccount",
+        "#SBATCH --account=testaccount",
+        "#SBATCH --qos=qos_test",
         "#SBATCH --partition=cpucourt",
         "#SBATCH --time=00:30:00",
         "#SBATCH --cpus-per-task=4",
@@ -148,8 +152,8 @@ def test_write_sbatch_script_without_tool_omits_module_load(tmp_path):
     ssh_slurm._write_sbatch_script(
         local_run_dir,
         job_name="raw_cmd",
-        account="groupaccount",
-        qos="qos_groupaccount",
+        account="testaccount",
+        qos="qos_test",
         partition="cpucourt",
         time_limit="00:30:00",
         ncores=1,
@@ -200,8 +204,8 @@ def test_submit_writes_sbatch_rsyncs_calls_sbatch_writes_yaml(
         working_dir=str(local_run_dir),
         project_dir=str(project_dir),
         cluster="azzurra",
-        account="groupaccount",
-        qos="qos_groupaccount",
+        account="testaccount",
+        qos="qos_test",
         partition="cpucourt",
         job_name="test_haddock",
         ncores=4,
@@ -232,7 +236,7 @@ def test_submit_writes_sbatch_rsyncs_calls_sbatch_writes_yaml(
     assert record["lifecycle"] == "submitted"
     assert record["remote"]["cluster"] == "azzurra"
     assert record["remote"]["job_id"] == "11331448"
-    assert record["remote"]["account"] == "groupaccount"
+    assert record["remote"]["account"] == "testaccount"
 
 
 def _make_project(tmp_path):
@@ -497,7 +501,7 @@ def test_fetch_pulls_run_dir_and_updates_fetched_at(fake_subprocess, tmp_path):
             "cluster": "azzurra",
             "job_id": "11331448",
             "local_run_dir": str(local_run_dir),
-            "remote_run_dir": "/workspace/user/magnolia/p/runs/haddock3_20260529_140000",
+            "remote_run_dir": "/workspace/testuser/magnolia/p/runs/haddock3_20260529_140000",
         },
     )
 
@@ -550,7 +554,7 @@ def test_fetch_missing_local_run_dir_in_yaml_returns_run_record_missing(fake_sub
         remote={
             "cluster": "azzurra",
             "job_id": "77777",
-            "remote_run_dir": "/workspace/user/some/path",
+            "remote_run_dir": "/workspace/testuser/some/path",
             # local_run_dir intentionally absent
         },
     )
@@ -659,7 +663,7 @@ def test_fetch_job_results_mcp_tool_returns_json(fake_subprocess, tmp_path):
             "cluster": "azzurra",
             "job_id": "55555",
             "local_run_dir": str(local_run_dir),
-            "remote_run_dir": "/workspace/user/magnolia/p/runs/xtb_20260529_140000",
+            "remote_run_dir": "/workspace/testuser/magnolia/p/runs/xtb_20260529_140000",
         },
     )
     fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")

@@ -35,13 +35,19 @@ def isolated(monkeypatch, tmp_path):
 # ── the packaged profile ────────────────────────────────────────────────────
 
 def test_packaged_azzurra_keeps_its_site_facts():
-    """Moved here from test_ssh_slurm: these are configuration now, not code."""
-    azzurra = clusters.load()["azzurra"]
+    """Moved here from test_ssh_slurm: these are configuration now, not code.
+
+    Read the PACKAGED file directly — a developer machine's user config
+    (~/.config/magnolia/clusters.yaml) legitimately overrides the account.
+    """
+    azzurra = yaml.safe_load(clusters.PACKAGED_CLUSTERS.read_text())["clusters"]["azzurra"]
 
     assert azzurra["ssh_host"] == "azzurra"
-    assert azzurra["default_account"] == "groupaccount"
+    # No group account in the packaged (public) profile — that is per-user
+    # config in ~/.config/magnolia/clusters.yaml.
+    assert azzurra["default_account"] == ""
     # default_qos is intentionally empty (commit ad2aa09): Slurm auto-assigns QOS
-    # from the association; passing --qos=qos_groupaccount trips QOSGrpCpuLimit.
+    # from the association; an explicit --qos can trip QOSGrpCpuLimit on this site.
     assert azzurra["default_qos"] == ""
     assert azzurra["default_partition"] == "cpucourt"
     assert azzurra["tunnel_script"] == "hpc_tunnel.sh"
@@ -70,7 +76,7 @@ def test_overriding_one_key_keeps_the_rest_of_the_profile(isolated):
     """Whole-profile replacement would silently drop Azzurra's tunnel script."""
     packaged, user, write = isolated
     write(packaged, azzurra={"ssh_host": "azzurra", "tunnel_script": "hpc_tunnel.sh",
-                             "default_account": "groupaccount"})
+                             "default_account": "testaccount"})
     write(user, azzurra={"default_account": "mine"})
 
     azzurra = clusters.load()["azzurra"]

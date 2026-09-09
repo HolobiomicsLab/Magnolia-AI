@@ -6,7 +6,6 @@ boltzgen:
   version: "0.3.1"
   wrapper: softwares/bin/boltzgen
   venv_path: softwares/boltzgen/.venv
-  actual_venv_path: /home/user/.local/share/magnolia/softwares/boltzgen/.venv
   cache_path: softwares/boltzgen/cache
   gpu_required: true
   python_version: "3.12"

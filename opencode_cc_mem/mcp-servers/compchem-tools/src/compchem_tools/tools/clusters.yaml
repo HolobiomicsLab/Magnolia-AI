@@ -18,13 +18,15 @@
 
 clusters:
   # Université Côte d'Azur HPC. The specific case that the generic backend must
-  # keep supporting: VPN tunnel, 2FA on the login node, group account.
+  # keep supporting: VPN tunnel, 2FA on the login node.
+  # NOTE: the group account is per-user/per-group — set it in
+  # ~/.config/magnolia/clusters.yaml, not here (this file is public).
   azzurra:
     ssh_host: azzurra
     scratch_root: /workspace/{user}/magnolia
-    default_account: groupaccount
-    # Intentionally empty (commit ad2aa09): Slurm auto-assigns QOS from the
-    # association, and passing --qos=qos_groupaccount trips QOSGrpCpuLimit.
+    default_account: ""
+    # Intentionally empty: Slurm auto-assigns QOS from the association, and
+    # passing an explicit --qos can trip QOSGrpCpuLimit on this site.
     default_qos: ""
     default_partition: cpucourt
     tunnel_script: hpc_tunnel.sh
