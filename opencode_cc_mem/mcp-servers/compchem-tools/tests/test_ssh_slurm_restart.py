@@ -16,7 +16,7 @@ import yaml
 from compchem_tools.tools import ssh_slurm
 
 
-OLD_REMOTE = "/workspace/user/magnolia/myproject/runs/haddock3_OLD"
+OLD_REMOTE = "/workspace/testuser/magnolia/myproject/runs/haddock3_OLD"
 
 
 def _seed_prior_run(project_dir):

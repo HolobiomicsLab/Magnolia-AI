@@ -41,7 +41,14 @@ const DISABLED = ["0", "off", "false", "no"].includes(
   String(process.env.MAGNOLIA_ACTION_RETRIEVE ?? "").toLowerCase(),
 )
 
-const PYTHON = process.env.MAGNOLIA_PYTHON || "/home/user/repos/project_magnolia/.venv/bin/python3"
+import { existsSync } from "fs"
+import { join, resolve } from "path"
+
+// Self-locate the repo venv (<repo>/.opencode/plugins/ → repo root → .venv);
+// no machine-specific absolute paths in the repo. MAGNOLIA_PYTHON overrides.
+const REPO_ROOT = resolve(import.meta.dir, "../../..")
+const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
+const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
 const QUERY_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 120_000
 const MAX_HITS = 4
