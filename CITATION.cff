@@ -24,10 +24,19 @@ keywords:
   - reproducibility
   - Model Context Protocol
 authors:
-  # Add ORCID identifiers and any further authors before the first release.
+  # Further authors to be confirmed before the first release.
   - given-names: Tao
     family-names: Jiang
     affiliation: "Université Côte d'Azur, CNRS"
+    orcid: "https://orcid.org/0000-0002-5293-3916"
+  - given-names: Elise
+    family-names: Dumont
+    affiliation: "Université Côte d'Azur"
+    orcid: "https://orcid.org/0000-0002-2359-111X"
+  - given-names: Louis-Félix
+    family-names: Nothias
+    affiliation: "Université Côte d'Azur, CNRS"
+    orcid: "https://orcid.org/0000-0001-6711-6719"
 # The repository carries no tag yet. On the first release, add:
 #   version: "X.Y.Z"
 #   date-released: "YYYY-MM-DD"
