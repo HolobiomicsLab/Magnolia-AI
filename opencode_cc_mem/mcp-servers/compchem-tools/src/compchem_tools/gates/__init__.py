@@ -7,6 +7,7 @@ from compchem_tools.gates.docking import (
 )
 from compchem_tools.gates.structure import (
     pdb_has_chain_id,
+    pdb_files_have_chain_ids,
     file_size_nonzero,
     structure_parseable,
     qm_inputs_defined,
@@ -23,6 +24,7 @@ GATE_REGISTRY = {
     "pose_valid": pose_valid,
     "at_least_one_pocket": at_least_one_pocket,
     "pdb_has_chain_id": pdb_has_chain_id,
+    "pdb_files_have_chain_ids": pdb_files_have_chain_ids,
     "file_size_nonzero": file_size_nonzero,
     "structure_parseable": structure_parseable,
     "vinyl_isomers_exist": vinyl_isomers_exist,
