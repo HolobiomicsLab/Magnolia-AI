@@ -39,6 +39,17 @@ or you get anchoring and agreement, not debate. Confrontation comes second,
 with enumerated disagreements ("defend or revise point 3"), never open-ended
 "convince each other".
 
+**Calibration (2026-09-10):** verdicts on borderline questions are noise — a
+six-run replication of one question split ~evenly, and the same model produced
+both verdicts in different runs. Quote verified claims, not verdicts, in
+decision memos. "Independent" aggregates disagree and go stale (five different
+capability pictures surfaced for one model across runs; one quoted a catalogue
+fossil "58" while the live index read "40") — record source AND version for
+every ledger row, and prefer direct primary fetches in the chair verification
+pass. One extra ensemble sample is a cheap coverage complement (it uniquely
+surfaced an option both the panel and the old debate missed), never an
+arbiter. Evidence: `runs/2026-09-10_debate-calib-c-glm/CALIBRATION.md`.
+
 ## When to use / not use
 
 Use: design decisions, research-idea soundness, protocol choices, result
@@ -218,7 +229,19 @@ durable record. After the final round:
 
 1. `debate.sh finalize <name>` — verify rounds DONE, get the run-record JSON.
 2. Write the merged verdict to `<run>/verdict.md` — name the final artifact
-   path in your reply (turn-closing contract).
+   path in your reply (turn-closing contract). **Every verdict opens with a
+   one-screen front section** so a reader (agent or human) gets the actionable
+   part in ten seconds:
+   - **Settled** — verified claims, each with its source; what the panel
+     agreed on *and the chair spot-checked*.
+   - **Split** — unresolved disagreements, each with its exact check (or a
+     parked reason).
+   - **Conditions & triggers** — what would flip the call.
+   - **Next check** — the single next action that closes an open row.
+   Full reasoning, divergence detail, and transcripts follow below.
+   *Reader contract:* quote the Settled claims (not the verdict line) for
+   judgment calls; execute the Next check before acting on a Split row; re-read
+   the verdict when a trigger fires.
 3. `memory_record_run(tool="debate", run_id=<dir name>, status, metrics from
    finalize JSON)` — debates must appear in run history.
 4. `memory_record_learning(entry_type="note", ...)` — converged outcome +
