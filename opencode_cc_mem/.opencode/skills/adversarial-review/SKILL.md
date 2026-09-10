@@ -59,14 +59,21 @@ adversaries share blind spots. Practical choices (`opencode models`):
 
 | Model | Use for |
 |---|---|
-| `kimi-for-coding/k3` | Substantive research/design debate (proven strong) |
-| `zai-coding-plan/glm-5.3` | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
+| `kimi-for-coding/k3` (fallback: `opencode-go/kimi-k3`) | Substantive research/design debate (proven strong) |
+| `zai-coding-plan/glm-5.3` (fallback: `opencode-go/glm-5.3`) | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
 | `deepseek/deepseek-v4-flash` (or `opencode-go/deepseek-flash`) | Cheap, fast smoke tests and narrow verdict-format tasks (both serve V4.1-Flash) |
 | `opencode-go/qwen3.8-max` | ASSESSED 2026-09-10 (GLM×DS panel) → **WAIT-LIST**: the Max API id is proprietary (policy-excluded); the open checkpoint `Qwen3.8-2.4T-A95B` is license-clean and hostable (OpenRouter / HF-Novita) but unproven — AA v4.3 40 vs GLM 45 / Kimi 44, no independent checkpoint eval. Reconsider only on a checkpoint eval showing parity. |
 
 Panel pool is open-weight only (user mandate 2026-09-10); decorrelation rule
 still decides *which* of these is eligible per session — e.g. k3-chaired
 debates use glm-5.3 + deepseek, GLM-chaired debates use k3 + deepseek.
+
+**Quota reroute (verified 2026-09-10).** When a direct provider's 5-hour
+limit hits (zai-coding-plan, kimi-for-coding), `opencode-go/<model>` serves
+the same models on the Go subscription — tested end-to-end via headless
+`opencode run` for `glm-5.3` and `kimi-k3`, plus raw endpoint for
+`deepseek-flash`. Use `opencode-go/*`, NOT `opencode/*`: the zen path returns
+`CreditsError` (insufficient balance) without a payment method.
 
 ## Tools and web access
 
