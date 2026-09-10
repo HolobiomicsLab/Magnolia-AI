@@ -32,6 +32,38 @@ def pdb_has_chain_id(
     return result
 
 
+def pdb_files_have_chain_ids(work_dir: str) -> dict[str, Any]:
+    """Check that every top-level ``*.pdb`` in a directory has chain IDs.
+
+    Directory-level companion to :func:`pdb_has_chain_id`, used by the
+    pre-submit gates (HADDOCK3 inputs typically sit at the top of the run
+    dir). v1 scans the top level only; deepen to config-referenced files if
+    false positives bite. No PDB files present is a PASS with a note — there
+    is nothing to violate.
+    """
+    wdir = Path(work_dir)
+    if not wdir.exists():
+        return {"passed": False, "error": f"Directory not found: {work_dir}"}
+
+    files = sorted(wdir.glob("*.pdb"))
+    if not files:
+        return {"passed": True, "files": [], "note": "no top-level PDB files"}
+
+    results = []
+    all_passed = True
+    for f in files:
+        r = pdb_has_chain_id(str(f))
+        entry: dict[str, Any] = {"path": str(f), "passed": r.get("passed", False)}
+        if "chain_ids" in r:
+            entry["chain_ids"] = r["chain_ids"]
+        if "error" in r:
+            entry["error"] = r["error"]
+        results.append(entry)
+        if not entry["passed"]:
+            all_passed = False
+    return {"passed": all_passed, "files": results}
+
+
 def file_size_nonzero(file_path: str) -> dict[str, Any]:
     """Check that a file exists and has non-zero size."""
     p = Path(file_path)
