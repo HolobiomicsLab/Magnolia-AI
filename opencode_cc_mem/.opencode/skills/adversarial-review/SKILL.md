@@ -41,8 +41,32 @@ adversaries share blind spots. Practical choices (`opencode models`):
 | Model | Use for |
 |---|---|
 | `kimi-for-coding/k3` | Substantive research/design debate (proven strong) |
-| `deepseek/deepseek-v4-flash` | Cheap, fast smoke tests and narrow verdict-format tasks |
-| `zai-coding-plan/...` | Only when main agent is NOT GLM-family |
+| `zai-coding-plan/glm-5.3` | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
+| `deepseek/deepseek-v4-flash` (or `opencode-go/deepseek-flash`) | Cheap, fast smoke tests and narrow verdict-format tasks (both serve V4.1-Flash) |
+| `opencode-go/qwen3.8-max` | ASSESSED 2026-09-10 (GLM×DS panel) → **WAIT-LIST**: the Max API id is proprietary (policy-excluded); the open checkpoint `Qwen3.8-2.4T-A95B` is license-clean and hostable (OpenRouter / HF-Novita) but unproven — AA v4.3 40 vs GLM 45 / Kimi 44, no independent checkpoint eval. Reconsider only on a checkpoint eval showing parity. |
+
+Panel pool is open-weight only (user mandate 2026-09-10); decorrelation rule
+still decides *which* of these is eligible per session — e.g. k3-chaired
+debates use glm-5.3 + deepseek, GLM-chaired debates use k3 + deepseek.
+
+## Tools and web access
+
+Headless adversaries inherit opencode's built-in tools (read/glob/grep/
+webfetch; Magnolia MCP stays disabled for blindness). **Web verification works
+and materially improves cross-examination** — verified 2026-09-10 (GLM-5.3 ×
+DS V4.1-Flash panel: 47 completed webfetch calls across two rounds; round 2
+settled disagreements instead of entrenching them). For topics needing fresh
+facts, instruct the adversary explicitly to verify via web and cite a URL per
+claim:
+
+- Search: `https://duckduckgo.com/html/?q=...` (reliable) or
+  `https://www.bing.com/search?q=...` (can return garbage).
+- Then fetch primary sources (vendor pages, GitHub, HF — raw LICENSE files
+  live at `/raw/main/LICENSE`).
+- JS-rendered sites (e.g. qwen.ai blogs) return no content; mark such claims
+  UNVERIFIED.
+- Require a final "URLs actually fetched" list — it makes the answer auditable
+  and cheap to spot-check.
 
 ## Mechanics (all via compchem-tools_run_shell; never blocks)
 
@@ -108,7 +132,7 @@ machinery:
 
 ```
 debate.sh init panel-kimi ctx.md && debate.sh round1 panel-kimi kimi-for-coding/k3 p.txt
-debate.sh init panel-ds   ctx.md && debate.sh round1 panel-ds deepseek/deepseek-v4-pro p.txt
+debate.sh init panel-glm  ctx.md && debate.sh round1 panel-glm  zai-coding-plan/glm-5.3 p.txt
 ```
 
 Choreography: **blind jury first** (each adversary answers independently,
