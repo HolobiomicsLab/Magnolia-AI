@@ -1,0 +1,124 @@
+#!/bin/bash
+# magnolia-exp — launch opencode against the EXPERIMENTAL worktree + scratch project.
+#
+# Dev-only twin of `magnolia`, for the experimental-branch workflow (see
+# runs/2026-09-10_debate-position-ds/execution-plan.md). Guarantees:
+#   * opencode config/plugins load from the WORKTREE (never the live tree)
+#   * memory server + compchem-tools run WORKTREE sources (PYTHONPATH shadow)
+#   * all sessions operate on ~/magnolia-scratch/projects/scratch-demo (never live projects/)
+#   * a dedicated compchem-tools daemon on port 8011 (never the live 8001)
+# Idempotent: re-run any time; it (re)creates symlinks, side files, config.
+#
+# Usage: magnolia-exp            (no args; the project is always scratch-demo)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+OPENCODE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"     # worktree opencode_cc_mem/
+EXP_ROOT="$(cd "$OPENCODE_DIR/.." && pwd)"          # worktree root
+LIVE_ROOT="${MAGNOLIA_LIVE_ROOT:-$HOME/repos/project_magnolia}"  # live tree (venv + llm setup side file)
+
+SCRATCH_ROOT="${MAGNOLIA_EXP_SCRATCH:-$HOME/magnolia-scratch/projects}"
+SCRATCH="$SCRATCH_ROOT/scratch-demo"
+PROJECT="scratch-demo"
+PORT="${COMPCHEM_TOOLS_EXP_PORT:-8011}"
+
+if [ "$EXP_ROOT" = "$LIVE_ROOT" ]; then
+    echo "error: magnolia-exp is running from the live tree; use it from the worktree only." >&2
+    exit 1
+fi
+BRANCH="$(git -C "$EXP_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+
+# ---- idempotent scratch environment -------------------------------------
+mkdir -p "$SCRATCH/.magnolia"/{entries,staging,runs,sessions,queue,archive,backups,session-notes}
+if [ ! -f "$SCRATCH/.magnolia/GOAL.md" ]; then
+    cat > "$SCRATCH/.magnolia/GOAL.md" <<'EOF'
+# Goal: scratch-demo
+
+Throwaway project for experimental-tree smoke tests. Toy jobs only; no real
+Slurm; memory entries here are disposable.
+EOF
+fi
+[ -f "$SCRATCH/.magnolia/boot-context.md" ] || touch "$SCRATCH/.magnolia/boot-context.md"
+[ -f "$SCRATCH/.magnolia/audit-report.md" ] || touch "$SCRATCH/.magnolia/audit-report.md"
+
+# ---- worktree wiring -----------------------------------------------------
+[ -e "$EXP_ROOT/.venv" ] || ln -s "$LIVE_ROOT/.venv" "$EXP_ROOT/.venv"
+mkdir -p "$OPENCODE_DIR/projects" "$OPENCODE_DIR/.magnolia"
+[ -e "$OPENCODE_DIR/projects/$PROJECT" ] || ln -s "$SCRATCH" "$OPENCODE_DIR/projects/$PROJECT"
+if [ ! -f "$OPENCODE_DIR/.magnolia/llm-setup.json" ]; then
+    if [ -f "$LIVE_ROOT/opencode_cc_mem/.magnolia/llm-setup.json" ]; then
+        cp "$LIVE_ROOT/opencode_cc_mem/.magnolia/llm-setup.json" "$OPENCODE_DIR/.magnolia/llm-setup.json"
+    else
+        printf '%s\n' '{"memory_model":"deepseek-v4-flash","memory_enabled":true}' > "$OPENCODE_DIR/.magnolia/llm-setup.json"
+    fi
+fi
+
+# ---- source shadowing ----------------------------------------------------
+# Worktree sources FIRST on PYTHONPATH: both MCP servers and any tool subprocess
+# import the experimental code even though the venv binary is the live one.
+export PYTHONPATH="$OPENCODE_DIR/mcp-servers/compchem-memory/src:$OPENCODE_DIR/mcp-servers/compchem-tools/src${PYTHONPATH:+:$PYTHONPATH}"
+export MAGNOLIA_PROJECT_DIR="$SCRATCH"
+
+# ---- render worktree opencode.json --------------------------------------
+EXP_OC="$OPENCODE_DIR" EXP_ROOT="$EXP_ROOT" EXP_PROJ="$PROJECT" EXP_PORT="$PORT" \
+"$EXP_ROOT/.venv/bin/python3" - <<'PY'
+import json, os, pathlib
+oc = pathlib.Path(os.environ["EXP_OC"])
+setup = {}
+sp = oc / ".magnolia" / "llm-setup.json"
+if sp.exists():
+    try:
+        setup = json.loads(sp.read_text())
+    except Exception:
+        setup = {}
+mem_on = bool(setup.get("memory_enabled")) and bool(setup.get("memory_model"))
+cfg = (oc / "opencode.json.template").read_text()
+cfg = (cfg.replace("@@PROJECT@@", os.environ["EXP_PROJ"])
+          .replace("@@MAGNOLIA_ROOT@@", os.environ["EXP_ROOT"])
+          .replace("@@PYTHON@@", os.environ["EXP_ROOT"] + "/.venv/bin/python3")
+          .replace("@@MEMORY_ENABLED@@", "true" if mem_on else "false"))
+cfg = json.loads(cfg)
+if setup.get("main_model"):
+    cfg["model"] = setup["main_model"]
+if mem_on:
+    env = cfg["mcp"]["compchem-memory"]["environment"]
+    env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
+    if setup.get("memory_provider"):
+        env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+# exp daemon port (never the live 8001)
+cfg["mcp"]["compchem-tools"]["url"] = f"http://127.0.0.1:{os.environ['EXP_PORT']}/mcp"
+out = oc / "opencode.json"
+tmp = out.with_name(out.name + ".tmp")
+tmp.write_text(json.dumps(cfg, indent=2) + "\n")
+os.replace(tmp, out)
+print("memory " + ("on" if mem_on else "off"))
+PY
+
+# ---- exp daemon (scoped port + pidfile; never touches the live daemon) ---
+COMPCHEM_TOOLS_PORT="$PORT" MAGNOLIA_PROJECT_DIR="$SCRATCH" PYTHONPATH="$PYTHONPATH" \
+    bash "$SCRIPT_DIR/compchem-tools-daemon.sh" start >&2 \
+    || echo "warning: exp compchem-tools daemon failed to start (port $PORT)" >&2
+
+# ---- banner + launch -----------------------------------------------------
+cat >&2 <<EOF
+
+════════════════════ magnolia-exp ════════════════════
+ worktree : $EXP_ROOT  (branch: $BRANCH)
+ scratch  : $SCRATCH
+ tools    : http://127.0.0.1:$PORT/mcp  (exp daemon)
+ memory   : worktree sources via PYTHONPATH shadow
+ live     : $LIVE_ROOT  (untouched)
+═══════════════════════════════════════════════════════
+
+EOF
+
+if [ -f "$EXP_ROOT/.venv/bin/activate" ]; then
+    set +u
+    # shellcheck disable=SC1091
+    source "$EXP_ROOT/.venv/bin/activate"
+    set -u
+fi
+
+cd "$OPENCODE_DIR"
+exec opencode
