@@ -26,6 +26,59 @@ def _generate_run_id(tool: str) -> str:
     return f"{tool}_{ts}_{suffix}"
 
 
+# Per-tool mechanical pre-submit gates (2026-06-18 enforcement direction,
+# wired 2026-09-10 — execution plan P0.3). Fail-closed: a failing gate blocks
+# the submission unless the caller explicitly passes acknowledge=True (the
+# same override the recall hold uses). v1 covers HADDOCK3's canonical
+# precondition: chain IDs on its PDB inputs.
+_PRE_SUBMIT_GATES: dict[str, tuple[str, ...]] = {
+    "haddock3": ("pdb_files_have_chain_ids",),
+}
+
+
+def _check_pre_submit_gates(
+    tool: str | None, working_dir: str, acknowledge: bool
+) -> dict[str, Any] | None:
+    """Run per-tool mechanical gates; return a hold dict on failure, else None.
+
+    A failing gate blocks the submission unless ``acknowledge=True``. A gate
+    that raises also blocks — a broken gate must never silently pass bad
+    input. A missing registry entry is skipped (wiring drift must not block
+    users).
+    """
+    from compchem_tools.gates import GATE_REGISTRY
+
+    if not tool:
+        return None
+    for name in _PRE_SUBMIT_GATES.get(tool, ()):
+        fn = GATE_REGISTRY.get(name)
+        if fn is None:
+            continue
+        try:
+            result = fn(working_dir)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"pre-submit gate '{name}' errored: {e}",
+                "gate": {"name": name, "passed": False, "error": str(e)},
+            }
+        if not result.get("passed"):
+            if acknowledge:
+                continue
+            return {
+                "success": False,
+                "error": f"pre-submit gate failed: {name}",
+                "gate": {"name": name, **result},
+                "hint": (
+                    "PDB input(s) are missing chain IDs (column 22). Fix with "
+                    "preprocess_pdb(add_chain_id=...) or move non-input PDBs out "
+                    "of the working dir; resubmit with acknowledge=True only "
+                    "after review."
+                ),
+            }
+    return None
+
+
 def submit_job(
     command: str,
     working_dir: str,
@@ -58,6 +111,11 @@ def submit_job(
     held = recall_gate(tool, command, project_dir, acknowledge, system_tags)
     if held is not None:
         return held
+
+    # Mechanical pre-submit gates (P0.3; fail-closed, acknowledge overrides).
+    gate_hold = _check_pre_submit_gates(tool, working_dir, acknowledge)
+    if gate_hold is not None:
+        return gate_hold
 
     if scheduler == "ssh-slurm":
         from compchem_tools.tools import ssh_slurm
