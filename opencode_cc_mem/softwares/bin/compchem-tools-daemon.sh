@@ -33,7 +33,7 @@ HOST="127.0.0.1"
 PROJECT_DIR="${MAGNOLIA_PROJECT_DIR:-projects/communication}"
 LOG_DIR="$ROOT/opencode_cc_mem/logs"
 OUT_LOG="$LOG_DIR/compchem-tools-http.log"
-PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/compchem-tools-daemon.pid"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/compchem-tools-daemon-${PORT}.pid"
 
 is_up() {
   # Proxy-proof liveness: OUR supervisor process must be alive. HTTP port
@@ -76,7 +76,7 @@ start() {
   # Supervisor loop: restart the server if it ever exits (crash or wedge).
   # Runs as its own session leader so it survives logout. Env is baked into
   # the child-script text (shell functions don't cross into bash -c children).
-  SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_RULES_DIR='rules' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
+  SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_RULES_DIR='rules' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PYTHONPATH='${PYTHONPATH:-}' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
   setsid bash -c "
     echo \"[supervisor] \$(date -Is) start\" >> '$OUT_LOG'
     while true; do
@@ -100,11 +100,17 @@ start() {
 
 stop() {
   if [ -f "$PIDFILE" ]; then
-    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+    sup="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "${sup:-}" ]; then
+      kill "$sup" 2>/dev/null || true
+      # The supervisor is a session leader (setsid): killing its process
+      # group takes the `env ... compchem_tools.server` child with it.
+      # Scoped by pidfile — never pkill globally (a global pkill would kill
+      # the live daemon's server on 8001 when stopping this instance).
+      kill -- "-$sup" 2>/dev/null || true
+    fi
     rm -f "$PIDFILE"
   fi
-  # Bracket trick: pattern won't match this script's own command line.
-  pkill -9 -f "compchem_tools[.]server" 2>/dev/null || true
   sleep 1
   if is_up; then echo "still up?"; return 1; fi
   echo "stopped"
