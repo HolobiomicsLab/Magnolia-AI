@@ -19,8 +19,8 @@ For a first installation, read in this order:
 
 For a deeper account of how the system behaves:
 
-4. **[Architecture](architecture.md)** — the four components, the MCP daemon, the session
-   life-cycle, and where knowledge is stored.
+4. **[Architecture](architecture.md)** — the framework and harness, APIs and MCP, the session
+   life-cycle, and how knowledge is stored and versioned.
 5. **[Memory](memory.md)** — the notebook, the promotion of a note into a rule, unattended
    consolidation, and the known limits of conversation distillation.
 6. **[Cluster execution](hpc.md)** — cluster profiles, Slurm conventions, the job life-cycle, and
@@ -32,7 +32,7 @@ For a deeper account of how the system behaves:
 | Notation | Meaning |
 |---|---|
 | `projects/<name>/` | Shorthand for `opencode_cc_mem/projects/<name>/`, the root of one project |
-| `.magnolia/` | The notebook of the project that contains it; never tracked by git |
+| `.magnolia/` | The project notebook; excluded from the main repository, with a local Git history for `entries/` and `staging/` |
 | `runs/YYYY-MM-DD_name/` | The mandatory output convention for any computation |
 | *"…"* in italics | A prompt addressed to Magnolia, to be typed as prose |
 
