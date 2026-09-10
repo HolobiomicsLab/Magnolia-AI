@@ -74,3 +74,70 @@ def test_local_submit_records_remote_block_and_tags(tmp_path, monkeypatch):
     assert rec["remote"]["exit_sentinel"].endswith("local_exit_code")
     assert rec["system_tags"] == ["peptide", "6mer"]
     assert rec["lifecycle"] == "running"
+
+
+def _alive_non_zombie(pid: int) -> bool:
+    """Linux helper: True if pid exists and is not a zombie."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            state = f.read().rsplit(") ", 1)[1].split()[0]
+        return state != "Z"
+    except FileNotFoundError:
+        return False
+
+
+def test_cancel_local_kills_children(tmp_path):
+    """Regression (P0.2): cancel must kill the whole process group, not just
+    the master. The job spawns a background child; both must die on cancel."""
+    import time as _time
+    from compchem_tools.tools.jobs import _cancel_local, _local_group_alive
+
+    child_pidfile = tmp_path / "child.pid"
+    res = _submit_local(
+        f"sleep 300 & echo $! > {child_pidfile}; sleep 300",
+        tmp_path, "job", 1,
+    )
+    assert res["success"] is True
+    master_pid = res["pid"]
+
+    # Wait for the child to spawn and record its pid.
+    deadline = _time.time() + 5
+    while _time.time() < deadline and not (
+        child_pidfile.exists() and child_pidfile.read_text().strip()
+    ):
+        _time.sleep(0.05)
+    assert child_pidfile.exists(), "child pidfile was never written"
+    child_pid = int(child_pidfile.read_text().strip())
+
+    assert _alive_non_zombie(master_pid), "master should be running before cancel"
+    assert _alive_non_zombie(child_pid), "child should be running before cancel"
+
+    cancel = _cancel_local(res["job_id"])
+    assert cancel["success"] is True
+    assert cancel["group_terminated"] is True, cancel
+
+    deadline = _time.time() + 5
+    while _time.time() < deadline and (
+        _alive_non_zombie(master_pid) or _alive_non_zombie(child_pid)
+    ):
+        _time.sleep(0.05)
+    assert not _alive_non_zombie(master_pid), "master survived cancel"
+    assert not _alive_non_zombie(child_pid), "child survived cancel (original bug)"
+    assert _local_group_alive(master_pid) is False
+
+
+def test_cancel_local_already_terminated(tmp_path):
+    """Cancel of a finished job succeeds without signalling errors."""
+    import time as _time
+    from compchem_tools.tools.jobs import _cancel_local
+
+    res = _submit_local("sh -c 'exit 0'", tmp_path, "job", 1)
+    assert res["success"] is True
+    deadline = _time.time() + 5
+    while _time.time() < deadline and _alive_non_zombie(res["pid"]):
+        _time.sleep(0.05)
+
+    cancel = _cancel_local(res["job_id"])
+    assert cancel["success"] is True
+    assert ("already terminated" in str(cancel.get("note", ""))
+            or cancel.get("group_terminated") is True)
