@@ -670,10 +670,62 @@ def _check_local(job_id: str) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _local_group_alive(pid: int) -> bool:
+    """True if the process group ``pid`` has any live (non-zombie) member.
+
+    Local jobs run with ``start_new_session=True`` (see ``_submit_local``), so
+    the recorded master pid IS the process-group id, and every child the
+    command spawns inherits that group. Zombies are excluded: after the group
+    is signalled the master can linger as a zombie until its parent (the MCP
+    daemon) reaps it, and a zombie must not read as "still running".
+    """
+    import os
+
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        # No /proc (non-Linux): fall back to a killpg probe.
+        try:
+            os.killpg(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat", "rb") as f:
+                data = f.read().decode("utf-8", "replace")
+            # /proc/<pid>/stat: "pid (comm) state ppid pgrp session ..."
+            after = data.rsplit(") ", 1)[1].split()
+            state, pgid = after[0], int(after[2])
+        except (OSError, IndexError, ValueError):
+            continue
+        if pgid == pid and state != "Z":
+            return True
+    return False
+
+
 def _cancel_local(job_id: str) -> dict[str, Any]:
-    """Cancel local job by sending SIGTERM."""
+    """Cancel a local job by signalling its whole process group.
+
+    Local jobs are started with ``start_new_session=True``, so the recorded pid
+    is a session/process-group leader and the command's children share its
+    group. Killing only the master pid orphaned the children (the 2026-06 todo
+    item), so this signals the GROUP, escalating SIGTERM -> SIGKILL after a
+    bounded grace period (a stuck scientific binary can ignore SIGTERM).
+
+    Regression: tests/test_local_lifecycle.py::test_cancel_local_kills_children.
+    """
     import os
     import signal
+    import time
+
+    TERM_GRACE_S = 2.0
+    POLL_S = 0.2
 
     try:
         parts = job_id.split("_")
@@ -681,26 +733,60 @@ def _cancel_local(job_id: str) -> dict[str, Any]:
             return {"success": False, "error": f"Invalid local job ID format: {job_id}"}
 
         pid = int(parts[1])
-        try:
-            os.kill(pid, signal.SIGTERM)
+
+        if not _local_group_alive(pid):
             return {
                 "success": True,
                 "job_id": job_id,
                 "scheduler": "local",
                 "pid": pid,
+                "note": "Process group already terminated",
             }
+
+        signals_sent: list[str] = []
+        try:
+            os.killpg(pid, signal.SIGTERM)
+            signals_sent.append("SIGTERM")
         except ProcessLookupError:
             return {
                 "success": True,
                 "job_id": job_id,
                 "scheduler": "local",
-                "note": "Process already terminated",
+                "pid": pid,
+                "note": "Process group already terminated",
             }
         except PermissionError:
             return {
                 "success": False,
-                "error": f"Permission denied to kill process {pid}",
+                "error": f"Permission denied to kill process group {pid}",
             }
+
+        deadline = time.monotonic() + TERM_GRACE_S
+        while time.monotonic() < deadline and _local_group_alive(pid):
+            time.sleep(POLL_S)
+
+        if _local_group_alive(pid):
+            try:
+                os.killpg(pid, signal.SIGKILL)
+                signals_sent.append("SIGKILL")
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                return {
+                    "success": False,
+                    "error": f"Permission denied to kill process group {pid}",
+                    "signals_sent": signals_sent,
+                }
+            time.sleep(POLL_S)
+
+        return {
+            "success": True,
+            "job_id": job_id,
+            "scheduler": "local",
+            "pid": pid,
+            "signals_sent": signals_sent,
+            "group_terminated": not _local_group_alive(pid),
+        }
     except (ValueError, IndexError):
         return {"success": False, "error": f"Could not parse PID from job ID: {job_id}"}
     except Exception as e:
