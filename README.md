@@ -2,7 +2,7 @@
 
 # Project Magnolia
 
-**An agentic research assistant for computational chemistry — with a laboratory notebook that remembers.**
+**A persistent-memory framework for computational research, developed through computational chemistry.**
 
 <p>
   <img alt="Licence: MIT with Non-Military Clause" src="https://img.shields.io/badge/licence-MIT%20%2B%20Non--Military-4c6ef5?style=flat-square">
@@ -18,20 +18,24 @@
 
 ## In brief
 
-Magnolia drives the software a computational chemist would otherwise operate by hand — pocket
-prediction, docking, molecular dynamics, quantum chemistry, generative design — on a workstation
-or on a Slurm cluster, and writes down what was run, what came out of it, and what was learnt.
+Magnolia helps a researcher retain and reuse the operational knowledge produced during
+computational work: what was run, which choices were made, what failed, and what was learnt.
+Its current tools and worked examples centre on computational chemistry, from docking and
+molecular dynamics to quantum chemistry, on a workstation or a Slurm cluster. The memory,
+review and provenance mechanisms provide a starting point for adaptation to other domains.
 You work with it in ordinary prose, in a terminal.
 
-The written record is the point. It lives inside the project directory as Markdown, it is read
-back at the beginning of every session, and observations that survive repetition are proposed to
-you for promotion into standing rules. An assistant that merely executes commands saves an
-afternoon; one that accumulates a reviewable account of a project becomes more useful over months.
+The written record lives inside the project directory as Markdown, and relevant context is read
+back in subsequent sessions. Git versions the shared rules and protocols; a separate local Git
+repository tracks the notebook's staged and confirmed entries. Repeated observations can be
+proposed to you for promotion into standing rules. A protocol refined on Friday can therefore
+inform work resumed on Monday, together with the recorded reasons for the change.
 
 Three properties distinguish Magnolia from a general-purpose coding agent:
 
-- **Instrument coverage.** HADDOCK3, gnina, P2Rank, GROMACS, ORCA, Gaussian, xTB and BoltzGen are
-  exposed as typed tools with their own operating rules, not as free-form shell commands.
+- **Scientific tool integration.** The chemistry toolset includes typed wrappers for HADDOCK3,
+  gnina, P2Rank, GROMACS, ORCA, Gaussian and xTB, with task-specific protocols. BoltzGen is
+  driven through the recorded `run_shell` route.
 - **A memory that is reviewed, not merely accumulated.** Learnings are staged, corroborated across
   sessions, and promoted into version-controlled rules only with your explicit agreement.
 - **Provenance by construction.** Runs, commands, job identifiers and outcomes are recorded as they
@@ -80,6 +84,11 @@ a person decides.
 
 ## Scientific scope
 
+Computational chemistry is the current application domain and the source of the worked examples
+below. Extending Magnolia to another field requires its own tool adapters or recorded shell
+commands, written protocols, and verification criteria. The repository's general memory design
+does not by itself establish scientific validity or tested support in another domain.
+
 | Domain | Instrument | Exposed as |
 |---|---|---|
 | Binding-site prediction | P2Rank | `p2rank_predict` |
@@ -104,7 +113,14 @@ verification checklist — loaded only when the task calls for it. See
 Magnolia is instructed in prose, and the quality of the first message largely determines the quality
 of the session. A serviceable opening states four things: **the objective**, **where the inputs
 live**, **what has already been attempted**, and **the criterion by which the result will be
-judged**. What follows are four representative openings; a longer catalogue, with the follow-up
+judged**. A domain-independent opening is:
+
+> *"Review the scripts, logs and recorded findings from the last two runs in this project.
+> Identify which protocol choices changed and why, retaining unsuccessful attempts and unresolved
+> questions. Suggest what we should reuse when we resume on Monday; ask me to review any proposed
+> standing rule before applying it."*
+
+What follows are four worked application openings; a longer catalogue, with the follow-up
 turns and the expected outputs, is in [`docs/use-cases.md`](docs/use-cases.md).
 
 ### 1. Structure-based design of a peptide binder
