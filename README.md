@@ -191,14 +191,31 @@ are worth their length, since a premature run costs queue time.
 
 ## How it is put together
 
-Four components, communicating over the [Model Context Protocol](https://modelcontextprotocol.io).
+Magnolia combines a memory and review workflow with an **agent harness**: the runtime that
+manages the model, conversation, instructions and tool calls. The supplied harness is
+[OpenCode](https://opencode.ai). Two Python services expose memory and execution tools through
+the [Model Context Protocol (MCP)](https://modelcontextprotocol.io); the knowledge files remain
+ordinary files in the workspace.
 
 | Layer | Component | Function |
 |---|---|---|
-| Interface | [OpenCode](https://opencode.ai) | The terminal client you converse with; loads rules, skills and the project's boot context at session start |
+| Agent harness | [OpenCode](https://opencode.ai) | The terminal client you converse with; loads rules, skills and the project's boot context at session start |
 | Execution | **compchem-tools** | 36 typed tools for the scientific software and for Slurm; runs as a local HTTP daemon on `127.0.0.1:8001` |
 | Memory | **compchem-memory** | 24 tools for the notebook: capture, retrieval, distillation, consolidation, promotion |
 | Knowledge | `rules/`, `.opencode/skills/`, `.magnolia/` | Doctrine read every session, protocols loaded on demand, and learnings written by Magnolia itself |
+
+**APIs and MCP serve different roles.** An application programming interface (API) exposes
+operations offered by a software component; MCP standardises how an agent client discovers and
+calls exposed tools. Magnolia's MCP handlers invoke Python functions and scientific executables,
+while model-provider APIs supply model responses. Direct API or command-line integration is
+another possible route, but it would still need to preserve run capture, memory retrieval and
+human review. The HTTP tool daemon speaks MCP; it is not a separate REST API.
+
+Other MCP-capable harnesses are possible integration targets. A complete adaptation would also
+need to load the rules and task protocols, provide project context, capture conversations and
+preserve the review steps. The launcher and session plugins currently target OpenCode; an MCP
+connection alone does not establish equivalent behaviour in another harness. See
+[the integration boundaries](docs/architecture.md#harness-apis-and-mcp).
 
 Two design decisions are worth stating, since they explain otherwise puzzling details.
 
@@ -223,6 +240,11 @@ The knowledge base has **three homes**, distinguished by who writes them and whe
 
 Doctrine and protocols are authored and reviewed through git; learnings are observed and proposed.
 The dividing line is provenance, not length.
+
+The notebook's nested Git history covers `entries/` and `staging/`. It is local to the project
+and does not publish research data to the Magnolia repository. Run outputs and logs require
+their own preservation arrangements; Git versioning of the learning entries is not a complete
+archive of an experiment.
 
 ---
 
