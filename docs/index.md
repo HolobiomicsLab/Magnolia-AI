@@ -1,7 +1,8 @@
 # Documentation
 
-Project Magnolia is an agentic research assistant for computational chemistry. This directory holds
-the reference documentation; [`../README.md`](../README.md) is the shorter introduction, and
+Project Magnolia is a persistent-memory framework for computational research, with tools and
+worked examples currently centred on computational chemistry. This directory holds the reference
+documentation; [`../README.md`](../README.md) is the shorter introduction, and
 [`../WORKFLOW_GUIDE.md`](../WORKFLOW_GUIDE.md) is the practical guide to supervising a session.
 
 ## Reading order
