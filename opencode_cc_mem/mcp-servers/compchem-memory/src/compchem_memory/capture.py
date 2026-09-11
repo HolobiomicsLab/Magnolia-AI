@@ -1,6 +1,7 @@
 """Shared capture infrastructure: per-project SessionManager registry + decorator (Task 2)."""
 
 import json
+import os
 import time
 from functools import wraps
 from pathlib import Path
@@ -156,6 +157,8 @@ def _maybe_inline_extract(mgr, project_dir: str) -> None:
     """Inline trigger: if should_extract returns True, fire commit().
     All exceptions swallowed — extraction failures must never block tools."""
     if mgr is None:
+        return
+    if os.environ.get("MAGNOLIA_DISABLE_INLINE_EXTRACT"):
         return
     try:
         from compchem_memory.extraction import AutomaticMemoryExtractor
