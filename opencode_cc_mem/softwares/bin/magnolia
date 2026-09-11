@@ -74,7 +74,7 @@ Options:
 Examples:
   magnolia setup hsc70_peptides
   magnolia hsc70_peptides
-  magnolia memory set deepseek-v4-flash
+  magnolia memory set deepseek-flash
   magnolia --critic hsc70_peptides
 
 Available projects:
@@ -450,7 +450,7 @@ except Exception:
     echo "  Cheap is recommended; the provider is derived from the model name."
     local cur_mem def_mem
     cur_mem="$(setup_get memory_model)"
-    def_mem="${cur_mem:-deepseek-v4-flash}"
+    def_mem="${cur_mem:-deepseek-flash}"
     ans="$(_read_from_tty "  memory model [$def_mem]: " || true)"
     local mem="${ans:-$def_mem}"
     echo "  verifying with one real call…"
