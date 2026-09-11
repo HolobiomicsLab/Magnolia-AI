@@ -86,3 +86,19 @@ def test_decorator_drains_notices_into_response(project_dir):
     assert "1 learning distilled" in result
     # queue is drained
     assert distill_log.drain_distill_notices(str(project_dir)) == []
+
+
+def test_decorator_keeps_json_valid_when_notice_pending(project_dir):
+    """Regression (2026-06 flake): a pending notice must not be concatenated
+    onto a JSON-string tool result — json.loads in callers must still pass."""
+    distill_log.push_distill_notice(str(project_dir), "QUOTE-Y", "1 learning distilled")
+
+    @captured(source="compchem-memory")
+    def json_tool(project_dir: str | None = None) -> str:
+        return json.dumps({"success": True, "value": 1})
+
+    result = json_tool(project_dir=str(project_dir))
+    parsed = json.loads(result)  # must not raise
+    assert parsed["success"] is True
+    assert parsed["value"] == 1
+    assert parsed["_distill_notices"] == ["📝 1 learning distilled — QUOTE-Y"]
