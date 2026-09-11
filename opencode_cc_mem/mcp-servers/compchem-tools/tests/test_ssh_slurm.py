@@ -335,6 +335,41 @@ def test_submit_rsync_push_failure_returns_rsync_push_failed(fake_subprocess, tm
     assert result["error_kind"] == "rsync_push_failed"
 
 
+def test_submit_records_effective_resources(fake_subprocess, tmp_path):
+    """A0: the submit-time run record carries the resolved resource request."""
+    project_dir, local_run_dir = _make_project(tmp_path)
+    fake_subprocess.canned["hpc_tunnel.sh"] = CompletedProcess([], 0, "", "")
+    fake_subprocess.canned["&& sbatch job.slurm"] = CompletedProcess(
+        [], 0, "Submitted batch job 4242\n", ""
+    )
+    result = ssh_slurm.submit(
+        command="echo hi",
+        working_dir=str(local_run_dir),
+        project_dir=str(project_dir),
+        cluster="azzurra",
+        tool="haddock3",
+        ncores=8,
+        memory="32GB",
+        time_limit="04:00:00",
+    )
+    assert result["success"] is True, result
+    runs = [p for p in (project_dir / ".magnolia" / "runs").glob("*.yaml")
+            if p.name != "INDEX.yaml"]
+    assert len(runs) == 1
+    rec = yaml.safe_load(runs[0].read_text())
+    cfg = ssh_slurm.CLUSTER_CONFIG["azzurra"]
+    assert rec["resources"] == {
+        "ncores": 8,
+        "memory": "32GB",
+        "time_limit": "04:00:00",
+        "scheduler": "ssh-slurm",
+        "cluster": "azzurra",
+        "partition": cfg["default_partition"],
+        "account": cfg["default_account"],
+        "qos": cfg["default_qos"],
+    }
+
+
 def test_parse_sacct_completed_row():
     line = "11331448|COMPLETED|0:0|00:00:42|256M|00:00:38|2026-05-29T14:00:10|2026-05-29T14:00:52|gpu06"
     parsed = ssh_slurm._parse_sacct(line)

@@ -307,6 +307,16 @@ def submit(
     account = account or cfg["default_account"]
     qos = qos or cfg["default_qos"]
     partition = partition or cfg["default_partition"]
+    resources = {
+        "ncores": ncores,
+        "memory": memory,
+        "time_limit": time_limit,
+        "scheduler": "ssh-slurm",
+        "cluster": cluster,
+        "partition": partition,
+        "account": account,
+        "qos": qos,
+    }
 
     local_run_dir = Path(working_dir)
     local_run_dir.mkdir(parents=True, exist_ok=True)
@@ -379,7 +389,8 @@ def submit(
         # job_id/fetched_at so the lifecycle is consistent and the poller (which
         # scans lifecycle in {submitted, running}) re-tracks the NEW job.
         remote_fields["restart_count"] = (prior_remote.get("restart_count") or 0) + 1
-        _PROJECT_MANAGER.begin_restart(project_dir, run_id, remote_fields)
+        _PROJECT_MANAGER.begin_restart(project_dir, run_id, remote_fields,
+                                       resources=resources)
     else:
         _PROJECT_MANAGER.record_run(
             project_dir=project_dir,
@@ -388,6 +399,7 @@ def submit(
             status=None,
             lifecycle="submitting",
             remote=remote_fields,
+            resources=resources,
             system_tags=system_tags,
         )
 
