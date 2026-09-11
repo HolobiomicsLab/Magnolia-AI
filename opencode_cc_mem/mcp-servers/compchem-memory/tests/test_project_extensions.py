@@ -174,3 +174,62 @@ def test_index_grep_for_state_returns_complete_record(project):
     line = matching[0]
     for token in ["haddock3_20260530_090000", "cluster: azzurra", "job_id: '11331500'", "elapsed: 01:30:00", "node: compute41"]:
         assert token in line, f"missing {token!r} in {line!r}"
+
+
+def test_record_run_persists_effective_resources(project):
+    pm, project_dir = project
+    resources = {
+        "ncores": 32,
+        "memory": "64GB",
+        "time_limit": "24:00:00",
+        "scheduler": "ssh-slurm",
+        "cluster": "azzurra",
+        "partition": "cpucourt",
+        "account": "spectrometry",
+        "qos": "",
+    }
+    pm.record_run(
+        project_dir=project_dir,
+        run_id="haddock3_20260911_120000",
+        tool="haddock3",
+        status=None,
+        lifecycle="submitted",
+        resources=resources,
+    )
+    yaml_files = list((Path(project_dir) / ".magnolia" / "runs").glob("*_haddock3_20260911_120000.yaml"))
+    record = yaml.safe_load(yaml_files[0].read_text())
+    assert record["resources"] == resources
+
+
+def test_record_run_without_resources_omits_key(project):
+    pm, project_dir = project
+    pm.record_run(project_dir=project_dir, run_id="xtb_20260911_120001", tool="xtb", status="pass")
+    yaml_files = list((Path(project_dir) / ".magnolia" / "runs").glob("*_xtb_20260911_120001.yaml"))
+    record = yaml.safe_load(yaml_files[0].read_text())
+    assert "resources" not in record
+
+
+def test_begin_restart_refreshes_resources(project):
+    pm, project_dir = project
+    pm.record_run(
+        project_dir=project_dir,
+        run_id="haddock3_20260911_130000",
+        tool="haddock3",
+        status="fail",
+        lifecycle="failed",
+        remote={"cluster": "azzurra", "job_id": "111"},
+        resources={"ncores": 8, "memory": "16GB", "scheduler": "ssh-slurm"},
+    )
+    restarted = pm.begin_restart(
+        project_dir,
+        "haddock3_20260911_130000",
+        {"cluster": "azzurra", "restart_count": 1},
+        resources={"ncores": 16, "memory": "32GB", "scheduler": "ssh-slurm"},
+    )
+    assert restarted is True
+    yaml_files = list((Path(project_dir) / ".magnolia" / "runs").glob("*_haddock3_20260911_130000.yaml"))
+    record = yaml.safe_load(yaml_files[0].read_text())
+    assert record["resources"]["ncores"] == 16
+    assert record["resources"]["memory"] == "32GB"
+    assert record["lifecycle"] == "submitting"
+    assert record["status"] is None
