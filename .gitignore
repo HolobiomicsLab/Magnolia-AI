@@ -1,6 +1,8 @@
 # venv + transient/rendered/config
 .venv
 opencode_cc_mem/opencode.json
+# machine-local dev plan (kept at repo root for session continuity; not released)
+/EXECUTION_PLAN.md
 # user research data (scaffolded per launch; never the 111G originals)
 opencode_cc_mem/projects/
 # heavy re-installable local tool binaries/weights

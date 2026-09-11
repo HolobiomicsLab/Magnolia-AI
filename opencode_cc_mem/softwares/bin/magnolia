@@ -545,6 +545,20 @@ if [ "$SETUP" = "1" ]; then
     echo
 fi
 
+# Safety net (2026-09-10): the live tree must be on master. A stray checkout
+# would silently run experimental code in daily sessions (worktree architecture:
+# see runs/2026-09-10_debate-position-ds/execution-plan.md). Enforced; bypass
+# for deliberate exceptions: MAGNOLIA_ALLOW_NONMASTER=1 magnolia <project>
+if [ "${MAGNOLIA_ALLOW_NONMASTER:-0}" != "1" ]; then
+    LIVE_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [ "$LIVE_BRANCH" != "master" ]; then
+        echo "error: live tree is on '$LIVE_BRANCH', not master — refusing to launch." >&2
+        echo "  tree: $REPO_ROOT" >&2
+        echo "  deliberate exception: MAGNOLIA_ALLOW_NONMASTER=1 magnolia $PROJECT" >&2
+        exit 1
+    fi
+fi
+
 # Render template + LLM policy → opencode.json (atomic; echoes on/off).
 MEMORY_STATE="$(render_config "$PROJECT")"
 if [ "$MEMORY_STATE" = "off" ]; then
