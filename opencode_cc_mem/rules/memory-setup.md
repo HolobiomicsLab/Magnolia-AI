@@ -2,7 +2,7 @@
 name: memory-setup
 description: How to set up Magnolia's memory model when a user asks to "set up memory" — model roles, the magnolia memory command, verification, and the restart requirement.
 version: 1.0
-last_verified: 2026-08-28
+last_verified: 2026-09-11
 tags: [setup, llm, memory-model, onboarding]
 ---
 
@@ -15,7 +15,7 @@ by the `magnolia` launcher on every launch):
 | Role | What it does | Guidance |
 |---|---|---|
 | **Main model** | Drives the agent the user talks to | User's choice; configured by `magnolia setup` (step 1) |
-| **Memory model** | Background only: session distillation (~20 min timer + boot), rolling handover merge (boot), memory re-ranking, consolidation | **Cheap is right.** Default `deepseek-v4-flash`. Runs unattended, volume scales with activity |
+| **Memory model** | Background only: session distillation (~20 min timer + boot), rolling handover merge (boot), memory re-ranking, consolidation | **Cheap is right.** Default `deepseek-flash`. Runs unattended, volume scales with activity |
 
 They can be the same model. They usually should not be.
 
@@ -46,7 +46,7 @@ Two triggers lead here — the flow below is the same for both:
 
 1. **Explain the roles** (table above) in one short paragraph — cheap model
    for memory, smart model for the agent — and state the default
-   (`deepseek-v4-flash`).
+   (`deepseek-flash`).
 2. **Ask which memory model** they want, offering the default. Mention the
    quality alternative (`deepseek-v4-pro`) exists if their workload needs it.
 3. **Check the key**: the chosen provider's API key must be in the
@@ -56,7 +56,7 @@ Two triggers lead here — the flow below is the same for both:
    their env file themselves.
 4. **Run the command**:
    ```bash
-   magnolia memory set deepseek-v4-flash
+   magnolia memory set deepseek-flash
    ```
    It makes one REAL test call before saving. On failure it writes nothing —
    report the stderr verbatim and fix the cause (wrong model id, missing
