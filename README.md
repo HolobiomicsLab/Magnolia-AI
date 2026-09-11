@@ -2,7 +2,7 @@
 
 # Project Magnolia
 
-**A persistent-memory framework for computational research, developed through computational chemistry.**
+**A persistent-memory AI agent framework for computational research, developed through computational chemistry.**
 
 <p>
   <img alt="Licence: MIT with Non-Military Clause" src="https://img.shields.io/badge/licence-MIT%20%2B%20Non--Military-4c6ef5?style=flat-square">
@@ -259,10 +259,11 @@ Observations rise through three levels, each demanding more evidence than the la
 | Level | Location | Content |
 |---|---|---|
 | Draft note | `.magnolia/staging/` | Noticed once, not yet committed to |
-| Project note | `.magnolia/entries/` | Held up across **at least two** sessions |
+| Project note | `.magnolia/entries/` | Confirmed explicitly, or promoted after consistent observations across sessions |
 | Rule | `rules/` | Held up across **three** sessions, reviewed, and accepted by you |
 
-The first step is automatic; the second is not. A candidate rule is examined by three independent
+Staging entries can be confirmed with `memory_confirm`; rule elevation requires a separate review.
+A candidate rule is examined by three independent
 review passes, of which at least two must approve, is checked against the rules already in force,
 and is then drafted and left waiting in `.magnolia/reflex/promotion-proposal.json`. Nothing is
 written until you say so. To see what is pending, ask:
@@ -283,10 +284,15 @@ documented in [`docs/memory.md`](docs/memory.md).
 
 ## Installation
 
-**Prerequisites.** Python 3.11 or newer, a POSIX system (Linux or macOS), and
-[OpenCode](https://opencode.ai) as the chat client. A model provider is required; Magnolia is
-agnostic and works with subscription plans (Moonshot Kimi, Z.AI GLM, Claude, ChatGPT, GitHub
-Copilot) as well as pay-as-you-go keys and local models served through Ollama or llama.cpp.
+Start with the **[onboarding guide](docs/getting-started.md)** for platform checks,
+OpenCode installation, credentials and a first-session/restart exercise. The supplied
+shell path expects Python 3.11+, Git, Bash, GNU coreutils, curl, `setsid` and OpenCode.
+Linux is the reference environment; macOS needs additional shell utilities and may
+need a manually supervised tools server. Scientific programs are installed separately.
+
+The main model is configured in OpenCode. Background memory uses Magnolia's separate
+Python client and credentials; an OpenCode subscription/login does not configure it.
+See the guide's [provider table](docs/getting-started.md#4-configure-the-two-model-roles).
 
 ```bash
 git clone https://github.com/HolobiomicsLab/Magnolia-AI.git
@@ -301,10 +307,13 @@ python3 -m venv .venv
 Should `pip` be absent from a minimal Python installation, run
 `.venv/bin/python3 -m ensurepip --upgrade` first.
 
-**Verify the installation** before going further:
+**Verify the installation** against an empty temporary project before going further:
 
 ```bash
-.venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
+MAGNOLIA_CHECK_DIR="$(mktemp -d)"
+MAGNOLIA_PROJECT_DIR="$MAGNOLIA_CHECK_DIR" \
+MAGNOLIA_RULES_DIR="$PWD/opencode_cc_mem/rules" \
+  .venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
 ```
 
 The check imports the two server modules rather than merely testing that their directories are on
@@ -318,10 +327,10 @@ it can neither act nor remember.
 ## First session
 
 ```bash
-# Step 1 — configure the models (run once)
+# Configure the models and open the first session
 ./opencode_cc_mem/softwares/bin/magnolia setup my_project
 
-# Step 2 — work
+# On later sessions, reopen the project without setup
 ./opencode_cc_mem/softwares/bin/magnolia my_project
 ```
 
@@ -336,9 +345,10 @@ terms of [§ Use cases](#use-cases-and-starting-prompts) above.
 
 Two options are worth knowing early:
 
-- `magnolia --critic <project>` enables a flag-only claim critic: an independent judge model marks
-  statements in Magnolia's reports that are not supported by the tools actually invoked. It changes
-  nothing and only annotates.
+- `magnolia --critic <project>` enables a flag-only claim critic. It uses `DEEPSEEK_API_KEY`
+  to send the report and session tool trace to its judge, writes verdict logs and displays flags.
+  It does not block or edit the session; without that key it currently does nothing silently.
+  See the [hook guide](docs/harness-adaptation.md#what-the-opencode-plugins-actually-do) before enabling it.
 - `magnolia memory status` reports which models are in force.
 
 Commands run through `magnolia-run <command…>` are recorded in the session log, so shell-driven work
@@ -439,6 +449,8 @@ fails on a module-name collision. Run them separately, as above.
 | [`docs/memory.md`](docs/memory.md) | The notebook, promotion, self-reflex, and the distillation ceiling |
 | [`docs/hpc.md`](docs/hpc.md) | Cluster profiles, Slurm conventions, the job life-cycle |
 | [`docs/tools.md`](docs/tools.md) | Reference for all tools exposed over MCP |
+| [`docs/harness-adaptation.md`](docs/harness-adaptation.md) | Manual integration, OpenCode hook diagnostics, transcript portability and adapter checks |
+| [`docs/domain-adaptation.md`](docs/domain-adaptation.md) | A domain pilot, protocol template, wrapper/assessor changes and validation |
 
 ---
 
