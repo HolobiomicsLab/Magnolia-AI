@@ -368,6 +368,12 @@ manuscript will rest on — an independent opinion is worth more than a confirma
 adversarial-review skill convenes independent model instances that carry none of Magnolia's memory
 of the project, and therefore none of its accumulated commitments, and has them argue the case.
 
+The quality of that review depends on adversary diversity: models from different families carry
+different blind spots, so their disagreements are what inform you. If only one model is available
+the skill still runs, using independent sessions rather than different models, but the review
+degrades to a single-lineage second opinion — useful for catching errors in the reasoning, not for
+corroborating claims.
+
 **Opening prompt**
 
 > *"Before I commit two weeks of GPU time to this design strategy, red-team it. Convene an
