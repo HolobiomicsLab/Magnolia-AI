@@ -467,6 +467,7 @@ class ProjectManager:
         *,
         lifecycle: str | None = None,
         remote: dict[str, Any] | None = None,
+        resources: dict[str, Any] | None = None,
         system_tags: list[str] | None = None,
     ) -> str:
         runs_dir = self._runs_dir(project_dir)
@@ -480,6 +481,8 @@ class ProjectManager:
             "quality_flags": quality_flags or [],
             "errors_solved": errors_solved or [],
         }
+        if resources is not None:
+            record["resources"] = resources
         if lifecycle is not None:
             record["lifecycle"] = lifecycle
         if remote is not None:
@@ -574,7 +577,8 @@ class ProjectManager:
             return None
 
     def begin_restart(
-        self, project_dir: str, run_id: str, remote: dict[str, Any]
+        self, project_dir: str, run_id: str, remote: dict[str, Any],
+        resources: dict[str, Any] | None = None,
     ) -> bool:
         """Reset an existing run record for an IN-PLACE restart. Returns False if
         the run doesn't exist.
@@ -598,6 +602,8 @@ class ProjectManager:
         rec["status"] = None
         rec["lifecycle"] = "submitting"
         rec["remote"] = remote  # wholesale replace — stale terminal markers gone
+        if resources is not None:
+            rec["resources"] = resources
         atomic_write_text(fpath, yaml.dump(rec, default_flow_style=False, sort_keys=False))
         self._update_runs_index(project_dir)
         return True
