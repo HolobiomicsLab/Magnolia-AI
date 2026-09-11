@@ -11,6 +11,7 @@ filesystem error in the final write cannot crash the launch.
 """
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -20,6 +21,7 @@ from compchem_memory.atomic_io import atomic_write_text
 HANDOVER_STATE_FILE = ".handover-state.md"
 HANDOVER_CURSOR_FILE = ".handover-cursor.json"       # legacy single-cursor file (migrated away)
 HANDOVER_CURSORS_DIR = ".handover-cursors"           # per-session cursors: <sid>.json
+HANDOVER_MERGE_MAX_TOKENS = 8000                     # full-state rewrite budget; was 3000, which clipped the state mid-item (2026-09-11)
 TOMBSTONE_HEADING = "## Won't-do / Archived"
 
 HANDOVER_MERGE_PROMPT = """You maintain a ROLLING HANDOVER for a computational-chemistry
@@ -286,18 +288,34 @@ def generate_handover(
         # burns the budget on reasoning unless thinking is disabled; the
         # startswith("## ") check rejects that corruption mode before it can
         # enter the rolling state. One retry, then stop as before.
+        #
+        # Truncation guard (2026-09-11): the merge rewrites the WHOLE state, so
+        # a max_tokens cut-off silently drops its tail (observed: a day of work
+        # lost while the cursor advanced). finish_reason == "length" now counts
+        # as a failed attempt — the cursor stays put so the session is retried
+        # instead of half-lost.
         merged = None
         for _attempt in (1, 2):
-            candidate = llm(
+            result = llm(
                 HANDOVER_MERGE_PROMPT,
                 user_content,
-                max_tokens=3000,
+                max_tokens=HANDOVER_MERGE_MAX_TOKENS,
                 temperature=0.2,
                 disable_thinking=True,
+                return_finish_reason=True,
             )
-            if candidate and candidate.strip().startswith("## "):
+            if isinstance(result, tuple):
+                candidate, finish_reason = result
+            else:  # injected callable predating the finish-reason kwarg
+                candidate, finish_reason = result, None
+            if (candidate and candidate.strip().startswith("## ")
+                    and finish_reason != "length"):
                 merged = candidate
                 break
+            if finish_reason == "length":
+                print(f"[handover] merge for {sid} hit max_tokens "
+                      f"({HANDOVER_MERGE_MAX_TOKENS}); output truncated — "
+                      f"not advancing cursor", file=sys.stderr)
         if merged is None:
             break        # LLM failed or returned non-handover output — stop; state + cursors for prior sessions stay consistent
 

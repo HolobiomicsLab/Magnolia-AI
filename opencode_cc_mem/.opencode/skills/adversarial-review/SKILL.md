@@ -72,7 +72,7 @@ adversaries share blind spots. Practical choices (`opencode models`):
 |---|---|
 | `kimi-for-coding/k3` (fallback: `opencode-go/kimi-k3`) | Substantive research/design debate (proven strong) |
 | `zai-coding-plan/glm-5.3` (fallback: `opencode-go/glm-5.3`) | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
-| `deepseek/deepseek-v4-flash` (or `opencode-go/deepseek-flash`) | Cheap, fast smoke tests and narrow verdict-format tasks (both serve V4.1-Flash) |
+| `deepseek/deepseek-flash` (direct; = V4.1-Flash) or `opencode-go/deepseek-v4.1-flash` (explicit ID) | Cheap, fast smoke tests and narrow verdict-format tasks (legacy `deepseek-v4-flash` retired; both ping-verified 2026-09-11) |
 | `opencode-go/qwen3.8-max` | ASSESSED 2026-09-10 (GLM×DS panel) → **WAIT-LIST**: the Max API id is proprietary (policy-excluded); the open checkpoint `Qwen3.8-2.4T-A95B` is license-clean and hostable (OpenRouter / HF-Novita) but unproven — AA v4.3 40 vs GLM 45 / Kimi 44, no independent checkpoint eval. Reconsider only on a checkpoint eval showing parity. |
 
 Panel pool is open-weight only (user mandate 2026-09-10); decorrelation rule
