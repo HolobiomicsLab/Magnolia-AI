@@ -1,8 +1,36 @@
 """Shared pytest fixtures for compchem-tools tests."""
 from __future__ import annotations
+
+import os
+import tempfile
 from subprocess import CompletedProcess
 from typing import Any
+
 import pytest
+
+# Hermetic tests: importing the server starts a background poller, and the
+# @captured wrappers can fire inline LLM extraction. Both do real I/O
+# (network/quota/stray project writes); disable them unless a test opts in.
+os.environ.setdefault("MAGNOLIA_DISABLE_BACKGROUND_POLLER", "1")
+os.environ.setdefault("MAGNOLIA_DISABLE_INLINE_EXTRACT", "1")
+
+# The wrapper exports a cwd-relative project pin ("projects/<name>"); redirect
+# it to a throwaway absolute dir so env-defaulted code paths cannot scaffold
+# stores inside the package tree.
+os.environ["MAGNOLIA_PROJECT_DIR"] = tempfile.mkdtemp(prefix="magnolia-tests-")
+
+
+@pytest.fixture(autouse=True)
+def _no_capture_writes(monkeypatch):
+    """Keep @captured tool calls from scaffolding <cwd>/.magnolia: constructing
+    a SessionManager creates its sessions dir even when nothing is recorded, and
+    draining notices creates the store dir."""
+    from compchem_memory import capture as _capture
+
+    monkeypatch.setattr(_capture, "get_session_manager", lambda *a, **k: None)
+    monkeypatch.setattr(
+        _capture, "_attach_distill_notices", lambda result, project_dir: result
+    )
 
 
 class _FakeSubprocessRunner:

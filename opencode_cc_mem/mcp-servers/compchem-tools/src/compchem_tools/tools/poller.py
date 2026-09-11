@@ -304,6 +304,9 @@ def run_poll_timer_background(project_dir: str) -> None:
     """Spawn the daemon thread. Called once from server.py at import."""
     global PROJECT_DIR_FOR_TIMER
     PROJECT_DIR_FOR_TIMER = project_dir
+    if os.environ.get("MAGNOLIA_DISABLE_BACKGROUND_POLLER"):
+        log.info("background poller disabled (MAGNOLIA_DISABLE_BACKGROUND_POLLER)")
+        return
     t = threading.Thread(target=_run_poll_timer_background_worker, daemon=True)
     t.start()
 

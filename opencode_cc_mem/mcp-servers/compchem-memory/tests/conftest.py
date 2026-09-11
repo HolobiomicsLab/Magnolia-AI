@@ -8,6 +8,9 @@ activating live LLM calls inside tests that aren't designed for it.
 Tests that need to exercise the LLM path explicitly opt in via
 `monkeypatch.setenv(...)` per-test (see tests/test_llm_providers.py).
 """
+import os
+import tempfile
+
 import pytest
 
 
@@ -27,9 +30,40 @@ _LLM_ENV_VARS = (
     "KIMI_BASE_URL",
 )
 
+# The magnolia wrapper exports a cwd-relative project pin ("projects/<name>").
+# Redirect it to a throwaway absolute dir: importing compchem_memory.server
+# runs its startup scan against this value and would otherwise scaffold a
+# ghost project store inside the package tree.
+os.environ["MAGNOLIA_PROJECT_DIR"] = tempfile.mkdtemp(prefix="magnolia-tests-")
+
 
 @pytest.fixture(autouse=True)
 def _isolate_llm_env(monkeypatch):
     """Clear LLM-related env vars before every test."""
     for var in _LLM_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _redirect_default_capture_dir(monkeypatch, tmp_path):
+    """@captured defaults project_dir to the cwd when a tool omits it; send
+    that to the per-test tmp dir so suites never scaffold <package>/.magnolia."""
+    from compchem_memory import capture as _capture
+
+    real = _capture.get_session_manager
+
+    def redirected(project_dir, *a, **k):
+        if str(project_dir) in (".", ""):
+            project_dir = str(tmp_path)
+        return real(project_dir, *a, **k)
+
+    monkeypatch.setattr(_capture, "get_session_manager", redirected)
+
+    real_notices = _capture._attach_distill_notices
+
+    def notices_redirected(result, project_dir):
+        if str(project_dir) in (".", ""):
+            project_dir = str(tmp_path)
+        return real_notices(result, project_dir)
+
+    monkeypatch.setattr(_capture, "_attach_distill_notices", notices_redirected)

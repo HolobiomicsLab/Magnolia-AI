@@ -22,7 +22,7 @@ def test_post_run_assess_still_records_and_returns_json(tmp_path, monkeypatch):
         del sys.modules[mod]
     try:
         server = importlib.import_module("compchem_memory.server")
-        out = server.post_run_assess(str(run_dir), "xtb", 0, str(pd))
+        out = server.post_run_assess(str(run_dir), "xtb", 0, project_dir=str(pd))
         payload = json.loads(out)
         assert payload["overall"] in ("pass", "warning", "fail")
         assert "metrics" in payload
