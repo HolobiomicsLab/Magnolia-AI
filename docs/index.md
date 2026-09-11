@@ -9,11 +9,10 @@ documentation; [`../README.md`](../README.md) is the shorter introduction, and
 
 For a first installation, read in this order:
 
-1. **[Getting started](getting-started.md)** — prerequisites, installation, model configuration,
-   the first project, and what to do when something does not work.
-2. **[Use cases](use-cases.md)** — how a campaign is actually conducted, with the opening prompts
-   that set one up: docking and design, quantum chemistry, molecular dynamics, literature work,
-   cluster campaigns, and writing up.
+1. **[Getting started](getting-started.md)** — platform prerequisites, installation, separate
+   model credentials, offline capture, first-session/restart checks and troubleshooting.
+2. **[Use cases](use-cases.md)** — two worked continuity examples (a failed docking run and a
+   metabolomics preprocessing comparison), followed by the chemistry/research prompt catalogue.
 3. **[Supervising a session](../WORKFLOW_GUIDE.md)** — a worked conversation, the mistakes that
    cost the most time, and prompting templates.
 
@@ -26,6 +25,10 @@ For a deeper account of how the system behaves:
 6. **[Cluster execution](hpc.md)** — cluster profiles, Slurm conventions, the job life-cycle, and
    how results return to the notebook.
 7. **[Tool reference](tools.md)** — every tool exposed over MCP, grouped by domain.
+8. **[Harness adaptation](harness-adaptation.md)** — service setup, the manual memory loop,
+   OpenCode hook diagnostics, transcript limits and checks for an alternate client.
+9. **[Domain adaptation](domain-adaptation.md)** — a first domain pilot, protocol template,
+   wrapper/assessor changes and evidence needed before routine use.
 
 ## Conventions used throughout
 

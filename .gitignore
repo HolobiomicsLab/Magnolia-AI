@@ -66,6 +66,8 @@ opencode_cc_mem/session-ses_*.md
 !/docs/memory.md
 !/docs/hpc.md
 !/docs/tools.md
+!/docs/harness-adaptation.md
+!/docs/domain-adaptation.md
 
 # Personal cluster runbook (UniCA/Azzurra specifics, username examples) — machine-local only
 opencode_cc_mem/rules/hpc_azzurra.md

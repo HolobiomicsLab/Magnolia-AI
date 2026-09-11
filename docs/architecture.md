@@ -51,6 +51,13 @@ also depends on the OpenCode configuration, launcher and session plugins. An ada
 These are integration requirements, not a claim that other harnesses have been tested. The
 current installation and session instructions describe OpenCode.
 
+The [harness adaptation guide](harness-adaptation.md) provides concrete connection settings,
+a manual memory loop, the hook/event inventory and a diagnostic sequence. In particular,
+the action plugin starts retrieval before a tool call but injects its findings into the
+result after execution; it is advisory and cannot prevent that action. The separate
+[domain adaptation guide](domain-adaptation.md) identifies chemistry-specific prompts,
+tool recognition and assessors that need review when moving to another field.
+
 ## Two arrangements that require explanation
 
 ### compchem-tools runs as an HTTP daemon
