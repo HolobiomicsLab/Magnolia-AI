@@ -2,7 +2,7 @@
 
 # Project Magnolia
 
-**An agentic research assistant for computational chemistry — with a laboratory notebook that remembers.**
+**A persistent-memory AI agent framework for computational research, developed through computational chemistry.**
 
 <p>
   <img alt="Licence: MIT with Non-Military Clause" src="https://img.shields.io/badge/licence-MIT%20%2B%20Non--Military-4c6ef5?style=flat-square">
@@ -18,20 +18,24 @@
 
 ## In brief
 
-Magnolia drives the software a computational chemist would otherwise operate by hand — pocket
-prediction, docking, molecular dynamics, quantum chemistry, generative design — on a workstation
-or on a Slurm cluster, and writes down what was run, what came out of it, and what was learnt.
+Magnolia helps a researcher retain and reuse the operational knowledge produced during
+computational work: what was run, which choices were made, what failed, and what was learnt.
+Its current tools and worked examples centre on computational chemistry, from docking and
+molecular dynamics to quantum chemistry, on a workstation or a Slurm cluster. The memory,
+review and provenance mechanisms provide a starting point for adaptation to other domains.
 You work with it in ordinary prose, in a terminal.
 
-The written record is the point. It lives inside the project directory as Markdown, it is read
-back at the beginning of every session, and observations that survive repetition are proposed to
-you for promotion into standing rules. An assistant that merely executes commands saves an
-afternoon; one that accumulates a reviewable account of a project becomes more useful over months.
+The written record lives inside the project directory as Markdown, and relevant context is read
+back in subsequent sessions. Git versions the shared rules and protocols; a separate local Git
+repository tracks the notebook's staged and confirmed entries. Repeated observations can be
+proposed to you for promotion into standing rules. A protocol refined on Friday can therefore
+inform work resumed on Monday, together with the recorded reasons for the change.
 
 Three properties distinguish Magnolia from a general-purpose coding agent:
 
-- **Instrument coverage.** HADDOCK3, gnina, P2Rank, GROMACS, ORCA, Gaussian, xTB and BoltzGen are
-  exposed as typed tools with their own operating rules, not as free-form shell commands.
+- **Scientific tool integration.** The chemistry toolset includes typed wrappers for HADDOCK3,
+  gnina, P2Rank, GROMACS, ORCA, Gaussian and xTB, with task-specific protocols. BoltzGen is
+  driven through the recorded `run_shell` route.
 - **A memory that is reviewed, not merely accumulated.** Learnings are staged, corroborated across
   sessions, and promoted into version-controlled rules only with your explicit agreement.
 - **Provenance by construction.** Runs, commands, job identifiers and outcomes are recorded as they
@@ -80,6 +84,11 @@ a person decides.
 
 ## Scientific scope
 
+Computational chemistry is the current application domain and the source of the worked examples
+below. Extending Magnolia to another field requires its own tool adapters or recorded shell
+commands, written protocols, and verification criteria. The repository's general memory design
+does not by itself establish scientific validity or tested support in another domain.
+
 | Domain | Instrument | Exposed as |
 |---|---|---|
 | Binding-site prediction | P2Rank | `p2rank_predict` |
@@ -104,7 +113,14 @@ verification checklist — loaded only when the task calls for it. See
 Magnolia is instructed in prose, and the quality of the first message largely determines the quality
 of the session. A serviceable opening states four things: **the objective**, **where the inputs
 live**, **what has already been attempted**, and **the criterion by which the result will be
-judged**. What follows are four representative openings; a longer catalogue, with the follow-up
+judged**. A domain-independent opening is:
+
+> *"Review the scripts, logs and recorded findings from the last two runs in this project.
+> Identify which protocol choices changed and why, retaining unsuccessful attempts and unresolved
+> questions. Suggest what we should reuse when we resume on Monday; ask me to review any proposed
+> standing rule before applying it."*
+
+What follows are four worked application openings; a longer catalogue, with the follow-up
 turns and the expected outputs, is in [`docs/use-cases.md`](docs/use-cases.md).
 
 ### 1. Structure-based design of a peptide binder
@@ -175,14 +191,31 @@ are worth their length, since a premature run costs queue time.
 
 ## How it is put together
 
-Four components, communicating over the [Model Context Protocol](https://modelcontextprotocol.io).
+Magnolia combines a memory and review workflow with an **agent harness**: the runtime that
+manages the model, conversation, instructions and tool calls. The supplied harness is
+[OpenCode](https://opencode.ai). Two Python services expose memory and execution tools through
+the [Model Context Protocol (MCP)](https://modelcontextprotocol.io); the knowledge files remain
+ordinary files in the workspace.
 
 | Layer | Component | Function |
 |---|---|---|
-| Interface | [OpenCode](https://opencode.ai) | The terminal client you converse with; loads rules, skills and the project's boot context at session start |
+| Agent harness | [OpenCode](https://opencode.ai) | The terminal client you converse with; loads rules, skills and the project's boot context at session start |
 | Execution | **compchem-tools** | 36 typed tools for the scientific software and for Slurm; runs as a local HTTP daemon on `127.0.0.1:8001` |
 | Memory | **compchem-memory** | 24 tools for the notebook: capture, retrieval, distillation, consolidation, promotion |
 | Knowledge | `rules/`, `.opencode/skills/`, `.magnolia/` | Doctrine read every session, protocols loaded on demand, and learnings written by Magnolia itself |
+
+**APIs and MCP serve different roles.** An application programming interface (API) exposes
+operations offered by a software component; MCP standardises how an agent client discovers and
+calls exposed tools. Magnolia's MCP handlers invoke Python functions and scientific executables,
+while model-provider APIs supply model responses. Direct API or command-line integration is
+another possible route, but it would still need to preserve run capture, memory retrieval and
+human review. The HTTP tool daemon speaks MCP; it is not a separate REST API.
+
+Other MCP-capable harnesses are possible integration targets. A complete adaptation would also
+need to load the rules and task protocols, provide project context, capture conversations and
+preserve the review steps. The launcher and session plugins currently target OpenCode; an MCP
+connection alone does not establish equivalent behaviour in another harness. See
+[the integration boundaries](docs/architecture.md#harness-apis-and-mcp).
 
 Two design decisions are worth stating, since they explain otherwise puzzling details.
 
@@ -208,6 +241,11 @@ The knowledge base has **three homes**, distinguished by who writes them and whe
 Doctrine and protocols are authored and reviewed through git; learnings are observed and proposed.
 The dividing line is provenance, not length.
 
+The notebook's nested Git history covers `entries/` and `staging/`. It is local to the project
+and does not publish research data to the Magnolia repository. Run outputs and logs require
+their own preservation arrangements; Git versioning of the learning entries is not a complete
+archive of an experiment.
+
 ---
 
 ## The notebook
@@ -221,10 +259,11 @@ Observations rise through three levels, each demanding more evidence than the la
 | Level | Location | Content |
 |---|---|---|
 | Draft note | `.magnolia/staging/` | Noticed once, not yet committed to |
-| Project note | `.magnolia/entries/` | Held up across **at least two** sessions |
+| Project note | `.magnolia/entries/` | Confirmed explicitly, or promoted after consistent observations across sessions |
 | Rule | `rules/` | Held up across **three** sessions, reviewed, and accepted by you |
 
-The first step is automatic; the second is not. A candidate rule is examined by three independent
+Staging entries can be confirmed with `memory_confirm`; rule elevation requires a separate review.
+A candidate rule is examined by three independent
 review passes, of which at least two must approve, is checked against the rules already in force,
 and is then drafted and left waiting in `.magnolia/reflex/promotion-proposal.json`. Nothing is
 written until you say so. To see what is pending, ask:
@@ -245,10 +284,15 @@ documented in [`docs/memory.md`](docs/memory.md).
 
 ## Installation
 
-**Prerequisites.** Python 3.11 or newer, a POSIX system (Linux or macOS), and
-[OpenCode](https://opencode.ai) as the chat client. A model provider is required; Magnolia is
-agnostic and works with subscription plans (Moonshot Kimi, Z.AI GLM, Claude, ChatGPT, GitHub
-Copilot) as well as pay-as-you-go keys and local models served through Ollama or llama.cpp.
+Start with the **[onboarding guide](docs/getting-started.md)** for platform checks,
+OpenCode installation, credentials and a first-session/restart exercise. The supplied
+shell path expects Python 3.11+, Git, Bash, GNU coreutils, curl, `setsid` and OpenCode.
+Linux is the reference environment; macOS needs additional shell utilities and may
+need a manually supervised tools server. Scientific programs are installed separately.
+
+The main model is configured in OpenCode. Background memory uses Magnolia's separate
+Python client and credentials; an OpenCode subscription/login does not configure it.
+See the guide's [provider table](docs/getting-started.md#4-configure-the-two-model-roles).
 
 ```bash
 git clone https://github.com/HolobiomicsLab/Magnolia-AI.git
@@ -263,10 +307,13 @@ python3 -m venv .venv
 Should `pip` be absent from a minimal Python installation, run
 `.venv/bin/python3 -m ensurepip --upgrade` first.
 
-**Verify the installation** before going further:
+**Verify the installation** against an empty temporary project before going further:
 
 ```bash
-.venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
+MAGNOLIA_CHECK_DIR="$(mktemp -d)"
+MAGNOLIA_PROJECT_DIR="$MAGNOLIA_CHECK_DIR" \
+MAGNOLIA_RULES_DIR="$PWD/opencode_cc_mem/rules" \
+  .venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
 ```
 
 The check imports the two server modules rather than merely testing that their directories are on
@@ -280,10 +327,10 @@ it can neither act nor remember.
 ## First session
 
 ```bash
-# Step 1 — configure the models (run once)
+# Configure the models and open the first session
 ./opencode_cc_mem/softwares/bin/magnolia setup my_project
 
-# Step 2 — work
+# On later sessions, reopen the project without setup
 ./opencode_cc_mem/softwares/bin/magnolia my_project
 ```
 
@@ -298,9 +345,10 @@ terms of [§ Use cases](#use-cases-and-starting-prompts) above.
 
 Two options are worth knowing early:
 
-- `magnolia --critic <project>` enables a flag-only claim critic: an independent judge model marks
-  statements in Magnolia's reports that are not supported by the tools actually invoked. It changes
-  nothing and only annotates.
+- `magnolia --critic <project>` enables a flag-only claim critic. It uses `DEEPSEEK_API_KEY`
+  to send the report and session tool trace to its judge, writes verdict logs and displays flags.
+  It does not block or edit the session; without that key it currently does nothing silently.
+  See the [hook guide](docs/harness-adaptation.md#what-the-opencode-plugins-actually-do) before enabling it.
 - `magnolia memory status` reports which models are in force.
 
 Commands run through `magnolia-run <command…>` are recorded in the session log, so shell-driven work
@@ -401,6 +449,8 @@ fails on a module-name collision. Run them separately, as above.
 | [`docs/memory.md`](docs/memory.md) | The notebook, promotion, self-reflex, and the distillation ceiling |
 | [`docs/hpc.md`](docs/hpc.md) | Cluster profiles, Slurm conventions, the job life-cycle |
 | [`docs/tools.md`](docs/tools.md) | Reference for all tools exposed over MCP |
+| [`docs/harness-adaptation.md`](docs/harness-adaptation.md) | Manual integration, OpenCode hook diagnostics, transcript portability and adapter checks |
+| [`docs/domain-adaptation.md`](docs/domain-adaptation.md) | A domain pilot, protocol template, wrapper/assessor changes and validation |
 
 ---
 
