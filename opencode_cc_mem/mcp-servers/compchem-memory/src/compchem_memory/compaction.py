@@ -98,7 +98,8 @@ def compact_with_agent(
 ) -> CompactionResult | None:
     """Use LLM to compact session events into a summary."""
     events_json = json.dumps(events, default=str)
-    summary = call_llm(COMPACTION_SYSTEM_PROMPT, events_json, max_tokens=max_tokens)
+    summary = call_llm(COMPACTION_SYSTEM_PROMPT, events_json, max_tokens=max_tokens,
+                       disable_thinking=True)
     if not summary:
         return None
 
