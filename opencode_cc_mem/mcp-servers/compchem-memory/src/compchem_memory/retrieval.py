@@ -34,7 +34,7 @@ def llm_select_memories(
     )
     manifest = format_manifest(headers)
     user_content = f"Task: {task_description}\n\nAvailable entries:\n{manifest}"
-    result = call_llm_json(system_prompt, user_content)
+    result = call_llm_json(system_prompt, user_content, disable_thinking=True)
     if result and isinstance(result, dict) and "selected" in result:
         selected = result["selected"][:max_selections]
         return selected
