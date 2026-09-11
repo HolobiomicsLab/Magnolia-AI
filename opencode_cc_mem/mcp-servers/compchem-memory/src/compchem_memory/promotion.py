@@ -68,7 +68,7 @@ def _default_judge(entry: dict[str, Any], lens_idx: int) -> dict[str, Any] | Non
     from compchem_memory.llm import call_llm_json
     payload = {"title": entry["meta"].get("title", ""), "body": entry["body"][:1500]}
     res = call_llm_json(_PANEL_SYSTEM, json.dumps(payload), max_tokens=400,
-                        temperature=_PROMOTION_PANEL_TEMPERATURE)
+                        temperature=_PROMOTION_PANEL_TEMPERATURE, disable_thinking=True)
     return res if isinstance(res, dict) else None
 
 
@@ -119,7 +119,7 @@ def _default_drafter(entry: dict[str, Any]) -> dict[str, Any] | None:
     payload = {"title": entry["meta"].get("title", ""), "body": entry["body"],
                "tags": entry["meta"].get("tags") or []}
     res = call_llm_json(_DRAFT_SYSTEM, json.dumps(payload), max_tokens=1200,
-                        temperature=0)
+                        temperature=0, disable_thinking=True)
     return res if isinstance(res, dict) else None
 
 
@@ -170,7 +170,7 @@ def _default_checker(drafted, rules):
     payload = {"draft": {"name": drafted["name"], "description": drafted["description"]},
                "existing": rules}
     return call_llm_json(_CONSISTENCY_SYSTEM, json.dumps(payload), max_tokens=300,
-                         temperature=0)
+                         temperature=0, disable_thinking=True)
 
 
 def check_consistency(
