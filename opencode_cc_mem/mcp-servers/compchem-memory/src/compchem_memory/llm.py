@@ -66,10 +66,10 @@ PROVIDER_KIMI = "kimi"
 _VALID_PROVIDERS = {PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI}
 
 _DEFAULT_MODEL = {
-    # deepseek-chat is a back-compat alias for deepseek-v4-flash, deprecated
-    # 2026-07-24; use the explicit v4 id (1M context, cheap). Override per
-    # provider via MAGNOLIA_LLM_MODEL (e.g. deepseek-v4-pro for higher recall).
-    PROVIDER_DEEPSEEK: "deepseek-v4-flash",
+    # deepseek-flash is the direct API's name for DeepSeek-V4.1-Flash (the
+    # legacy deepseek-v4-flash alias is retired). Override per provider via
+    # MAGNOLIA_MEMORY_MODEL (e.g. a future deepseek-v4-pro for higher recall).
+    PROVIDER_DEEPSEEK: "deepseek-flash",
     PROVIDER_ANTHROPIC: "claude-haiku-4-5-20251001",
     PROVIDER_OPENAI: "gpt-4o-mini",
     # Kimi K3 on the Kimi-for-Coding plan endpoint (models.dev id "k3").
@@ -225,10 +225,13 @@ def is_llm_available() -> bool:
 
 
 def _record_timing(provider: str | None, model: str | None, ms: float,
-                   outcome: str, **extra) -> None:
+                   outcome: str, resolved_model: str | None = None,
+                   **extra) -> None:
     """Append one telemetry row per call_llm attempt. Best-effort: telemetry
     must never break (or slow down) the call it measures. Location mirrors the
-    project-pinned convention: <MAGNOLIA_PROJECT_DIR>/.magnolia/llm-timing.jsonl."""
+    project-pinned convention: <MAGNOLIA_PROJECT_DIR>/.magnolia/llm-timing.jsonl.
+    `model` is the requested id; `resolved_model` is the id the provider echoed
+    back (None when unknown) — the pair exposes silent alias/routing swaps."""
     try:
         base = Path(os.environ.get("MAGNOLIA_PROJECT_DIR", ".")) / ".magnolia"
         base.mkdir(parents=True, exist_ok=True)
@@ -236,6 +239,7 @@ def _record_timing(provider: str | None, model: str | None, ms: float,
             "ts": datetime.now(timezone.utc).isoformat(),
             "provider": provider,
             "model": model,
+            "resolved_model": resolved_model,
             "ms": round(ms),
             "outcome": outcome,   # ok | empty | no_provider | no_key | error
             **extra,
@@ -269,8 +273,9 @@ def call_llm(
     reasoning model from spending its output budget on reasoning_content. Kimi
     always sends thinking-disabled (see _call_kimi), so the flag is a no-op there.
 
-    Every attempt appends a timing row (see _record_timing) so slow or silently
-    failing calls are decomposable after the fact instead of invisible."""
+    Every attempt appends a timing row (see _record_timing), including the
+    provider-echoed `resolved_model`, so slow, silently failing, or silently
+    re-routed calls are decomposable after the fact instead of invisible."""
     provider, model = _resolve_call()
     if not provider:
         _record_timing(None, None, 0, "no_provider")
@@ -282,16 +287,18 @@ def call_llm(
     t0 = time.monotonic()
     try:
         if provider == PROVIDER_ANTHROPIC:
-            out, finish = _call_anthropic(key, model, system_prompt, user_content, max_tokens,
-                                          temperature)
+            out, finish, resolved = _call_anthropic(
+                key, model, system_prompt, user_content, max_tokens, temperature)
         elif provider == PROVIDER_KIMI:
-            out, finish = _call_kimi(key, model, system_prompt, user_content, max_tokens,
-                                     temperature)
+            out, finish, resolved = _call_kimi(
+                key, model, system_prompt, user_content, max_tokens, temperature)
         else:
-            out, finish = _call_openai_compat(provider, key, model, system_prompt, user_content,
-                                              max_tokens, temperature, disable_thinking)
+            out, finish, resolved = _call_openai_compat(
+                provider, key, model, system_prompt, user_content, max_tokens,
+                temperature, disable_thinking)
         _record_timing(provider, model, (time.monotonic() - t0) * 1000,
-                       "ok" if out else "empty", chars=len(out) if out else 0)
+                       "ok" if out else "empty", resolved_model=resolved,
+                       chars=len(out) if out else 0)
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
@@ -302,7 +309,7 @@ def call_llm(
 def _call_anthropic(
     key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None,
-) -> str | None:
+) -> tuple[str | None, str | None, str | None]:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
     kwargs: dict = {
@@ -314,15 +321,16 @@ def _call_anthropic(
     if temperature is not None:
         kwargs["temperature"] = temperature
     resp = client.messages.create(**kwargs)
+    resolved = getattr(resp, "model", None)
     if not resp.content:
-        return None, resp.stop_reason
-    return resp.content[0].text, resp.stop_reason
+        return None, resp.stop_reason, resolved
+    return resp.content[0].text, resp.stop_reason, resolved
 
 
 def _call_kimi(
     key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None,
-) -> str | None:
+) -> tuple[str | None, str | None, str | None]:
     """Kimi-for-Coding speaks the Anthropic Messages schema (models.dev lists its
     sdk as @ai-sdk/anthropic). Plain httpx, mirroring _call_openai_compat, so no
     Anthropic-SDK base_url semantics sneak in. Sends both auth header styles —
@@ -355,17 +363,18 @@ def _call_kimi(
     )
     resp.raise_for_status()
     data = resp.json()
+    resolved = data.get("model")
     # Thinking models may lead with a non-text block; take the first text block.
     for block in data.get("content") or []:
         if block.get("type") == "text":
-            return block.get("text"), data.get("stop_reason")
-    return None, data.get("stop_reason")
+            return block.get("text"), data.get("stop_reason"), resolved
+    return None, data.get("stop_reason"), resolved
 
 
 def _call_openai_compat(
     provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None, disable_thinking: bool = False,
-) -> str | None:
+) -> tuple[str | None, str | None, str | None]:
     """DeepSeek + OpenAI both use the OpenAI chat completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
     body: dict = {
@@ -390,12 +399,13 @@ def _call_openai_compat(
     )
     resp.raise_for_status()
     data = resp.json()
+    resolved = data.get("model")
     choices = data.get("choices") or []
     if not choices:
-        return None, None
+        return None, None, resolved
     choice = choices[0]
     msg = choice.get("message") or {}
-    return msg.get("content"), choice.get("finish_reason")
+    return msg.get("content"), choice.get("finish_reason"), resolved
 
 
 def call_llm_json(
