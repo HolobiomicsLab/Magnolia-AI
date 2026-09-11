@@ -263,6 +263,19 @@ def test_call_llm_deepseek_posts_to_chat_completions(monkeypatch):
     ]
 
 
+def test_call_llm_returns_finish_reason_when_requested(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    def fake_post(url, **kw):
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {"choices": [{"message": {"content": "cut here"},
+                                          "finish_reason": "length"}]}
+        return resp
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    assert llm.call_llm("s", "u", return_finish_reason=True) == ("cut here", "length")
+    assert llm.call_llm("s", "u") == "cut here"          # default stays text-only
+
+
 def test_call_llm_openai_posts_to_default_base(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "op-key")
     captured = {}

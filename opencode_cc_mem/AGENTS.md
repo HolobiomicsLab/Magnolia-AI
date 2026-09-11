@@ -14,7 +14,7 @@ list.
 - **Absent** → memory is NOT configured yet. Do not wait to be asked:
   proactively tell the user, in 2-3 plain sentences, that (a) Magnolia has a
   memory system that distills sessions into reusable learnings, (b) it needs
-  a cheap background model (default `deepseek-v4-flash`) to run, and (c) you
+  a cheap background model (default `deepseek-flash`) to run, and (c) you
   can set it up right now. Then follow `rules/memory-setup.md`. If the user
   declines, proceed without memory and do not nag again this session.
 
