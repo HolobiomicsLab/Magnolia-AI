@@ -7,6 +7,7 @@ former .magnolia/skills skill tier was retired; protocols live in
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -103,10 +104,40 @@ def _resolve_distill_interval_seconds() -> int:
         return default
 
 
+# DeepSeek peak-pricing windows (UTC, weekdays): 01:00-04:00 and 06:00-10:00
+# (= Beijing 09:00-12:00 / 14:00-18:00), when token prices are 2x. Everything
+# else — the rest of the day and weekends — is off-peak.
+_PEAK_WINDOWS_UTC = ((1 * 60, 4 * 60), (6 * 60, 10 * 60))
+
+
+def _is_peak_time(now: datetime | None = None) -> bool:
+    """True during a DeepSeek peak-pricing window. `now` is injectable for
+    tests; defaults to the current UTC time."""
+    now = now or datetime.now(timezone.utc)
+    if now.weekday() >= 5:  # Sat/Sun are entirely off-peak
+        return False
+    minutes = now.hour * 60 + now.minute
+    return any(start <= minutes < end for start, end in _PEAK_WINDOWS_UTC)
+
+
+def _offpeak_gate_disabled() -> bool:
+    """Kill-switch: MAGNOLIA_OFFPEAK_DISABLE=1 restores 24/7 sweeping."""
+    return (os.environ.get("MAGNOLIA_OFFPEAK_DISABLE") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def _distill_timer_tick(project_dir: str) -> None:
-    """One timer tick: sweep the project for undistilled sessions.
-    Never raises — a timer failure must not crash the server."""
+    """One timer tick: sweep the project for undistilled sessions, unless a
+    DeepSeek peak-pricing window is active — then the sweep is deferred and
+    the backlog runs at the next off-peak tick. The boot sweep and manual
+    memory_distill_session are deliberately ungated. Never raises — a timer
+    failure must not crash the server."""
     try:
+        if not _offpeak_gate_disabled() and _is_peak_time():
+            print("[distill_timer] peak hours (UTC) — skipping sweep; "
+                  "backlog will run at the next off-peak tick")
+            return
         scan_and_distill(project_dir)
     except Exception as e:
         print(f"[distill_timer] tick error: {e}")
