@@ -253,10 +253,16 @@ def call_llm(
     *,
     temperature: float | None = None,
     disable_thinking: bool = False,
-) -> str | None:
+    return_finish_reason: bool = False,
+) -> str | None | tuple[str | None, str | None]:
     """Call the resolved LLM provider. Returns text on success or None on
     any failure (no provider configured, missing key, network error,
     malformed response). NEVER raises.
+
+    With ``return_finish_reason=True`` returns ``(text, finish_reason)`` so a
+    caller (e.g. the handover merge) can tell a complete answer from one cut
+    off at ``max_tokens`` (``finish_reason == "length"``). On any failure the
+    tuple is ``(None, None)``.
 
     `temperature` (when set) and `disable_thinking` (DeepSeek reasoning models —
     sends `thinking: {"type": "disabled"}`) make a call deterministic and stop a
@@ -276,21 +282,21 @@ def call_llm(
     t0 = time.monotonic()
     try:
         if provider == PROVIDER_ANTHROPIC:
-            out = _call_anthropic(key, model, system_prompt, user_content, max_tokens,
-                                  temperature)
+            out, finish = _call_anthropic(key, model, system_prompt, user_content, max_tokens,
+                                          temperature)
         elif provider == PROVIDER_KIMI:
-            out = _call_kimi(key, model, system_prompt, user_content, max_tokens,
-                             temperature)
+            out, finish = _call_kimi(key, model, system_prompt, user_content, max_tokens,
+                                     temperature)
         else:
-            out = _call_openai_compat(provider, key, model, system_prompt, user_content,
-                                      max_tokens, temperature, disable_thinking)
+            out, finish = _call_openai_compat(provider, key, model, system_prompt, user_content,
+                                              max_tokens, temperature, disable_thinking)
         _record_timing(provider, model, (time.monotonic() - t0) * 1000,
                        "ok" if out else "empty", chars=len(out) if out else 0)
-        return out
+        return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
                        error=type(e).__name__)
-        return None
+        return (None, None) if return_finish_reason else None
 
 
 def _call_anthropic(
@@ -309,8 +315,8 @@ def _call_anthropic(
         kwargs["temperature"] = temperature
     resp = client.messages.create(**kwargs)
     if not resp.content:
-        return None
-    return resp.content[0].text
+        return None, resp.stop_reason
+    return resp.content[0].text, resp.stop_reason
 
 
 def _call_kimi(
@@ -352,8 +358,8 @@ def _call_kimi(
     # Thinking models may lead with a non-text block; take the first text block.
     for block in data.get("content") or []:
         if block.get("type") == "text":
-            return block.get("text")
-    return None
+            return block.get("text"), data.get("stop_reason")
+    return None, data.get("stop_reason")
 
 
 def _call_openai_compat(
@@ -386,9 +392,10 @@ def _call_openai_compat(
     data = resp.json()
     choices = data.get("choices") or []
     if not choices:
-        return None
-    msg = choices[0].get("message") or {}
-    return msg.get("content")
+        return None, None
+    choice = choices[0]
+    msg = choice.get("message") or {}
+    return msg.get("content"), choice.get("finish_reason")
 
 
 def call_llm_json(
