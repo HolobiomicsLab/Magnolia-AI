@@ -324,3 +324,33 @@ def test_generate_persistent_corruption_writes_nothing(store):
     assert path is None
     assert not (store / hv.HANDOVER_STATE_FILE).exists()
     assert not (store / _CURSORS_DIR / "ses_a.json").exists()
+
+
+def test_generate_truncated_merge_keeps_state_and_cursor(store):
+    """finish_reason == 'length' means the merge output was cut at max_tokens;
+    a whole-state rewrite would silently lose its tail, so the merge must be
+    rejected and the cursor left un-advanced for a retry (2026-09-11)."""
+    _write_mapping(store, ["ses_a"])
+    (store / hv.HANDOVER_STATE_FILE).write_text("## Done\n- prior\n")
+    export = {"info": {"id": "ses_a"}, "messages": [_msg("m1", "user", "new work")]}
+
+    def truncated_llm(system, user, **kw):
+        return "## Done\n- partial item cut mid", "length"
+
+    assert hv.generate_handover(
+        str(store.parent), exporter=lambda s: export, llm=truncated_llm) is None
+    assert (store / hv.HANDOVER_STATE_FILE).read_text() == "## Done\n- prior\n"
+    assert not (store / _CURSORS_DIR / "ses_a.json").exists()
+
+
+def test_generate_finish_reason_stop_merges_normally(store):
+    _write_mapping(store, ["ses_a"])
+    export = {"info": {"id": "ses_a"}, "messages": [_msg("m1", "user", "dock KILDQ")]}
+
+    def ok_llm(system, user, **kw):
+        return "## Done\n- docked KILDQ\n", "stop"
+
+    path = hv.generate_handover(str(store.parent), exporter=lambda s: export, llm=ok_llm)
+    assert path is not None
+    assert "docked KILDQ" in (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert _session_cursor(store, "ses_a") == "m1"
