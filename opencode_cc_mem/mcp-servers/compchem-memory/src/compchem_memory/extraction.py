@@ -206,7 +206,8 @@ class AutomaticMemoryExtractor:
     def _llm_distill(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Use LLM to extract structured knowledge from session events."""
         events_json = json.dumps(events, indent=2, default=str)
-        result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000)
+        result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000,
+                               disable_thinking=True)
         if not result or not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
@@ -222,7 +223,8 @@ class AutomaticMemoryExtractor:
         only when the LLM succeeded but found nothing worth keeping."""
         if not transcript or not transcript.strip():
             return []
-        result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000)
+        result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000,
+                               disable_thinking=True)
         if result is None:
             return None  # LLM failed — distinct from "ran and found nothing"
         if not isinstance(result, list):
