@@ -85,7 +85,7 @@ def test_resolve_returns_none_when_no_keys():
 # ============ model-name prefix routing (_resolve_call) =============
 
 def test_provider_for_model_prefixes():
-    assert llm._provider_for_model("deepseek-v4-flash") == "deepseek"
+    assert llm._provider_for_model("deepseek-flash") == "deepseek"
     assert llm._provider_for_model("DeepSeek-V4-Pro") == "deepseek"   # case-insensitive
     assert llm._provider_for_model("claude-haiku-4-5-20251001") == "anthropic"
     assert llm._provider_for_model("gpt-5-mini") == "openai"
@@ -105,8 +105,8 @@ def test_resolve_call_model_prefix_beats_key_autodetect(monkeypatch):
 def test_resolve_call_explicit_provider_beats_model_prefix(monkeypatch):
     """Proxy case: an OpenAI-compatible endpoint serving a deepseek-named model."""
     monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openai")
-    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "deepseek-v4-flash")
-    assert llm._resolve_call() == ("openai", "deepseek-v4-flash")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "deepseek-flash")
+    assert llm._resolve_call() == ("openai", "deepseek-flash")
 
 
 def test_resolve_call_unknown_model_falls_back_to_key_autodetect(monkeypatch):
@@ -117,7 +117,7 @@ def test_resolve_call_unknown_model_falls_back_to_key_autodetect(monkeypatch):
 
 def test_resolve_call_no_model_uses_provider_default(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
-    assert llm._resolve_call() == ("deepseek", "deepseek-v4-flash")
+    assert llm._resolve_call() == ("deepseek", "deepseek-flash")
 
 
 def test_resolve_call_placeholder_model_ignored(monkeypatch):
@@ -125,7 +125,7 @@ def test_resolve_call_placeholder_model_ignored(monkeypatch):
     (exercised via the legacy env name — it reads through the same guard)."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
     monkeypatch.setenv("MAGNOLIA_LLM_MODEL", "@@DISTILL_MODEL@@")
-    assert llm._resolve_call() == ("deepseek", "deepseek-v4-flash")
+    assert llm._resolve_call() == ("deepseek", "deepseek-flash")
 
 
 def test_resolve_call_legacy_env_names_still_honored(monkeypatch):
@@ -166,7 +166,7 @@ def test_get_api_key_openai(monkeypatch):
 # ============ _get_model =============
 
 def test_get_model_defaults(monkeypatch):
-    assert llm._get_model("deepseek") == "deepseek-v4-flash"
+    assert llm._get_model("deepseek") == "deepseek-flash"
     assert llm._get_model("anthropic") == "claude-haiku-4-5-20251001"
     assert llm._get_model("openai") == "gpt-4o-mini"
 
@@ -255,7 +255,7 @@ def test_call_llm_deepseek_posts_to_chat_completions(monkeypatch):
     assert out == "from deepseek"
     assert captured["url"] == "https://api.deepseek.com/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer ds-key-abc"
-    assert captured["json"]["model"] == "deepseek-v4-flash"
+    assert captured["json"]["model"] == "deepseek-flash"
     assert captured["json"]["max_tokens"] == 42
     assert captured["json"]["messages"] == [
         {"role": "system", "content": "you are a helper"},
@@ -501,3 +501,89 @@ def test_call_llm_kimi_returns_none_when_no_text_block(monkeypatch):
 
     monkeypatch.setattr(llm.httpx, "post", fake_post)
     assert llm.call_llm("s", "u") is None
+
+
+# ============ P0.4: resolved-model identity =============
+
+def _timing_rows(tmp_path):
+    rows = (tmp_path / ".magnolia" / "llm-timing.jsonl").read_text().splitlines()
+    return [json.loads(line) for line in rows]
+
+
+def test_call_llm_records_resolved_model_deepseek(monkeypatch, tmp_path):
+    """Requested id and provider-echoed id both land in telemetry (P0.4)."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+
+    def fake_post(url, **kw):
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {
+            "model": "deepseek-v4.1-flash",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+        }
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    llm.call_llm("s", "u")
+    row = _timing_rows(tmp_path)[-1]
+    assert row["model"] == "deepseek-flash"
+    assert row["resolved_model"] == "deepseek-v4.1-flash"
+    assert row["outcome"] == "ok"
+
+
+def test_call_llm_records_resolved_model_kimi(monkeypatch, tmp_path):
+    monkeypatch.setenv("KIMI_PLAN_MAGNOLIA_API_KEY", "km")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+
+    def fake_post(url, **kw):
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {
+            "model": "k3-2026-08",
+            "content": [{"type": "text", "text": "hi"}],
+            "stop_reason": "end_turn",
+        }
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    llm.call_llm("s", "u")
+    row = _timing_rows(tmp_path)[-1]
+    assert row["model"] == "k3"
+    assert row["resolved_model"] == "k3-2026-08"
+
+
+def test_call_llm_resolved_model_none_on_error(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+
+    def boom(*a, **kw):
+        raise httpx.ConnectError("nope")
+
+    monkeypatch.setattr(llm.httpx, "post", boom)
+    assert llm.call_llm("s", "u") is None
+    row = _timing_rows(tmp_path)[-1]
+    assert row["outcome"] == "error"
+    assert row["resolved_model"] is None
+
+
+def test_call_anthropic_returns_resolved_model(monkeypatch):
+    import anthropic
+
+    class FakeMessage:
+        content = [type("Block", (), {"text": "hello"})()]
+        stop_reason = "end_turn"
+        model = "claude-haiku-4-5-20251001"
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            return FakeMessage()
+
+    class FakeAnthropic:
+        def __init__(self, api_key):
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
+    out, finish, resolved = llm._call_anthropic(
+        "k", "claude-haiku-4-5", "s", "u", 10)
+    assert (out, finish, resolved) == ("hello", "end_turn", "claude-haiku-4-5-20251001")
