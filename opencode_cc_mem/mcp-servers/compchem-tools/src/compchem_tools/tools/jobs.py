@@ -167,6 +167,16 @@ def submit_job(
                 "local_run_dir": result.get("local_run_dir", str(wdir)),
                 "exit_sentinel": result.get("exit_sentinel"),
             }
+        resources = {
+            "ncores": ncores,
+            "memory": memory,
+            "time_limit": time_limit,
+            "scheduler": scheduler,
+            "cluster": cluster,
+            "partition": partition,
+            "account": account,
+            "qos": qos,
+        }
         try:
             _PROJECT_MANAGER.record_run(
                 project_dir=str(project_dir),
@@ -175,6 +185,7 @@ def submit_job(
                 status=None,
                 lifecycle=lifecycle,
                 remote=remote_block,
+                resources=resources,
                 system_tags=system_tags,
             )
             result["run_id"] = run_id

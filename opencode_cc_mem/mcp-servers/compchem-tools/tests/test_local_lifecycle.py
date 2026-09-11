@@ -74,6 +74,16 @@ def test_local_submit_records_remote_block_and_tags(tmp_path, monkeypatch):
     assert rec["remote"]["exit_sentinel"].endswith("local_exit_code")
     assert rec["system_tags"] == ["peptide", "6mer"]
     assert rec["lifecycle"] == "running"
+    assert rec["resources"] == {
+        "ncores": 4,
+        "memory": "8GB",
+        "time_limit": "24:00:00",
+        "scheduler": "local",
+        "cluster": None,
+        "partition": None,
+        "account": None,
+        "qos": None,
+    }
 
 
 def _alive_non_zombie(pid: int) -> bool:
