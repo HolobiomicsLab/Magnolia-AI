@@ -1,20 +1,41 @@
 ---
 name: hpc_cluster_template
-description: Starting point for a per-cluster rule. Copy to rules/hpc_<cluster>.md, fill in from the discovery commands, and register the machine-readable half in clusters.yaml.
-version: 1.0
-last_verified: 2026-09-03
+description: Starting point for your private cluster skill. Copy to ~/.config/opencode/skills/hpc-<cluster>/SKILL.md, fill in from the discovery commands, and register the machine-readable half in clusters.yaml.
+version: 1.1
+last_verified: 2026-09-16
 tags: [slurm, hpc, template]
 ---
 
-# `<cluster>` — site rule (template)
+# `<cluster>` — your cluster skill (template)
 
-`slurm.md` covers what is true of every Slurm cluster. This file covers what is
-true only of yours. Copy it to `rules/hpc_<cluster>.md` and fill it in.
+The `slurm` skill covers what is true of every Slurm cluster. Your cluster
+skill covers what is true only of yours. Copy this file to
+`~/.config/opencode/skills/hpc-<cluster>/SKILL.md` and fill it in.
 
-Per-cluster rule files are gitignored: they end up holding account names, login
-handles and paths that belong to one group at one site. The template is
-committed so the pointer in `slurm.md` always resolves; your filled-in copy is
-not.
+Your filled-in skill lives **outside the repository**, in your opencode
+config directory: it cannot be committed or shared by accident. The template
+is committed so the pointer in the `slurm` skill always resolves.
+
+## Register your cluster facts (so promotion leaves them alone)
+
+List regexes of your cluster's private strings — hostnames, account names,
+VPN addresses — under `cluster_facts:` in the skill's frontmatter. Magnolia's
+promotion step reads them and keeps lessons that match out of all shared
+files (see `magnolia-destinations.yaml`):
+
+```yaml
+---
+name: hpc-<cluster>
+description: "..."
+metadata:
+  version: "1.0"
+  last_verified: "2026-09-16"
+cluster_facts:
+  - <cluster>
+  - <login-hostname regex>
+  - --account[= ]<your-account>
+---
+```
 
 ## Two halves, two places
 
@@ -23,7 +44,7 @@ them agreeing:
 
 | Half | Lives in | Read by |
 |---|---|---|
-| Prose — how to get on, what the queues are for, what breaks | `rules/hpc_<cluster>.md` (this file, filled in) | the agent |
+| Prose — how to get on, what the queues are for, what breaks | `~/.config/opencode/skills/hpc-<cluster>/SKILL.md` (this file, filled in) | the agent |
 | Values — ssh alias, scratch layout, account, partition, tunnel | `compchem_tools/tools/clusters.yaml`, or `~/.config/magnolia/clusters.yaml` | `ssh_slurm` |
 
 The config half is the one that decides where a job actually lands. A cluster
@@ -59,7 +80,7 @@ fails and names the candidates rather than guessing.
 
 ## Your account, partition and QOS
 
-Fill in from the discovery commands in `slurm.md`:
+Fill in from the discovery commands in the `slurm` skill:
 
 ```bash
 sacctmgr show association where user=$USER format=Account,QOS,Partition
@@ -78,5 +99,5 @@ that is the part nobody can rediscover from the man pages.
 
 ## Known failure modes
 
-The reason this file is worth keeping. One line each: the symptom you saw, and
+The reason this skill is worth keeping. One line each: the symptom you saw, and
 what it actually was.
