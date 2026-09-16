@@ -30,7 +30,7 @@ _SCIENCE_FAILURE_STATES = {
     "FAILED", "F",
     "TIMEOUT", "TO",
     "OUT_OF_MEMORY", "OOM",
-    "REVOKED", "RV",  # rules/slurm.md: "admin intervention needed" — not retryable
+    "REVOKED", "RV",  # slurm skill: "admin intervention needed" — not retryable
 }
 _INFRA_FAILURE_STATES = {
     "NODE_FAIL", "NF",

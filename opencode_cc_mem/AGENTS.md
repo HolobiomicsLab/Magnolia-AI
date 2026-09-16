@@ -125,9 +125,11 @@ Magnolia has exactly three knowledge homes. Choose by content class:
 2. **`.opencode/skills/<name>/SKILL.md`** — task-shaped protocols (how to run
    haddock3, how to run an adversarial review, how to draft a manuscript).
    Loaded on demand when the task matches the description; bodies cost nothing
-   until then. These are authored, git-tracked documents; the git review is
-   the gate. Before doing a task that matches a skill's description, load it
-   with the `skill` tool.
+   until then. Shared skills are authored, git-tracked documents; the git
+   review is the gate. Exception: your private cluster skill (`hpc-<cluster>`)
+   lives in `~/.config/opencode/skills/` — outside the repository, so it can
+   never be committed. Before doing a task that matches a skill's
+   description, load it with the `skill` tool.
 3. **`.magnolia/` memory tiers** — learned knowledge (session → staging →
    project entries). Surfaced by boot-context, `memory_get_context`, and the
    action-retrieval plugin.
@@ -151,7 +153,11 @@ protocol:
   files into the git-tracked `rules/` directory and the source entry is
   archived (git-reversible). This is the only elevation path — the raw-copy
   `memory_promote` tool and the `.magnolia/skills` tier were retired
-  2026-09-04.
+  2026-09-04. Every proposal carries a destination: a lesson that contains
+  cluster-specific facts (your cluster's address, account name, VPN) is never
+  written into shared files — accepting it marks it handled, and the review
+  shows the text to copy into your private `hpc-<cluster>` skill. Destinations
+  are defined in `magnolia-destinations.yaml` (next to `rules/`).
 
 ## Reviewing consolidation proposals
 

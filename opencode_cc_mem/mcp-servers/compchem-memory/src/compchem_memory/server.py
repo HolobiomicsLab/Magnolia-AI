@@ -785,11 +785,14 @@ def memory_apply_promotions(
     promote_raw: list[int] | None = None, project_dir: str | None = None,
 ) -> str:
     """Apply confirmed rule elevations (by index): `accept` writes each drafted
-    rule and archives the source project entry; `promote_raw` elevates the entry
-    verbatim instead of the draft; `reject` durably dismisses a proposal. Commits
-    to the versioning repo (reversible via git). Removes magnolia-review/
-    promotions.md once every proposal is handled. Edit the resulting rule file
-    afterward if needed."""
+    rule to its proposal's destination (shared `rules/` by default; a lesson
+    containing cluster-specific facts goes to "your cluster file" — nothing is
+    written; copy the draft into your `hpc-<cluster>` skill yourself) and
+    archives the source project entry; `promote_raw` elevates the entry
+    verbatim instead of the draft (refused for cluster-file proposals);
+    `reject` durably dismisses a proposal. Commits to the versioning repo
+    (reversible via git). Removes magnolia-review/promotions.md once every
+    proposal is handled. Edit the resulting rule file afterward if needed."""
     from compchem_memory import promotion
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
