@@ -29,6 +29,13 @@ pending tasks?", "status?"), answer directly from the SESSION HANDOVER already
 in boot-context — do NOT call `memory_get_context`. The handover is already in
 context; the call re-fetches it at multi-second latency.
 
+**Skill gate:** before starting a task, check `available_skills` for a
+description match; if one matches, loading it with the `skill` tool is the
+first tool call for that task (after the memory gate above). The system-prompt
+list is authoritative; handover notes about registration state are hints and
+go stale. This gate exists because an unloaded but matched skill fails
+silently — see known_problem/2026-09-16_skill-not-loaded.md.
+
 ## After resolving a tool error
 
 Call `memory_record_learning` with `entry_type="error_resolution"`. Structure
