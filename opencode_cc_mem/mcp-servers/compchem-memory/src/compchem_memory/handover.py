@@ -55,7 +55,8 @@ MERGE RULES:
 - SIZE: keep the handover compact — it must stay well under ~150 lines. In '## Done', full
   detail (numbers, paths, IDs) ONLY for items this transcript worked on; compress every other
   Done item to ONE line ("what — key result"). The details live in the distilled memory
-  entries; the handover needs the outcome, not the story.
+  entries; the handover needs the outcome, not the story. Keep at most the 10 most recent
+  Done items — older completed work already lives in the distilled entries and the notebook.
 - NEVER re-add anything listed under '## Won't-do / Archived'. Preserve that section as-is.
 - Ground items in specifics (residues, scores, IDs, run directories, file paths), not vague summaries.
 
@@ -85,6 +86,29 @@ def render_for_boot_context(state_text: str) -> str:
 _PRIORITY_SECTIONS = ("## In progress", "## To do", "## Stale?", "## Key files")
 
 
+def _split_items(section_body: str) -> tuple[str, list[str]]:
+    """Split a '## Section' body into (header line, item chunks). A new
+    '- '/'* ' line starts a new chunk; blank lines are separators;
+    continuation lines extend the current chunk. Budget code relies on
+    chunks staying whole — items are never cut mid-line."""
+    lines = section_body.splitlines()
+    header, items = lines[0], lines[1:]
+    chunks: list[str] = []
+    chunk: list[str] = []
+    for line in items:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith(("- ", "* ")) and chunk:
+            chunks.append("\n".join(chunk))
+            chunk = [line]
+        else:
+            chunk.append(line)
+    if chunk:
+        chunks.append("\n".join(chunk))
+    return header, chunks
+
+
 def budget_handover_block(block: str, char_budget: int) -> str:
     """Section-aware, tail-preserving compression of the handover view.
 
@@ -92,7 +116,15 @@ def budget_handover_block(block: str, char_budget: int) -> str:
     Done is chronological, so its tail is last session's work, and it was cut
     mid-sentence (observed 2026-08-28). Here the priority sections are kept
     whole and '## Done' is elided from the FRONT: oldest history goes first,
-    newest work survives."""
+    newest work survives.
+
+    When even the priority sections exceed the budget, the reference sections
+    ('## Stale?' / '## Key files') are dropped entirely and whole items are
+    elided oldest-first from '## In progress' / '## To do' — never a
+    mid-line cut: the old tail-slice (block[-budget:]) started mid-word and
+    dropped a restarted session's entire To do list from boot context
+    (observed 2026-09-16). The output may exceed the budget by the length of
+    the pointer line when the budget is pathologically small."""
     if len(block) <= char_budget:
         return block
 
@@ -116,9 +148,35 @@ def budget_handover_block(block: str, char_budget: int) -> str:
     non_done_total = sum(len(b) + 2 for b in non_done if b)
 
     if non_done_total >= char_budget:
-        # Pathological: even without Done we're over — tail-slice the whole
-        # block (newest content last) rather than head-slice.
-        return block[-char_budget:]
+        # Even the priority sections alone are over budget. Keep
+        # '## In progress' and '## To do' with items whole (newest kept,
+        # oldest elided); drop the reference sections; always point to the
+        # full state file.
+        pointer = ("*(older items elided to fit the boot budget — "
+                   "full handover in .magnolia/.handover-state.md)*")
+        by_heading = {p[0].strip(): _body(p) for p in parts}
+        out_sections: list[str] = []
+        used = len(pointer) + 2
+        for heading in ("## In progress", "## To do"):
+            body = by_heading.get(heading, "")
+            if not body:
+                continue
+            header, chunks = _split_items(body)
+            avail = char_budget - used - len(header) - 2
+            kept: list[str] = []
+            spent = 0
+            for c in reversed(chunks):          # elide oldest first
+                if spent + len(c) + 2 > avail:
+                    break
+                kept.append(c)
+                spent += len(c) + 2
+            kept.reverse()
+            section = "\n".join([header, *kept]).strip()
+            out_sections.append(section)
+            used += len(section) + 2
+        if not out_sections:
+            return pointer
+        return "\n\n".join(out_sections) + "\n\n" + pointer
 
     elision = ("*(older Done items elided to fit the boot budget — "
                "full history in .magnolia/.handover-state.md)*")
@@ -126,24 +184,7 @@ def budget_handover_block(block: str, char_budget: int) -> str:
 
     done = next((_body(p) for p in parts if p[0].strip() == "## Done"), "")
     if done:
-        lines = done.splitlines()
-        header, items = lines[0], lines[1:]
-        # Items = bullet blocks: a "- "/"* " line starts a new item; blank
-        # lines are separators (adjacent bullets must not fuse into one
-        # un-splittable chunk); continuation lines extend the current item.
-        chunks: list[str] = []
-        chunk: list[str] = []
-        for line in items:
-            s = line.strip()
-            if not s:
-                continue
-            if s.startswith(("- ", "* ")) and chunk:
-                chunks.append("\n".join(chunk))
-                chunk = [line]
-            else:
-                chunk.append(line)
-        if chunk:
-            chunks.append("\n".join(chunk))
+        header, chunks = _split_items(done)
         kept: list[str] = []
         used = 0
         for c in reversed(chunks):

@@ -64,24 +64,71 @@ def test_budget_block_keeps_priority_sections_and_newest_done():
     assert "item2" not in out
 
 
-def test_budget_block_pathological_tail_slice():
-    # Priority sections alone exceed the budget → tail-slice (keep newest
-    # chars) rather than the old head-slice that cut the newest work.
+def test_budget_block_overflow_keeps_actionable_sections_whole():
+    # 2026-09-16 regression: priority sections alone exceed the budget. The
+    # old tail-slice kept the last N chars and cut mid-line ANYWHERE — a
+    # restarted session lost its whole To do list from boot context. Now the
+    # actionable sections survive with items whole, the reference sections
+    # are dropped, and a pointer to the full state file is kept.
+    item = "y" * 60
     block = (
         "## Done\n- old done thing\n\n"
-        "## In progress\n" + "\n".join(f"- line{i}: " + "y" * 60 for i in range(30))
-        + "\n\n## To do\n- final next step\n"
+        "## In progress\n" + "\n".join(f"- line{i}: {item}" for i in range(30)) + "\n\n"
+        "## To do\n- final next step\n- second next step\n\n"
+        "## Key files\n- runs/2026-06-15_kferq/\n"
     )
-    out = hv.budget_handover_block(block, 400)
-    assert len(out) <= 400
-    assert out.rstrip().endswith("final next step")   # tail preserved
+    out = hv.budget_handover_block(block, 320)
+    assert out.startswith("## In progress")            # boundary-clean start
+    assert "## Key files" not in out                   # reference section dropped
+    assert "full handover in .magnolia/.handover-state.md" in out
+    assert "final next step" in out                    # To do kept whole
+    assert "second next step" in out
+    assert "- line29: " + item in out                  # newest In progress items kept
+    assert "- line0: " + item not in out               # oldest elided first
+    original_items = {f"- line{i}: {item}" for i in range(30)}
+    survivors = [l for l in out.splitlines() if l.startswith("- line")]
+    assert all(l in original_items for l in survivors)  # contract: no mid-item cut
+
+
+def test_budget_block_overflow_elides_oldest_items_first():
+    # When items must be dropped, the oldest go first and survivors stay
+    # whole — never a mid-line fragment of a dropped item. The big Key
+    # files entry pushes the non-Done sections over the budget.
+    old_item = "- oldthing " + "a" * 40
+    new_item = "- newthing " + "a" * 40
+    block = (
+        f"## In progress\n{old_item}\n{new_item}\n\n"
+        "## To do\n- next\n\n"
+        "## Key files\n- " + "p" * 400 + "\n"
+    )
+    out = hv.budget_handover_block(block, 180)
+    assert new_item in out
+    assert old_item not in out
+    original_items = {old_item, new_item, "- next"}
+    survivors = [l for l in out.splitlines() if l.startswith("- ")]
+    assert all(l in original_items for l in survivors)
+
+
+def test_budget_block_overflow_tiny_budget_still_boundary_clean():
+    # Even a budget far below any item's size must not produce mid-line
+    # fragments — headers plus the pointer line, nothing else.
+    block = (
+        "## In progress\n- alpha " + "z" * 100 + "\n\n"
+        "## To do\n- gamma " + "z" * 100 + "\n"
+    )
+    out = hv.budget_handover_block(block, 150)
+    assert out.startswith("## ")
+    assert "full handover in .magnolia/.handover-state.md" in out
+    assert "z" * 50 not in out                         # no fragment of any item
 
 
 def test_merge_prompt_has_size_and_stale_expiry_rules():
-    """Contract: the merge LLM is told to compress old Done items and to
-    expire twice-stale items to tombstones (anti-windup, 2026-08-28)."""
+    """Contract: the merge LLM is told to compress old Done items, to cap
+    their count, and to expire twice-stale items to tombstones
+    (anti-windup, 2026-08-28; Done cap 2026-09-16)."""
     assert "ONE line" in hv.HANDOVER_MERGE_PROMPT
     assert "STALE EXPIRY" in hv.HANDOVER_MERGE_PROMPT
+    assert "at most the 10 most recent" in hv.HANDOVER_MERGE_PROMPT
 
 
 # ---- read_handover_block ----------------------------------------------------
