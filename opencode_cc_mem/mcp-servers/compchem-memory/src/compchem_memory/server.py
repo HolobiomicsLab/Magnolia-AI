@@ -7,8 +7,11 @@ former .magnolia/skills skill tier was retired; protocols live in
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
+
+_BOOT_T0 = time.monotonic()  # anchor for server-import latency in the boot-timing rows
 
 from fastmcp import FastMCP
 
@@ -31,18 +34,37 @@ from compchem_memory.compaction import (
 from compchem_memory.health import run_health_check
 from compchem_memory.notebook import generate_notebook
 from compchem_memory.storage import (
-    RULES_DIR as _RULES_DIR,
     ensure_project_store,
     resolve_project_dir,
+    resolved_rules_dir,
 )
 from compchem_memory.project_guard import check_project
 from compchem_memory.startup_scan import scan_and_distill, _opencode_available
 from compchem_memory.llm import is_llm_available
 from compchem_memory.opencode_ingest import _latest_sid, distill_session_transcript
 
-RULES_DIR = Path(os.environ.get("MAGNOLIA_RULES_DIR", str(_RULES_DIR)))
+RULES_DIR = resolved_rules_dir()
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
+
+
+def _claim_once(name: str) -> bool:
+    """Claim a once-per-PROCESS side effect (boot pipeline, distill timer).
+
+    server.py can be imported twice in one process: ``python -m
+    compchem_memory.server`` registers it only as ``__main__``, so a later
+    ``import compchem_memory.server`` re-executes the module body — including
+    the module-level boot/timer spawns below. A module-global flag would not
+    be shared between the two module objects, so the claim lives in the
+    process environment, keyed by project dir. First caller gets True and
+    must run; later callers get False and skip. (Children inherit the marker,
+    so keep this for side effects that must have a single in-process owner —
+    the memory server is spawned by opencode, never the reverse.)"""
+    key = f"MAGNOLIA_ONCE_{name}_{abs(hash(PROJECT_DIR))}"
+    if os.environ.get(key):
+        return False
+    os.environ[key] = "1"
+    return True
 
 
 def _build_boot_steps(project_dir):
@@ -63,16 +85,49 @@ def _build_boot_steps(project_dir):
 
 
 def _run_startup_scan_background():
-    """Run startup_scan, handover, boot_context, audit, then write .current-session-id."""
+    """Run startup_scan, handover, boot_context, audit, then write .current-session-id.
+
+    Every step is timed: a row per step goes to .magnolia/boot-timing.jsonl and
+    to stderr, so a slow restart is decomposable (step wall time; per-LLM-call
+    detail already lives in llm-timing.jsonl). Guarded to run once per process —
+    see _claim_once."""
+    if not _claim_once("boot"):
+        return
     import threading
     import datetime
 
+    def _log_boot_step(step: str, ms: float, ok: bool = True, error: object = None) -> None:
+        row = {
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "step": step,
+            "ms": int(ms),
+            "ok": ok,
+        }
+        if error is not None:
+            row["error"] = str(error)[:200]
+        try:
+            p = Path(PROJECT_DIR) / ".magnolia" / "boot-timing.jsonl"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(row) + "\n")
+        except Exception:
+            pass
+        suffix = "" if ok else f" (error: {error})"
+        print(f"[boot-timing] {step}: {int(ms)} ms{suffix}")
+
     def _worker():
+        _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
+        t_all = time.monotonic()
         for step_name, step_fn in _build_boot_steps(PROJECT_DIR):
+            t0 = time.monotonic()
             try:
                 step_fn()
             except Exception as e:
                 print(f"[{step_name}] error: {e}")
+                _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
+            else:
+                _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
+        t0 = time.monotonic()
         try:
             session_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H%M%S")
             current = Path(PROJECT_DIR) / ".magnolia" / ".current-session-id"
@@ -80,6 +135,7 @@ def _run_startup_scan_background():
             current.write_text(session_id)
         except Exception as e:
             print(f"[session_id] error: {e}")
+        _log_boot_step("total", (time.monotonic() - t_all) * 1000)
 
     threading.Thread(target=_worker, daemon=True).start()
 
@@ -114,7 +170,10 @@ def _distill_timer_tick(project_dir: str) -> None:
 
 def _run_distill_timer_background() -> None:
     """Daemon thread: sweep distillation on a wall-clock interval, so distillation
-    is robust to a long-lived server (no reboot to trigger startup_scan)."""
+    is robust to a long-lived server (no reboot to trigger startup_scan).
+    Guarded to run once per process — see _claim_once."""
+    if not _claim_once("distill_timer"):
+        return
     import threading
     import time
 

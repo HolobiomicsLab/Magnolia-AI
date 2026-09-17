@@ -140,10 +140,10 @@ def _maybe_promote(store: Path) -> None:
         if _has_pending_review(store / "reflex" / "promotion-proposal.json"):
             return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.promotion import propose_promotions, eligible_entries
-        from compchem_memory.server import RULES_DIR
+        from compchem_memory.storage import resolved_rules_dir
         if not eligible_entries(str(store)):
             return
-        propose_promotions(str(store), rules_dir=str(RULES_DIR))
+        propose_promotions(str(store), rules_dir=str(resolved_rules_dir()))
     except Exception as e:  # noqa: BLE001 - promotion must never break the sweep
         print(f"[promotion] skipped: {e}")
 
