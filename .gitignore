@@ -1,6 +1,10 @@
 # venv + transient/rendered/config
 .venv/
 opencode_cc_mem/opencode.json
+# uv lockfiles — dependency pinning not adopted (see todo.md "to be discussed");
+# regenerates on every `uv run`
+uv.lock
+**/uv.lock
 # machine-local dev plan (kept at repo root for session continuity; not released)
 /EXECUTION_PLAN.md
 # user research data (scaffolded per launch; never the 111G originals)
@@ -54,6 +58,9 @@ HANDOVER.md
 .worktrees/
 # exported session transcripts (full tool logs + chat) — machine-local artifacts
 opencode_cc_mem/session-ses_*.md
+
+# Known-problem postmortems (machine-local dev notes for collaborators; not released)
+/known_problem/
 
 # Root-level docs/ also holds machine-local setup runbooks (credentials-adjacent).
 # Everything is ignored by default; only the curated documentation set below is
