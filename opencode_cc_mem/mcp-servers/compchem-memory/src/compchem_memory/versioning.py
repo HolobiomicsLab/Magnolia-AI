@@ -1,4 +1,5 @@
-"""Local-first git versioning of the learning tiers (entries/, staging/).
+"""Local-first git versioning of the learning tiers (entries/, staging/)
+and the rolling handover state (.handover-state.md).
 
 Git the local tool, never GitHub the service — every operation here is fully
 offline and never contacts a remote. The .magnolia store gets its own nested git
@@ -13,7 +14,9 @@ from pathlib import Path
 
 # Ignore everything, then re-include only the knowledge tiers and this file.
 # Robust against new plumbing directories appearing later.
-_GITIGNORE = "/*\n!/.gitignore\n!/entries/\n!/staging/\n"
+# .handover-state.md is tracked since 2026-09-16: the merge ages items out
+# (Done cap, stale expiry), and drops must stay recoverable from git.
+_GITIGNORE = "/*\n!/.gitignore\n!/entries/\n!/staging/\n!/.handover-state.md\n"
 
 
 def _git(store: Path, *args: str) -> subprocess.CompletedProcess:
