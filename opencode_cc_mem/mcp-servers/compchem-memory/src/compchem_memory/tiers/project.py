@@ -348,7 +348,7 @@ class ProjectManager:
         return str(dest)
 
     def auto_promote_staging(self, project_dir: str) -> list[str]:
-        """Auto-promote staging entries with observation_count >= 2, confidence > 0.85,
+        """Auto-promote staging entries with observation_count >= 2, confidence >= 0.85,
         AND observed_in_sessions containing >= 2 distinct session_ids.
 
         Closes cybernetics §3.4 (single-session auto-promotion risk).
@@ -362,7 +362,7 @@ class ProjectManager:
             conf = meta.get("confidence", 0.5)
             sessions = meta.get("observed_in_sessions", []) or []
             distinct_sessions = len(set(sessions))
-            if obs >= 2 and conf > 0.85 and distinct_sessions >= 2:
+            if obs >= 2 and conf >= 0.85 and distinct_sessions >= 2:
                 try:
                     dest = self.confirm_staging(project_dir, f.stem)
                     promoted.append(f.name)
@@ -409,10 +409,15 @@ class ProjectManager:
     })
 
     def _significant_words(self, title_lower: str) -> set[str]:
-        """Topic-bearing words of a title: alphanumerics stripped, stopwords and
-        single characters removed."""
+        """Topic-bearing words of a title: alphanumerics stripped, stopwords,
+        single characters and bare numbers removed (a date like 2026-09-04 must
+        not make two unrelated titles share 'significant' words)."""
         words = re.findall(r"[a-z0-9_]+", title_lower)
-        return {w for w in words if w not in self._STOPWORDS and len(w) > 1}
+        return {
+            w
+            for w in words
+            if w not in self._STOPWORDS and len(w) > 1 and not w.isdigit()
+        }
 
     def find_similar_staging(
         self,
@@ -429,7 +434,13 @@ class ProjectManager:
         entry, so keying on them turned a generic note into a magnet that
         absorbed unrelated learnings. Tags only break ties. Entries of a
         different ``entry_type`` are never matched — a project ``note`` and an
-        ``error_resolution`` are different kinds of knowledge."""
+        ``error_resolution`` are different kinds of knowledge.
+
+        A candidate must clear BOTH tests — string similarity (ratio >= 0.6) AND
+        at least 2 shared significant words — and the best score must reach 0.6.
+        Either test alone matched unrelated entries (2026-09-18: a debate note
+        bumped a skill-tier entry via shared 'tier/promotion', and a dated title
+        bumped another via shared date tokens)."""
         staging = self._staging_dir(project_dir)
         title_lower = title.lower()
         title_words = self._significant_words(title_lower)
@@ -446,13 +457,15 @@ class ProjectManager:
             # Count only meaningful shared words — common stopwords like "to"/
             # "before" carry no topic and must not, on their own, force a match.
             shared_title_words = title_words & self._significant_words(existing_title)
-            if ratio < 0.6 and len(shared_title_words) < 2:
+            if ratio < 0.6 or len(shared_title_words) < 2:
                 continue
             existing_tags = set(t.lower() for t in meta.get("tags", []))
             score = ratio + len(tags_set & existing_tags) * 0.1
             if score > best_score:
                 best_score = score
                 best_match = f.name
+        if best_match is not None and best_score < 0.6:
+            return None
         return best_match
 
     def record_run(
