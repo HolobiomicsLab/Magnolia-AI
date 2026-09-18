@@ -44,6 +44,12 @@ def consolidate_tier(
             report["archived"] = archived
             report["actions"].append(f"Archived {archived} excess entries (cap: {max_entries})")
 
+        # Prune pre-mutation backup copies (keep newest 5 per entry, expire >90d)
+        pruned = _prune_backups(base_dir)
+        if pruned:
+            report["backups_pruned"] = pruned
+            report["actions"].append(f"Pruned {pruned} stale backups")
+
         remaining = len([e for e in entries_dir.glob("*.md") if e.name != "INDEX.md"])
         report["remaining"] = remaining
 
@@ -219,6 +225,47 @@ def _archive_excess(entries_dir: Path, base_dir: str, max_entries: int) -> int:
             archived += 1
 
     return archived
+
+
+def _prune_backups(base_dir: str, keep_per_entry: int = 5, max_age_days: int = 90) -> int:
+    """Prune .magnolia/backups/: keep the newest `keep_per_entry` backups per
+    entry stem and drop anything older than `max_age_days`. Backup filenames
+    follow `{stem}_{YYYYMMDD_HH%MSS}` (storage.backup_file); the embedded
+    timestamp decides age, falling back to mtime when absent. The store is
+    git-versioned, so pruned copies stay recoverable from history."""
+    backups_dir = Path(base_dir) / ".magnolia" / "backups"
+    if not backups_dir.is_dir():
+        return 0
+    now = datetime.now(timezone.utc)
+    by_stem: dict[str, list[tuple[datetime, Path]]] = {}
+    removed = 0
+    for f in backups_dir.glob("*"):
+        if not f.is_file() or f.name.startswith("._"):
+            continue
+        m = re.match(r"^(.*)_(\d{8}_\d{6})$", f.stem)
+        ts = None
+        stem = f.stem
+        if m:
+            stem = m.group(1)
+            try:
+                ts = datetime.strptime(m.group(2), "%Y%m%d_%H%M%S").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                ts = None
+        if ts is None:
+            ts = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+        if (now - ts).total_seconds() / 86400 > max_age_days:
+            f.unlink()
+            removed += 1
+            continue
+        by_stem.setdefault(stem, []).append((ts, f))
+    for copies in by_stem.values():
+        copies.sort(key=lambda pair: pair[0], reverse=True)
+        for _, f in copies[keep_per_entry:]:
+            f.unlink()
+            removed += 1
+    return removed
 
 
 def _parse_frontmatter(text: str) -> dict[str, Any]:
