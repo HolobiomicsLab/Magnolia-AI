@@ -17,10 +17,14 @@
  * RESULT (soft injection — the agent sees the knowledge at the moment the
  * action's outcome is produced). No gating, no blocking in v1.
  *
- * Noise control: only hits with score >= 2 (distinct query tokens matched) or
- * confidence >= 0.8 are injected, capped at 4. Identical queries within 120 s
- * reuse the cached result. The retrieval child is killed at 2500 ms; on any
- * failure the tool result passes through untouched.
+ * Noise control (v2, 2026-09-18): only hits with query-match score >= 3 are
+ * injected — confidence alone must never substitute for relevance (it injected
+ * two June entries on 209 of 258 staging injections in 3 weeks) — capped at 4,
+ * at most 8 injection events per session, and the same entry at most twice per
+ * session. Every instrumented call (injected or not) is logged with a coarse
+ * outcome marker so retrieval value becomes measurable. Identical queries
+ * within 120 s reuse the cached result. The retrieval child is killed at
+ * 2500 ms; on any failure the tool result passes through untouched.
  *
  * Safe by design: retrieval is READ-ONLY and every failure is swallowed —
  * this plugin must never break a tool call.
@@ -52,6 +56,9 @@ const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "
 const QUERY_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 120_000
 const MAX_HITS = 4
+const MIN_SCORE = 3
+const MAX_INJECTIONS_PER_SESSION = 8
+const MAX_PER_ENTRY_PER_SESSION = 2
 
 // Tools whose invocation is an "action" worth checking memory for first:
 // state-changing shell, submissions, file writes/edits, and the main
@@ -128,6 +135,30 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
   // query -> { ts, lines } result cache
   const cache = new Map<string, { ts: number; lines: string[] }>()
 
+  // C1 noise-control state, keyed by session (bounded: oldest dropped at 40)
+  const sessionInjections = new Map<string, number>()
+  const entryLatch = new Map<string, Map<string, number>>()
+  const skipLogged = new Map<string, Set<string>>()
+  const touchSession = (sid: string) => {
+    if (!sid || sessionInjections.has(sid)) return
+    if (sessionInjections.size >= 40) {
+      for (const k of [...sessionInjections.keys()].slice(0, sessionInjections.size - 20)) {
+        sessionInjections.delete(k)
+        entryLatch.delete(k)
+        skipLogged.delete(k)
+      }
+    }
+    sessionInjections.set(sid, 0)
+  }
+  const logSkip = (sid: string, tool: string, callID: unknown, reason: string) => {
+    const seen = skipLogged.get(sid) ?? new Set<string>()
+    skipLogged.set(sid, seen)
+    if (!seen.has(reason)) {
+      seen.add(reason)
+      log({ sessionID: sid, tool, callID, skipped: reason })
+    }
+  }
+
   async function retrieve(query: string): Promise<{ lines: string[]; ms: number } | null> {
     if (!query.trim()) return null
     const hit = cache.get(query)
@@ -171,20 +202,47 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
     "tool.execute.after": async (input: any, output: any) => {
       try {
         const callID = input?.callID
+        const sessionID = String(input?.sessionID ?? "")
+        const tool = String(input?.tool ?? "")
+        touchSession(sessionID)
         const prom = pending.get(callID)
         pending.delete(callID)
         if (!prom || typeof output?.output !== "string") return
         const res = await prom
-        if (!res || res.lines.length === 0) return
 
-        const hits = res.lines
+        // D1 coarse outcome marker (heuristic: keyword scan of the result head;
+        // a precise application link needs the callID join against the session log).
+        const outText = output.output
+        const outcome = /\b(error|failed|traceback|exception)\b/i.test(outText.slice(0, 400))
+          ? "error?"
+          : "ok"
+        const logCall = (injected: number) =>
+          log({ sessionID, tool, callID, outcome, injected })
+
+        if (!res || res.lines.length === 0) { logCall(0); return }
+
+        // C1: relevance floor — query-match score only; confidence must never
+        // substitute for relevance.
+        const all = res.lines
           .map((l) => { try { return JSON.parse(l) } catch { return null } })
-          .filter((h): h is any => !!h)
-          .filter((h) => (h.score ?? 0) >= 2 || (h.confidence ?? 0) >= 0.8)
-          .slice(0, MAX_HITS)
-        if (hits.length === 0) return
+          .filter((h): h is any => !!h && typeof h.path === "string")
+          .filter((h) => (h.score ?? 0) >= MIN_SCORE)
 
-        const tool = String(input?.tool ?? "")
+        // C1: per-entry latch — the same entry at most twice per session.
+        const latch = entryLatch.get(sessionID) ?? new Map<string, number>()
+        entryLatch.set(sessionID, latch)
+        const fresh = all.filter((h) => (latch.get(h.path) ?? 0) < MAX_PER_ENTRY_PER_SESSION)
+
+        // C1: per-session budget.
+        const used = sessionInjections.get(sessionID) ?? 0
+        if (fresh.length === 0) { logSkip(sessionID, tool, callID, "latch"); logCall(0); return }
+        if (used >= MAX_INJECTIONS_PER_SESSION) {
+          logSkip(sessionID, tool, callID, "budget")
+          logCall(0)
+          return
+        }
+
+        const hits = fresh.slice(0, MAX_HITS)
         const bullet = (h: any) => {
           const badge = [h.tier, h.type].filter(Boolean).join("/")
           const prov = h.provisional ? " [unconfirmed]" : ""
@@ -199,13 +257,23 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
           `\n(read-only auto-injection; opt out MAGNOLIA_ACTION_RETRIEVE=0)\n\n`
 
         output.output = block + output.output
+        sessionInjections.set(sessionID, used + 1)
+        for (const h of hits) latch.set(h.path, (latch.get(h.path) ?? 0) + 1)
+        logCall(hits.length)
         log({
-          sessionID: input?.sessionID,
+          sessionID,
           tool,
           callID,
           ms: res.ms,
           hits: hits.length,
           titles: hits.map((h) => h.title).slice(0, 4),
+          entries: hits.map((h) => ({
+            path: h.path,
+            tier: h.tier,
+            score: h.score,
+            confidence: h.confidence,
+            provisional: !!h.provisional,
+          })),
         })
       } catch { /* never throw into opencode */ }
     },
