@@ -22,6 +22,11 @@ untrack files for that reason before.
 The most common contribution adds an instrument. The shortest route is **a skill plus a thin typed
 wrapper**, not free-form shell:
 
+For a first pilot, the [domain adaptation guide](docs/domain-adaptation.md) starts with
+an existing script and explicit learning capture before adding a reusable wrapper.
+For another agent client, see [harness adaptation](docs/harness-adaptation.md), including
+the OpenCode event dependencies and adapter acceptance checks.
+
 | Contribution | Location | Note |
 |---|---|---|
 | A new instrument | `opencode_cc_mem/mcp-servers/compchem-tools/src/compchem_tools/tools/` and a skill in `opencode_cc_mem/.opencode/skills/<name>/SKILL.md` | The wrapper types the call; the skill carries the protocol, the failure modes and the verification checklist |

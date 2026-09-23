@@ -133,6 +133,82 @@ def test_same_title_different_entry_type_does_not_match(project_dir):
     assert match is None, "must not match across entry_type"
 
 
+# --- 2026-09-18 incidents: weak title collisions must not bump ---------------
+
+def test_dated_titles_do_not_collide_on_date_tokens(project_dir):
+    """Two unrelated titles sharing only date tokens ('2026-09-04' vs
+    '2026-09-18') must not match. Live incident: a debate note bumped the
+    'Ad Verum webapp is BUILT' entry via shared date tokens alone."""
+    pm = _pm()
+    _make_staging_entry(
+        project_dir,
+        "20260904_075836_adverum",
+        "Ad Verum is built already.",
+        {
+            "title": "Ad Verum webapp is BUILT (user correction 2026-09-04) — July-2026 PoC-plan entries are historical",
+            "type": "note",
+            "tags": ["ad-verum"],
+            "observation_count": 1,
+        },
+    )
+    match = pm.find_similar_staging(
+        str(project_dir),
+        "Gate-debate 2026-09-18: confirmation demoted to veto; tentative tier + deterministic evidence design",
+        ["xiulian"],
+        entry_type="note",
+    )
+    assert match is None, "date tokens alone must not trigger a match"
+
+
+def test_two_shared_words_without_similarity_do_not_match(project_dir):
+    """Sharing two generic words ('tier', 'promotion') without overall title
+    similarity must not match. Live incident: a debate note bumped the
+    'Skill tier redistributed' entry."""
+    pm = _pm()
+    _make_staging_entry(
+        project_dir,
+        "20260903_161533_skilltier",
+        "Protocols moved to .opencode/skills.",
+        {
+            "title": "Skill tier redistributed: protocols to .opencode/skills, learnings to project tier, promotion is editorial",
+            "type": "note",
+            "tags": ["skill-tier"],
+            "observation_count": 1,
+        },
+    )
+    match = pm.find_similar_staging(
+        str(project_dir),
+        "Debate verdict: demote human memory_confirm to optional veto; tentative tier + deterministic evidence gates promotion",
+        ["xiulian"],
+        entry_type="note",
+    )
+    assert match is None, "two shared words with dissimilar titles must not match"
+
+
+def test_dated_titles_with_real_overlap_still_match(project_dir):
+    """Positive control: genuinely similar dated titles still match — the
+    numeric-token filter must not break real dedup."""
+    pm = _pm()
+    _make_staging_entry(
+        project_dir,
+        "20260601_090000_submitjob_timeout",
+        "submit_job timed out at 300s on the first attempt.",
+        {
+            "title": "submit_job timeout at 2026-06-01 with default walltime",
+            "type": "error_resolution",
+            "tags": ["submit_job"],
+            "observation_count": 1,
+        },
+    )
+    match = pm.find_similar_staging(
+        str(project_dir),
+        "submit_job timeout at 2026-06-02 with default walltime",
+        ["submit_job"],
+        entry_type="error_resolution",
+    )
+    assert match is not None, "genuinely similar dated titles must still match"
+
+
 # --- Parser robustness: '---' inside a frontmatter value --------------------
 
 def test_parse_frontmatter_tolerates_triple_dash_in_value(project_dir):

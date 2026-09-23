@@ -1,0 +1,21 @@
+# Where a promoted lesson can land. Read by the compchem-memory promotion step;
+# looked up next to the rules/ directory. If this file is missing, the defaults
+# below apply. See rules/magnolia.md "Knowledge placement" for the why.
+
+# shared-rules:   committed, loaded every session. Keep small — every line is
+#                 paid at every startup.
+shared_rules: rules
+
+# shared-skills:  committed, loaded only when the task needs them. Maintained by
+#                 hand; promotion never writes here automatically.
+shared_skills: .opencode/skills
+
+# cluster-skills: your private cluster facts (login hostname, account name,
+#                 VPN address). A skill named hpc-<cluster> here lives OUTSIDE
+#                 the repository, so it can never be committed or shared. List
+#                 your cluster's private strings under `cluster_facts:` in that
+#                 skill's frontmatter — promotion matches them and proposes
+#                 "your cluster file" as the destination for such lessons,
+#                 keeping them out of all shared files.
+cluster_skills: ~/.config/opencode/skills
+cluster_skill_prefix: hpc-

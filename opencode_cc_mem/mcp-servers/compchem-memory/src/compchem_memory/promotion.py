@@ -4,11 +4,14 @@ human-confirm. Eligibility is deterministic (session count); verification is an
 LLM consensus panel + consistency check; the merged/drafted rule is human-confirmed.
 
 Detect with intelligence, gate with determinism, human-confirm — same contract as
-consolidation. Elevated rules land in the git-tracked rules/ directory (always-on
-doctrine, AGENTS.md-loaded); the skill tier was retired 2026-09, so this is the
-only elevation path (the raw-copy memory_promote tool was removed with it)."""
+consolidation. Accepted rules land in their proposal's DESTINATION: the
+git-tracked rules/ directory (always-on doctrine) by default, or the user's
+private cluster file (never shared) when the lesson contains cluster-specific
+facts (see magnolia-destinations.yaml). The skill tier was retired 2026-09;
+the raw-copy memory_promote tool was removed with it."""
 
 import json
+import re as _re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -23,6 +26,76 @@ _PROMOTION_MIN_SESSIONS = 3      # eligibility gate: distinct sessions
 _PROMOTION_PANEL_PASSES = 3      # K independent consensus passes
 _PROMOTION_PANEL_TEMPERATURE = 0.4
 _PROMOTION_PANEL_APPROVE = 2     # >= this many approvals to survive
+
+
+# ---------------------------------------------------------------------------
+# Destinations — where an accepted rule may land
+# ---------------------------------------------------------------------------
+
+_DESTINATIONS_FILE = "magnolia-destinations.yaml"
+
+_DEFAULT_DESTINATIONS = {
+    "shared_rules": "rules",
+    "shared_skills": ".opencode/skills",
+    "cluster_skills": "~/.config/opencode/skills",
+    "cluster_skill_prefix": "hpc-",
+}
+
+DESTINATION_SHARED_RULES = "shared-rules"
+DESTINATION_CLUSTER_FILE = "cluster-file"
+
+
+def load_destinations(rules_dir: str) -> dict[str, str]:
+    """The homes a promoted lesson can land in, as path strings. Read from
+    <rules_dir>/../magnolia-destinations.yaml when present; built-in defaults
+    apply otherwise. Values stay verbatim (the cluster-skills default keeps
+    its '~') and are expanded only by the consumer that touches the disk."""
+    out = dict(_DEFAULT_DESTINATIONS)
+    p = Path(rules_dir).parent / _DESTINATIONS_FILE
+    if p.exists():
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            data = {}
+        if isinstance(data, dict):
+            for key in out:
+                value = data.get(key)
+                if isinstance(value, str) and value:
+                    out[key] = value
+    return out
+
+
+def collect_cluster_fact_patterns(destinations: dict[str, str]) -> list:
+    """Regexes listed under `cluster_facts:` in the user's LOCAL cluster
+    skills (frontmatter). Cluster skills live outside the repository, so the
+    patterns come from the user's own machine and never from shared files.
+    A lesson matching any pattern is proposed for the user's cluster file,
+    not for shared rules. Uncompilable entries are skipped."""
+    d = Path(destinations["cluster_skills"]).expanduser()
+    prefix = destinations["cluster_skill_prefix"]
+    patterns: list = []
+    if not d.is_dir():
+        return patterns
+    for f in sorted(d.glob(f"{prefix}*/SKILL.md")):
+        e = parse_frontmatter_file(f)
+        if not e:
+            continue
+        for raw in e["meta"].get("cluster_facts") or []:
+            try:
+                patterns.append(_re.compile(str(raw), _re.IGNORECASE))
+            except _re.error:
+                continue
+    return patterns
+
+
+def destination_for(entry: dict[str, Any], fact_patterns: list) -> str:
+    """Your cluster file when the entry mentions a cluster fact; else shared
+    rules. Title + body are both checked so a lesson named after a private
+    hostname is caught too."""
+    text = f'{entry["meta"].get("title", "")}\n{entry["body"]}'
+    if any(p.search(text) for p in fact_patterns):
+        return DESTINATION_CLUSTER_FILE
+    return DESTINATION_SHARED_RULES
 
 
 def _distinct_sessions(meta: dict[str, Any]) -> int:
@@ -98,8 +171,6 @@ def run_panel(
 # ---------------------------------------------------------------------------
 # Rule drafting
 # ---------------------------------------------------------------------------
-
-import re as _re
 
 _DRAFT_SYSTEM = (
     "Rewrite ONE project learning as a durable RULE for a computational-chemistry "
@@ -202,11 +273,12 @@ def propose_promotions(
     store_dir: str, *, rules_dir: str,
     judge=None, drafter=None, checker=None,
 ) -> dict[str, Any]:
-    """Gate → panel → draft → consistency. Write survivors to
+    """Gate → panel → draft → consistency → destination. Write survivors to
     reflex/promotion-proposal.json. Proposal-only; mutates no entries.
     Carries prior rejections forward by content key (entry basename)."""
     store = Path(store_dir)
     rules = _existing_rule_summaries(rules_dir)
+    fact_patterns = collect_cluster_fact_patterns(load_destinations(rules_dir))
     proposals: list[dict[str, Any]] = []
     for entry in eligible_entries(store_dir):
         panel = run_panel(entry, judge=judge)
@@ -222,6 +294,7 @@ def propose_promotions(
                       "correctness_flag": panel["correctness_flag"]},
             "consistency": consistency,
             "drafted_rule": drafted,
+            "destination": destination_for(entry, fact_patterns),
             "confidence": round(panel["approvals"] / _PROMOTION_PANEL_PASSES, 2),
         })
 
@@ -257,7 +330,7 @@ def render_promotions_markdown(store_dir: str) -> str | None:
         "# Rule-elevation proposals — review",
         "",
         "Each project learning below passed the panel; the agent proposes elevating",
-        "it to a cross-project rule. Tell the agent which to apply or reject "
+        "it to a durable destination. Tell the agent which to apply or reject "
         '(e.g. "apply 0, reject 1"). Edit the rule file AFTER it is created.',
         "",
     ]
@@ -273,6 +346,15 @@ def render_promotions_markdown(store_dir: str) -> str | None:
             f"{p.get('distinct_sessions')}  |  approvals: "
             f"{p.get('panel', {}).get('approvals')}/{_PROMOTION_PANEL_PASSES}",
         ]
+        dest = p.get("destination", DESTINATION_SHARED_RULES)
+        if dest == DESTINATION_CLUSTER_FILE:
+            lines.append("- destination: **your cluster file** (private) — this "
+                         "lesson mentions facts about YOUR cluster; it is never "
+                         "written into shared files. On accept, nothing is "
+                         "written — copy the draft into your `hpc-<cluster>` "
+                         "skill yourself.")
+        else:
+            lines.append("- destination: shared rules (`rules/`)")
         if flag:
             lines.append(f"- ⚠ correctness concern: {flag}")
         if cons.get("status") in ("duplicate", "conflict"):
@@ -337,11 +419,15 @@ def apply_promotions(
 ) -> dict[str, Any]:
     """Apply accepted promotions (write drafted rule + archive source entry),
     promote_raw (elevate entry verbatim), and record rejections durably.
+    A proposal destined for the user's cluster file is never written into
+    shared rules: accept marks it handled (deferred — the user copies the
+    draft into their hpc-<cluster> skill by hand), promote_raw is refused.
     Persists after each apply; one failure never aborts the batch (recorded in
     `failed`). Deterministic over the artifact — no markdown parsing."""
     store = Path(store_dir)
     artifact = store / "reflex" / "promotion-proposal.json"
-    empty = {"applied": 0, "rules": [], "promoted_raw": 0, "rejected": 0, "failed": []}
+    empty = {"applied": 0, "rules": [], "promoted_raw": 0, "rejected": 0,
+             "deferred_to_cluster_file": 0, "failed": []}
     if not artifact.exists():
         return empty
     data = json.loads(artifact.read_text())
@@ -361,12 +447,27 @@ def apply_promotions(
 
     rules: list[str] = []
     raw_n = 0
+    deferred = 0
     failed: list[int] = []
     accept_list = accept or []
     for i in accept_list + (promote_raw or []):
         if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in applied_set or i in rejected_set:
             continue
         p = proposals[i]
+        if p.get("destination") == DESTINATION_CLUSTER_FILE:
+            if i in accept_list:
+                # Accepted into the user's private cluster file: nothing is
+                # written here and the source entry stays in place (it is the
+                # only copy until the user moves the text into their
+                # hpc-<cluster> skill). Mark handled so it stops re-surfacing.
+                applied_set.add(i)
+                deferred += 1
+                _persist()
+            else:
+                # Raw-copying cluster-specific content into shared rules is
+                # refused outright.
+                failed.append(i)
+            continue
         try:
             if i in accept_list:
                 path = _write_rule(rules_dir, p["drafted_rule"])
@@ -393,4 +494,5 @@ def apply_promotions(
 
     _persist()
     return {"applied": len(rules) - raw_n, "rules": rules, "promoted_raw": raw_n,
+            "deferred_to_cluster_file": deferred,
             "rejected": rejected_n, "failed": failed}

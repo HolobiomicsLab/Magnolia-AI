@@ -12,10 +12,15 @@ from compchem_memory.context_assembly import assemble_context
 
 def regenerate_boot_context(
     project_dir: str,
-    token_budget: int = 6000,
+    token_budget: int = 10000,
 ) -> str:
     """Write .magnolia/boot-context.md with prerendered project memory.
-    Returns the path of the written file."""
+    Returns the path of the written file.
+
+    Budget was 6000; raised to 10000 (2026-09-16): the session tier's 20%
+    share (~4.8 KB) could not cover a ~17 KB handover state, and the overflow
+    fallback tail-sliced mid-line, dropping a restarted session's To do list.
+    """
     result = assemble_context(
         task_description="project boot context",
         project_dir=project_dir,

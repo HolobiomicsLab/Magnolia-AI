@@ -476,7 +476,7 @@ def _parse_sacct(line: str) -> dict[str, str] | None:
     }
 
 
-# State sets per rules/slurm.md
+# State sets per the slurm skill (.opencode/skills/slurm/)
 _RUNNING_STATES = {"PD", "PENDING", "CF", "CONFIGURING", "R", "RUNNING", "S", "SUSPENDED", "CG", "COMPLETING"}
 _COMPLETED_STATES = {"CD", "COMPLETED"}
 _CANCELLED_STATES = {"CA", "CANCELLED", "CANCELLED+"}

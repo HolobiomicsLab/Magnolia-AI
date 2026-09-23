@@ -2,8 +2,8 @@
 name: adversarial-review
 description: "Run a blind adversarial review — debate, red-team, second opinion, cross-examination — of a research idea, design doc, analysis, protocol, or plan using independent LLM adversaries via headless opencode. Use when the user asks to debate, challenge, stress-test, cross-examine, get a second opinion on, or red-team an idea/plan/design/interpretation, or before committing to a high-stakes design decision. Do NOT use for quick lookups, trivial choices, or execution of an already-decided plan."
 metadata:
-  version: "1.2"
-  last_verified: "2026-09-10"
+  version: "1.3"
+  last_verified: "2026-09-11"
   tags: "debate,adversarial,red-team,second-opinion,panel"
 ---
 
@@ -85,6 +85,28 @@ the same models on the Go subscription — tested end-to-end via headless
 `opencode run` for `glm-5.3` and `kimi-k3`, plus raw endpoint for
 `deepseek-flash`. Use `opencode-go/*`, NOT `opencode/*`: the zen path returns
 `CreditsError` (insufficient balance) without a payment method.
+
+**Single-provider fallback (one model available; added 2026-09-11).** When only
+one model family is accessible the debate still runs — `debate.sh` takes any
+model per workspace, so the panel is N blind `round1`s with the same model ID.
+Treat it as a **degraded mode** and price its agreement accordingly.
+
+- **Fresh sessions only.** Each panelist gets its own `init` workspace and its
+  own blind `round1`; never `resume` one panelist into another's context.
+  Independent sampling is the only decorrelation left — use 2–3 sessions.
+- **Optional role prompts** (one to attack, one to defend/verify) reintroduce
+  some contrast, but the lineage is still shared.
+- **What survives:** blind error-catching against the chair, source-grounded
+  verification (webfetch + the required "URLs actually fetched" list), and
+  coverage of options the chair missed. The claim ledger is more load-bearing
+  here, not less — every disputed row still gets an exact check.
+- **What does not survive:** cross-lab corroboration. Agreement within one
+  lineage is a single observation: mark those ledger rows
+  `AGREE (single-lineage)` and source-verify before relying. Round-2 concession
+  is more suspect than usual — apply the no-new-evidence rule strictly.
+- **Mandatory verdict caveat:** state the panel is single-family and name the
+  model; if the chair shares that family, say so too — the correlation
+  compounds.
 
 ## Tools and web access
 

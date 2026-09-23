@@ -28,10 +28,12 @@ def test_ensure_repo_repairs_corrupted_gitignore(tmp_path):
 
     versioning.ensure_repo(store)  # must restore the canonical ignore rules
 
-    assert (store / ".gitignore").read_text() == "/*\n!/.gitignore\n!/entries/\n!/staging/\n"
+    assert (store / ".gitignore").read_text() == (
+        "/*\n!/.gitignore\n!/entries/\n!/staging/\n!/.handover-state.md\n"
+    )
 
 
-def test_ensure_repo_tracks_only_entries_and_staging(tmp_path):
+def test_ensure_repo_tracks_knowledge_tiers_only(tmp_path):
     store = tmp_path / ".magnolia"
     (store / "entries").mkdir(parents=True)
     (store / "staging").mkdir(parents=True)
@@ -39,6 +41,7 @@ def test_ensure_repo_tracks_only_entries_and_staging(tmp_path):
     versioning.ensure_repo(store)
     (store / "entries" / "a.md").write_text("keep me")
     (store / "staging" / "b.md").write_text("keep me")
+    (store / ".handover-state.md").write_text("keep me")
     (store / "sessions" / "log.jsonl").write_text("ignore me")
     (store / "boot-context.md").write_text("ignore me")
 
@@ -47,6 +50,7 @@ def test_ensure_repo_tracks_only_entries_and_staging(tmp_path):
 
     assert "entries/a.md" in tracked
     assert "staging/b.md" in tracked
+    assert ".handover-state.md" in tracked     # merge-time aging stays recoverable
     assert "sessions/log.jsonl" not in tracked
     assert "boot-context.md" not in tracked
 
