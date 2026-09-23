@@ -29,8 +29,8 @@
  * Log: <project>/.magnolia/action-retrieval.jsonl (one line per injection).
  */
 import { execFile } from "node:child_process"
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { join, dirname, resolve } from "node:path"
 import { promisify } from "node:util"
 
 import type { Plugin } from "@opencode-ai/plugin"
@@ -40,9 +40,6 @@ const execFileP = promisify(execFile)
 const DISABLED = ["0", "off", "false", "no"].includes(
   String(process.env.MAGNOLIA_ACTION_RETRIEVE ?? "").toLowerCase(),
 )
-
-import { existsSync } from "fs"
-import { join, resolve } from "path"
 
 // Self-locate the repo venv (<repo>/.opencode/plugins/ → repo root → .venv);
 // no machine-specific absolute paths in the repo. MAGNOLIA_PYTHON overrides.

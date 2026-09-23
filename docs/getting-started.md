@@ -1,135 +1,321 @@
 # Getting started
 
-This document takes a fresh machine to a first working session. It should take about a quarter of
-an hour, most of which is spent choosing a model provider.
+Start with a small project that needs no scientific software. Verify installation
+and capture, then check that one reviewed learning can be retrieved after a restart.
+Once that works, add the instruments needed for your research.
 
-## 1. Prerequisites
+The supplied launcher targets OpenCode. For a different client, install the Python
+packages below and continue with [harness adaptation](harness-adaptation.md).
+Commands run from the repository root unless stated otherwise.
 
-| Requirement | Note |
-|---|---|
-| Python 3.11 or newer | `python3 --version`. Available by default on most recent Linux and macOS systems |
-| A POSIX system | Linux or macOS. Windows is usable through WSL but is not exercised by the maintainers |
-| [OpenCode](https://opencode.ai) | The terminal client through which one converses with Magnolia |
-| A model provider | See § 3 |
+## 1. Prepare the machine
 
-The scientific software itself (HADDOCK3, GROMACS, ORCA and the rest) is **not** a prerequisite.
-Magnolia installs tools into `opencode_cc_mem/softwares/` as they are needed, and a session that
-only reads results or plans an experiment requires none of them.
+| Requirement | Check | Purpose |
+|---|---|---|
+| Git and access to this repository | `git --version` | Source, protocols and local memory history |
+| Python 3.11+, with venv and pip | `python3 --version` | Both Magnolia packages |
+| Bash, GNU coreutils, curl and `setsid` | Checks below | Launching, execution logging and daemon supervision |
+| OpenCode | `opencode --version` | Interactive harness and plugins |
+| Main-model credentials | Authenticate in OpenCode | Conversation and tool use |
+| Separate memory-model credentials | Step 4 | Extraction, handover and reranking |
 
-## 2. Installation
+Linux is the reference shell environment for these instructions. On Debian/Ubuntu,
+the system packages are `git`, `python3-venv`, `python3-pip`, `curl`, `coreutils` and
+`util-linux`; verify that the distribution's Python is at least 3.11. Windows users
+need a Linux environment such as WSL for Magnolia's scripts. The Windows OpenCode
+executable alone does not supply that environment.
+
+Install OpenCode following its [official instructions](https://opencode.ai/docs/#install).
+For example, with Node.js and npm already installed:
+
+```bash
+npm install -g opencode-ai
+opencode --version
+```
+
+Check the shell utilities before launching:
+
+```bash
+command -v git python3 bash curl timeout setsid
+date +%s%N
+```
+
+The date command must print digits only. A result ending in `N` is incompatible with
+Magnolia's GNU nanosecond timestamps. `setsid` starts the tool-daemon supervisor;
+`timeout` is used by the model setup probe.
+
+**macOS:** the Python packages can be installed, but stock BSD `date` and the absence
+of `setsid` prevent the supplied shell path from working as written. Use GNU coreutils
+with its unprefixed commands on `PATH`; installing `gdate` alone is not enough. Without
+`setsid`, run the tools server in a separate foreground terminal as described in
+[harness adaptation](harness-adaptation.md#start-the-tool-server). This does not provide
+automatic daemon restart. Check capture and reconnection before relying on this
+arrangement; it is not an end-to-end macOS compatibility claim.
+
+Scientific programs, a GPU, a cluster and Perspicacité are optional at this stage.
+The Python packages expose interfaces; they do not install HADDOCK3, ORCA, GROMACS
+or the other scientific executables. Each has its own dependencies and licence.
+
+## 2. Install the Python packages
 
 ```bash
 git clone https://github.com/HolobiomicsLab/Magnolia-AI.git
 cd Magnolia-AI
 
 python3 -m venv .venv
-.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-tools
-.venv/bin/python3 -m pip install -e opencode_cc_mem/mcp-servers/compchem-memory
+.venv/bin/python3 -m pip install --upgrade pip
+.venv/bin/python3 -m pip install \
+  -e opencode_cc_mem/mcp-servers/compchem-tools \
+  -e opencode_cc_mem/mcp-servers/compchem-memory
 ```
 
-Both packages go into the **same** environment. compchem-tools imports compchem-memory internally,
-so installing the first without the second yields a server that starts and then fails on its first
-call.
+The repository currently requires collaborator access. A clone error may concern
+GitHub access or Git authentication, before Python is involved.
 
-If `pip` is missing — some minimal Python builds omit it — run `.venv/bin/python3 -m ensurepip
---upgrade` before the two installation commands.
+Install **both packages in the same environment**: execution imports memory. If pip
+is absent, run `.venv/bin/python3 -m ensurepip --upgrade` and retry. Use the explicit
+interpreter path to avoid installing into a different Python.
 
-**Verify:**
+Verify imports against a disposable project. Importing the servers starts background
+workers, so give them an empty directory rather than a research notebook:
 
 ```bash
-.venv/bin/python3 -c "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
+MAGNOLIA_CHECK_DIR="$(mktemp -d)"
+MAGNOLIA_PROJECT_DIR="$MAGNOLIA_CHECK_DIR" \
+MAGNOLIA_RULES_DIR="$PWD/opencode_cc_mem/rules" \
+  .venv/bin/python3 -c \
+  "import compchem_tools.server, compchem_memory.server; print('Helper programs are ready.')"
+.venv/bin/magnolia-memory --help
+.venv/bin/python3 -m pip check
 ```
 
-This imports the two server modules, so a broken installation is caught here rather than during the
-first session. Do not proceed past a `ModuleNotFoundError`.
+Expected: the readiness message, CLI subcommands, and no broken package requirements.
+This checks Python imports, not OpenCode connectivity, model authentication or
+scientific binaries. Resolve a `ModuleNotFoundError`, including one for `httpx`, before
+continuing; both editable installs should use the current checkout.
 
-## 3. Choosing a model provider
+## 3. Check capture without a model
 
-Magnolia is provider-agnostic; OpenCode brokers the connection. Two model roles are configured
-separately, and they need not come from the same provider:
+This works without OpenCode or an API key. It records an explicitly executed command;
+`log-bash` itself does **not** execute the command supplied to it.
 
-- **Main model** — the agent you converse with. It reads the rules, chooses the tools, interprets
-  results. This is where capability matters.
-- **Memory model** — a background model that distils sessions, prepares handovers and re-ranks
-  retrieved notes. It is called often and rewards a cheap, generous-context model.
+```bash
+MAGNOLIA_DEMO_DIR="$(mktemp -d)"
+printf 'Magnolia capture check\n'
+.venv/bin/magnolia-memory log-bash \
+  --project-dir "$MAGNOLIA_DEMO_DIR" \
+  --working-dir "$PWD" \
+  --command "printf 'Magnolia capture check\\n'" \
+  --exit 0 --result-summary 'Magnolia capture check'
 
-Common arrangements, in no particular order:
+.venv/bin/python3 - "$MAGNOLIA_DEMO_DIR" <<'PY'
+import json
+import pathlib
+import sys
+logs = list((pathlib.Path(sys.argv[1]) / '.magnolia' / 'sessions').glob('*.jsonl'))
+events = [json.loads(line) for log in logs for line in log.read_text().splitlines()]
+assert any(e['event_type'] == 'bash_execution' and e['exit_code'] == 0 for e in events)
+print('Recorded command found in', logs[0])
+PY
+```
 
-| Plan | Provider | Note |
+Expected: a JSONL file under `.magnolia/sessions/` containing the command and exit status.
+This proves local logging only. Step 6 checks the additional interactive behaviour.
+
+## 4. Configure the two model roles
+
+| Role | Configuration | Credentials |
 |---|---|---|
-| Kimi Coding Plan | Moonshot AI | Economical; used daily by the author |
-| GLM Coding Plan | Z.AI | Strong multilingual and coding performance |
-| Claude Max | Anthropic | Higher usage limits than the Pro tier |
-| ChatGPT Plus / Pro | OpenAI | Widely available |
-| GitHub Copilot | GitHub | Uses an existing subscription |
+| Main agent | OpenCode provider/model ID | OpenCode authentication |
+| Background memory | `magnolia setup` or `magnolia memory set` | Variables read by Magnolia's Python client |
 
-Pay-as-you-go keys (Anthropic, OpenAI, Google Vertex AI, Moonshot, DeepSeek, OpenRouter) and local
-models served through Ollama, llama.cpp or LM Studio are equally usable. The choice can be revised
-later with `/connect` or `/models` inside a session.
+Authenticate the main model with `opencode auth login`, then inspect IDs with
+`opencode models` ([OpenCode CLI](https://opencode.ai/docs/cli/)). Choose an ID available
+to your account; this guide does not prescribe a subscription.
 
-One consideration bears on the memory model in particular: distillation quality is bounded by the
-*effective* context window of the model, which is materially smaller than the advertised maximum.
-See [memory.md § The distillation ceiling](memory.md#the-distillation-ceiling).
+The memory client currently implements four provider routes:
 
-## 4. Configuring the models
+| Provider argument | Credential variable | Endpoint override |
+|---|---|---|
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_BASE_URL` |
+| `anthropic` | `ANTHROPIC_API_KEY` | No dedicated override in this client |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
+| `kimi` | `KIMI_PLAN_MAGNOLIA_API_KEY` or `KIMI_API_KEY` | `KIMI_BASE_URL` |
 
-```bash
-./opencode_cc_mem/softwares/bin/magnolia setup my_project
-```
+Kimi uses its coding endpoint and Anthropic-style messages. Another OpenAI-compatible
+service may work through `--provider openai` and `OPENAI_BASE_URL`, but must pass the
+real probe. Compatibility with every local or hosted server is not established.
+The routes are defined in
+[`llm.py`](../opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/llm.py).
 
-The command proceeds in two steps: the main model is configured and verified, then the memory
-model. Memory remains disabled until its model has answered a test call, so a mistyped model name
-degrades the assistant rather than corrupting the notebook.
-
-The second step may be deferred. Start a session and say *"set up memory"*; Magnolia follows
-[`opencode_cc_mem/rules/memory-setup.md`](../opencode_cc_mem/rules/memory-setup.md) and configures
-it in conversation. A restart is required afterwards, since the model choice is injected at launch.
-
-Choices persist in `opencode_cc_mem/.magnolia/llm-setup.json` and are re-applied on every launch.
-`magnolia memory status` reports what is in force; `magnolia memory set <model> [--provider P]`
-changes the memory role alone.
-
-## 5. The first project
+Supply the chosen credential through your local environment or secret manager before
+launch. Keep keys out of the tracked template, prompts and notebook. OpenCode login
+does not automatically configure the Python client, and background calls may have
+separate billing. Setup performs real model calls.
 
 ```bash
-./opencode_cc_mem/softwares/bin/magnolia my_project
+./opencode_cc_mem/softwares/bin/magnolia setup onboarding_demo
 ```
 
-Naming a project that does not exist prompts to scaffold it: the `.magnolia/` structure and a seed
-`GOAL.md`. Then:
+The current launcher requires a project name even with `setup`. Accept the scaffold
+prompt, but press Enter when asked for a goal. Scaffolding happens before model setup;
+a nonempty goal can trigger an extra call using ambient credentials/defaults rather
+than the model you are about to select. Fill the goal after configuration. Setup opens
+OpenCode afterwards.
 
-1. Place your inputs in `opencode_cc_mem/projects/my_project/raw_input/` — structures, sequences,
-   whatever the campaign starts from.
-2. Open with a message that states the objective, the location of the inputs, what has already been
-   attempted, and how the result will be judged. [use-cases.md](use-cases.md) gives four worked
-   openings; [`../WORKFLOW_GUIDE.md`](../WORKFLOW_GUIDE.md) gives a complete session.
-3. Expect a proposal rather than an action. Magnolia is instructed to discuss before executing, and
-   saying *"discuss the approach first, do not run anything yet"* reinforces it.
+When deliberately testing a feature branch, apply the
+[non-master override](#5-locate-and-reopen-the-first-project) to this setup invocation too.
 
-Two switches are worth knowing on day one:
+Setup asks for the main model and verifies an explicitly entered ID, then probes the
+memory model. Leaving the main field empty keeps OpenCode's default without testing
+it. The current memory default is `deepseek-flash`; choose another model if appropriate.
+A failed memory probe leaves memory disabled. You can converse in that state, but it
+is not a working persistent-memory setup.
 
-- `magnolia --critic my_project` enables a flag-only claim critic. An independent judge model marks
-  statements in Magnolia's reports that the invoked tools do not support. Verdicts land in
-  `<project>/.magnolia/claim-critic/`. It annotates and changes nothing.
-- `magnolia-run <command…>` wraps any shell command so that it is recorded in the session log —
-  useful when you drive a tool yourself but want the notebook to know.
+Inspect the saved selection in another terminal, from the repository root:
 
-## 6. When something does not work
+```bash
+./opencode_cc_mem/softwares/bin/magnolia memory status
+```
 
-| Symptom | Likely cause and remedy |
+To change only the background model (replace this example ID with your provider's ID):
+
+```bash
+./opencode_cc_mem/softwares/bin/magnolia memory set deepseek-flash --provider deepseek
+```
+
+This writes the selection only after a successful call. Restart the client and any
+separately managed processes after changing their model environment.
+
+## 5. Locate and reopen the first project
+
+If setup already opened `onboarding_demo`, keep that session for step 6. To return
+to the project after quitting, launch without `setup`:
+
+```bash
+./opencode_cc_mem/softwares/bin/magnolia onboarding_demo
+```
+
+For a new project name, the launcher asks to scaffold it and creates
+`opencode_cc_mem/projects/onboarding_demo/.magnolia/`, its subdirectories and `GOAL.md`,
+renders the configuration, starts the tools daemon and opens OpenCode. For this demo,
+edit `.magnolia/GOAL.md` to state “Verify that a reviewed learning survives a restart.”
+For later projects, the scaffold's optional goal expansion uses ambient model settings;
+leave it blank and edit the file if you need to choose the model first.
+
+The launcher normally requires the code checkout to be on `master`. To deliberately
+test a reviewed feature branch, use the existing override for that invocation:
+
+```bash
+MAGNOLIA_ALLOW_NONMASTER=1 ./opencode_cc_mem/softwares/bin/magnolia onboarding_demo
+```
+
+Do not switch or reset a working tree merely to silence the branch check. For a real
+project, create `projects/<name>/raw_input/` for inputs and keep each calculation under
+`runs/YYYY-MM-DD_description/` within that project. OpenCode starts in `opencode_cc_mem/`,
+so give the agent the project path explicitly.
+
+### Configuration that persists
+
+| File | Purpose | How to change it |
+|---|---|---|
+| `opencode_cc_mem/.magnolia/llm-setup.json` | Local model selections and memory-enabled flag | Setup or `magnolia memory set`; ignored by Git |
+| `opencode_cc_mem/opencode.json.template` | MCP connections, plugins, instruction paths and permissions | Review an intentional configuration change |
+| `opencode_cc_mem/opencode.json` | Generated client configuration | Inspect; edits are overwritten on launch |
+| `projects/<name>/.magnolia/GOAL.md` | Project purpose and criteria | Review and edit with the project |
+
+The template enables optional Perspicacité at `localhost:8000/mcp`. If you do not run
+it, set that server's `enabled` field to `false` in your template and review the diff.
+Also review `permission.external_directory`: inherited paths are not a portable
+access policy for your machine. Keep personal paths and keys out of shared config.
+The launcher uses one generated config and active-project marker per checkout;
+use one project session at a time.
+
+## 6. Verify a complete first session
+
+In another terminal, from the repository root:
+
+```bash
+./opencode_cc_mem/softwares/bin/compchem-tools-daemon.sh status
+(cd opencode_cc_mem && opencode mcp list)
+```
+
+The first checks a supervisor; the second checks client connections
+([OpenCode MCP docs](https://opencode.ai/docs/mcp-servers/)). Neither alone proves a
+successful tool invocation. In the conversation, ask:
+
+> In `projects/onboarding_demo`, retrieve context for this installation check. Use
+> Magnolia's recorded shell tool to run `printf 'capture works\n'`, with its working
+> directory set to that project. Show the exit status and the session file containing
+> the event. Do not install scientific software or submit jobs.
+
+Then exercise reviewed memory:
+
+> Record a learning titled “Onboarding output convention”: this demo writes checked
+> results under `runs/`, and this convention applies to this demo only. Show me the
+> staging entry and its identifier before confirming it.
+
+After checking it, request confirmation of that exact entry with `memory_confirm`.
+Quit normally, reopen `magnolia onboarding_demo`, and ask:
+
+> Retrieve the onboarding output convention, identify its source entry and explain
+> its scope. Do not infer it from this message or create a new entry.
+
+| Check | Evidence |
 |---|---|
-| `ModuleNotFoundError` from the verification command | The installation did not complete. Repeat § 2; report the message if it persists |
-| No scientific tools in the tool list | The compchem-tools daemon is not running. `opencode_cc_mem/softwares/bin/compchem-tools-daemon.sh status`, then `… start`; the log is `opencode_cc_mem/logs/compchem-tools-http.log` |
-| No `memory_*` tools | Memory has not been configured, or its model failed verification. `magnolia memory status`, then § 4 |
-| Magnolia acts before you have finished explaining | Say so: *"do not run anything yet, I am still giving you context"*. Models differ markedly in eagerness |
-| A tool exists but the programme is missing | Ask Magnolia to install it; tools are placed under `softwares/` with a launcher in `softwares/bin/` |
-| Notebook appears empty after a productive session | Distillation may have skimmed a long transcript. Ask explicitly: *"note that down: …"*. See [memory.md](memory.md) |
+| Memory and execution connections | Successful `memory_get_context` and `run_shell` calls |
+| Recorded execution | Command/result events in this project's `.magnolia/sessions/` |
+| Explicit learning | Proposed Markdown under `.magnolia/staging/` |
+| Confirmed learning | That entry under `.magnolia/entries/` |
+| Continuity | New-session retrieval identifies the entry and its limited scope |
 
-The daemon is started automatically by the `magnolia` launcher and is idempotent; starting it by
-hand is only ever a diagnostic step.
+Tools may carry a client/server prefix. `memory_confirm` moves staging into project
+memory; elevation into shared `rules/` is a separate review/apply operation. No rule
+promotion is needed for this exercise. A missing event or memory is a failed check
+even if the assistant produces a plausible answer.
 
-## 7. Next
+## 7. Troubleshooting
 
-- [use-cases.md](use-cases.md) — what a campaign looks like end to end.
-- [hpc.md](hpc.md) — registering a cluster, which is a configuration change rather than a code one.
-- [memory.md](memory.md) — how notes become rules, and why you are asked to approve them.
+| Symptom | Check and next action |
+|---|---|
+| Python import fails | Repeat both installs in the same `.venv`; record Python/package versions |
+| `setsid` missing or timestamp arithmetic fails | Revisit step 1; a model change cannot repair shell dependencies |
+| Main model works, memory does not | Check the separate key/model route and `magnolia memory status`; rerun its probe |
+| Memory tools absent | Inspect generated `mcp.compchem-memory.enabled`; restart after successful setup |
+| Execution tools absent | Check daemon/client status and `opencode_cc_mem/logs/compchem-tools-http.log` |
+| Daemon says UP but calls fail | Status checks the supervisor, not an MCP round trip; inspect its log and port `8001` ownership |
+| Shell wrapper missing | Service `PATH` needs this checkout's `.venv/bin` and `opencode_cc_mem/softwares/bin` |
+| Records in the wrong notebook | Pass absolute `project_dir`; for shell, also set `cwd` to that project; restart for another project |
+| `project_switch_blocked` | Start a new session for the intended project rather than retrying the write |
+| Long command times out | `run_shell` defaults to 90 s and caps foreground work at 110 s; use `background=true` or a scheduler job and track completion |
+| Missing notes or retrieval | Check capture and model errors separately; follow the [hook diagnostics](harness-adaptation.md#diagnose-opencode-hooks) |
+| Changes to `opencode.json` disappear | Edit the persistent source described in step 5 |
+| Scientific tool fails | Its underlying executable/environment may still need installing; follow its skill |
+
+Do not restart a shared daemon during another person's run. Report the code revision,
+OpenCode/Python versions, failing command, expected/actual result and a small redacted
+log excerpt. Avoid uploading a whole notebook.
+
+## 8. Record, update and back up
+
+Record the working installation with the project, alongside scientific software versions:
+
+```bash
+git rev-parse HEAD
+opencode --version
+.venv/bin/python3 --version
+.venv/bin/python3 -m pip freeze
+```
+
+Requirements have lower bounds, not a complete lockfile; OpenCode is also unpinned.
+Record the working combination. Before updating, preserve local changes, back up the
+project and review upstream changes. Reinstall both editable packages and repeat step 6.
+Rolling back source does not roll back packages, client versions or project data.
+
+The main repository does not back up ignored research data. The Git history inside
+`.magnolia/` covers staged/confirmed entries, not all notebook files or run outputs.
+Back up the **whole project**, including `.magnolia/`, inputs and runs, to a destination
+approved for that research. Keep machine credentials separate.
+
+Continue with [worked use cases](use-cases.md#two-worked-continuity-examples),
+[domain adaptation](domain-adaptation.md), [memory](memory.md) or [cluster setup](hpc.md).

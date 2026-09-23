@@ -1,6 +1,7 @@
 """Storage resolution: project-local memory store at project_dir/.magnolia/."""
 
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,15 @@ PROJECTS_DIR = GLOBAL_BASE / "projects"
 # (formerly ~/.magnolia/skills) was retired 2026-09: protocols moved to
 # .opencode/skills/, learnings stay in the memory tiers.
 RULES_DIR = GLOBAL_BASE / "rules"
+
+
+def resolved_rules_dir() -> Path:
+    """The effective rules directory: the MAGNOLIA_RULES_DIR workspace override
+    when set, else the global fallback RULES_DIR. Single source of truth shared
+    by server.py and startup_scan.py — startup_scan must not import server for
+    this value (that circular import re-executed server.py's module body and
+    spawned a second boot pipeline, 2026-09-17)."""
+    return Path(os.environ.get("MAGNOLIA_RULES_DIR", str(RULES_DIR)))
 
 
 def ensure_project_store(project_dir: str) -> Path:

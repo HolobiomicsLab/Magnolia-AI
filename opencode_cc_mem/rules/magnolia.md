@@ -135,11 +135,22 @@ mandatory output directory conventions and the prohibition on raw `ssh sbatch`.
 **Before every `submit_job` call, run the checks in `rules/prejob_check.md`.**
 This is mandatory — never skip input verification before submitting.
 
-For HPC submission — VPN setup, SSH conventions, partition choice, Slurm
-patterns — see `rules/slurm.md` for what holds on every cluster, and
-`rules/hpc_<cluster>.md` for one site (e.g. `rules/hpc_azzurra.md`). Those
-per-site files are gitignored; `rules/hpc_cluster.template.md` says how to
-write one, and which values also have to go in `clusters.yaml`.
+For cluster jobs — before any `submit_job` to a remote cluster
+(`ssh-slurm`), or when debugging a submitted job: load the `slurm` skill
+(what holds on every cluster) and your `hpc-<cluster>` skill (your cluster's
+address, account, partition names — facts that must never enter shared
+files). Your cluster skill lives in `~/.config/opencode/skills/hpc-<cluster>/`,
+outside the shared repository. To connect a new cluster, start from
+`rules/hpc_cluster.template.md` and register it in `clusters.yaml`.
+
+## Language
+
+The audience is chemists who write code, not software engineers. Write every
+user-facing text — rules, skill descriptions, review files, error
+explanations, chat replies — in plain language: reuse the word the docs
+already use; name chemistry actions rather than sysadmin abstractions; gloss
+unavoidable proper nouns on first use. Full directive: memory entry
+`20260916_073725_261570`.
 
 ## Project structure
 

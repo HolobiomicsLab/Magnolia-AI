@@ -1,23 +1,26 @@
 ---
 name: slurm
-description: Cluster-agnostic Slurm primer — sbatch directives, state machine, sacct semantics, common gotchas. Cluster-specific facts (partition names, account names, modulefiles) live in rules/hpc_<cluster>.md, from the template in rules/hpc_cluster.template.md.
-version: 1.0
-last_verified: 2026-05-28
-tags: [slurm, hpc, scheduler]
+description: "Submitting and monitoring calculations on remote compute clusters that use the Slurm job scheduler: writing a job script (sbatch), choosing partitions, accounts, CPUs and memory, reading job states (squeue, sacct), cancelling jobs, common submission errors and how to fix them. Use when submitting calculations to a remote cluster (submit_job with ssh-slurm), checking on a submitted job, or debugging scheduler rejections and failures. Load your hpc-<cluster> skill alongside — it holds YOUR cluster's address, account, and partition names. Do NOT use for calculations on your own computer."
+metadata:
+  version: "1.1"
+  last_verified: "2026-09-16"
+  tags: "[slurm, hpc, scheduler]"
 ---
 
 # Slurm Operating Rules
 
-This rule covers **Slurm semantics that are the same on every cluster Magnolia
-operates on**. Per-cluster details — VPN/SSH access, exact partition names,
-account names, module conventions — live in `rules/hpc_<cluster>.md` (e.g.
-`rules/hpc_azzurra.md`).
+*Rehomed from `rules/slurm.md` (always-loaded) to an on-demand skill on
+2026-09-16, as a startup-latency fix. Content unchanged; the per-cluster
+pointers now target cluster skills.*
 
-Those per-cluster files are gitignored, because they fill up with one group's
-account names and login handles. If yours is missing, start from
-`rules/hpc_cluster.template.md`, which also covers the machine-readable half:
-the site profile in `clusters.yaml` that the submission backend actually reads.
-A cluster described in prose but absent from that file cannot be submitted to.
+This skill covers **Slurm semantics that are the same on every cluster
+Magnolia operates on**. Per-cluster details — VPN/SSH access, exact partition
+names, account names, module conventions — live in YOUR `hpc-<cluster>`
+skill (a private file in `~/.config/opencode/skills/`, never shared).
+If yours is missing, start from `rules/hpc_cluster.template.md`, which also
+covers the machine-readable half: the site profile in `clusters.yaml` that
+the submission backend actually reads. A cluster described in prose but
+absent from that file cannot be submitted to.
 
 Slurm is the workload manager. You submit a *job script* via `sbatch`; Slurm
 schedules it onto compute nodes based on resource requests; you observe state
@@ -25,11 +28,11 @@ via `squeue` (live) and `sacct` (historical).
 
 ## When to use Slurm
 
-Match `magnolia.md`'s long-running-jobs rule: route any workload whose expected
-wall time exceeds 30 min through Slurm rather than running it in the foreground.
-Choose partition by **expected wall time first**; memory and CPU shape are
-secondary because most clusters have multiple comparable-CPU partitions
-distinguished mainly by walltime caps.
+Match `magnolia.md`'s long-running-jobs rule: route any workload whose
+expected wall time exceeds 30 min through Slurm rather than running it in the
+foreground. Choose partition by **expected wall time first**; memory and CPU
+shape are secondary because most clusters have multiple
+comparable-CPU partitions distinguished mainly by walltime caps.
 
 ## The five things every Slurm job needs
 
@@ -54,7 +57,7 @@ module load <your-tool-modules>
 <your-actual-workload>
 ```
 
-The cluster-specific `rules/hpc_<cluster>.md` lists the valid `<your-account>`,
+Your `hpc-<cluster>` skill lists the valid `<your-account>`,
 `<your-qos>`, and `<partition>` values for that cluster.
 
 ## Account vs Partition vs QOS — three independent axes
@@ -242,8 +245,9 @@ requested time exceeds the partition cap.
 ## When this rule is wrong
 
 - Slurm major version bumps to 26.x and renames state codes — re-check this
-  rule's State table.
+  skill's State table.
 - The cluster uses a fork of Slurm (e.g. some sites add custom states like
-  `DEADLINE_QUEUED`) — fold the cluster's specifics into `rules/hpc_<cluster>.md`.
+  `DEADLINE_QUEUED`) — fold the cluster's specifics into your `hpc-<cluster>`
+  skill.
 - New Slurm features (heterogeneous jobs, federation, GPU sharding) — these
   aren't covered here; consult the upstream docs at https://slurm.schedmd.com/.

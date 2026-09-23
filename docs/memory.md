@@ -13,7 +13,7 @@ Every project carries a notebook at `projects/<name>/.magnolia/`:
 | `sessions/` | The journal of each session: tool calls, commands, outcomes |
 | `runs/` | One record per computation — configuration, status, results |
 | `staging/` | Draft notes, observed once, not yet committed to |
-| `entries/` | Project notes that have held up across sessions |
+| `entries/` | Explicitly confirmed notes, or notes promoted after consistent observations across sessions |
 | `queue/` | Events awaiting ingestion, chiefly results returning from a cluster |
 | `session-notes/`, `archive/`, `backups/` | Working files, superseded entries, safety copies |
 
@@ -23,9 +23,9 @@ repository — it belongs to your science, not to the assistant.
 
 Two capture paths feed it, and they differ in what they can see:
 
-- **The tool journal** records what was invoked and how it ended. It is exact, and it is blind to
-  reasoning: it knows that a docking run completed with a given score, not what you concluded from
-  the score.
+- **The tool journal** records invocations and outcomes, with abbreviated arguments and results.
+  Keep full logs and output files alongside it. The journal does not explain what you concluded
+  from a score or why a parameter was chosen.
 - **Conversation distillation** submits the transcript to the memory model and asks it to extract
   the scientific findings. This is the path that captures interpretation — *"the contact map places
   F2 within 4 Å of R272"* — and it is the more valuable of the two, and the less reliable. See
@@ -37,8 +37,9 @@ You may write to the notebook directly at any point, and it is worth doing:
 
 > *"Record that DOI 10.1021/… recommends AIR restraints for this class of target."*
 
-Such annotations are permanent entries alongside the automatic ones, and — being stated rather than
-inferred — they are never lost to a distillation failure.
+Ask for `memory_record_learning` and inspect the resulting staging entry. Confirm useful entries
+with `memory_confirm` so that project memory can retrieve them. This records your interpretation
+explicitly rather than relying on a later transcript summary; verify that the write succeeded.
 
 ## From a note to a rule
 
@@ -50,12 +51,18 @@ where a machine observation becomes something a person has signed.
 | Level | Location | Content |
 |---|---|---|
 | 1. Draft note | `.magnolia/staging/` | Noticed in a single session; not yet committed to |
-| 2. Project note | `.magnolia/entries/` | A finding about *this* project, corroborated more than once |
+| 2. Project note | `.magnolia/entries/` | A finding about *this* project, confirmed explicitly or corroborated across sessions |
 | 3. Rule | `opencode_cc_mem/rules/` | Durable enough to apply on *every* project; read at every session start |
 
-**Level 1 to 2 is automatic.** A draft becomes a project note once the same observation has arisen
+**Level 1 to 2 can be automatic or explicit.** A draft becomes a project note once the same observation has arisen
 in **at least two distinct sessions** and Magnolia is confident in it. A single enthusiastic session
-is not enough, which is exactly what the two-session requirement exists to prevent.
+is not enough for that automatic path. You can also review and confirm a particular staging
+entry with `memory_confirm`; explicit confirmation does not require two sessions.
+
+The [onboarding exercise](getting-started.md#6-verify-a-complete-first-session) checks this
+explicit path through a restart. For another client, see the
+[manual memory loop](harness-adaptation.md#establish-the-manual-memory-loop); automatic
+conversation ingestion currently depends on OpenCode exports.
 
 **Level 2 to 3 is proposed, not performed.** Once a project note has held up across **three**
 sessions, Magnolia nominates it. Before the nomination reaches you it is examined by three

@@ -1,14 +1,15 @@
 # Architecture
 
-Magnolia is not a single programme but a small assembly of parts, joined by the
-[Model Context Protocol](https://modelcontextprotocol.io). This document describes what each part
-does, why two of the arrangements are unusual, and what happens over the course of a session.
+Magnolia combines persistent project memory, human review and recorded tool execution within an
+agent harness. The current implementation uses OpenCode and exposes two Python services through
+the [Model Context Protocol](https://modelcontextprotocol.io). This document describes the parts,
+their integration boundaries, and what happens over the course of a session.
 
 ## The four components
 
 | Layer | Component | Location | Function |
 |---|---|---|---|
-| Interface | OpenCode | external | The terminal client; brokers the model, loads instructions, renders the conversation |
+| Agent harness | OpenCode | external | The runtime and terminal client; brokers the model, loads instructions, renders the conversation |
 | Execution | **compchem-tools** | `opencode_cc_mem/mcp-servers/compchem-tools/` | 36 typed tools: scientific instruments, structure preparation, Slurm |
 | Memory | **compchem-memory** | `opencode_cc_mem/mcp-servers/compchem-memory/` | 24 tools: capture, retrieval, distillation, consolidation, promotion |
 | Knowledge | rules, skills, notebook | `rules/`, `.opencode/skills/`, `<project>/.magnolia/` | What Magnolia knows before, during and after a session |
@@ -16,6 +17,46 @@ does, why two of the arrangements are unusual, and what happens over the course 
 A fifth is optional: [Perspicacité](https://github.com/HolobiomicsLab/Perspicacite-AI), a literature
 retrieval server declared on `localhost:8000`. When it is running it is picked up automatically;
 when it is not, the corresponding tools are simply absent.
+
+## Harness, APIs and MCP
+
+The **framework** is the combination of memory, review, provenance and execution mechanisms.
+The **harness** is the runtime in which the agent works: it manages the conversation, model
+access, instruction loading and tool calls. These roles are distinct from the interfaces used
+to reach individual components.
+
+| Interface | Role in the current implementation |
+|---|---|
+| Model-provider API | Supplies responses for reasoning and memory processing |
+| MCP | Exposes named memory and execution tools to the agent client |
+| Python functions and command-line tools | Implement memory operations and invoke scientific software behind those tools |
+| Git | Records revisions of rules, protocols and selected notebook entries; it is not a tool transport |
+
+MCP standardises tool discovery and invocation. It can wrap operations that would otherwise be
+called through a library API, a command line or a service-specific API. The current tool daemon
+uses streamable HTTP **for MCP**; it does not expose a general REST API. A direct API integration
+would be an additional adapter and would need to retain capture, retrieval and review semantics.
+
+### Adapting another harness
+
+An MCP-capable harness is a candidate client for the two servers, but full Magnolia behaviour
+also depends on the OpenCode configuration, launcher and session plugins. An adaptation needs to:
+
+1. Connect the memory server and tool daemon with the correct project and environment.
+2. Load standing rules, project context and task-specific protocols at the appropriate time.
+3. Capture tool events and conversations in a form the memory pipeline can process; the existing
+   conversation-ingestion path uses OpenCode session exports.
+4. Surface pending proposals and preserve explicit human confirmation before applying rules.
+
+These are integration requirements, not a claim that other harnesses have been tested. The
+current installation and session instructions describe OpenCode.
+
+The [harness adaptation guide](harness-adaptation.md) provides concrete connection settings,
+a manual memory loop, the hook/event inventory and a diagnostic sequence. In particular,
+the action plugin starts retrieval before a tool call but injects its findings into the
+result after execution; it is advisory and cannot prevent that action. The separate
+[domain adaptation guide](domain-adaptation.md) identifies chemistry-specific prompts,
+tool recognition and assessors that need review when moving to another field.
 
 ## Two arrangements that require explanation
 
@@ -97,13 +138,19 @@ becomes a rule — are yours. See [memory.md](memory.md) for the second.
 | `opencode_cc_mem/.opencode/skills/` | Task protocols | Yes |
 | `opencode_cc_mem/projects/<name>/raw_input/` | Your inputs | No |
 | `opencode_cc_mem/projects/<name>/runs/` | One dated directory per computation | No |
-| `opencode_cc_mem/projects/<name>/.magnolia/` | The notebook | No |
+| `opencode_cc_mem/projects/<name>/.magnolia/` | The notebook | Excluded from this repository; `entries/` and `staging/` have a separate local Git history |
 | `opencode_cc_mem/softwares/` | Scientific software and launchers | Only the small infrastructure scripts |
 | `opencode_cc_mem/logs/` | Daemon logs | No |
 | `~/.config/magnolia/clusters.yaml` | Your personal cluster facts | No — outside the repository by design |
 
 The asymmetry is deliberate. The repository carries the assistant; the science stays with the
 scientist, and anything specific to one machine or one person stays off the shared history.
+
+The nested notebook history supports inspection and reversal of changes to staged and confirmed
+learnings. It does not track the entire notebook, run outputs or logs, and its versioning operations
+do not contact a remote. Promoted rules are versioned in the main repository through ordinary Git
+review. Preserving a complete computational experiment also requires its inputs, outputs,
+software environment and logs.
 
 ## Design principles
 
