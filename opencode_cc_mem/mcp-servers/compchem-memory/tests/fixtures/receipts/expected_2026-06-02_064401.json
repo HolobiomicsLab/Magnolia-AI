@@ -1,0 +1,54 @@
+{
+  "session": "hsc70_new/.magnolia/sessions/2026-06-02_064401.jsonl",
+  "hand_labeled": "2026-09-23, from the raw JSONL events (v1-era records, unstamped)",
+  "receipts": [
+    {
+      "receipt_id": "2026-06-02_064401:1",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "KFERQ_p2rank1_s5000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260602_070104", "job_id": "11336169"}
+    },
+    {
+      "receipt_id": "2026-06-02_064401:2",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "QRKEL_p2rank1_s5000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260602_070106", "job_id": "11336170"}
+    },
+    {
+      "receipt_id": "2026-06-02_064401:3",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "RKELQ_p2rank1_s5000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260602_070109", "job_id": "11336171"}
+    },
+    {
+      "receipt_id": "2026-06-02_064401:4",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "RKDLQ_p2rank1_s5000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260602_070111", "job_id": "11336172"}
+    }
+  ]
+}

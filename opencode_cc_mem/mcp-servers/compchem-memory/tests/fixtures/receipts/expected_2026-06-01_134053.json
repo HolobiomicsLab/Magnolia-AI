@@ -1,0 +1,30 @@
+{
+  "session": "hsc70_new/.magnolia/sessions/2026-06-01_134053.jsonl",
+  "hand_labeled": "2026-09-23, from the raw JSONL events (v1-era records, unstamped)",
+  "receipts": [
+    {
+      "receipt_id": "2026-06-01_134053:1",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "KILDQ_p2rank1_s2000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260601_202842", "job_id": "11335803"}
+    },
+    {
+      "receipt_id": "2026-06-01_134053:2",
+      "tool": "submit_job",
+      "fidelity": "summary",
+      "decisions": [
+        {"parameter": "job_name", "chosen": "KILDQ_p2rank1_s5000", "default": "compchem"},
+        {"parameter": "resource_selection",
+         "chosen": {"scheduler": "ssh-slurm", "ncores": "32"},
+         "default": {"scheduler": "slurm", "ncores": 4}}
+      ],
+      "outcome": {"success": true, "run_id": "haddock3_20260601_202844", "job_id": "11335804"}
+    }
+  ]
+}
