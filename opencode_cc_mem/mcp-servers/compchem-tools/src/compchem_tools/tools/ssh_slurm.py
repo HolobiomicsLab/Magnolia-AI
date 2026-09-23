@@ -18,11 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from subprocess import CompletedProcess
 import json
-import uuid
 import re
 import subprocess  # noqa: F401 — patched by tests via tools.ssh_slurm.subprocess.run
 from typing import Any
 
+# Shared with jobs.py and the memory CLI so one run has one id everywhere.
+from compchem_memory.runid import generate_run_id as _generate_run_id
 from compchem_memory.tiers.project import ProjectManager
 
 from compchem_tools.tools import clusters
@@ -247,19 +248,6 @@ echo "$SLURM_JOB_ID" > .magnolia/jobid
 
 
 _PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
-
-
-def _generate_run_id(tool: str) -> str:
-    """Generate a unique run_id: <tool>_<YYYYMMDD_HHMMSS>_<6hex> in UTC.
-
-    The 6-hex suffix disambiguates parallel submissions that land in the same
-    second. Without it, concurrent submit_job calls produce identical run_ids,
-    causing remote directory collisions (all jobs rsync to the same remote
-    path; last-write wins; all jobs read the same overwritten config).
-    """
-    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    suffix = uuid.uuid4().hex[:6]
-    return f"{tool}_{ts}_{suffix}"
 
 
 def _project_name(project_dir: str) -> str:

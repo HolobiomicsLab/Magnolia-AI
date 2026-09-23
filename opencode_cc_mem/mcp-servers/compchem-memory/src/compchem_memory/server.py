@@ -505,9 +505,13 @@ def post_run_assess(
     tool: str,
     exit_code: int = 0,
     project_dir: str | None = None,
+    run_id: str | None = None,
 ) -> str:
     """After a computation completes: check exit code, verify output files exist,
     extract metrics, flag quality issues. Records run in memory automatically.
+
+    run_id: optional canonical id from the submit_job result; when omitted, an
+    existing record for run_dir is reused, else basename(run_dir).
 
     Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
     guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
@@ -522,6 +526,7 @@ def post_run_assess(
         exit_code=exit_code,
         project_dir=pd,
         project_mgr=proj_m,
+        run_id=run_id,
     )
     sess_m = _get_session_mgr(pd)
     sess_m.record(
