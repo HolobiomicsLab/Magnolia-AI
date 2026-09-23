@@ -12,6 +12,8 @@ from compchem_memory.storage import ensure_project_store, scaffold_obsidian_vaul
 def cmd_assess(args: argparse.Namespace) -> int:
     """Auto-assess a scientific tool run and record results."""
     from compchem_memory.learning.assessor import assess_run
+    from compchem_memory.learning.orchestrator import resolve_run_id
+    from compchem_memory.runid import generate_run_id
     from compchem_memory.tiers.project import ProjectManager
 
     command = args.command
@@ -52,8 +54,12 @@ def cmd_assess(args: argparse.Namespace) -> int:
     #    adds .magnolia/ itself.
     try:
         proj_m = ProjectManager(Path.home() / ".magnolia")
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        run_id = f"{tool}_{ts}"
+        # Canonical id: reuse the submit record's run_id when run_dir maps to
+        # one (so the assessment updates that record instead of forking a
+        # twin); otherwise a uniform mint, or basename(run_dir) fallback.
+        run_id = resolve_run_id(proj_m, project_dir, run_dir) if run_dir else None
+        if not run_id:
+            run_id = generate_run_id(tool)
         proj_m.upsert_run(
             str(Path(project_dir).resolve()),
             run_id=run_id,
