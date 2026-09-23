@@ -18,6 +18,7 @@ from compchem_tools.gates.covalent import (
     smarts_exactly_one_match,
     docked_poses_exist,
 )
+from compchem_tools.gates.hygiene import run_dir_self_contained
 
 GATE_REGISTRY = {
     "docking_inputs_ready": docking_inputs_ready,
@@ -32,4 +33,5 @@ GATE_REGISTRY = {
     "docked_poses_exist": docked_poses_exist,
     "qm_inputs_defined": qm_inputs_defined,
     "scf_converged": scf_converged,
+    "run_dir_self_contained": run_dir_self_contained,
 }
