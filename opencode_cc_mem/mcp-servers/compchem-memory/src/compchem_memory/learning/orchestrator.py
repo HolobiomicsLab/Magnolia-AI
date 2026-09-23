@@ -32,14 +32,15 @@ def assess_and_record(
     pollute the distill stream.
 
     run_id: explicit magnolia run_id to key the YAML on. When None (default),
-    falls back to basename(run_dir) — correct for the MCP tool path where
-    run_dir IS the magnolia-named directory.  The poller must pass the
-    run_record["run_id"] explicitly so the assessment updates the existing
-    YAML rather than creating an orphan keyed on basename(local_run_dir).
+    the run_dir is resolved against existing run records first — submit paths
+    pin ``remote.local_run_dir`` — so an assessment lands on the SAME record
+    the submit wrote instead of forking a twin keyed on basename(run_dir).
+    Falls back to basename(run_dir) when no record matches (e.g. a tool run
+    outside submit_job). The poller passes run_id explicitly.
     """
     assessment = assess_run(run_dir, tool, exit_code)
     if run_id is None:
-        run_id = Path(run_dir).name
+        run_id = resolve_run_id(project_mgr, project_dir, run_dir)
     # Upsert (not record_run): merge the assessment into the EXISTING run_id
     # record so a same-day-completed job keeps its remote/lifecycle data instead
     # of having it overwritten, and a next-day assessment doesn't fork a twin.
@@ -52,3 +53,20 @@ def assess_and_record(
         quality_flags=assessment.get("quality_flags", []),
     )
     return assessment
+
+
+def resolve_run_id(
+    project_mgr: ProjectManager, project_dir: str, run_dir: str
+) -> str:
+    """Canonical id for ``run_dir``.
+
+    Prefer the existing run record's run_id — submit paths pin
+    ``remote.local_run_dir``, so this is how an assessment joins the submit
+    record instead of forking a twin. Fall back to basename(run_dir) for runs
+    that never went through submit_job.
+    """
+    try:
+        rec = project_mgr.find_run_by_local_dir(project_dir, run_dir)
+    except Exception:
+        rec = None
+    return (rec or {}).get("run_id") or Path(run_dir).name
