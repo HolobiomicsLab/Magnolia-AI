@@ -500,6 +500,40 @@ def memory_consolidate(
 
 @mcp.tool()
 @captured(source="compchem-memory")
+def memory_verify_claim(
+    claim: str,
+    project_dir: str | None = None,
+    run_id: str | None = None,
+    evidence: dict[str, Any] | None = None,
+) -> str:
+    """Verify the labeled numbers in a claim against run-record evidence.
+
+    Deterministic: extracts label=number assertions from the claim and checks
+    them against the run record's metrics (via run_id) plus any explicit
+    evidence dict. Fail-closed: an unmatched label is 'unverified', a
+    disagreement is 'contradicted' — never a silent pass, and the verdict
+    names the offending numbers.
+
+    Call this when: grounding a quantitative claim before writing it to
+    memory, or checking an entry/receipt against the run that produced it."""
+    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=False)
+    if guard.kind == "cross_write":
+        return _project_switch_blocked_payload(guard)
+    from compchem_memory.verifier import verify_claim
+
+    merged: dict[str, Any] = dict(evidence or {})
+    if run_id:
+        pd = _resolve_project_store(project_dir)
+        rec = _get_project_mgr().get_run(pd, run_id)
+        if rec is not None:
+            merged.setdefault("run_record", rec)
+        else:
+            merged.setdefault("run_record_missing", run_id)
+    return json.dumps(verify_claim(claim, merged), indent=2)
+
+
+@mcp.tool()
+@captured(source="compchem-memory")
 def post_run_assess(
     run_dir: str,
     tool: str,

@@ -22,7 +22,10 @@ _PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
 # same override the recall hold uses). v1 covers HADDOCK3's canonical
 # precondition: chain IDs on its PDB inputs.
 _PRE_SUBMIT_GATES: dict[str, tuple[str, ...]] = {
-    "haddock3": ("pdb_files_have_chain_ids",),
+    # HADDOCK3's canonical preconditions: chain IDs on PDB inputs, and a
+    # self-contained run dir (no symlinks escaping it) — the rsync to the
+    # cluster silently re-reads whatever the link points at remotely.
+    "haddock3": ("pdb_files_have_chain_ids", "run_dir_self_contained"),
 }
 
 
