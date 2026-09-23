@@ -7,6 +7,12 @@ activating live LLM calls inside tests that aren't designed for it.
 
 Tests that need to exercise the LLM path explicitly opt in via
 `monkeypatch.setenv(...)` per-test (see tests/test_llm_providers.py).
+
+`_isolate_session_list` autouse: same idea for the handover skip-before-export
+probe — generate_handover must never shell out to the live opencode CLI in
+tests. The stub returns None (= listing unavailable), which preserves the
+legacy export-everything behavior. Tests exercising the skip path inject
+`session_updates=` or patch the function themselves.
 """
 import os
 import tempfile
@@ -42,6 +48,18 @@ def _isolate_llm_env(monkeypatch):
     """Clear LLM-related env vars before every test."""
     for var in _LLM_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_session_list(monkeypatch):
+    """Never shell out to `opencode session list` from the test suite.
+
+    Returning None means 'listing unavailable', which makes generate_handover
+    export every session (the pre-2026-09-22 behavior). Tests that exercise
+    skip-before-export inject `session_updates=` explicitly."""
+    from compchem_memory import handover as _handover
+
+    monkeypatch.setattr(_handover, "_list_session_updates", lambda: None)
 
 
 @pytest.fixture(autouse=True)
