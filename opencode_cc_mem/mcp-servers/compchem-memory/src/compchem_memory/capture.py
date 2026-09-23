@@ -1,4 +1,18 @@
-"""Shared capture infrastructure: per-project SessionManager registry + decorator (Task 2)."""
+"""Shared capture infrastructure: per-project SessionManager registry + decorator (Task 2).
+
+Capture versions (P1/A1 — the receipts extractor treats the stamp as
+load-bearing and degrades gracefully on unstamped/v1 records):
+
+  v2 (full fidelity, allowlisted tools — see capture_manifest): every kwarg
+    captured structured under ``args``; the full result under
+    ``result_summary`` plus a structured ``result`` twin when it is JSON.
+  v1 (everything else): legacy summary — 3 positional args, 5 kwargs, values
+    @80 chars; result @200 chars. Historical v1 records truncate SILENTLY
+    (no stamp); new v1 records carry the stamp and flag every cut.
+
+The historical bug was the SILENCE of truncation, not the number — every cut
+today (including v2's generous safety caps) is flagged on the record.
+"""
 
 import json
 import os
@@ -8,7 +22,17 @@ from pathlib import Path
 from typing import Any, Callable
 
 from compchem_memory.tiers.session import SessionManager
+from compchem_memory.capture_manifest import FULL_FIDELITY_TOOLS
 from compchem_memory import distill_log
+
+CAPTURE_VERSION_LEGACY = 1
+CAPTURE_VERSION_FULL = 2
+
+# Safety valves for v2 — far above any real orchestration payload, but a
+# runaway string must never bloat the session log. Anything cut here is
+# flagged (args_truncated / result_truncated), never silent.
+V2_ARGS_CAP = 64_000
+V2_RESULT_CAP = 64_000
 
 _session_managers: dict[str, SessionManager] = {}
 
@@ -31,22 +55,104 @@ def reset_registry() -> None:
     _session_managers.clear()
 
 
-def _summarize_args(args: tuple, kwargs: dict) -> str:
+def _jsonable(value: Any) -> Any:
+    """Best-effort JSON value for the structured ``args``/``result`` fields."""
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _call_fields(full_fidelity: bool, args: tuple, kwargs: dict) -> dict[str, Any]:
+    """tool_call payload fields, by capture version.
+
+    v2: all kwargs structured under ``args`` (plus the string ``args_summary``
+    legacy consumers read). If the serialized blob exceeds the safety cap the
+    structured fields are omitted — the flag says why.
+    v1: legacy summary. Both versions set ``args_truncated`` whenever anything
+    was cut, so no truncation is silent anymore.
+    """
+    if full_fidelity:
+        positional = [str(a) for a in args]
+        full_kwargs = {k: _jsonable(v) for k, v in kwargs.items()}
+        blob = json.dumps(
+            {"positional": positional, "kwargs": full_kwargs}, default=str
+        )
+        truncated = len(blob) > V2_ARGS_CAP
+        fields: dict[str, Any] = {
+            "capture_version": CAPTURE_VERSION_FULL,
+            "args_truncated": truncated,
+        }
+        if not truncated:
+            fields["args_positional"] = positional
+            fields["args"] = full_kwargs
+        summary = ", ".join(
+            positional + [f"{k}={v}" for k, v in kwargs.items()]
+        )
+        fields["args_summary"] = (
+            summary[:V2_ARGS_CAP] if len(summary) > V2_ARGS_CAP else summary
+        )
+        return fields
     parts = []
+    truncated = len(args) > 3
     for a in args[:3]:
-        parts.append(str(a)[:80])
-    for k, v in list(kwargs.items())[:5]:
+        sa = str(a)
+        if len(sa) > 80:
+            truncated = True
+        parts.append(sa[:80])
+    items = list(kwargs.items())
+    if len(items) > 5:
+        truncated = True
+    for k, v in items[:5]:
         if k == "project_dir":
             continue
-        parts.append(f"{k}={str(v)[:80]}")
-    return ", ".join(parts)
+        sv = str(v)
+        if len(sv) > 80:
+            truncated = True
+        parts.append(f"{k}={sv[:80]}")
+    return {
+        "capture_version": CAPTURE_VERSION_LEGACY,
+        "args_summary": ", ".join(parts),
+        "args_truncated": truncated,
+    }
 
 
-def _summarize_result(result: Any) -> str:
+def _result_fields(full_fidelity: bool, result: Any) -> dict[str, Any]:
+    """tool_success payload fields, by capture version.
+
+    v2: the full result string, plus a structured ``result`` twin when it
+    parses as JSON and fits the safety cap. v1: the legacy 200-char summary.
+    ``result_truncated`` flags every cut in both versions.
+    """
     if result is None:
-        return "None"
+        return {"result_summary": "None", "result_truncated": False}
+    if full_fidelity:
+        # compchem-memory tools return JSON strings; compchem-tools tools
+        # return dicts. Both become canonical JSON + a structured twin.
+        if isinstance(result, (dict, list)):
+            s = json.dumps(result, default=str)
+            parsed = result
+        else:
+            s = str(result)
+            try:
+                parsed = json.loads(s)
+            except (ValueError, TypeError):
+                parsed = None
+        fields: dict[str, Any] = {"capture_version": CAPTURE_VERSION_FULL}
+        if isinstance(parsed, (dict, list)) and len(s) <= V2_RESULT_CAP:
+            fields["result"] = parsed
+        truncated = len(s) > V2_RESULT_CAP
+        fields["result_summary"] = s[:V2_RESULT_CAP] if truncated else s
+        fields["result_truncated"] = truncated
+        return fields
     s = str(result)
-    return s[:200] + ("..." if len(s) > 200 else "")
+    truncated = len(s) > 200
+    return {
+        "capture_version": CAPTURE_VERSION_LEGACY,
+        "result_summary": s[:200] + ("..." if truncated else ""),
+        "result_truncated": truncated,
+    }
 
 
 def _attach_distill_notices(result: Any, project_dir: str) -> Any:
@@ -101,6 +207,7 @@ def captured(source: str):
     """
     def decorator(fn: Callable) -> Callable:
         tool_name = fn.__name__
+        full_fidelity = tool_name in FULL_FIDELITY_TOOLS
 
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -111,7 +218,7 @@ def captured(source: str):
                 mgr.record("tool_call", {
                     "source": source,
                     "tool": tool_name,
-                    "args_summary": _summarize_args(args, kwargs),
+                    **_call_fields(full_fidelity, args, kwargs),
                 })
             except Exception:
                 pass
@@ -127,7 +234,13 @@ def captured(source: str):
                             "source": source,
                             "tool": tool_name,
                             "duration_ms": duration_ms,
+                            "capture_version": (
+                                CAPTURE_VERSION_FULL
+                                if full_fidelity
+                                else CAPTURE_VERSION_LEGACY
+                            ),
                             "error": f"{type(e).__name__}: {str(e)[:500]}",
+                            "error_truncated": len(str(e)) > 500,
                         })
                 except Exception:
                     pass
@@ -141,7 +254,7 @@ def captured(source: str):
                         "source": source,
                         "tool": tool_name,
                         "duration_ms": duration_ms,
-                        "result_summary": _summarize_result(result),
+                        **_result_fields(full_fidelity, result),
                     })
             except Exception:
                 pass
