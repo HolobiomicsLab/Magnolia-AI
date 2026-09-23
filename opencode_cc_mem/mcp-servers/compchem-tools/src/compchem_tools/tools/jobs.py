@@ -4,26 +4,16 @@ import json
 import shlex
 import subprocess
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Shared with ssh_slurm and the memory CLI so one run has one id everywhere.
+from compchem_memory.runid import generate_run_id as _generate_run_id
 from compchem_memory.tiers.project import ProjectManager
 from compchem_tools.tools._resources import apply_tool_memory_floor
 from compchem_tools.tools.recall_gate import recall_gate
 
 _PROJECT_MANAGER = ProjectManager(global_base=Path.home() / ".magnolia")
-
-
-def _generate_run_id(tool: str) -> str:
-    """Generate a unique run_id: <tool>_<YYYYMMDD_HHMMSS>_<6hex> in UTC.
-
-    The 6-hex suffix disambiguates parallel submissions that land in the same
-    second. Without it, concurrent submit_job calls produce identical run_ids.
-    """
-    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    suffix = uuid.uuid4().hex[:6]
-    return f"{tool}_{ts}_{suffix}"
 
 
 # Per-tool mechanical pre-submit gates (2026-06-18 enforcement direction,
@@ -150,47 +140,59 @@ def submit_job(
     else:
         return {"success": False, "error": f"Unknown scheduler: {scheduler}. Use 'slurm', 'pbs', 'ssh-slurm', or 'local'."}
 
-    # Record the run in .magnolia/runs/ for consistency with ssh-slurm.
-    # Non-ssh-slurm schedulers don't have a remote block; the run shows up
-    # with lifecycle="running" (local, process started) or "submitted"
-    # (slurm/pbs, handed to scheduler) and no remote key — that distinction
-    # is the differentiator. Only records when project_dir is provided
-    # (required for the agent path; human ad-hoc use can skip it).
-    if result.get("success") and project_dir:
+    # Every successful backend returns a run_id (P1 "uniform run_id"):
+    # local/slurm/pbs mint it here, ssh-slurm mints it in ssh_slurm.submit. It
+    # is attached BEFORE recording so the id survives even when no project_dir
+    # is given or recording fails — the recorded submit result is the receipts
+    # join key.
+    if result.get("success"):
         run_id = _generate_run_id(tool or "job")
-        lifecycle = "running" if scheduler == "local" else "submitted"
-        remote_block = None
-        if scheduler == "local":
-            remote_block = {
-                "scheduler": "local",
-                "job_id": result.get("job_id"),
-                "local_run_dir": result.get("local_run_dir", str(wdir)),
-                "exit_sentinel": result.get("exit_sentinel"),
+        result["run_id"] = run_id
+
+        # Record the run in .magnolia/runs/ for consistency with ssh-slurm.
+        # Non-ssh-slurm schedulers have no remote block; the run shows up with
+        # lifecycle="running" (local, process started) or "submitted"
+        # (slurm/pbs, handed to scheduler). Only records when project_dir is
+        # provided (required for the agent path; human ad-hoc use can skip it).
+        if project_dir:
+            lifecycle = "running" if scheduler == "local" else "submitted"
+            if scheduler == "local":
+                remote_block = {
+                    "scheduler": "local",
+                    "job_id": result.get("job_id"),
+                    "local_run_dir": result.get("local_run_dir", str(wdir)),
+                    "exit_sentinel": result.get("exit_sentinel"),
+                }
+            else:
+                # Pin the run dir — the run_dir -> run_id join key used by
+                # find_run_by_local_dir (same key local/ssh-slurm records
+                # carry). Deliberately NO `scheduler` key: slurm/pbs status
+                # stays local-file based, and the poller only tracks
+                # ssh-slurm/local records.
+                remote_block = {"local_run_dir": str(wdir.resolve())}
+            resources = {
+                "ncores": ncores,
+                "memory": memory,
+                "time_limit": time_limit,
+                "scheduler": scheduler,
+                "cluster": cluster,
+                "partition": partition,
+                "account": account,
+                "qos": qos,
             }
-        resources = {
-            "ncores": ncores,
-            "memory": memory,
-            "time_limit": time_limit,
-            "scheduler": scheduler,
-            "cluster": cluster,
-            "partition": partition,
-            "account": account,
-            "qos": qos,
-        }
-        try:
-            _PROJECT_MANAGER.record_run(
-                project_dir=str(project_dir),
-                run_id=run_id,
-                tool=tool or "raw",
-                status=None,
-                lifecycle=lifecycle,
-                remote=remote_block,
-                resources=resources,
-                system_tags=system_tags,
-            )
-            result["run_id"] = run_id
-        except Exception:
-            pass  # never let run recording break the submission result
+            try:
+                _PROJECT_MANAGER.record_run(
+                    project_dir=str(project_dir),
+                    run_id=run_id,
+                    tool=tool or "raw",
+                    status=None,
+                    lifecycle=lifecycle,
+                    remote=remote_block,
+                    resources=resources,
+                    system_tags=system_tags,
+                )
+            except Exception:
+                pass  # never let run recording break the submission result
 
     return result
 def check_job(
