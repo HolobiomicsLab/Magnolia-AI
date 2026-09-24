@@ -101,6 +101,7 @@ def capture_failure(
 
 
 from compchem_memory.learning.orchestrator import assess_and_record  # noqa: E402
+from compchem_memory.job_notices import push_job_notice  # noqa: E402
 
 
 def _category(state: str) -> str:
@@ -185,6 +186,15 @@ def dispatch_terminal(
     elif category == "deliberate":
         # check() already set lifecycle=cancelled; nothing to do.
         pass
+
+    # Notify the user's session (toast via magnolia-job-notify.ts). A cancel
+    # was user-initiated, so deliberate is the one silent terminal state.
+    if category != "deliberate":
+        try:
+            push_job_notice(project_dir, run_id=run_id, tool=tool,
+                            state=state, category=category, job_id=job_id)
+        except Exception:
+            pass  # push_job_notice never raises; belt-and-braces for dispatch
     return category
 
 
