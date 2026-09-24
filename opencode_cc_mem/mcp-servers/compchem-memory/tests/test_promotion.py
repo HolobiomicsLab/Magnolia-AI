@@ -1,7 +1,10 @@
 # tests/test_promotion.py
+from datetime import datetime
 from pathlib import Path
 import yaml
-from compchem_memory.promotion import eligible_entries, _PROMOTION_MIN_SESSIONS
+from compchem_memory.promotion import (
+    eligible_entries, _PROMOTION_MIN_SESSIONS, _PROMOTION_PANEL_PASSES,
+)
 
 
 def _entry(entries_dir, name, title, body, sessions):
@@ -162,6 +165,9 @@ def test_propose_writes_survivors_only(tmp_path):
 
 
 def test_propose_carries_rejection_forward(tmp_path):
+    # A user rejection must stay durable across regeneration. Under verdict
+    # memoization the entry is NOT re-proposed; the rejection persists in
+    # rejected_records keyed by content hash.
     store = _store_with_eligible(tmp_path)
     args = dict(rules_dir=str(tmp_path / "rules"), judge=_approve_all,
                 drafter=_draft_stub, checker=_ok_checker)
@@ -172,7 +178,135 @@ def test_propose_carries_rejection_forward(tmp_path):
     art_path.write_text(_json.dumps(data))
     propose_promotions(str(store), **args)                    # a.md still eligible
     data = _json.loads(art_path.read_text())
-    assert data["rejected"] == [0]                            # carried forward by key
+    assert data["proposals"] == []                            # not re-proposed
+    (rec,) = data["rejected_records"]
+    assert rec["key"] == "a.md"                               # carried forward by key
+
+
+# ---------------------------------------------------------------------------
+# Verdict memoization (skip re-judging unchanged rejections)
+# ---------------------------------------------------------------------------
+from compchem_memory.promotion import _entry_content_hash
+from compchem_memory.reflex_common import parse_frontmatter_file
+
+
+def _reject_all(entry, lens_idx):
+    return {"approve": False, "correctness_concern": None, "generality_concern": "niche"}
+
+
+def _exploding_judge(entry, lens_idx):
+    raise AssertionError("judge must not be called for an unchanged rejected entry")
+
+
+def _read_artifact(store):
+    return _json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+
+
+def test_propose_records_panel_rejection_with_hash_and_timestamp(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    res = propose_promotions(str(store), rules_dir=str(tmp_path / "rules"),
+                             judge=_reject_all, drafter=_draft_stub, checker=_ok_checker)
+    art = _read_artifact(store)
+    assert art["proposals"] == [] and res["candidates"] == 0
+    entry = parse_frontmatter_file(store / "entries" / "a.md")
+    (rec,) = art["rejected_records"]
+    assert rec["key"] == "a.md"
+    assert rec["entry_hash"] == _entry_content_hash(entry)
+    datetime.fromisoformat(rec["last_judged"])                # parses as ISO timestamp
+
+
+def test_propose_skips_unchanged_rejection_without_calling_judge(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    args = dict(rules_dir=str(tmp_path / "rules"), drafter=_draft_stub, checker=_ok_checker)
+    propose_promotions(str(store), judge=_reject_all, **args)
+    prior = _read_artifact(store)["rejected_records"][0]["last_judged"]
+
+    res = propose_promotions(str(store), judge=_exploding_judge, **args)
+
+    assert res["skipped_rejected"] == 1
+    art = _read_artifact(store)
+    (rec,) = art["rejected_records"]
+    assert rec["last_judged"] == prior                        # verdict reused, not refreshed
+    assert art["proposals"] == []
+
+
+def test_propose_rejudges_when_entry_content_changes(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    args = dict(rules_dir=str(tmp_path / "rules"), drafter=_draft_stub, checker=_ok_checker)
+    propose_promotions(str(store), judge=_reject_all, **args)
+    prior_hash = _read_artifact(store)["rejected_records"][0]["entry_hash"]
+    with open(store / "entries" / "a.md", "a") as fh:         # new observation appended
+        fh.write("\n## Observation 2 (2026-09-24)\n\nnew corroborating evidence\n")
+    calls = {"n": 0}
+    def counting_reject(entry, lens_idx):
+        calls["n"] += 1
+        return _reject_all(entry, lens_idx)
+
+    res = propose_promotions(str(store), judge=counting_reject, **args)
+
+    assert calls["n"] == _PROMOTION_PANEL_PASSES            # panel re-run on change
+    rec = _read_artifact(store)["rejected_records"][0]
+    assert rec["entry_hash"] != prior_hash
+    assert rec["entry_hash"] == _entry_content_hash(
+        parse_frontmatter_file(store / "entries" / "a.md"))
+
+
+def test_propose_survivor_carries_hash_and_last_judged(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    propose_promotions(str(store), rules_dir=str(tmp_path / "rules"),
+                       judge=_approve_all, drafter=_draft_stub, checker=_ok_checker)
+    art = _read_artifact(store)
+    (p,) = art["proposals"]
+    entry = parse_frontmatter_file(store / "entries" / "a.md")
+    assert p["entry_hash"] == _entry_content_hash(entry)
+    datetime.fromisoformat(p["last_judged"])
+
+
+def test_propose_skips_user_rejected_survivor(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    args = dict(rules_dir=str(tmp_path / "rules"), drafter=_draft_stub, checker=_ok_checker)
+    propose_promotions(str(store), judge=_approve_all, **args)
+    art_path = store / "reflex" / "promotion-proposal.json"   # user rejects index 0
+    data = _json.loads(art_path.read_text()); data["rejected"] = [0]
+    art_path.write_text(_json.dumps(data))
+
+    res = propose_promotions(str(store), judge=_exploding_judge, **args)
+
+    assert res["skipped_rejected"] == 1
+    art = _read_artifact(store)
+    assert art["proposals"] == []
+    (rec,) = art["rejected_records"]
+    assert rec["key"] == "a.md"
+    assert rec["entry_hash"] == data["proposals"][0]["entry_hash"]
+
+
+def test_propose_legacy_artifact_without_hashes_rejudges_once(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    (store / "reflex").mkdir(exist_ok=True)                   # pre-fix schema, no hashes
+    (store / "reflex" / "promotion-proposal.json").write_text(
+        '{"proposals": [], "applied": [], "rejected": []}')
+    calls = {"n": 0}
+    def counting_approve(entry, lens_idx):
+        calls["n"] += 1
+        return _approve_all(entry, lens_idx)
+
+    propose_promotions(str(store), rules_dir=str(tmp_path / "rules"),
+                       judge=counting_approve, drafter=_draft_stub, checker=_ok_checker)
+
+    assert calls["n"] == _PROMOTION_PANEL_PASSES            # legacy record never matches
+    assert _read_artifact(store)["proposals"][0]["entry_title"] == "Alpha rule"
+
+
+def test_propose_judge_outage_records_nothing_and_is_not_sticky(tmp_path):
+    store = _store_with_eligible(tmp_path)
+    args = dict(rules_dir=str(tmp_path / "rules"), drafter=_draft_stub, checker=_ok_checker)
+    res = propose_promotions(str(store), judge=lambda e, k: None, **args)
+    art = _read_artifact(store)
+    assert res["candidates"] == 0
+    assert art["proposals"] == [] and art["rejected_records"] == []   # outage != rejection
+
+    res = propose_promotions(str(store), judge=_approve_all, **args)
+    assert res["candidates"] == 1                             # re-judged next sweep
 
 
 # ---------------------------------------------------------------------------
