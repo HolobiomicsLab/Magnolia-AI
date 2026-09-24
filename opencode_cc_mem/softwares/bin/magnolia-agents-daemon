@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""magnolia-agents-daemon — mailbox watcher for the helper agents.
+
+Two helper agents (literature, xiulian) live in their project directories.
+This daemon watches their inboxes for TASK letters (`*.task.md` with a
+`status: open` line); for each it runs a headless `opencode run` in that
+project, then writes a reply file beside the letter and marks it done.
+
+Started by the `magnolia` launcher. Single-instance (flock). Event-driven:
+the loop only lists directories; LLM work happens once per task letter.
+Kill switch: MAGNOLIA_AGENTS=0.
+
+Design: docs/agents-daemon-design.md
+"""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+AGENTS = ("literature", "xiulian")
+SCAN_INTERVAL_S = 10
+TASK_TIMEOUT_S = 30 * 60
+STATUS_RE = re.compile(r"^([\s>*-]*status:\s*)open\b", re.I | re.M)
+
+
+# ----------------------------------------------------------------- paths ---
+
+def state_dir(root: str) -> Path:
+    return Path(root) / ".magnolia-agents"
+
+
+def state_path(root: str) -> Path:
+    return state_dir(root) / "state.json"
+
+
+def log_line(root: str, msg: str) -> None:
+    try:
+        state_dir(root).mkdir(parents=True, exist_ok=True)
+        with (state_dir(root) / "daemon.log").open("a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now(timezone.utc).isoformat()} {msg}\n")
+    except Exception:
+        pass
+
+
+def load_state(root: str) -> dict:
+    try:
+        return json.loads(state_path(root).read_text(encoding="utf-8"))
+    except Exception:
+        return {"done": {}}
+
+
+def save_state(root: str, state: dict) -> None:
+    state_dir(root).mkdir(parents=True, exist_ok=True)
+    state_path(root).write_text(json.dumps(state, indent=1) + "\n", encoding="utf-8")
+
+
+# ------------------------------------------------------------ discovery ---
+
+def is_open_task(text: str) -> bool:
+    return bool(STATUS_RE.search(text))
+
+
+def discover_tasks(root: str, agents=AGENTS) -> list[Path]:
+    """All open task letters not already handled (path + content hash)."""
+    state = load_state(root)
+    found: list[Path] = []
+    for agent in agents:
+        inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
+        if not inbox.is_dir():
+            continue
+        for f in sorted(inbox.rglob("*.task.md")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not is_open_task(text):
+                continue
+            digest = hashlib.sha1(f.read_bytes()).hexdigest()
+            if state["done"].get(str(f)) == digest:
+                continue  # already handled, unchanged
+            found.append(f)
+    return found
+
+
+# ------------------------------------------------------------- execution ---
+
+def set_status(text: str, new_status: str) -> str:
+    return STATUS_RE.sub(rf"\g<1>{new_status}", text, count=1)
+
+
+def write_reply(task_file: Path, agent: str, body: str) -> Path:
+    reply = task_file.with_name(task_file.stem.replace(".task", "") + "_reply.md")
+    header = (f"# Reply: {task_file.stem}\n\n"
+              f"- from: agents-daemon ({agent} helper)\n"
+              f"- date: {datetime.now(timezone.utc).isoformat()}\n\n")
+    reply.write_text(header + body + "\n", encoding="utf-8")
+    return reply
+
+
+def default_runner(agent: str, project_dir: str, root: str, prompt: str,
+                   timeout_s: int) -> str:
+    """Real headless run. Separate function so tests can stub it.
+
+    --model is REQUIRED in practice: without it, `opencode run` falls back to
+    the GLOBAL config's default model, which on this machine names a retired
+    model (zai-coding-plan/glm-4.6) and fails with ProviderModelNotFoundError
+    (found 2026-09-24, first smoke). MAGNOLIA_AGENTS_MODEL overrides."""
+    model = os.environ.get("MAGNOLIA_AGENTS_MODEL",
+                           "zai-coding-plan/glm-5.3-flash")
+    env = dict(os.environ)
+    env["MAGNOLIA_ROOT"] = root
+    env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
+    proc = subprocess.run(
+        ["opencode", "run", "--model", model, prompt],
+        cwd=project_dir, env=env, timeout=timeout_s,
+        capture_output=True, text=True,
+    )
+    log_line(root, f"[{agent}] opencode run rc={proc.returncode} "
+                   f"stdout={len(proc.stdout or '')}B "
+                   f"stderr={len(proc.stderr or '')}B model={model}")
+    out = (proc.stdout or "").strip()
+    if proc.returncode != 0:
+        raise RuntimeError(f"opencode run exit={proc.returncode}: "
+                           f"{(proc.stderr or '')[-500:]}")
+    return out or "(no output)"
+
+
+def handle_task(task_file: Path, agent: str, root: str,
+                runner=default_runner, timeout_s: int = TASK_TIMEOUT_S) -> str:
+    """Run one task letter; write the reply; flip its status; update state.
+    Returns 'done' or 'error' (the letter is consumed either way — a failed
+    task is reported in the reply file, not retried in a loop)."""
+    state = load_state(root)
+    text = task_file.read_text(encoding="utf-8", errors="replace")
+    project_dir = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
+    prompt = (
+        f"You are the on-duty {agent} helper. A request letter arrived in "
+        f"your inbox:\n\n---\n{text}\n---\n\n"
+        f"Do the work it asks for. Rules: work only inside your own project "
+        f"directory ({project_dir}) and the inbox folders; do NOT use the "
+        f"memory tools (this letter is self-contained); do NOT try to write "
+        f"or edit any files — headless runs cannot approve file-write "
+        f"permissions. Instead, give your complete answer as your final "
+        f"message text; the daemon captures it and writes the reply file.\n"
+    )
+    status = "done"
+    reply = task_file.with_name(task_file.stem.replace(".task", "") + "_reply.md")
+    try:
+        body = runner(agent, project_dir, root, prompt, timeout_s)
+        if not reply.exists():
+            # The agent printed the answer instead of writing the file
+            # (tool permissions vary headlessly) — the stdout IS the reply.
+            write_reply(task_file, agent, body)
+    except Exception as e:
+        status = "error"
+        body = f"## Task failed\n\nThe helper run raised: {e}\n\n"
+        body += "Edit this letter (any change reopens it) to try again."
+        write_reply(task_file, agent, body)
+    try:
+        task_file.write_text(set_status(text, status), encoding="utf-8")
+    except Exception:
+        pass
+    digest = hashlib.sha1(task_file.read_bytes()).hexdigest()
+    state["done"][str(task_file)] = digest
+    save_state(root, state)
+    log_line(root, f"[{agent}] {task_file.name} -> {status}")
+    return status
+
+
+def scan_once(root: str, agents=AGENTS, runner=default_runner) -> list[str]:
+    results = []
+    for f in discover_tasks(root, agents):
+        agent = f.parts[f.parts.index("projects") + 1]
+        results.append(f"{agent}:{handle_task(f, agent, root, runner)}")
+    return results
+
+
+# ------------------------------------------------------------------ main ---
+
+_LOCK_FH = None  # module-level: if the file object is garbage-collected, the
+                 # descriptor closes and the flock is silently released.
+
+
+def acquire_lock(root: str) -> int | None:
+    global _LOCK_FH
+    state_dir(root).mkdir(parents=True, exist_ok=True)
+    fh = (state_dir(root) / "daemon.lock").open("w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    fh.write(str(os.getpid()))
+    fh.flush()
+    _LOCK_FH = fh
+    return fh.fileno()  # keep the fd open: the lock lives as long as we do
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="magnolia-agents-daemon")
+    ap.add_argument("--root", default=os.environ.get("MAGNOLIA_ROOT") or os.getcwd())
+    ap.add_argument("--once", action="store_true", help="one scan, no loop")
+    ap.add_argument("--interval", type=int, default=SCAN_INTERVAL_S)
+    args = ap.parse_args()
+    if os.environ.get("MAGNOLIA_AGENTS", "") == "0":
+        print("agents daemon disabled (MAGNOLIA_AGENTS=0)")
+        return 0
+    if not args.once and acquire_lock(args.root) is None:
+        print("agents daemon already running")
+        return 0
+    log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")
+    while True:
+        try:
+            for r in scan_once(args.root):
+                print(r, flush=True)
+        except Exception as e:
+            log_line(args.root, f"scan error: {e}")
+        if args.once:
+            return 0
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
