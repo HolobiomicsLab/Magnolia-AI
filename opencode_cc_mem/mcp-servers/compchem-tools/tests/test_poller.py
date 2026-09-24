@@ -229,6 +229,61 @@ def test_dispatch_unknown_state_treated_as_science_failure(tmp_path, monkeypatch
     assert mgr.entries == []
 
 
+# --- job notices (poller → magnolia-job-notify.ts toast bridge) -------------
+
+def _drained(project_dir):
+    from compchem_memory.job_notices import drain_job_notices
+    return drain_job_notices(str(project_dir))
+
+
+def test_dispatch_success_emits_job_notice(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **kw: {"overall": "pass", "metrics": {},
+                                      "quality_flags": []})
+    pd = tmp_path / "proj"
+    rec = _record_running()
+    rec["remote"]["local_run_dir"] = str(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "COMPLETED", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "completed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    notices = _drained(pd)
+    assert len(notices) == 1
+    assert notices[0]["category"] == "success"
+    assert notices[0]["state"] == "COMPLETED"
+    assert notices[0]["run_id"] == "r1"
+    assert notices[0]["tool"] == "xtb"
+    assert notices[0]["job_id"] == "777"
+
+
+def test_dispatch_failures_emit_notices_deliberate_is_silent(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    ssh = _StubSshSlurm()
+    monkeypatch.setattr(poller, "ssh_slurm", ssh)
+    monkeypatch.setattr(poller, "assess_and_record",
+                        lambda **kw: pytest.fail("must not assess on failure"))
+    pd = tmp_path / "proj"
+    rec = _record_running()
+    rec["remote"]["local_run_dir"] = str(tmp_path)
+
+    poller.dispatch_terminal(rec, {"state": "FAILED", "exit_code": "1:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    cats = [n["category"] for n in _drained(pd)]
+    assert cats == ["science_failure", "infra_failure"]
+
+    # A user-initiated cancel must NOT toast.
+    poller.dispatch_terminal(rec, {"state": "CANCELLED", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "cancelled"},
+                              project_dir=str(pd), project_mgr=mgr)
+    assert _drained(pd) == []
+
+
 def test_poll_jobs_polls_each_active_run(tmp_path, monkeypatch):
     pd = tmp_path / "proj"
     runs = pd / ".magnolia" / "runs"
