@@ -284,6 +284,155 @@ def test_dispatch_failures_emit_notices_deliberate_is_silent(tmp_path, monkeypat
     assert _drained(pd) == []
 
 
+# --- P2 bounded auto-retry ---------------------------------------------------
+
+def _retry_rec(tmp_path, restart_count=0):
+    import json
+    rec = _record_running()
+    run_dir = tmp_path / "run"
+    manifest_dir = run_dir / ".magnolia"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "manifest.json").write_text(
+        json.dumps({"command": "echo hi", "run_id": "r1"}))
+    rec["remote"]["local_run_dir"] = str(run_dir)
+    rec["remote"]["restart_count"] = restart_count
+    rec["resources"] = {"ncores": 8, "memory": "8GB", "time_limit": "2:00:00",
+                         "account": "acc", "qos": "", "partition": "part"}
+    return rec
+
+
+def test_dispatch_infra_failure_auto_retries_once(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    monkeypatch.setattr(poller, "ssh_slurm", _StubSshSlurm())
+    submits = []
+    def fake_submit(**kw):
+        submits.append(kw)
+        return {"success": True, "run_id": kw["restart_of"], "job_id": "999"}
+    monkeypatch.setattr(poller.ssh_slurm, "submit", fake_submit,
+                        raising=False)
+    pd = tmp_path / "proj"
+    rec = _retry_rec(tmp_path)
+    cat = poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                          "terminal": True, "lifecycle": "failed"},
+                                    project_dir=str(pd), project_mgr=mgr)
+    assert cat == "infra_failure"
+    assert len(submits) == 1
+    kw = submits[0]
+    assert kw["restart_of"] == "r1"
+    assert kw["command"] == "echo hi"
+    assert kw["working_dir"] == str(tmp_path / "run")
+    assert kw["ncores"] == 8 and kw["memory"] == "8GB"
+    assert kw["time_limit"] == "2:00:00" and kw["partition"] == "part"
+    assert kw["account"] == "acc"
+    # No failure flag: the run is in-flight again, not failed.
+    assert not any(u["patch"].get("remote", {}).get("retry_recommended")
+                   for u in mgr.updates)
+    # The user is told a retry was issued.
+    notices = _drained(pd)
+    assert [n["category"] for n in notices] == ["infra_retry"]
+
+
+def test_dispatch_infra_failure_bounded_after_first_restart(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    monkeypatch.setattr(poller, "ssh_slurm", _StubSshSlurm())
+    submits = []
+    monkeypatch.setattr(poller.ssh_slurm, "submit",
+                        lambda **kw: submits.append(kw) or {"success": True},
+                        raising=False)
+    pd = tmp_path / "proj"
+    rec = _retry_rec(tmp_path, restart_count=1)
+    poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    assert submits == []  # bounded: no second chance without a human
+    assert any(u["patch"].get("remote", {}).get("retry_recommended") is True
+               for u in mgr.updates)
+
+
+def test_dispatch_infra_failure_retry_fails_falls_back(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    monkeypatch.setattr(poller, "ssh_slurm", _StubSshSlurm())
+    monkeypatch.setattr(poller.ssh_slurm, "submit",
+                        lambda **kw: {"success": False, "error": "ssh down"},
+                        raising=False)
+    pd = tmp_path / "proj"
+    rec = _retry_rec(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    assert any(u["patch"].get("remote", {}).get("retry_recommended") is True
+               for u in mgr.updates)
+
+
+def test_dispatch_infra_failure_kill_switch(tmp_path, monkeypatch):
+    mgr = _RecordingMgr()
+    monkeypatch.setattr(poller, "ssh_slurm", _StubSshSlurm())
+    submits = []
+    monkeypatch.setattr(poller.ssh_slurm, "submit",
+                        lambda **kw: submits.append(kw) or {"success": True},
+                        raising=False)
+    monkeypatch.setenv("MAGNOLIA_AUTO_RETRY", "0")
+    pd = tmp_path / "proj"
+    rec = _retry_rec(tmp_path)
+    poller.dispatch_terminal(rec, {"state": "NODE_FAIL", "exit_code": "0:0",
+                                    "terminal": True, "lifecycle": "failed"},
+                              project_dir=str(pd), project_mgr=mgr)
+    assert submits == []
+    assert any(u["patch"].get("remote", {}).get("retry_recommended") is True
+               for u in mgr.updates)
+
+
+# --- P2 health peek (local gromacs early-fatal flag) -------------------------
+
+def test_health_peek_flags_local_gromacs_fatal_once(tmp_path):
+    import json as _json
+    mgr = _RecordingMgr()
+    pd = tmp_path / "proj"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "md.log").write_text(
+        "GROMACS runs fine...\nFatal error: 2 water molecules not found\n",
+        encoding="utf-8")
+    rec = {"run_id": "r1", "tool": "gromacs", "lifecycle": "running",
+           "remote": {"scheduler": "local", "job_id": "pid_4242",
+                      "local_run_dir": str(run_dir)}}
+    poller._health_peek(rec, str(pd), mgr)
+    health = [u for u in mgr.updates
+              if u["patch"].get("remote", {}).get("health", {}).get("status")]
+    assert len(health) == 1
+    assert health[0]["patch"]["remote"]["health"]["pattern"] == "Fatal error"
+    notices = _drained(pd)
+    assert [n["category"] for n in notices] == ["health_warning"]
+    # Idempotent: once the flag is persisted in the record (the real
+    # update_run patches the YAML the sweep re-reads), a second peek is
+    # silent. Simulate the persistence the real manager performs.
+    rec["remote"]["health"] = {"status": "error_seen",
+                               "pattern": "Fatal error",
+                               "file": "md.log"}
+    poller._health_peek(rec, str(pd), mgr)
+    assert len([u for u in mgr.updates
+                if u["patch"].get("remote", {}).get("health", {}).get("status")]) == 1
+    assert _drained(pd) == []
+
+
+def test_health_peek_ignores_non_gromacs_and_ssh_runs(tmp_path):
+    mgr = _RecordingMgr()
+    pd = tmp_path / "proj"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "md.log").write_text("Fatal error: nope\n", encoding="utf-8")
+    xtb_local = {"run_id": "r1", "tool": "xtb", "lifecycle": "running",
+                 "remote": {"scheduler": "local", "job_id": "pid_1",
+                            "local_run_dir": str(run_dir)}}
+    gmx_ssh = {"run_id": "r2", "tool": "gromacs", "lifecycle": "running",
+               "remote": {"scheduler": "ssh-slurm", "job_id": "42",
+                          "local_run_dir": str(run_dir)}}
+    poller._health_peek(xtb_local, str(pd), mgr)
+    poller._health_peek(gmx_ssh, str(pd), mgr)
+    assert mgr.updates == []
+    assert _drained(pd) == []
+
+
 def test_poll_jobs_polls_each_active_run(tmp_path, monkeypatch):
     pd = tmp_path / "proj"
     runs = pd / ".magnolia" / "runs"

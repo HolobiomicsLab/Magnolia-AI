@@ -177,6 +177,24 @@ def dispatch_terminal(
             project_mgr=project_mgr,
         )
     elif category == "infra_failure":
+        # P2 bounded auto-retry: ONE in-place resubmission per run (counting
+        # manual restarts via restart_count — a run that already had a second
+        # chance does not get a third without a human). Conservative by
+        # design: safe before the full governor exists. If the retry cannot
+        # be issued, fall back to the old flag-and-fail behavior.
+        if _auto_retry_enabled() and int(remote.get("restart_count") or 0) < 1:
+            result = _auto_retry_slurm(run_record, project_dir=project_dir)
+            if result.get("success"):
+                try:
+                    push_job_notice(project_dir, run_id=run_id, tool=tool,
+                                    state=state, category="infra_retry",
+                                    job_id=job_id)
+                except Exception:
+                    pass
+                log.info("dispatch_terminal: auto-retried %s after %s "
+                         "(new job_id=%s)", run_id, state,
+                         result.get("job_id", "?"))
+                return category
         project_mgr.update_run(
             project_dir, run_id,
             {"lifecycle": "failed",
@@ -238,6 +256,7 @@ def poll_jobs(project_dir: str) -> dict[str, Any]:
                 continue
             polled += 1
             if not check_result.get("terminal"):
+                _health_peek(rec, project_dir, _PROJECT_MANAGER)
                 continue
             transitioned += 1
             try:
@@ -268,10 +287,111 @@ def poll_jobs(project_dir: str) -> dict[str, Any]:
 
 
 import os  # noqa: E402 — late import keeps top tidy
+import json  # noqa: E402
 
 
 # Set by server.py at import time so the worker thread sees the right project.
 PROJECT_DIR_FOR_TIMER: str = ""
+
+# Early-fatal patterns for the health peek (P2: deliberately narrow — GROMACS
+# `.log` grep only; do NOT grow this into a parser framework).
+_HEALTH_TOOL = "gromacs"
+_HEALTH_PATTERNS = ("Fatal error", "Segmentation fault", "MPI_ABORT")
+_HEALTH_TAIL_LINES = 200
+
+
+def _auto_retry_enabled() -> bool:
+    """Single-retry auto-resubmission for infra failures. MAGNOLIA_AUTO_RETRY=0
+    disables (mirrors the MAGNOLIA_HANDOVER_SKIP_EXPORT kill-switch pattern)."""
+    return os.environ.get("MAGNOLIA_AUTO_RETRY", "") != "0"
+
+
+def _auto_retry_slurm(rec: dict[str, Any], *, project_dir: str) -> dict[str, Any]:
+    """Resubmit an infra-failed ssh-slurm run IN PLACE, once.
+
+    Uses submit(restart_of=run_id): same run_id, same remote dir (partial
+    output preserved), begin_restart resets the record to a clean in-flight
+    state so the poller re-tracks the new job_id. The command comes from the
+    L4 manifest written at submit time; resources from the run record (A0).
+    """
+    remote = rec.get("remote") or {}
+    local_run_dir = Path(remote.get("local_run_dir", ""))
+    try:
+        manifest = json.loads(
+            (local_run_dir / ".magnolia" / "manifest.json").read_text())
+    except Exception as e:
+        return {"success": False, "error_kind": "manifest_unreadable",
+                "error": f"auto-retry needs the L4 manifest: {e}"}
+    command = manifest.get("command")
+    if not command:
+        return {"success": False, "error_kind": "no_command",
+                "error": "manifest has no command"}
+    resources = rec.get("resources") or {}
+    return ssh_slurm.submit(
+        command=command,
+        working_dir=str(local_run_dir),
+        project_dir=project_dir,
+        cluster=remote.get("cluster"),
+        account=resources.get("account"),
+        qos=resources.get("qos"),
+        partition=resources.get("partition"),
+        ncores=int(resources.get("ncores") or 4),
+        memory=resources.get("memory", "4GB"),
+        time_limit=resources.get("time_limit", "24:00:00"),
+        tool=rec.get("tool"),
+        restart_of=rec.get("run_id"),
+        system_tags=rec.get("system_tags") or None,
+    )
+
+
+def _health_peek(rec: dict[str, Any], project_dir: str, project_mgr: Any) -> None:
+    """Mid-run early-error peek for LOCAL gromacs runs (P2: start narrow).
+
+    Scans the tail of *.log in the local run dir for fatal patterns; on a
+    fresh hit, flags remote.health in the run record and emits one
+    health_warning job notice. Never raises; never touches ssh-slurm runs
+    (their logs live on the cluster until fetch)."""
+    remote = rec.get("remote") or {}
+    if remote.get("scheduler") != "local":
+        return
+    if str(rec.get("tool", "")).lower() != _HEALTH_TOOL:
+        return
+    health = remote.get("health") or {}
+    if health.get("status"):
+        return  # already flagged — do not spam every sweep
+    local_run_dir = Path(remote.get("local_run_dir", ""))
+    if not local_run_dir.is_dir():
+        return
+    hit_pattern = None
+    hit_file = None
+    for p in sorted(local_run_dir.glob("*.log")):
+        tail = _tail(p, _HEALTH_TAIL_LINES)
+        for pat in _HEALTH_PATTERNS:
+            if pat in tail:
+                hit_pattern, hit_file = pat, p.name
+                break
+        if hit_pattern:
+            break
+    if not hit_pattern:
+        return
+    try:
+        project_mgr.update_run(
+            project_dir, rec["run_id"],
+            {"remote": {"health": {"status": "error_seen",
+                                    "pattern": hit_pattern,
+                                    "file": hit_file,
+                                    "at": datetime.now(timezone.utc).isoformat()}}},
+        )
+    except Exception as e:
+        log.warning("health_peek: could not flag %s: %s", rec.get("run_id"), e)
+        return
+    try:
+        from compchem_memory.job_notices import push_job_notice
+        push_job_notice(project_dir, run_id=rec["run_id"], tool=rec.get("tool", ""),
+                        state=hit_pattern, category="health_warning",
+                        job_id=remote.get("job_id"))
+    except Exception:
+        pass
 
 
 def _resolve_poll_interval_seconds() -> int:
