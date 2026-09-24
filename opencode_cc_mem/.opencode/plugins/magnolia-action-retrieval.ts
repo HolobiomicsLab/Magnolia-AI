@@ -101,7 +101,7 @@ function argsToQuery(args: any): string {
   return parts.join(" ").slice(0, 400)
 }
 
-export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
+export const MagnoliaActionRetrieval: Plugin = async ({ client, directory }) => {
   if (DISABLED) return {}
 
   // Resolve the active project the same way magnolia-auto-retrieval does
@@ -134,6 +134,10 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
   const pending = new Map<string, Promise<{ lines: string[]; ms: number; query: string } | null>>()
   // query -> { ts, lines } result cache
   const cache = new Map<string, { ts: number; lines: string[] }>()
+
+  // P3 memory-quality telemetry: injections awaiting an application probe,
+  // keyed by session (bounded: oldest dropped at 40). Flushed at session.idle.
+  const injectedTurns = new Map<string, Array<{ callID: string; tool: string; titles: string[]; paths: string[] }>>()
 
   // C1 noise-control state, keyed by session (bounded: oldest dropped at 40)
   const sessionInjections = new Map<string, number>()
@@ -183,7 +187,72 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
     }
   }
 
+  // --- P3 memory-quality telemetry: application probe -----------------------
+  // At session.idle, test whether the turn's reply lexically engages the
+  // entries injected during that turn. LEXICAL PROXY, not semantic proof:
+  // >=2 distinctive tokens (len>=5, from entry titles/paths) present in the
+  // reply counts as "applied". Rows are appended to the same ledger with
+  // event="application", joined later by (sessionID, callID).
+
+  const STOP = new Set(["about", "there", "these", "those", "which", "while",
+    "their", "would", "could", "should", "where", "after", "before", "under",
+    " learning", "memory", "project", "entry", "staging", "magnolia"])
+
+  function distinctiveTokens(titles: string[], paths: string[]): string[] {
+    const raw = (titles.join(" ") + " " + paths.join(" "))
+      .toLowerCase()
+      .replace(/[^a-z]+/g, " ")
+    const out = new Set<string>()
+    for (const w of raw.split(/\s+/)) {
+      if (w.length >= 5 && !STOP.has(w)) out.add(w)
+    }
+    return [...out]
+  }
+
+  async function probeApplication(sessionID: string): Promise<void> {
+    const items = injectedTurns.get(sessionID)
+    if (!items || items.length === 0) return
+    injectedTurns.delete(sessionID)
+    try {
+      const resp: any = await client.session.messages({ path: { id: sessionID } })
+      const msgs: any[] = resp?.data ?? resp ?? []
+      if (!Array.isArray(msgs) || msgs.length === 0) return
+      let lastUser = -1
+      msgs.forEach((m, i) => { if (m?.info?.role === "user") lastUser = i })
+      const replyParts: string[] = []
+      for (const m of msgs.slice(lastUser + 1)) {
+        if (m?.info?.role !== "assistant") continue
+        for (const p of m?.parts ?? []) {
+          if (p?.type === "text" && !p?.synthetic && p?.text) replyParts.push(p.text)
+        }
+      }
+      const reply = replyParts.join("\n").toLowerCase()
+      for (const item of items) {
+        const tokens = distinctiveTokens(item.titles, item.paths)
+        const matched = tokens.filter((t) => reply.includes(t))
+        const applied = tokens.length > 0 && matched.length >= Math.min(2, tokens.length)
+        log({
+          event: "application",
+          sessionID,
+          tool: item.tool,
+          callID: item.callID,
+          applied,
+          matched,
+          distinct: tokens.length,
+        })
+      }
+    } catch { /* never throw into opencode */ }
+  }
+
   return {
+    event: async (input: any) => {
+      try {
+        if (input?.event?.type === "session.idle") {
+          const sid = input?.event?.properties?.sessionID
+          if (sid) await probeApplication(String(sid))
+        }
+      } catch { /* never throw into opencode */ }
+    },
     "tool.execute.before": async (input: any, output: any) => {
       try {
         const tool = String(input?.tool ?? "")
@@ -275,6 +344,20 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
             provisional: !!h.provisional,
           })),
         })
+        // P3 telemetry: remember this injection so the session.idle probe can
+        // test whether the turn's reply actually used it.
+        if (injectedTurns.size > 40) {
+          const oldest = injectedTurns.keys().next().value
+          if (oldest) injectedTurns.delete(oldest)
+        }
+        const turnItems = injectedTurns.get(sessionID) ?? []
+        turnItems.push({
+          callID: String(callID),
+          tool,
+          titles: hits.map((h) => String(h.title ?? "")),
+          paths: hits.map((h) => String(h.path ?? "")),
+        })
+        injectedTurns.set(sessionID, turnItems)
       } catch { /* never throw into opencode */ }
     },
   }

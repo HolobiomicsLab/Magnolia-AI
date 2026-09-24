@@ -33,6 +33,60 @@ def _injected(e: dict) -> bool:
     return bool(e.get("hits", 0))
 
 
+def application_report(events: list[dict]) -> dict:
+    """P3 memory-quality telemetry: join application-probe rows (event ==
+    "application", emitted by the plugin at session.idle) with the injection
+    rows they refer to, keyed by (sessionID, callID).
+
+    An injection with no probe counts as ``probes_missing`` (session ended
+    before a probe, plugin reload, older schema) — it must NOT count as
+    not-applied, or the rate would be biased downward. Probes with no
+    matching injection row are ``orphans`` (injection logged pre-upgrade).
+    The ``applied`` signal is a LEXICAL PROXY (>=2 distinctive tokens of the
+    entry title/path appearing in the turn's reply), not semantic proof."""
+    probes = [e for e in events if e.get("event") == "application"]
+    inj_keys: set[tuple[str, str]] = set()
+    for e in events:
+        if _injected(e) and e.get("callID"):
+            inj_keys.add((str(e.get("sessionID", "")), str(e.get("callID", ""))))
+
+    applied = not_applied = orphans = 0
+    by_tier: dict[str, dict[str, int]] = {}
+    tier_by_key: dict[tuple[str, str], str] = {}
+    for e in events:
+        if not (_injected(e) and e.get("callID")):
+            continue
+        key = (str(e.get("sessionID", "")), str(e.get("callID", "")))
+        tiers = {h.get("tier", "?") for h in (e.get("entries") or [])} or {"?"}
+        tier_by_key[key] = "/".join(sorted(str(t) for t in tiers))
+
+    for p in probes:
+        key = (str(p.get("sessionID", "")), str(p.get("callID", "")))
+        if key not in inj_keys:
+            orphans += 1
+            continue
+        tier = tier_by_key.get(key, "?")
+        slot = by_tier.setdefault(tier, {"applied": 0, "not_applied": 0})
+        if p.get("applied"):
+            applied += 1
+            slot["applied"] += 1
+        else:
+            not_applied += 1
+            slot["not_applied"] += 1
+
+    probed = applied + not_applied
+    missing = len(inj_keys) - probed
+    return {
+        "probes": len(probes),
+        "applied": applied,
+        "not_applied": not_applied,
+        "application_rate": round(applied / probed, 3) if probed else None,
+        "probes_missing": max(missing, 0),
+        "orphans": orphans,
+        "by_tier": by_tier,
+    }
+
+
 def summarize(events: list[dict], store_dir: str | None = None) -> dict:
     total = len(events)
     inj = [e for e in events if _injected(e)]
@@ -59,6 +113,7 @@ def summarize(events: list[dict], store_dir: str | None = None) -> dict:
         "distinct_paths_surfaced": len(path_counts),
         "surfaced_by_path": dict(path_counts.most_common(10)),
         "surfaced_by_title": dict(title_counts.most_common(10)),
+        "application": application_report(events),
     }
 
     if store_dir:
