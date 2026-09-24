@@ -10,6 +10,7 @@ private cluster file (never shared) when the lesson contains cluster-specific
 facts (see magnolia-destinations.yaml). The skill tier was retired 2026-09;
 the raw-copy memory_promote tool was removed with it."""
 
+import hashlib
 import json
 import re as _re
 from datetime import datetime, timezone
@@ -152,11 +153,12 @@ def run_panel(
     """Run K independent passes. survives iff >= _PROMOTION_PANEL_APPROVE approve.
     Any pass raising a correctness_concern is surfaced (correctness veto/flag)."""
     judge = judge or _default_judge
-    passes: list[dict[str, Any]] = []
-    for k in range(_PROMOTION_PANEL_PASSES):
-        v = judge(entry, k) or {"approve": False, "correctness_concern": None,
-                                 "generality_concern": None}
-        passes.append(v)
+    votes = [judge(entry, k) for k in range(_PROMOTION_PANEL_PASSES)]
+    no_verdict = all(v is None for v in votes)   # judge unreachable — NOT a rejection
+    passes: list[dict[str, Any]] = [
+        v if isinstance(v, dict) else {"approve": False, "correctness_concern": None,
+                                      "generality_concern": None}
+        for v in votes]
     approvals = sum(1 for v in passes if v.get("approve"))
     correctness_flag = next((v.get("correctness_concern") for v in passes
                              if v.get("correctness_concern")), None)
@@ -165,6 +167,7 @@ def run_panel(
         "approvals": approvals,
         "survives": approvals >= _PROMOTION_PANEL_APPROVE,
         "correctness_flag": correctness_flag,
+        "no_verdict": no_verdict,
     }
 
 
@@ -269,20 +272,85 @@ def _entry_key(proposal: dict[str, Any]) -> str:
     return Path(proposal.get("source", "")).name
 
 
+def _entry_content_hash(entry: dict[str, Any]) -> str:
+    """Hash of exactly what the panel judges (id + title + body). A new
+    observation appended to the entry, an edit, any content change re-opens
+    the case; byte-stable content reuses the prior verdict instead of
+    re-running the panel every sweep."""
+    h = hashlib.sha256()
+    h.update(str(entry.get("id", "")).encode())
+    h.update(b"\n")
+    h.update(str(entry["meta"].get("title", "")).encode())
+    h.update(b"\n")
+    h.update(str(entry.get("body", "")).encode())
+    return h.hexdigest()[:16]
+
+
+def _prior_rejected_records(artifact: Path) -> dict[str, dict[str, Any]]:
+    """key -> rejection record from the previous sweep. Two sources: the
+    explicit rejected_records list (current schema — panel and user rejections)
+    and the legacy index-based 'rejected' proposals carrying entry_hash.
+    Records without an entry_hash (pre-fix artifacts) never match and simply
+    cause one re-judgement, after which the current schema takes over."""
+    if not Path(artifact).exists():
+        return {}
+    try:
+        prior = json.loads(Path(artifact).read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for rec in prior.get("rejected_records", []):
+        if isinstance(rec, dict) and rec.get("key"):
+            out[str(rec["key"])] = rec
+    old = prior.get("proposals", [])
+    for idx in prior.get("rejected", []):
+        if isinstance(idx, int) and 0 <= idx < len(old):
+            key = _entry_key(old[idx])
+            out.setdefault(key, {"key": key,
+                                 "entry_hash": old[idx].get("entry_hash"),
+                                 "last_judged": old[idx].get("last_judged")})
+    return out
+
+
 def propose_promotions(
     store_dir: str, *, rules_dir: str,
     judge=None, drafter=None, checker=None,
 ) -> dict[str, Any]:
     """Gate → panel → draft → consistency → destination. Write survivors to
     reflex/promotion-proposal.json. Proposal-only; mutates no entries.
-    Carries prior rejections forward by content key (entry basename)."""
+
+    Verdict memoization: an entry whose (key, content hash) was already
+    rejected — by the panel or by the user — is NOT re-judged. Only a content
+    change (new observation, edit) re-opens the case. This is what keeps the
+    sweep at ~0 LLM calls steady-state instead of re-confirming hundreds of
+    identical 'no' verdicts every 20 minutes. A judge outage (all passes
+    return None) records nothing, so a transient LLM failure never becomes a
+    sticky rejection."""
     store = Path(store_dir)
     rules = _existing_rule_summaries(rules_dir)
     fact_patterns = collect_cluster_fact_patterns(load_destinations(rules_dir))
+    artifact = store / "reflex" / "promotion-proposal.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    prior_keys = prior_rejected_keys(artifact, _entry_key)
+    prior_rej = _prior_rejected_records(artifact)
+    now = datetime.now(timezone.utc).isoformat()
     proposals: list[dict[str, Any]] = []
+    rejected_records: dict[str, dict[str, Any]] = {}
+    skipped_rejected = 0
     for entry in eligible_entries(store_dir):
+        key = str(entry.get("id", ""))
+        content_hash = _entry_content_hash(entry)
+        cached = prior_rej.get(key)
+        if cached is not None and cached.get("entry_hash") == content_hash:
+            rejected_records[key] = dict(cached)   # verdict reused; last_judged unchanged
+            skipped_rejected += 1
+            continue
         panel = run_panel(entry, judge=judge)
+        if panel["no_verdict"]:
+            continue                             # judge unreachable — try again next sweep
         if not panel["survives"]:
+            rejected_records[key] = {"key": key, "entry_hash": content_hash,
+                                     "last_judged": now}
             continue
         drafted = draft_rule(entry, drafter=drafter)
         consistency = check_consistency(drafted, rules, checker=checker)
@@ -290,6 +358,8 @@ def propose_promotions(
             "source": entry["path"],
             "entry_title": entry["meta"].get("title", ""),
             "distinct_sessions": _distinct_sessions(entry["meta"]),
+            "entry_hash": content_hash,
+            "last_judged": now,
             "panel": {"approvals": panel["approvals"], "passes": panel["passes"],
                       "correctness_flag": panel["correctness_flag"]},
             "consistency": consistency,
@@ -298,13 +368,13 @@ def propose_promotions(
             "confidence": round(panel["approvals"] / _PROMOTION_PANEL_PASSES, 2),
         })
 
-    artifact = store / "reflex" / "promotion-proposal.json"
-    artifact.parent.mkdir(parents=True, exist_ok=True)
-    prior_keys = prior_rejected_keys(artifact, _entry_key)
     rejected = [i for i, p in enumerate(proposals) if _entry_key(p) in prior_keys]
     artifact.write_text(json.dumps(
-        {"proposals": proposals, "applied": [], "rejected": rejected}, indent=2))
-    return {"candidates": len(proposals), "artifact": str(artifact)}
+        {"proposals": proposals, "applied": [], "rejected": rejected,
+         "rejected_records": sorted(rejected_records.values(),
+                                    key=lambda r: r["key"])}, indent=2))
+    return {"candidates": len(proposals), "artifact": str(artifact),
+            "skipped_rejected": skipped_rejected}
 
 
 # ---------------------------------------------------------------------------
