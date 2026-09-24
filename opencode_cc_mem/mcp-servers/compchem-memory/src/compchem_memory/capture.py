@@ -9,8 +9,21 @@ from typing import Any, Callable
 
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory import distill_log
+from compchem_memory.storage import resolve_project_dir
 
 _session_managers: dict[str, SessionManager] = {}
+
+
+def _resolve_project_dir(project_dir: str | None) -> str:
+    """Resolve the project dir the same way the tools do: explicit kwarg, else
+    the server's pinned MAGNOLIA_PROJECT_DIR, else cwd.
+
+    History: the decorator used the raw kwarg with a "." fallback, so tools
+    called without project_dir (the normal case from opencode) logged their
+    session events to a stray store at the server's cwd (repo root) and drained
+    .distill-notices from that wrong store — notices pushed to the real project
+    store were never delivered (1003 piled up undrained over 7 weeks)."""
+    return resolve_project_dir(project_dir, os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
 
 
 def get_session_manager(project_dir: str, project_id: str | None = None) -> SessionManager:
@@ -104,7 +117,7 @@ def captured(source: str):
 
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            project_dir = kwargs.get("project_dir") or "."
+            project_dir = _resolve_project_dir(kwargs.get("project_dir"))
             mgr = None
             try:
                 mgr = get_session_manager(project_dir)
