@@ -9,16 +9,56 @@ START_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
 START_EPOCH_MS=$(($(date +%s%N) / 1000000))
 
 PROJECT_DIR=""
-CURDIR="$(pwd)"
-while [ "$CURDIR" != "/" ]; do
-    if [ -d "$CURDIR/.magnolia" ]; then
-        PROJECT_DIR="$CURDIR"
-        break
-    fi
-    CURDIR="$(dirname "$CURDIR")"
-done
+
+# Project resolution, env-first. History (May–Sep 2026 incident): this script
+# used to discover the project by walking up from cwd only. The compchem-tools
+# MCP server runs with cwd at the repo root, where a stray .magnolia exists,
+# so every shell event was logged to a phantom "project_magnolia" store that no
+# reader ever saw (2,848 files). Now: honor MAGNOLIA_PROJECT_DIR when set.
+#
+# Candidate order matters. With a relative env value and cwd at the repo root,
+# the cwd-relative candidate resolves to a stale SKELETON store at
+# <root>/projects/<name>/.magnolia (which exists, but is the wrong one). The
+# authoritative store lives under opencode_cc_mem/, so that layout is tried
+# before cwd-relative. Mirrors _project_root() in compchem_tools/tools/view.py.
+PROJ_ENV="${MAGNOLIA_PROJECT_DIR:-}"
+if [ -n "$PROJ_ENV" ]; then
+    CANDIDATES=()
+    case "$PROJ_ENV" in
+        /*) CANDIDATES+=("$PROJ_ENV") ;;
+        *)
+            CANDIDATES+=(
+                "${MAGNOLIA_ROOT:+$MAGNOLIA_ROOT/opencode_cc_mem/}$PROJ_ENV"
+                "$PROJ_ENV"
+                "${MAGNOLIA_ROOT:+$MAGNOLIA_ROOT/}$PROJ_ENV"
+            )
+            ;;
+    esac
+    for cand in "${CANDIDATES[@]}"; do
+        [ -n "$cand" ] || continue
+        if [ -d "$cand/.magnolia" ]; then
+            PROJECT_DIR="$(cd "$cand" && pwd)"   # a real store — take it and stop
+            break
+        fi
+        if [ -z "$PROJECT_DIR" ] && [ -d "$cand" ]; then
+            PROJECT_DIR="$(cd "$cand" && pwd)"   # exists but no store yet; keep looking
+        fi
+    done
+fi
+
+# Fallback (env unset or no candidate exists): nearest .magnolia above cwd.
 if [ -z "$PROJECT_DIR" ]; then
-    PROJECT_DIR="$(pwd)"
+    CURDIR="$(pwd)"
+    while [ "$CURDIR" != "/" ]; do
+        if [ -d "$CURDIR/.magnolia" ]; then
+            PROJECT_DIR="$CURDIR"
+            break
+        fi
+        CURDIR="$(dirname "$CURDIR")"
+    done
+    if [ -z "$PROJECT_DIR" ]; then
+        PROJECT_DIR="$(pwd)"
+    fi
 fi
 PROJECT_ID="$(basename "$PROJECT_DIR")"
 
