@@ -60,3 +60,52 @@ def test_load_events_tolerates_bad_lines(tmp_path):
     events = load_events(p)
     assert len(events) == 2
     assert sum(e.get("a", 0) for e in events) == 3
+
+
+# --- P3 memory-quality telemetry: application probe join ---------------------
+
+def _probe(session_id, call_id, applied):
+    return {"ts": "2026-09-24T10:00:00Z", "event": "application",
+            "sessionID": session_id, "tool": "edit", "callID": call_id,
+            "applied": applied, "matched": ["alpha"], "distinct": 3}
+
+
+def test_application_report_full_join():
+    events = _events() + [
+        _probe("s1", "c1", True),    # staging injection, applied
+        _probe("s1", "c2", False),   # project injection, not applied
+        _probe("s1", "c9", True),    # orphan: no matching injection
+    ]
+    r = summarize(events)["application"]
+    assert r["probes"] == 3
+    assert r["applied"] == 1
+    assert r["not_applied"] == 1
+    assert r["orphans"] == 1
+    assert r["probes_missing"] == 0
+    assert r["application_rate"] == 0.5
+    assert r["by_tier"]["staging"]["applied"] == 1
+    assert r["by_tier"]["project"]["not_applied"] == 1
+
+
+def test_application_report_missing_probes_not_counted_as_not_applied():
+    events = [e for e in _events()]  # c1, c2 injected; no probes at all
+    r = summarize(events)["application"]
+    assert r["probes"] == 0
+    assert r["probes_missing"] == 2
+    assert r["application_rate"] is None
+
+
+def test_application_report_empty_log():
+    r = summarize([])["application"]
+    assert r == {"probes": 0, "applied": 0, "not_applied": 0,
+                 "application_rate": None, "probes_missing": 0,
+                 "orphans": 0, "by_tier": {}}
+
+
+def test_application_report_ignores_non_injected_rows_as_keys():
+    # c3 is a skip row (injected=0): a probe for it is an orphan, and it
+    # never enters probes_missing.
+    events = _events() + [_probe("s1", "c3", True)]
+    r = summarize(events)["application"]
+    assert r["orphans"] == 1
+    assert r["probes_missing"] == 2
