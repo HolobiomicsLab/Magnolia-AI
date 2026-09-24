@@ -617,5 +617,14 @@ else
     echo "warning: compchem-tools-daemon.sh missing — compchem-tools MCP tools unavailable" >&2
 fi
 
+# Start the helper-agents daemon (mailbox watcher for literature/xiulian).
+# Single-instance via its own flock; a second launch is a quiet no-op.
+# Kill switch: MAGNOLIA_AGENTS=0. Non-fatal by design.
+if [ "$MAGNOLIA_AGENTS" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemon" ]; then
+    nohup python3 "$SCRIPT_DIR/magnolia-agents-daemon" \
+        --root "$REPO_ROOT" >/dev/null 2>&1 &
+    disown || true
+fi
+
 cd "$OPENCODE_DIR"
 exec opencode
