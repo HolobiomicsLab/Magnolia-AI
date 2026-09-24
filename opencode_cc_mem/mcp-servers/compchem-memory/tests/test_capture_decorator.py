@@ -159,3 +159,31 @@ def test_decorator_inline_extraction_failure_does_not_break_tool(project_dir, mo
     # Tool must still return successfully despite the exception in should_extract
     result = some_tool(project_dir=str(project_dir))
     assert result == "ok"
+
+
+def test_decorator_without_project_dir_uses_pinned_env(tmp_path, monkeypatch):
+    """Regression (2026-09-24): called without project_dir, the decorator must
+    resolve the server's pinned MAGNOLIA_PROJECT_DIR — not fall back to cwd.
+    The old '.' fallback sent session logging to a stray store at the server's
+    cwd (repo root) and drained .distill-notices from that wrong store, so
+    notices pushed to the real project store were never delivered (1003 piled
+    up undrained over 7 weeks)."""
+    pd = tmp_path / "pinned-proj"
+    (pd / ".magnolia" / "sessions").mkdir(parents=True)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(pd))
+    monkeypatch.chdir(tmp_path)  # cwd is NOT the project
+
+    from compchem_memory import distill_log
+    distill_log.push_distill_notice(str(pd), "do the thing", "cleanup ready")
+
+    @captured(source="compchem-memory")
+    def memory_dummy(project_dir: str | None = None) -> str:
+        return "ok"
+
+    result = memory_dummy()
+
+    assert result.startswith("ok")
+    assert "cleanup ready" in result  # notice attached from the PROJECT's queue
+    assert not (pd / ".magnolia" / ".distill-notices").exists()  # queue drained
+    assert list((pd / ".magnolia" / "sessions").glob("*.jsonl"))  # events logged there
+    assert not (tmp_path / ".magnolia").exists()  # nothing stray at cwd
