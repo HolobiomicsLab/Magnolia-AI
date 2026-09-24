@@ -2,8 +2,8 @@
 name: adversarial-review
 description: "Run a blind adversarial review — debate, red-team, second opinion, cross-examination — of a research idea, design doc, analysis, protocol, or plan using independent LLM adversaries via headless opencode. Use when the user asks to debate, challenge, stress-test, cross-examine, get a second opinion on, or red-team an idea/plan/design/interpretation, or before committing to a high-stakes design decision. Do NOT use for quick lookups, trivial choices, or execution of an already-decided plan."
 metadata:
-  version: "1.3"
-  last_verified: "2026-09-11"
+  version: "1.4"
+  last_verified: "2026-09-18"
   tags: "debate,adversarial,red-team,second-opinion,panel"
 ---
 
@@ -141,6 +141,22 @@ debate.sh finalize <name>                      # verifies rounds; prints run-rec
 Script: `softwares/bin/debate.sh`. Poll `status` every ~60-90 s. For a
 self-test of the plumbing use `init <name> --tmp` (workspace in /tmp,
 `clean` allowed there — never on runs/ dirs).
+
+**Workspace project is env-pinned (verified 2026-09-18).** `debate.sh`
+resolves the runs base from `$MAGNOLIA_PROJECT_DIR` / `$MAGNOLIA_ROOT` in the
+shell environment, NOT from the tool's `project_dir` argument. The
+magnolia-run daemon exports a pinned project, so chairing a debate for a
+different project silently creates the workspace under the wrong
+`projects/<name>/runs/` (observed: xiulian). Override explicitly:
+
+```
+echo $MAGNOLIA_PROJECT_DIR          # check the pin first
+MAGNOLIA_ROOT=<repo root> MAGNOLIA_PROJECT_DIR=projects/<name> \
+  softwares/bin/debate.sh init <name> <ctx...>
+```
+
+A workspace created under the wrong project can be `mv`-ed before any round
+runs — it is self-contained. (Source: memory entry 20260918_093055_519263.)
 
 ## Round 1 prompt template (blind assessment)
 
