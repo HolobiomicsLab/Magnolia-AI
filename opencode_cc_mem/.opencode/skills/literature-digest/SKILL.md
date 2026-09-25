@@ -127,6 +127,20 @@ normalized file the offsets point into.
   panel pass should re-check, identification notes (how the paper was
   resolved, lookalikes to not confuse it with).
 
+## Handoff to xiulian (idea tickets)
+
+When a digest ends with `implementation_verdict: adopt` or `cherry-pick`
+AND importance tier T1 or T2, file an idea ticket so xiulian can
+prototype it:
+
+- Write `projects/xiulian/inbox/from-literature/<date>_<slug>.idea.ticket.md`
+  following the schema in that inbox's README (self-contained: digest path,
+  action_id, importance, claim, target, evidence, cost, test).
+- The ticket is NOT a `*.task.md` — it is triaged by the next xiulian
+  session, never auto-run.
+- Lower tiers (T3/T4) and `watch` verdicts stay in the digest only. Do not
+  file tickets for them.
+
 ## Conventions
 
 - **Confidence.** A single-pass digest is `medium`. An adversarial-review
