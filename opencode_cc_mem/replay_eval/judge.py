@@ -45,7 +45,7 @@ def _blind_payload(slc, candidates):
 
 
 def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = None,
-              workers: int = 4):
+              workers: int = 4, temperature: float = 0.0, max_tokens: int = 8000):
     import os
 
     run_dir = Path(run_dir)
@@ -70,8 +70,8 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
         if not cands:
             return name, {"n": 0}
         user, _ = _blind_payload(slices[name], cands)
-        text = llm_mod.call_llm(JUDGE_SYSTEM, user, max_tokens=4000,
-                                disable_thinking=True)
+        text = llm_mod.call_llm(JUDGE_SYSTEM, user, max_tokens=max_tokens,
+                                temperature=temperature, disable_thinking=True)
         verdicts, parse_ok = _parse_candidates(text)
         (judge_dir / f"{name}.json").write_text(
             json.dumps({"parse_ok": parse_ok, "verdicts": verdicts},
@@ -86,6 +86,7 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
         results = dict(ex.map(one, names))
 
     out = {"judge_model": judge_model, "arm_model": summary["arm"]["model"],
+           "temperature": temperature,
            "results": results,
            "totals": {
                "candidates": sum(r.get("n", 0) for r in results.values()),

@@ -22,6 +22,8 @@ def main(argv=None):
     p_judge.add_argument("--run", required=True)
     p_judge.add_argument("--model", default="kimi-k3-0711-preview")
     p_judge.add_argument("--provider", default=None)
+    p_judge.add_argument("--temperature", type=float, default=0.0)
+    p_judge.add_argument("--max-tokens", type=int, default=8000)
     p_judge.add_argument("--corpus", default=str(PKG_DIR / "corpus"))
 
     p_rep = sub.add_parser("report", help="render REPORT.md for a run dir")
@@ -48,7 +50,8 @@ def main(argv=None):
         from replay_eval import judge
 
         corpus = loader.load_corpus(Path(args.corpus))
-        res = judge.judge_run(args.run, corpus, args.model, args.provider)
+        res = judge.judge_run(args.run, corpus, args.model, args.provider,
+                              temperature=args.temperature, max_tokens=args.max_tokens)
         t = res["totals"]
         print(f"judged {t['candidates']} candidates: grounded={t['grounded']} "
               f"durable={t['durable']} specific={t['specific']}")
