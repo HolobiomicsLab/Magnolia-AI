@@ -352,7 +352,13 @@ class ProjectManager:
         AND observed_in_sessions containing >= 2 distinct session_ids.
 
         Closes cybernetics §3.4 (single-session auto-promotion risk).
+        Halts entirely while the distiller canary is frozen (plan D3): a
+        silently-degrading distiller must not keep promoting.
         """
+        from compchem_memory import canary
+
+        if canary.is_frozen(project_dir):
+            return []
         staging = self._staging_dir(project_dir)
         promoted = []
         for f in list(staging.glob("*.md")):
