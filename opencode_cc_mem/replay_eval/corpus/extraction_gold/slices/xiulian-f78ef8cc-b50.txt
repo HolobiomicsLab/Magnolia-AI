@@ -1,0 +1,851 @@
+USER: 1
+
+ASSISTANT (reasoning): The user says "1" — referring to my two open items:
+1. Commit the skill draft now (docs-only, safe on master) or hold it for the experimental branch?
+2. Want me to run the calibration?
+
+Hmm, "1" is ambiguous — it could mean:
+- "Option 1: commit the skill draft now"
+- Or it could be answering item (1) — "commit it"
+
+The two open items were posed as questions. "1" most likely means: for item 1, do the first option — commit the skill draft now. It might also mean "yes to 1" = commit. It's not obviously an answer to item 2.
+
+Wait, maybe the user is enumerating: "1" = commit now (answering question 1). They didn't say anything about question 2 (the calibration). So the safest interpretation: commit the skill draft now, and hold on the calibration (or ask). Actually, re-reading: "(1) commit the skill draft now (docs-only, safe on master) or hold it for the experimental branch? (2) want me to run the calibration?" — The user replied "1". The most natural reading: they're selecting option 1 for the first question: "commit the skill draft now". 
+
+Alternatively, they could be saying "do 1" meaning run the calibration? No — "1" aligns with "commit now" being the first option listed in item (1). Hmm, actually item (1)'s options were "commit now" vs "hold for experimental". "1" as a bare number more likely refers to the first open item overall — i.e., handle item 1. But item 1 itself is a question with two options...
+
+Let me think about the most useful interpretation. The user's style this session: terse, action-oriented ("commit it", "push it", "proceed"). A bare "1" likely means "first one" = commit the skill draft now. And possibly they're deferring/skipping the calibration for now, or they'll say separately.
+
+Risk assessment: If I commit the skill draft, that's cheap, reversible, docs-only, and consistent with the plan (docs-only can go early). If I misinterpret and they wanted the calibration... committing the skill is still harmless and likely wanted anyway (they asked me to draft it, and the natural follow-through is to commit once reviewed — though they haven't read the full diff; but they said "1").
+
+Hmm wait — actually, maybe "1" is answering the second question as "option 1"? The second question was "want me to run the calibration?" — yes/no, not numbered. The first question had options: commit now vs hold. If they wanted to commit, they might say "1" meaning the first choice. That fits.
+
+I'll commit the skill draft now. Should I also ask about the calibration? I can commit and then note the calibration is still pending their word. Or maybe they intend "1" as "do the first thing" = commit. Let me do the commit and briefly ask about the calibration.
+
+Actually, wait. Let me reconsider once more: could "1" mean "run the calibration" because it's listed after item (1)? No, that doesn't parse either. Another possibility: The user might be replying "1" to the numbered "Two open items" list meaning "handle open item 1" — i.e., decide/commit the skill. Yes.
+
+So: commit the skill draft to master. Then report and ask about calibration.
+
+Steps:
+1. Check git status/diff (already know: SKILL.md 67+/7-).
+2. Commit with a good message following repo conventions, with magnolia trailer.
+3. Report: committed hash, not pushed (or ask to push?). Earlier flow: user said "commit it" then later "push it". Now they said "1" (commit). I'll commit; ask if they want push or just push? The previous pattern shows they push deliberately. I'll commit and mention not pushed, ask. Hmm, actually to be efficient: they earlier pushed the last one at their request. I'll just commit and say "not pushed — say so if you want it up". Or maybe pushing is expected since master should stay in sync and the remote is the RC. But careful: don't be over-eager with push. I'll ask.
+
+Also the message should note the hardening rationale + citation pointers. Commit message:
+
+docs(skills): harden adversarial-review — detector framing, claim ledger, sycophancy guards
+
+- framing: debates are disagreement detectors feeding verifiers, never
+  arbiters (NeurIPS 2025 martingale result; EMNLP 2025 rebuttal-framing
+  persuasion; SPINE 2026 collapse-under-pressure)
+- round 1: calibrated confidence per top finding
+- round 2: verbatim opponent positions (no unmarked chair paraphrase),
+  evidence-required revisions, concession-under-pressure logging
+- new mandatory claim ledger (status + exact check per claim) feeding the
+  verifier subagent; chair verification pass formalized in Merge
+- aftermath: record endpoints + resolved model identity for reproducibility
+  (vendor aliases reroute silently)
+
+Co-authored-by: magnolia <magnolia@localhost>
+
+Then verify with git log -1 --stat and status.
+
+Let me do it. Also update? No todos needed. Then report concisely and ask about the calibration.
+
+ASSISTANT: Committing the skill draft:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Committed `2d2c8b6`, master ahead of origin by 1. Not pushed yet.
+
+Now report briefly and ask about (a) pushing and (b) the calibration run. Since "1" answered the first question, the calibration is still open. Keep it short.
+
+ASSISTANT: Committed: `2d2c8b6` — `docs(skills): harden adversarial-review — detector framing, claim ledger, sycophancy guards` (1 file, +67/−7). Local only (ahead 1).
+
+So: **open item 1 is done.** Still pending your word on:
+- **Push** `2d2c8b6` (and then the experimental worktree setup can start)
+- **Calibration run** — the 3-arm ablation (ensemble vs old protocol vs hardened protocol) on the qwen question; ~9 calls, fresh workspaces
+
+USER: one extra information, I have opencode go plan, it has some level of access of many models. for example, I am running low on glm 5 hour limit now, I can reroute the glm 5.3 to opencode. Can you test on that?
+
+ASSISTANT (reasoning): The user says: they have the "opencode go" plan, which has access to many models. For example, they're running low on GLM's 5-hour limit (the zai-coding-plan rate limit), and they can reroute GLM 5.3 to "opencode" — meaning the `opencode/glm-5.3` or `opencode-go/glm-5.3` model IDs via the opencode provider. They ask: "Can you test on that?"
+
+So the ask: test whether GLM-5.3 (and presumably other panel models) work via the opencode/opencode-go provider — so we can reroute panel models when direct provider limits hit. This is like the earlier deepseek endpoint check but for GLM via opencode-go.
+
+From the earlier `opencode models` output:
+- `opencode/glm-5.3` exists (opencode zen endpoint, https://opencode.ai/zen/v1)
+- `opencode-go/glm-5.3` exists (go endpoint, https://opencode.ai/zen/go/v1)
+- `opencode-go/glm-5.3-flash`, `opencode/glm-5.3-flash` too
+- Also `opencode/go` has kimi-k3, qwen3.8-max, etc.
+
+Recall the history:
+- Staging entry `20260908_095238`: "debate.sh with opencode/glm-* fails 401 (no payment method) — use zai-coding-plan/glm-*" — that was 2026-09-08, when the `opencode` provider (zen) GLM failed with 401 CreditsError. BUT the user now has opencode-go plan (subscription), and opencode-go ≠ opencode zen. The `opencode-go/*` provider should work with the go subscription. Earlier today I tested `opencode-go/deepseek-flash` via raw curl with the OPENCODE_GO_API_KEY (from .bashrc) — worked. And the qwenmax debate used `opencode-go/deepseek-flash` for one panelist (worked).
+
+So the test: verify `opencode-go/glm-5.3` works (both via `opencode models` listing — already known — and a live call). Best test approach:
+
+1. Raw curl to https://opencode.ai/zen/go/v1/chat/completions with model "glm-5.3", using OPENCODE_GO_API_KEY and x-opencode-session header. Check response: served-model field, content.
+
+2. Also verify it works through the actual runtime path — headless `opencode run -m opencode-go/glm-5.3` (same as debate.sh), since that's what we'd use in debates. A one-line test: `opencode run -m opencode-go/glm-5.3 "Reply PING_OK"` headless. That tests auth + model routing + the x-opencode-session header handling by opencode itself.
+
+3. Maybe also test `opencode/glm-5.3` (zen) to see if the 401 issue persists — since the user said "reroute the glm 5.3 to opencode". Hmm: "I can reroute the glm 5.3 to opencode" — the opencode provider (zen) or opencode-go? They said "I have opencode go plan" — so they mean opencode-go. But there are two providers: `opencode` (zen, pay-per-token) and `opencode-go` (subscription). The user says "I can reroute the glm 5.3 to opencode" — ambiguous, but given "opencode go plan", likely they mean the opencode-go list. Let me test both and report: which works, which doesn't.
+
+Also, useful: test kimi-k3 via opencode-go as well? The user's immediate concern is GLM rate limits. But the general question is "can panel models be rerouted to opencode-go when direct limits hit?" — GLM is the example. Testing GLM is the ask; I can note availability of kimi/qwen too (already in models list).
+
+Additionally: verify the model ID for debates: `opencode-go/glm-5.3`. And check the definition in the registry (context/output/pricing) like we did for deepseek — quick sanity: max output, context. Let me check models.json for opencode-go/glm-5.3.
+
+Test plan:
+1. `opencode models` confirm IDs (already done, but re-confirm glm entries).
+2. Raw curl test: opencode-go/glm-5.3 → PING_OK; also opencode/glm-5.3 (zen) to check the 401 status.
+3. Headless opencode run test: `opencode run -m opencode-go/glm-5.3 "Reply with exactly PING_OK"` — tests the actual debate.sh path. Need cwd = somewhere neutral; use /tmp (like debate.sh does with OPENCODE_DISABLE_PROJECT_CONFIG=1? debate.sh sets that; for a quick test, can run from /tmp with the env var to avoid project config).
+4. Check registry definition for opencode-go/glm-5.3 (limits/costs) — quick python on models.json.
+
+Then report: status + recommendation: update SKILL.md panel table to note the reroute option (e.g., "zai-coding-plan/glm-5.3 (or opencode-go/glm-5.3 when the plan's 5h limit hits)"). But wait — should I edit the skill now? The user asked "can you test on that?" — test first, then propose the fallback line. Maybe I should also commit if they approve. Let me test first.
+
+Also the 5-hour limit: zai-coding-plan has a 5-hour rolling limit (GLM Coding Plan). The fallback to opencode-go/glm-5.3 would draw from the Go subscription. Good to verify it's the same model (glm-5.3 full, not flash).
+
+Let me run the tests. Batch:
+- Command 1: curl opencode-go glm-5.3 + curl opencode glm-5.3 (zen) with the key from .bashrc. Also list glm entries from `opencode models` again for exact ids.
+- Command 2: headless opencode run test.
+
+Wait — for the zen `opencode/glm-5.3` test, the auth key: auth.json has 'opencode' provider key (sk-2BNVji... same as go? Earlier auth.json showed opencode and opencode-go both with key 'sk-2BNVjiOC2***' — same key). And OPENCODE_GO_API_KEY in .bashrc. The zen endpoint test earlier (models list) worked with that key. So test chat completion on zen too.
+
+Let me also think: does the zen endpoint require x-opencode-session? Earlier test: zen /models worked without; go /models worked without. For chat completions, go required x-opencode-session. Zen may or may not. I'll include the header for both (harmless).
+
+Then the headless run test:
+```
+cd /tmp && OPENCODE_DISABLE_PROJECT_CONFIG=1 timeout 90 opencode run -m opencode-go/glm-5.3 --format json "Reply with exactly: PING_OK" 2>/dev/null | tail -1
+```
+Hmm, `opencode run` output — the last JSON line should show result. Or use plain text: `opencode run -m ... "Reply with exactly: PING_OK"`. Headless run may take ~10-30s. With timeout 90 via run_shell timeout param (max 110s foreground). OK.
+
+Actually, more representative: test both opencode-go/glm-5.3 AND the model definition in registry. Let me write the commands.
+
+One more consideration: the user said "I am running low on glm 5 hour limit now" — the zai plan. So this test is timely; if it works, future debates can use opencode-go/glm-5.3. I should also note in the skill table the fallback. And maybe test kimi-k3 too? Not asked; GLM is the ask. But a one-liner test of opencode-go/kimi-k3 could be useful since the same reroute logic applies to Kimi (Moonshot limits). Let me include it as a bonus (cheap) — actually let me keep focus: test glm-5.3 (go), glm-5.3 (zen, to confirm the old 401), and maybe note kimi exists. A quick test of go/kimi-k3 too adds value with minimal cost. I'll do glm-first; if quick, kimi too.
+
+Let me run.
+
+ASSISTANT: Yes — testing the reroute options now. Three checks: the exact IDs available, raw endpoint behavior (Go vs zen), and the actual headless `opencode run` path that debates use:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Results:
+
+1. **`opencode-go/glm-5.3` works**: served GLM-5.3, `PING_OK`. Registry: ctx 1M, out 131072, cost $1.4/$4.4 (that's the Go-plan list price info; subscription anyway), tool+reasoning, no attachment.
+
+2. **`opencode/glm-5.3` (zen) fails**: CreditsError — insufficient balance. Confirms the Sep-8 staging finding (401/no payment method) still stands for the zen path. So the reroute target must be `opencode-go/glm-5.3`, not `opencode/glm-5.3`.
+
+3. **`opencode-go/kimi-k3` also exists** (ctx ~1M, out 131072, attach=true, tool+reasoning) — another reroute option for Kimi when Moonshot limits hit. Should test it live too.
+
+Now the headless `opencode run` test — the actual debate path. Test `opencode-go/glm-5.3` via: `OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run -m opencode-go/glm-5.3 "Reply with exactly: PING_OK"`. Run from /tmp. This tests that opencode itself routes/authorizes correctly (it should also add the x-opencode-session header automatically).
+
+Also test opencode-go/kimi-k3 via raw curl (quick) and maybe headless.
+
+Let me run:
+1. Headless opencode run test for opencode-go/glm-5.3 (timeout ~90s; model might take 20-40s).
+2. Raw curl for opencode-go/kimi-k3.
+
+Then report: reroute works via opencode-go/*; zen doesn't (credits); recommend skill table update: add fallback "or opencode-go/glm-5.3 when the zai 5-hour limit hits" and similarly note kimi. And note cost model: opencode-go is subscription-billed (the listed costs are reference), so using it for panels doesn't consume zai/moonshot quotas.
+
+Also should I check whether the Go plan has rate limits? Not visible. Fine.
+
+One more thing to verify: the debate.sh path uses `opencode run -m <model> --format json` with OPENCODE_DISABLE_PROJECT_CONFIG=1 — exactly what I'll test. Let me run both the glm headless test and kimi raw test in parallel.
+
+For the headless test: output may be the JSON event stream; grep for text. Use --format json and extract last text part, or simply use plain output. `opencode run -m model "prompt"` default format is text printed. Let me capture and tail. Use timeout 100. Note: run_shell foreground cap 110s default 90 — set timeout param to 105 to be safe? The tool has a timeout param. I'll set timeout=100 and shell `timeout 90`. Hmm, the run_shell timeout default is 90s; the command itself with `timeout 90` may exceed the wrapper's 90s cap. Let me set shell timeout to 80 and the tool timeout to 100. GLM should respond in ~10-30s.
+
+ASSISTANT: `opencode-go/glm-5.3` **works**; the zen path still fails with CreditsError (confirms the Sep-8 finding — must be Go, not zen). Kimi K3 is also on the Go plan. Now the critical test — the actual headless `opencode run` path debates use, plus Kimi:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Hmm, the headless glm test: output shows "EXIT=0" and stderr tail shows "> build · glm-5.3". The stdout tail -3 seems to have printed nothing visible before EXIT=0? Actually the output shows:
+
+```
+EXIT=0
+--- stderr tail ---
+> build · glm-5.3
+```
+
+So stdout was empty-ish (maybe the PING_OK went elsewhere or the pipeline consumed it). Exit 0 means opencode ran successfully. But did the model reply? With `opencode run`, default format prints the text response to stdout. The tail -3 of stdout showed nothing? Possibly the response was printed but got swallowed by the `2>/tmp/...err` redirect and `| tail -3`? The output should show text. Let me re-check by looking at the actual output more carefully — maybe the text is just missing because `--format json` not used and output went to stdout but the terminal control characters. The stderr shows the TUI-ish line "> build · glm-5.3" (opencode prints the agent header to stderr).
+
+To be sure the headless path actually produced PING_OK, let me re-run with --format json and extract the text part. Or simpler: `opencode run -m opencode-go/glm-5.3 "Reply with exactly: PING_OK"` and capture stdout to a file, then inspect. Let me do that quickly.
+
+Actually exit 0 is meaningful (opencode ran end-to-end), but I want to confirm the model responded (not an empty completion). Let me rerun with json format and parse.
+
+Also Kimi via opencode-go: works (PING_OK).
+
+Let me run one more verification: headless opencode run with --format json for both opencode-go/glm-5.3 and opencode-go/kimi-k3, extract text. Use timeout 80 each; run in one command or two parallel. These are the final checks.
+
+Note: run from /tmp with OPENCODE_DISABLE_PROJECT_CONFIG=1, exactly like debate.sh.
+
+ASSISTANT: Go-plan Kimi also works. The glm headless run exited 0 but I want to confirm the response text came back (output looked thin) — one more precise check with the JSON stream, exactly as debate.sh does it:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Both headless runs work end-to-end through the exact debate.sh invocation pattern:
+- `opencode-go/glm-5.3` → exit 0, text "PING_OK"
+- `opencode-go/kimi-k3` → exit 0, text "PING_OK"
+
+And raw endpoint: go/glm-5.3 and go/kimi-k3 work; zen/glm-5.3 fails with CreditsError.
+
+So the reroute is viable: when zai-coding-plan's 5-hour limit hits, use `opencode-go/glm-5.3`; similarly `opencode-go/kimi-k3` for Moonshot limits. Both are on the Go subscription.
+
+Now:
+1. Update the SKILL.md panel table with the fallback IDs (small edit): e.g. `zai-coding-plan/glm-5.3` (or `opencode-go/glm-5.3` when the zai 5-hour limit is hit); same for kimi: `kimi-for-coding/k3` (or `opencode-go/kimi-k3`).
+2. Should I commit this edit? The user asked "Can you test on that?" — the test is done. The skill update is the natural follow-through but requires... it's docs, small. Given the pattern this session (they've approved skill edits and commits), I could apply the edit and ask to commit, or apply and commit. Earlier they said "commit it" for the previous skill change. Now they just asked to test. I'll apply the edit (draft) and ask whether to commit — or maybe just apply and report; commit pending their word. Hmm, the previous flow: I drafted, they said commit. Let me apply the edit and propose committing with the next batch, or commit directly? The user's standing instruction pattern is cautious about commits; they explicitly say "commit it"/"push it". I'll apply the edit, report the test results, and ask to commit (quick).
+
+Actually wait — maybe better: apply the edit to the skill (it's the operative finding), and since master currently is ahead by 1 (2d2c8b6 unpushed)... they still haven't said push. I'll ask: commit this fallback line too? and push both?
+
+Alternatively, keep it lightweight: report test results + propose the skill edit; apply it right away (it's clearly wanted — the user's whole point is to enable the reroute; documenting it is the point). I'll apply the edit and ask for commit/push approval.
+
+Let me make the edit:
+
+Current rows:
+```
+| `kimi-for-coding/k3` | Substantive research/design debate (proven strong) |
+| `zai-coding-plan/glm-5.3` | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
+```
+
+New:
+```
+| `kimi-for-coding/k3` (fallback: `opencode-go/kimi-k3`) | Substantive research/design debate (proven strong); the opencode-go fallback verified working 2026-09-10 when provider quotas run low |
+| `zai-coding-plan/glm-5.3` (fallback: `opencode-go/glm-5.3`) | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels); Go fallback verified 2026-09-10 |
+```
+
+Also add a line under the table about the quota reroute: "Quota reroute (verified 2026-09-10): when a direct provider's 5-hour limit hits, `opencode-go/<model>` serves the same models on the Go subscription (raw endpoint + headless `opencode run` both tested for glm-5.3 and kimi-k3). Use `opencode-go/*`, NOT `opencode/*` (zen) — zen returns CreditsError without a payment method."
+
+Hmm, but also note: deepseek row already mentions opencode-go/deepseek-flash as alternative. Fine.
+
+Let me apply. Then report. Report should include:
+- Test matrix: go/glm-5.3 ✓ (raw + headless), zen/glm-5.3 ✗ CreditsError, go/kimi-k3 ✓ (raw + headless).
+- Registry defs: glm-5.3 1M/131K out, tool+reasoning; kimi-k3 ~1.05M/131K, attach true.
+- Implication: reroute works for debate panels when zai/moonshot quotas are exhausted; same model IDs on the Go subscription.
+- Skill updated (fallback line) — commit pending.
+
+Also: maybe record a memory note? This is a useful operational finding (parameter_guidance? error_resolution? note). The earlier staging entry 20260908_095238 said "opencode/glm-* fails 401 — use zai-coding-plan/glm-*". Now the update: opencode-go/glm-5.3 works (subscription), zen still fails. It's a correction/extension of that entry. A short memory note is warranted: "opencode-go provider serves glm-5.3/kimi-k3 (and deepseek) for debate reroutes; zen opencode/* requires credits; verified headless + raw." Let me add it via memory_record_learning (note type, concise). This is exactly the kind of future-session-relevant operational fact. Yes.
+
+So: edit skill + record memory note (parallel), then report. Then ask commit/push.
+
+Let me do the edit carefully (need exact old string). The table rows from my earlier edit:
+
+| `kimi-for-coding/k3` | Substantive research/design debate (proven strong) |
+| `zai-coding-plan/glm-5.3` | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
+
+I'll replace both rows + add a line after the paragraph following the table? The paragraph after table is "Panel pool is open-weight only..." — I'll append the quota-reroute note after that paragraph.
+
+Let me write the edits.
+
+ASSISTANT: Both **headless runs work end-to-end** (exactly the debate.sh invocation): `opencode-go/glm-5.3` → PING_OK, `opencode-go/kimi-k3` → PING_OK. Updating the skill with the fallback and recording the finding:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): All done:
+1. Skill updated with fallback IDs + quota-reroute note.
+2. Memory note recorded (own staging entry, no merge mismatch this time).
+
+Now report to the user:
+- Test results: opencode-go/glm-5.3 ✓ (raw + headless), opencode-go/kimi-k3 ✓, zen ✗ CreditsError.
+- Skill updated (fallback IDs + note) — uncommitted.
+- Pending: commit this skill edit? push pending commit 2d2c8b6? calibration?
+
+Keep it concise. Note that this means the calibration/any debate can proceed even with the GLM 5-hour limit — we can reroute GLM to opencode-go.
+
+ASSISTANT: Tested, and the reroute works:
+
+| Path | Result |
+|---|---|
+| `opencode-go/glm-5.3` — raw endpoint | ✓ PING_OK |
+| `opencode-go/glm-5.3` — headless `opencode run` (exact debate.sh path) | ✓ PING_OK |
+| `opencode-go/kimi-k3` — raw + headless | ✓ PING_OK |
+| `opencode/glm-5.3` (zen) | ✗ `CreditsError: Insufficient balance` — must be Go, not zen |
+| `opencode-go/deepseek-flash` | ✓ (verified earlier today) |
+
+So: when the zai 5-hour limit hits, pass `opencode-go/glm-5.3` to `debate.sh` — same model, same headless flow, zero script changes. Kimi has the same fallback. Registry confirms both are the full models (GLM-5.3: 1M ctx / 131K out, tool+reasoning; Kimi K3: ~1M / 131K, tool+reasoning+vision).
+
+**Updated in the skill** (uncommitted): fallback IDs in the panel table + a "Quota reroute (verified 2026-09-10)" note. **Recorded in memory** as a parameter_guidance entry.
+
+So the pending items are now:
+1. **Commit** the quota-reroute skill edit (and push — `2d2c8b6` is still unpushed)
+2. **Calibration run** — can proceed even under your GLM limit via the Go reroute
+3. Then the experimental worktree setup + P0
+
+Which next?
+
+USER: 1 then 2
+
+ASSISTANT (reasoning): The user says: "1 then 2". So:
+1. Commit the quota-reroute skill edit and push (both 2d2c8b6 and the new commit).
+2. Then run the calibration.
+
+Let me do step 1 first: commit the skill edit, then push (both commits).
+
+Then step 2: the calibration experiment. Design recap (from my earlier proposal, accepted implicitly):
+
+**Calibration/ablation experiment:**
+- Question: re-run the qwen3.8-max assessment (same round-1 prompt as the original qwen debate) with:
+  - **Arm A — ensemble baseline:** 3 fresh blind samples of ONE model + union/majority. Model choice: need to pick. The user's GLM 5-hour limit is low — so use the Go reroute for GLM, or use a different model for the ensemble arm. I proposed "GLM-5.3 ×3" earlier but given the quota, maybe use `opencode-go/glm-5.3` ×3 or `opencode-go/deepseek-flash` ×3. The point of the ensemble arm: same model sampled N times (self-consistency). DeepSeek V4.1-Flash is cheapest and not quota-limited (Go); GLM-5.3 is stronger. Since the original qwen debate used GLM+DS panelists, and the ensemble arm should be a single strong model ×3 — GLM-5.3 via opencode-go ×3 is best (no quota issue via Go). 
+  - **Arm B — old protocol baseline:** existing transcripts (free) — the original qwenmax debate (rounds 1-2, GLM + DS).
+  - **Arm C — new protocol:** fresh 3-model panel (GLM-5.3, DS V4.1-Flash, Kimi K3) — round 1 with confidence + hardened round 2 (verbatim positions, evidence-required revisions) + claim ledger + chair verification.
+- Metrics: unique true findings, false claims surviving, evidence-backed vs unevidenced concessions, DISAGREE rows resolved by checks, cost/time.
+- Deliverable: comparison memo (calibration verdict) at runs/.../calibration-verdict.md + memory records.
+
+Wait — let me reconsider the design for practicality and comparability:
+
+The original qwen debate had 2 panelists (GLM-5.3 zai + DS opencode-go). Arm B = that. For arm C, use 3 panelists (add Kimi) or keep 2 for comparability? The hardened protocol says "prefer cross-lab"; adding Kimi makes the panel a proper 3-model panel and tests the new guidelines on a real 3-panel (like the position panel). But comparability with arm B (2 panelists) suffers. However, the calibration's purpose: does the NEW protocol beat (i) ensemble-only, (ii) old protocol? For C vs B comparison, extra panelist confounds. Hmm.
+
+Alternative cleaner design: run arm C with the SAME two models as B (GLM + DS), under the new protocol. Then C vs B is apples-to-apples (same models, same question, new protocol). And arm A (3 samples of GLM) is the ensemble baseline. Kimi not needed. That's cleaner and cheaper.
+
+But the new protocol also includes the claim ledger + chair verification — those are chair-side; comparable outputs.
+
+Hmm, but also consider: the old debate was 2 rounds; the new protocol also 2 rounds (round 1 + hardened round 2). Same structure, improved prompts. Good.
+
+So:
+- Arm A: 3 × blind round-1 samples of GLM-5.3 (via opencode-go to save quota; or zai if quota resets — better use opencode-go/glm-5.3 since the user said they're low on zai limit). Three fresh workspaces, same r1 prompt. Then compute union/majority of findings.
+- Arm B: existing qwenmax debate (GLM + DS, old protocol). Free.
+- Arm C: 2 new workspaces (GLM + DS), fresh sessions, round 1 (with confidence) + round 2 hardened (verbatim positions from the OTHER panelist only — wait, arm C with 2 panelists: round 2 for each presents the other's verbatim positions. I need to write those prompts after reading r1s).
+
+Also I should measure "unevidenced concessions" in old vs new: old transcripts: DS's round-2 had concessions (license revision — which WAS evidenced by new fetches; pricing correction — evidenced; so old round 2 was mostly evidenced too). New protocol should log them. We can count from the new transcripts.
+
+And the evaluation criteria: unique true claims (vs our known ground truth from the original debate + chair verifications): 
+Ground truth established for qwen:
+- API `qwen3.8-max` proprietary (weights unpublished) — TRUE
+- Open checkpoint `Qwen/Qwen3.8-2.4T-A95B` exists, released 2026-08-12, MIT-ish custom license "Qwen3.8-Max License" with thresholds + internal-use carveout — TRUE
+- Kimi K3 license stricter ($20M MaaS trigger) — TRUE (fetched by DS)
+- AA v4.3: GLM-5.3 45, Kimi 44, Qwen 40, DS V4-Pro 36 — as reported
+- OpenRouter serves qwen/qwen3.8-2.4t-a95b — TRUE (fetched)
+- HF Inference Providers (Novita) — reported by GLM
+- PaperBench vendor-run display-only — TRUE
+- Qwen checkpoint text-only/thinking-only, 262K native — TRUE (from HF card)
+- DeepSeek V4.1-Flash no AA page (404) — checked by GLM
+- etc.
+
+Metrics for arms: count of the verified true claims found by each arm; unique finds; false claims (e.g., if a sample hallucinates). Also whether the arm flagged the key uncertainties.
+
+This is a real experiment — moderate work. Let me plan execution:
+
+Setup:
+- Names: for arm A: `calib-A1`, `calib-A2`, `calib-A3` (workspaces 2026-09-10_debate-calib-a{1,2,3}); for arm C: `calib-c-glm`, `calib-c-ds`.
+- Round-1 prompt: same as the original qwen r1 prompt (I have it at runs/2026-09-10_debate-qwenmax-glm/prompts/r1-source.md). Reuse verbatim. But the new protocol wants "calibrated confidence per top finding" — add that line to the r1 prompt for arm C (and arm A? The ensemble arm should be the plain baseline — the original prompt without confidence? For fairness, the ensemble baseline = original r1 prompt; arm C = original r1 + confidence line. Hmm, but then A and C r1 differ. The confidence line is part of the new protocol; the ensemble baseline represents "sample N times and vote" with the same prompt as used in the old debate. I'll keep the original prompt verbatim for arm A (same as old r1) and for arm C use r1+confidence. Document the difference.
+  
+  Actually — wait. Cleaner: use the SAME r1 prompt (with confidence) for both A and C? Then A tests ensembling under the new prompt and C's delta is purely round 2 + ledger. Hmm, but the old baseline B used the old r1 (no confidence). For "new protocol vs old protocol", C should use the full new protocol (confidence in r1 + hardened r2). For "ensemble vs debate", A should match the ensemble method (3 samples of one model with the SAME prompt as C's r1, so the comparison isolates the round-2 treatment). I'll use the r1-with-confidence prompt for both A and C. Note this in the memo. Hmm, but then "old protocol B" differs in r1 too. That's fine — B is the historical baseline; A vs C is the controlled comparison; B is context.
+
+  Hmm, actually let me keep it simpler and more rigorous: the core scientific question is "does hardened cross-exam add value over ensembling?" A vs C: same r1 prompt (with confidence), same model(s)? No — A is 3 samples of GLM; C is GLM+DS panel. Different composition. Ugh, the designs are not perfectly matched: ensemble-of-one-model vs 2-model-debate. That's inherent to the question "ensemble vs debate" as posed. Claude's claim: "sample the same model N times and take majority vote recovers a good fraction of debate gains" — the standard ablation. So A = GLM×3 samples; C = debate panel (GLM+DS) hardened. The comparison conflates model diversity with debate, but that's exactly the vanilla-MAD-vs-vote literature setup (homogeneous debate vs vote). Our C is cross-model, so it's actually "cross-model debate" vs "single-model ensemble". Fine — we can also note: if we wanted single-model debate we could, but our protocol is cross-model by design.
+
+  OK let me not over-engineer. Design as stated: A = GLM×3 samples; C = GLM+DS hardened 2-round. Metrics compare A vs C on finding coverage; B provides the old-protocol reference.
+
+- Arm A launches: 3 × `debate.sh round1 calib-a1 opencode-go/glm-5.3 <r1-prompt>`, etc. Since user is low on zai quota, use opencode-go/glm-5.3 for these. Note: arm A only needs round 1 (no cross-exam). debate.sh supports single round. 
+- Arm C: `debate.sh round1 calib-c-glm opencode-go/glm-5.3 <r1c>`, `debate.sh round1 calib-c-ds opencode-go/deepseek-flash <r1c>`; then after reading, write hardened r2 prompts (verbatim other position) and resume both.
+- Then chair: extract answers, build claim ledger for C, compute metrics table, write calibration memo, record runs + learning.
+
+Cost: A=3 GLM calls; C=2 rounds ×2 models = 4 calls. Total 7 calls. ~30 min.
+
+Wait — should arm C use GLM via opencode-go too? Yes, quota. And DS via opencode-go (as in the original qwen debate).
+
+Also record: resolved model identity / endpoints (per the new reproducibility rule). Good practice for the calibration itself.
+
+Execution steps now:
+1. Commit skill edit + push (both commits). 
+2. Set up calibration workspaces: names, prompt files.
+3. Launch arm A (3 samples) + arm C r1 (2 panelists) — 5 launches in parallel. All background.
+4. Poll, extract, write arm C r2 prompts, launch r2 ×2, poll, extract.
+5. Chair: claim ledger + metrics + memo + memory aftermath.
+
+One consideration: arm A = 3 samples of GLM via opencode-go. opencode-go/glm-5.3 might be slower (higher latency) — fine.
+
+Prompt files: 
+- r1 (ensemble/calibration baseline with confidence): take the original qwen r1-source.md and append the confidence requirement line. The original prompt already asks "End with a bullet list of every URL you actually fetched. Target 600-800 words." I'll add: "For each of your top findings, give a calibrated confidence (high/med/low)." 
+- Where to write: put in the calib-c-glm workspace's prompts dir; pass same file to all. Or write a shared file first. Let me create workspaces then write prompt(s):
+  - `/tmp` no — use the run dirs. Create calib workspaces first via debate.sh init, then write prompt files into one of them and pass paths.
+
+Actually simpler: write the prompt to the calib-c-glm workspace after init (like before), pass it to all five launches (A1-A3 and C-GLM, C-DS).
+
+Hmm wait, one more design question for arm A: "3 samples of one model + majority vote/union" — for a research-detailed report, majority voting isn't well-defined. Standard practice for this kind of ablation: union of findings / pairwise consistency, or convert findings into claims and take majority per claim. I'll do: extract each sample's findings, dedupe into a claim list, count per-claim votes (3/3, 2/3, 1/3), and evaluate which claims are true vs the ground truth. That lets us compare "union of 3 samples" vs "debate outcome" on coverage and precision. I'll compute that in the analysis stage.
+
+OK. Also: the user said "1 then 2" — so proceed through both without asking interim? Yes: commit+push, then run calibration. The calibration involves multiple launches and polls — that's fine, it's explicitly requested.
+
+Let me start with step 1: commit + push.
+
+Commit message for the quota reroute edit:
+```
+docs(skills): add opencode-go quota-reroute fallbacks for debate models
+
+- panel table: fallback IDs opencode-go/glm-5.3 and opencode-go/kimi-k3
+- verified 2026-09-10 end-to-end (raw endpoint + headless opencode run,
+  the exact debate.sh path); zen `opencode/*` still returns CreditsError
+- use opencode-go/* when direct providers' 5-hour limits hit
+```
+
+Then `git push origin master` (pushes both 2d2c8b6 and new commit).
+
+Then calibration setup. Let me do the commit+push first (single command), then the workspace init + prompt writes.
+
+Let me be careful with the commit: add the SKILL.md file only. Then push. Then report briefly? No — continue to calibration in the same turn (user said 1 then 2). I'll do commit+push, then init workspaces and write prompts, launch.
+
+Since this turn will be long, let me be efficient with tool calls: 
+Call 1: commit + push (shell).
+Call 2: init 5 workspaces (shell): calib-a1, calib-a2, calib-a3, calib-c-glm, calib-c-ds.
+Call 3 (parallel with 2): write the r1 prompt to a temp location — needs workspace? I can write to the calib-c-glm dir only after init. So: do call 2 first, then write prompt, then launches.
+
+Actually I can write the prompt file to /tmp/calib-r1.txt (write tool) in parallel with init (shell) — then launches afterwards. But earlier a /tmp write got rejected by the user once... that was a redirect. Use project path instead: write to `/home/tjiang/repos/project_magnolia/opencode_cc_mem/projects/xiulian/runs/2026-09-10_debate-calib-c-glm/prompts/calib-r1.md` AFTER init. So sequence: init (shell) → write prompt (write) → launch 5 (shell ×5, can batch in one message with multiple tool calls).
+
+Prompt content: copy of the original qwen r1 prompt + confidence line. Let me reconstruct it from the original file — I have it in context (I wrote it). Original:
+
+---
+You are doing an independent assessment. Today is 2026-09-10. You have web access via the webfetch tool — use it. The subject is days old, so verify on the web rather than relying on memory.
+
+TASK: Assess the model "Qwen3.8-Max" (Alibaba; API model id `qwen3.8-max`) as a candidate ADVERSARY MODEL for a blind adversarial-debate panel used by an open-weight-only scientific research agent stack. That stack runs computational chemistry (docking, molecular dynamics, HPC/Slurm job execution) and currently fields debate adversaries from DeepSeek V4.1-Flash, GLM-5.3, and Kimi K3. The stack's policy: only open-weight models as dependencies.
+
+Answer, in priority order:
+
+1. WEIGHTS & LICENSE (decisive). ...
+2. IDENTITY. ...
+3. CAPABILITY. ...
+4. VERDICT. ...
+
+Method: verify every factual claim with webfetch... End with a bullet list of every URL you actually fetched. Target 600-800 words.
+---
+
+I'll re-read the original r1 prompt file to copy verbatim rather than reconstruct (safer). Read from runs/2026-09-10_debate-qwenmax-glm/prompts/r1-source.md. Then append confidence line.
+
+Plan of calls:
+1. shell: commit + push.
+2. shell: init 5 workspaces.
+3. read original r1 prompt (to copy verbatim).
+Then write the calib r1 prompt file, then launch ×5.
+
+Can batch 1 and 2? They're independent. And read too. Let me batch: shell(commit+push), shell(init), read(original r1). Three calls in one message. Then next message: write prompt + launches.
+
+Let me go.
+
+ASSISTANT: On it — commit+push first, then setting up the calibration:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): Pushed: `009750c..378896b master -> master`. Both commits are up.
+
+Workspaces initialized: calib-a1, calib-a2, calib-a3, calib-c-glm, calib-c-ds.
+
+Now write the calibration round-1 prompt: verbatim copy of the original qwen r1 prompt + the confidence line (new protocol). Write to the calib-c-glm workspace's prompts/calib-r1.md, then launch:
+- Arm A: 3 × round1 with model `opencode-go/glm-5.3`, same prompt.
+- Arm C: round1 for calib-c-glm (`opencode-go/glm-5.3`) and calib-c-ds (`opencode-go/deepseek-flash`), same prompt.
+
+Write the prompt with the added confidence line. Insert before "Method:" or at the end of the task section:
+
+"...and the single piece of missing evidence that would change your verdict.
+
+For each of your top findings, give a calibrated confidence (high/med/low).
+
+Method: ..."
+
+Let me write it. Then launch 5 in one message (5 shell calls in parallel). All background via debate.sh.
+
+Note: For arm A, the prompt asks for confidence too — fine, it doesn't hurt the ensemble baseline; it adds a little structure. I decided A and C share the r1 prompt (with confidence). Document in the memo.
+
+Launch:
+- debate.sh round1 calib-a1 opencode-go/glm-5.3 <prompt>
+- debate.sh round1 calib-a2 opencode-go/glm-5.3 <prompt>
+- debate.sh round1 calib-a3 opencode-go/glm-5.3 <prompt>
+- debate.sh round1 calib-c-glm opencode-go/glm-5.3 <prompt>
+- debate.sh round1 calib-c-ds opencode-go/deepseek-flash <prompt>
+
+Then poll. GLM ×4 + DS ×1. The Go models might be slower; rounds 3-8 min each, parallel. Poll every ~80s.
+
+Let me write the prompt and launch.
+
+ASSISTANT: Pushed (`378896b`). Workspaces ready. Writing the calibration round-1 prompt (original + the new confidence line) and launching all five arms:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Now launch all 5:
+- Arm A (ensemble): calib-a1, calib-a2, calib-a3 — all `opencode-go/glm-5.3`.
+- Arm C: calib-c-glm (`opencode-go/glm-5.3`), calib-c-ds (`opencode-go/deepseek-flash`).
+
+Five parallel shell calls with debate.sh round1. All return immediately (background).
+
+ASSISTANT: Launching all five arms in parallel (3 × GLM ensemble samples + 2-panelist hardened round 1):
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): All five launched. Now poll. These will take a few minutes (web research rounds). Poll every ~80s. Let me sleep and check all five statuses.
+
+ASSISTANT: All five launched. Polling:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): DS done; four GLM runs still working (heavy web research). Let me extract DS's answer while waiting, then keep polling.
+
+Extract calib-c-ds answer.
+
+ASSISTANT: DS done; the four GLM runs still researching. Extracting DS while waiting:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Three ensemble arms done, calib-c-glm still running (177KB, unchanged from last check — might be stuck on a fetch or slow). Let me extract the three A arms and check c-glm's process.
+
+ASSISTANT: Three ensemble arms done. Extracting them and checking c-glm's progress:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): calib-c-glm is still running (4:10 elapsed, output stuck at 177757 bytes). Let me look at its recent events to see what it's doing — might be a stuck webfetch or long generation.
+
+Meanwhile, the A arms are extracted (8323, 7654, 8447 chars).
+
+Let me check c-glm's last events.
+
+ASSISTANT: c-glm is alive but quiet — checking its last events:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): c-glm's last event is `step_start` after a step_finish — it's likely generating (thinking/working on the next step) or waiting on a slow fetch. Output stuck at 177757 bytes but that was the same as last poll ~3 min ago. It might be thinking a lot (GLM-5.3 via Go endpoint could be slow) or stuck. Let me wait a bit more and check again. If it stays stuck for another few minutes, I may need to handle a hung run (kill/retry?).
+
+Actually looking more carefully: after step_finish → step_start, the next thing would be reasoning or tool call. GLM might be doing a long reasoning phase before the final answer. GLM r1 earlier (position panel) took ~4-5 min. c-glm has been running 4:10 now. Give it 2 more minutes.
+
+Meanwhile, I can read the extracted answers (DS c + 3 A arms) to start prep. Actually, let me first check DS's c answer content and the A answers briefly — no, better to wait a little, then do a batch read of all five. Let me poll once more with sleep 80.
+
+ASSISTANT: Still generating (step_start after a finish — GLM reasoning phase). Waiting once more:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): calib-c-glm is DONE now (184636 bytes — hmm, lower than the 177757 I saw earlier? Wait, out file size may have been rewritten/compacted... whatever, it says DONE). The ps command exit 1 because process gone — fine.
+
+Now all five are done:
+- calib-a1, a2, a3 (ensemble samples) — extracted
+- calib-c-ds — extracted
+- calib-c-glm — need to extract
+
+Let me extract c-glm, then read all five answers to build the comparison. Also check tool usage for each (web calls).
+
+Then: 
+1. Build the claim ledger for arm C (needs the c-glm and c-ds answers).
+2. Write the hardened round-2 prompts (verbatim positions) for c-glm and c-ds, launch resumes.
+3. While r2 runs, analyze arm A (union/majority scoring vs ground truth).
+4. After r2, extract, build final comparison + memo.
+
+Let me extract c-glm and read the DS answer + c-glm answer (to write r2 prompts). Also I should read the three A answers for the ensemble analysis, but that can come later. For the r2 prompts I need the c answers.
+
+ASSISTANT: c-glm done. Extracting and reading both C-arm answers to write the hardened round-2 prompts:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): Both C-arm round-1 answers are strong. Let me analyze:
+
+**calib-c-ds (DeepSeek V4.1-Flash via opencode-go):**
+- Weights: published `Qwen/Qwen3.8-2.4T-A95B`, custom license with 100M MAU/$20M revenue + $50M MaaS clauses, internal use exempt. Confidence marked. 
+- Notes AA labels proprietary (hosted SKU) — misleading.
+- Verdict: WAIT-LIST (conditional include) — include open checkpoint only if self-hosting ~4.8TB feasible + legal clears; exclude API.
+- Missing evidence: independent head-to-head of self-hosted checkpoint.
+- 23 URLs fetched.
+
+**calib-c-glm (GLM-5.3 via opencode-go):**
+- Weights: published, first Max-class open release (2026-08-12); license MIT-style with conditions, internal carved out. HIGH confidence.
+- Identity: rich detail (92 layers, 512 experts, MTP, pricing). 
+- Capability: vendor numbers + independent BenchmarkList/ECI composite: 147.8 #15/398, between K3 (#9) and GLM-5.3 (#19); weak spots KernelBench, ProgramBench, SciCode, Terminal-Bench 3.0; strong spots PaperBench etc.
+- Verdict: INCLUDE (self-hosted; never API). Confidence MED-HIGH. Costs: 2.4-4.8TB footprint; text-only/forced thinking.
+- Missing: independent eval of self-hosted artifact.
+- 14 URLs.
+
+Differences to settle (round 2):
+1. **Verdict direction:** DS says WAIT-LIST (conditional include): "even then feature-poorer/slower/weaker than GLM/K3" — leaning exclude on value; GLM says INCLUDE (eligibility passes; profile complementary; costs accepted). This mirrors the ORIGINAL qwen debate (DS leaning exclude, GLM leaning include) — good for comparison!
+2. **Capability characterization:** DS: AA v4.3 Qwen 40 vs GLM 45 / K3 44 — trails by 4-5. GLM: independent ECI 147.8 #15, between K3 (149.4) and GLM-5.3 (147.1) — i.e., GLM says Qwen sits BETWEEN them, DS says clearly behind both. Contradictory independent measures! AA vs BenchmarkList/ECI. Also GLM notes weak spots (KernelBench, ProgramBench, SciCode) relevant to comp-chem/HPC; DS didn't weigh those.
+3. **14 vs 23 sources; GLM found BenchmarkList + richer independent data; DS found the AA pages + deepseek HF page.**
+4. **Original-debate carryover:** In the original (old protocol) debate, DS revised to INCLUDE-conditionally after round 2; GLM held WAIT-LIST. Now in round 1 under the new protocol: DS = WAIT-LIST, GLM = INCLUDE. **The positions swapped!** That's a fascinating finding — could be sampling variance (new sessions, same question) or genuine ambiguity. Worth noting in the calibration memo: position stability across replications is low for the verdict direction — evidence of the "noise" in single-panel verdicts.
+
+Now write the hardened round-2 prompts for both:
+- For c-glm: present DS's positions VERBATIM (key quotes): 
+  - DS: "WAIT-LIST (conditional include)" and "even then it is feature-poorer than the SKU (no vision, no non-thinking, 262k native) and independently slower/weaker than GLM-5.3 or Kimi K3."
+  - DS's AA numbers: 40 vs 45/44.
+  - DS's caveat re AA mislabeling.
+  - DS's missing evidence.
+  - Ask GLM to defend INCLUDE vs WAIT-LIST; settle capability contradiction (ECI 147.8 between K3 and GLM vs AA 40 behind both); note DS's licensing read matches yours (so no license dispute).
+  - Require: revisions must cite new evidence; else "no new evidence — position retained". Confidence updates.
+  - Also require claim-level statements to feed the ledger? The final assessment should be structured.
+- For c-ds: present GLM's positions verbatim:
+  - GLM: "INCLUDE — but as a self-hosted Qwen3.8-2.4T-A95B adversary, never the API"; "eligibility gate passes cleanly, profile complementary"; costs accepted (footprint, text-only).
+  - GLM's independent numbers: ECI 147.8 #15/398 between K3 (149.4, #9) and GLM-5.3 (147.1, #19); weak spots KernelBench 5.5-7.1% vs K3 22.7%; ProgramBench 10.5% vs K3 77.8%; SciCode 52.9%; TB3.0 11.3%.
+  - GLM's licensing read agrees with DS.
+  - Ask DS to defend WAIT-LIST vs INCLUDE; settle the capability contradiction (does ECI placement change DS's "trails both" claim? or does AA vs ECI conflict matter?); address the weak-spot evidence vs comp-chem/HPC relevance; confidence updates.
+  - Evidence-required revisions.
+
+Both prompts also: instructions per the new protocol (verbatim quotes marked; evidence-required; concession logging).
+
+After r2, I need to build the claim ledger (C arm), then the comparison across arms:
+- Arm A: 3 samples — I need to read the three A answers and extract claims: (a) weights/license findings, (b) API/open distinction, (c) AA numbers, (d) verdict, (e) missing evidence. Then compute: how many of the ground-truth claims did each sample get; union coverage; majority consensus (majority vote would be on verdict direction, e.g.).
+- Arm B: old debate (already characterized).
+- Arm C: new protocol results.
+
+Metrics table: e.g. 
+- True-claim coverage vs a reference claim set (I'll define ~10-12 key verifiable claims from the chair-verified ground truth: open weights exist; checkpoint name; license custom + thresholds internal carveout; API proprietary/superset; AA 40; K3 license $20M stricter; OpenRouter serves checkpoint; HF providers; checkpoint stripped (text-only/262K); pricing; verdicts...).
+- UNVERIFIED accuracy (do they correctly mark uncertain items).
+- Concessions: evidenced vs unevidenced (C arm from r2; B arm from old transcripts: DS's license revision was evidenced; pricing correction evidenced; so old had ~2 evidenced concessions, 0 unevidenced? We'll compare).
+- DISAGREE rows resolved by exact checks (ledger).
+- Cost/time.
+
+The memo then: does hardened protocol beat ensemble/old? Plus the interesting observation: verdict flip across replications (DS/GLM swapped) suggests verdicts on ambiguous questions are within noise — a finding about panel reliability!
+
+Let me now write the round-2 prompts. Keep them compact but complete. Write to each workspace's prompts dir (r2-hardened.md), then resume both (opencode-go models).
+
+Prompt for c-glm:
+```
+Good analysis. A second independent assessor worked the same question. Compare against yours, defend or revise, then produce your FINAL assessment. You may re-fetch sources.
+
+THE OTHER ASSESSOR SAID (verbatim):
+- Verdict: "WAIT-LIST (conditional include) ... Include the open-weight Qwen3.8-2.4T-A95B only if the stack can self-host [~4.8 TB BF16] and legal clears the MaaS clause; exclude the qwen3.8-max API id outright... Even then it is feature-poorer than the SKU (no vision, no non-thinking, 262k native) and independently slower/weaker than GLM-5.3 or Kimi K3."
+- Independent numbers: "Artificial Analysis Intelligence Index v4.3: Qwen3.8 Max 40 (#30/201), versus GLM-5.3 (max) 45 (#1 of 112 open-weight) and Kimi K3 (max) 44 (#2). Qwen3.8 Max is slow (39.2 tok/s) and very verbose (180M tokens). So independently it trails both GLM-5.3 and Kimi K3 by 4–5 points."
+- On your independent source: "the aggregator scores 2.4T-A95B at an identical ECI (147.8) to the API model" (their own caveat).
+- Their license reading matches yours (custom license, internal exempt).
+
+DISAGREEMENTS TO SETTLE:
+1. VERDICT. You say INCLUDE; they say WAIT-LIST with the same eligibility reading. Is the difference about capability value vs eligibility? Defend or revise with evidence.
+2. CAPABILITY CONTRADICTION. Your BenchmarkList/ECI reading places Qwen (147.8, #15) BETWEEN Kimi K3 (149.4, #9) and GLM-5.3 (147.1, #19); the AA v4.3 index places it 4–5 points BEHIND both (40 vs 45/44). Reconcile the two independent measures — are they measuring different things (composite vs rubric), and which should dominate for a debate adversary? If you can re-fetch to check recency/version, do.
+3. THEIR STRONGEST POINT AGAINST YOU: "slower/weaker than GLM-5.3 or Kimi K3" makes a fourth adversary low-value at a 2.4TB serving cost. Answer the cost-benefit directly.
+
+For each revision: cite the new evidence that changed your mind, or state "no new evidence — position retained". Produce the FINAL assessment with your calibrated confidence and the URLs you fetched this round.
+```
+
+Prompt for c-ds:
+```
+Good analysis. A second independent assessor worked the same question. Compare against yours, defend or revise, then produce your FINAL assessment. You may re-fetch sources.
+
+THE OTHER ASSESSOR SAID (verbatim):
+- Verdict: "INCLUDE — but as a self-hosted Qwen3.8-2.4T-A95B adversary, never the qwen3.8-max API... The eligibility gate passes cleanly, and its profile (top-tier agentic/professional rubrics, long-horizon tool orchestration) is complementary to the incumbents... Two costs to accept: (a) serving 2.4T params (~2.4–4.8TB...) is a serious multi-node footprint...; (b) the open artifact is text-only with forced thinking".
+- Independent numbers: "ECI composite 147.8, #15/398 — between Kimi K3 (#9, 149.4) and GLM-5.3 (#19, 147.1)... Weak spots... KernelBench CUDA/Hard 5.5–7.1% (K3: 22.7%), ProgramBench 10.5% (K3: 77.8%), SciCode 52.9%, FrontierChallenge 15.5%, Terminal-Bench 3.0 11.3%."
+- Their license reading matches yours.
+
+DISAGREEMENTS TO SETTLE:
+1. VERDICT. Same eligibility read, opposite verdicts (WAIT-LIST vs INCLUDE). You argue "slower/weaker than GLM-5.3 or Kimi K3" makes it a low-value fourth adversary; they argue its agentic/professional profile is complementary and costs are acceptable. Defend or revise with evidence.
+2. CAPABILITY CONTRADICTION. Your AA v4.3 reading: 40 vs 45/44 (behind both). Their ECI reading: 147.8 placed BETWEEN Kimi K3 (149.4) and GLM-5.3 (147.1). Reconcile — which independent measure should dominate, and does their weak-spots evidence (KernelBench/ProgramBench/SciCode, directly relevant to a comp-chem/HPC stack) change your verdict?
+3. Their coupling of "complementary profile" to the panel: does decorrelation value (a different lineage) outweigh trailing on the composite? Take a position.
+
+For each revision: cite the new evidence that changed your mind, or state "no new evidence — position retained". Produce the FINAL assessment with your calibrated confidence and the URLs you fetched this round.
+```
+
+Good. Launch both resumes (opencode-go/glm-5.3 and opencode-go/deepseek-flash).
+
+Then while r2 runs, read the three A answers and start the ensemble analysis (I can do that during polling).
+
+Let me write both prompts and launch.
+
+ASSISTANT: Both C-arm round-1s are in — and notably, **the verdicts have swapped relative to the original debate** (DS now WAIT-LIST, GLM now INCLUDE; originally DS leaned include and GLM wait-list). Also a real capability contradiction to settle: AA says Qwen trails both (40 vs 45/44); GLM's BenchmarkList/ECI reading places it *between* Kimi and GLM. Writing the hardened round-2 prompts (verbatim positions, evidence-required revisions):
+
+ASSISTANT (tool:write)
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Launch both hardened round-2 resumes. Then while they run, read the three A-arm answers and prepare the ensemble analysis.
+
+ASSISTANT: Launching the hardened round 2 for both:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): A1 is excellent — and notably it found something new: **Qwen3.8-27B is Apache-2.0** — "include now, if a Qwen voice is wanted" — a genuinely different verdict option neither the old debate nor the C panel considered prominently (well, c-ds mentioned "The Apache-2.0 27B is viable and unrestricted but is not 'Max'" — actually c-ds did mention it! and a1 goes further: recommends including 27B now as the diversity option).
+
+Also a1 confirms AA numbers and the API/open split, and flags "DeepSeek V4.1-Flash as named could not be verified" (interesting — the models are calling V4.1-Flash unverified in search; but we know it launched today and AA has no page; it's brand-new). Also 55K downloads/month; 27B TF.
+
+Let me read a2 and a3 now (during round-2 polling), then check r2 status. This is the ensemble arm. Let me read both.
+
+ASSISTANT: A1 is strong — and adds a new option neither panel had emphasized: **Qwen3.8-27B is Apache-2.0** ("include now, if a Qwen voice is wanted"). Reading A2 and A3 while round 2 runs:
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): Fascinating. The three ensemble samples (all GLM-5.3, same prompt) produced:
+
+**A1:** WAIT-LIST the open 2.4T; EXCLUDE API; **include the Apache-2.0 27B now** if a Qwen voice is wanted. AA numbers 40/45/44. Missing: independent eval of open weights.
+
+**A2:** WAIT-LIST (exclude API; eligible via self-hosted but sits below both GLM/K3, 95B-serving burden; PaperBench vendor-only). AA numbers 40/45/44, #4 open-weights. Missing: independent eval of open weights.
+
+**A3:** **INCLUDE** — as the open checkpoint, not the API. Cites DIFFERENT independent numbers: AA index "via GPTProto, Aug 25 data": GLM-5.3 = 60, Kimi K3 = 60, Qwen = 58 (parity, not dominance); BenchLM Sept: K3 74.8 > Qwen 71.6 > GLM-5.3 68.3 (!); Code Arena WebDev #1 for 0902; 21.1 tok/s slowest. Also claims GLM-5.3 weights landed Aug 28 with $10B MaaS gate (!), Kimi K3 ~1.56TB.
+
+So the ensemble baseline itself shows:
+- **Verdict disagreement**: 2 WAIT-LIST vs 1 INCLUDE (but A1 also suggests 27B include-now — a third variant option).
+- **Capability number chaos across samples**: A1/A2 use AA "40 vs 45/44"; A3 uses "58 vs 60/60" (different index version/mirror) and BenchLM ranking where Qwen BEATS GLM-5.3 (71.6 > 68.3). Three samples of the SAME MODEL disagreed on the composite numbers (AA v4.3 40-45-44 vs the "57/58" older-style numbers vs BenchLM ordering).
+- **Unique finds per sample**: A1: 27B Apache-2.0 + "include now" option; A2: AA also has a page for the open 2.4T-A95B (scored 40 — same as API — new info!); A3: BenchLM ranking, Code Arena, GLM-5.3 weight landing + $10B gate, Brave search engine usable.
+
+This is ALREADY a striking calibration result: **same-model samples disagree on the verdict and the key capability numbers** — and the disagreement is largely about which independent index/aggregator to trust (AA vs BenchLM vs GPTProto-mirror). The "majority vote" on the verdict would be WAIT-LIST (2/3), which matches the original debate's GLM position and the chair's adopted WAIT-LIST... but sample variance is huge on the numbers.
+
+Also note A3's claim "GLM-5.3's weights landed Aug 28, custom license with $10B MaaS gate" — new info (if true), and "AA 60/60/58" contradicts the C-arm's "AA 45/44/40". These are likely different index versions (v4.3 vs older). C-arm GLM said ECI 147.8 etc. Every aggregation source gives a different picture. This chaos is itself the finding: independent aggregators disagree, and samples latch onto different sources.
+
+Now: round 2 for C is running. Let me poll. While waiting, I can start structuring the calibration analysis. But first poll r2 status.
+
+Actually — wait, there's an important asymmetry emerging:
+- Ensemble arm (A): 3 samples of GLM-5.3 → verdicts: Waitlist, Waitlist, Include. Numbers: 40-vs-45/44 (×2) vs 58-vs-60/60 (×1). 
+- C arm round 1: GLM (opencode-go) → INCLUDE; DS → WAIT-LIST. Numbers: GLM→ ECI 147.8; DS → AA 40 vs 45/44.
+- B (old debate): GLM → wait-list lean include → WAIT-LIST final; DS → lean exclude → INCLUDE-conditional final.
+
+Lots of instability. The calibration memo will quantify: verdict flips across arms/replications; aggregator chaos; evidence quality per arm; unique finds; concession behavior under hardened protocol (to be seen in r2).
+
+Let me poll r2 now.
+
+ASSISTANT: The ensemble samples are revealing: **same model, same prompt — two WAIT-LISTs and one INCLUDE**, with three different "independent" number sets (AA 40-vs-45/44, a mirror's 58-vs-60/60, BenchLM placing Qwen *above* GLM). Sample variance on this question is large — itself a finding. Polling the hardened round 2:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): DS round 2 done; GLM r2 running. Let me extract DS r2 and read it while waiting.
+
+ASSISTANT: DS round 2 done. Extracting it:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): DS's hardened round 2 is excellent — exactly the behavior the new protocol aims for:
+
+1. **Verification-first**: it went and tried to verify the other's ECI numbers, found ECI is real but the specific numbers unverifiable (client-side rendered; no corroboration). Marked them **UNVERIFIED** instead of accepting or rejecting rhetorically. That's the "chair verification pass" behavior, done by the panelist itself.
+2. **Evidenced revision**: WAIT-LIST → INCLUDE, narrowly, with explicit reasons (eligibility passes; decorrelation merit; but keeps caveats as gates not objections). It states what moved it and what didn't.
+3. **Reconciliation**: AA vs ECI measure different things; "position revised: my 'trails both' claim was index-specific and overstated; aggregate picture is a wash" — an evidence-backed concession (because the aggregator contradiction itself was recognized as index-artifact).
+4. **Calibrated confidence per finding** at the end — with "low (UNVERIFIED)" for the other's numbers.
+5. Gates before deployment + missing evidence.
+
+This is the strongest evidence yet for the hardened protocol: it produced a *qualified* revision (include with three gates), explicitly UNVERIFIED-marked the opponent's unverifiable claims, and kept the in-domain weak-spot concern alive as the go/no-go.
+
+Now waiting for GLM's r2. Poll. Then the calibration analysis:
+
+Metrics to compute:
+- **Coverage**: which key verified claims each arm found (I'll build the ground-truth/reference claim list).
+- **Verdict stability**: A: W/W/I; C-r1: I/W (GLM/DS); C-r2: ?/?; B-old: GLM held W, DS revised to I-conditional. 
+- **Unique finds**: A1: 27B Apache "include now" option; A2: AA page for open checkpoint scores 40 (same as API); A3: BenchLM ordering, Code Arena, GLM weights-landing + $10B gate claim; C-DS: deep HF/AA fetches, API-vs-checkpoint; C-GLM: ECI composite, weak spots; C-DS r2: ECI unverifiability finding, reconciliation.
+- **Sycophancy/concessions**: 
+  - Old protocol (B): DS revised lean-exclude→include after fetching Kimi license (evidenced); GLM reversed lean-include→wait-list after Adaptyv/benchlm (evidenced). Both evidenced.
+  - New protocol (C): DS revised WAIT-LIST → INCLUDE but explicitly labeled what was unverified and kept gates ("narrowly and conditionally"); the revision was partially triggered by the opponent's argument (decorrelation merit) rather than new fetched evidence — it's a partial concession-under-pressure, though it added the ECI investigation. GLM r2 pending.
+  - So even under the hardened protocol, revisions happen — but they're labeled and gated.
+- **Aggregator chaos**: the biggest finding — three ensembles + two C-arm panelists cited FIVE different capability pictures: AA v4.3 (40/45/44 — verified by direct fetch ×3 panelists), mirror's "58/60/60" (A3, via GPTProto), BenchLM (K3 74.8 > Qwen 71.6 > GLM 68.3, A3), ECI 147.8-between (C-GLM, unverifiable per C-DS), and "AA via GPTProto Aug 25: 60/60/58" (A3 again). The "independent eval" landscape is itself unreliable — which is exactly the chair-verification/claim-ledger use case.
+
+Also the meta-finding: **the same question produced 5 verdicts across 6 runs** (old DS→include, old GLM→wait-list; new DS→waitlist then include-conditional; new GLM→include then ?; ensemble: waitlist, waitlist, include). Verdict direction for this question is within-noise; only the verified facts (weights public, license terms, API-vs-checkpoint gap, AA numbers) are stable. This is a *quantitative* calibration result supporting Claude's critique: for judgment questions, single-sample verdicts are unreliable; what's reliable is the verified-claims layer (and the union of unique finds). The hardened protocol improves the *quality of reasoning and labeling* (UNVERIFIED marks, gates) but cannot eliminate verdict instability — which is precisely why the ledger + verifier is the product, not the verdict.
+
+Poll GLM r2 now.
+
+ASSISTANT: DS's hardened round 2 is exactly the intended behavior: it **attempted to verify the opponent's ECI numbers, found them unverifiable** (client-side rendered, no corroboration), marked them `UNVERIFIED` rather than accepting or dismissing rhetorically, revised WAIT-LIST→INCLUDE with explicit reasons, and kept the scientific-code concern as a go/no-go gate with calibrated confidence per finding. Polling GLM:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM r2 is stuck at 95809 bytes for ~2.5 min now. Let me check its last events to see whether it's reasoning or stuck on a fetch.
+
+ASSISTANT: GLM r2 quiet for a bit — checking its last events:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM r2 has a text part of 419 chars (likely narration between fetches) and is presumably generating the final answer now. The last events show it refetched AA pages (qwen, kimi, glm) — verifying. Let me wait a bit more.
+
+The out file size (95809) hasn't moved; the final answer may take a couple more minutes with GLM's long generations. Poll again after ~80s.
+
+ASSISTANT: GLM is re-verifying the AA pages (good — it's doing the same due diligence). One more wait:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM r2 stuck at 95809 bytes again (~2.5+ min no growth). It has 25 events, last one a 419-char text part. It might be stuck generating (long reasoning takes time but opencode streams text as it generates — if no new events for minutes, maybe it's in a long thinking block that isn't streamed, or the process is hung on the API).
+
+GLM-5.3 via opencode-go: its r1 took ~5 min with a slow patch; this r2 has been running 6+ min. Let me check the process state and how long since last event. I can check the file mtime and the process start.
+
+Actually — the earlier pattern: GLM r1 was stuck ~3 min at 177KB then jumped to done at 184KB. Its generation seems bursty. Let me wait a bit more (one more poll), then if still stuck, consider checking the err log / process state.
+
+Let me look at process CPU state and file mtime.
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The process is sleeping (S, 0% CPU) and the file hasn't been written since 11:40:42 — it's 11:44:44 now, so ~4 minutes with no output. It's likely stuck waiting on an API response (the Go endpoint could be slow/hung for GLM), or opencode is waiting.
+
+What to do:
+- Option 1: wait more. GLM r1 had a similar quiet patch (~3+ min) and then completed.
+- Option 2: the run might be hung on a network call with no timeout. If it stays stuck, I can kill and retry r2 for GLM.
+
+Let me wait one more cycle (~90s). If still no progress, check the err log for activity, and if hung, kill + retry.
+
+Actually let me check the err log tail for any hints (requests logged? errors?).
+
+ASSISTANT: ~4 min with no output and the process idle (0% CPU) — likely waiting on a slow API response. Checking the error log, then waiting one more cycle:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Still stuck: mtime unchanged at 11:40:42, now ~11:46+. The err log is empty (no output). The opencode process is idle. This looks like a hung API call (GLM via opencode-go) — no timeout/failure, just waiting.
+
+Decision: kill this r2 run and retry. The debate.sh pattern: kill the pid, reset ROUNDS to 1 in meta.env (so resume can be relaunched), and relaunch round 2 via resume. The staging entry 20260908_095238 mentioned "use zai-coding-plan/glm-* and reset ROUNDS to retry" — the reset ROUNDS pattern is known.
+
+Steps:
+1. Kill pid 179037 (and its opencode child if any — pkill by pattern? Careful. The bash wrapper pid 179037; the opencode child is a child process. Killing the wrapper may leave opencode. Let me kill the process group: `kill -- -<pgid>`? debate.sh runs `( cd ...; opencode ... ) &` so PID is the subshell. Children: opencode process. Use `pkill -P 179037`? Or kill the wrapper and find the opencode child by pattern `opencode run.*calib-c-glm`? Safer: `kill 179037` then `pgrep -f "debate-calib-c-glm"` to find opencode, kill it too.)
+2. Reset ROUNDS=1 in meta.env (so resume is allowed; ROUNDS=2 would trigger "round 2 already ran"? Actually resume just increments ROUNDS+1 and needs SID_r1 for -s; with ROUNDS=2 and cmd=resume, R=3, then it tries to resume from SID_r2 which doesn't exist → die "previous round session id not captured yet". So reset ROUNDS=1 to relaunch as round 2.)
+3. Clean the partial out/r2.json? If we relaunch, out/r2.json gets overwritten (`> "$ROOT/out/r$R.json"`). The partial is not needed; but keep for forensics? Overwrite is fine. Actually the meta has MODEL_r2 appended; relaunching appends again — harmless. Let me reset ROUNDS to 1 and relaunch.
+
+Note: the GLM session's r2 was stuck mid-generation; the session (SID_r1) persists — resume will continue the session with a fresh round-2 prompt. The stuck partial work is lost (fine — it was just starting the final answer, and the r2 prompt is preserved in prompts/r2-hardened.md).
+
+Alternatively — given time, should I just accept DS's r2 and skip GLM's r2? No — the calibration needs both arms. Retry GLM.
+
+Actually wait, could the hang be the Go endpoint being slow for GLM-5.3 (heavy model)? Its r1 took ~5 min total. This r2 has been going 7+ min. The idle 0% CPU + no bytes for 6 min suggests a hung HTTP request with a long/no timeout (opencode config timeout is 660000ms = 11 min for MCP, but provider calls have their own timeouts). Let me kill and retry once. If the retry hangs too, fall back to running GLM r2 via zai-coding-plan? The user said zai quota is low ("running low on glm 5 hour limit"). Hmm — maybe use a different model for GLM's r2? That would break comparability. Or retry opencode-go once; if it hangs again, wait it out or use zai.
+
+Let me kill + reset + relaunch now.
+
+Commands:
+```
+kill 179037 2>/dev/null; sleep 1; pgrep -f "calib-c-glm" | head; 
+```
+Then find any opencode child: `pgrep -af "opencode run.*calib-c-glm"`. Kill them.
+
+Then: `cd <run dir> && sed -i 's/^ROUNDS=.*/ROUNDS=1/' meta.env` — but debate.sh resume reads ROUNDS from meta. Then `debate.sh resume calib-c-glm opencode-go/glm-5.3 <r2 prompt>`.
+
+Let me do it carefully in one command block, then launch the resume in another (or same). Combine:
+
+```
+kill 179037 2>/dev/null; sleep 2; pkill -f "opencode run.*calib-c-glm" 2>/dev/null; sleep 1
+R=/home/.../2026-09-10_debate-calib-c-glm; sed -i 's/^ROUNDS=.*/ROUNDS=1/' $R/meta.env
+debate.sh resume calib-c-glm opencode-go/glm-5.3 $R/prompts/r2-hardened.md
+```
+
+Wait: careful with pkill pattern matching my own command line (the earlier lesson: `pkill -f` self-match footgun!). The command string contains "opencode run.*calib-c-glm"? My shell command would contain the pattern text "opencode run.*calib-c-glm" if I quote it literally... The pkill pattern matches command lines; my own bash command line includes the pattern string, so pkill could kill my own shell (known footgun from memory: "pkill -f self-match footgun: SIGTERMs the wrapper"). Use a safer approach: find the child PID via `pgrep -P 179037` before killing, or use `pgrep -f "[o]pencode run"` bracket trick to avoid self-match. Actually since I'm killing the wrapper first, its child opencode would be reparented but continue. Let me: `CH=$(pgrep -P 179037)` then kill both. If wrapper has children (subshell → opencode grandchild?). The subshell (pid 179037) runs `cd; opencode ...` — opencode is a child of the subshell. `pgrep -P 179037` gives opencode pid. Then kill.
+
+Commands:
+```
+C=$(pgrep -P 179037); kill 179037 $C 2>/dev/null; sleep 2; ps -p 179037 $C --no-headers 2>/dev/null || echo "killed"
+```
+
+Then reset + relaunch.
+
+Let me execute.
+
+ASSISTANT: GLM's r2 is hung (~6 min, no bytes, idle process — a wedged API call). Killing and retrying, using the known ROUNDS-reset pattern:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Killed. ROUNDS reset to 1, SID_r1 present. Now relaunch round 2 for GLM. Note MODEL_r2 line already exists from the stuck attempt — relaunching will append another MODEL_r2 (harmless for finalize; models list will have duplicates, fine).
+
+Relaunch: `debate.sh resume calib-c-glm opencode-go/glm-5.3 <r2-hardened.md>`.
+
+ASSISTANT: Killed cleanly, ROUNDS reset. Relaunching GLM's round 2:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Relaunched (pid 186620). Poll. While waiting, I can start drafting the calibration analysis structure — but I still need GLM's r2. Let me poll every ~80s. I'll wait.
+
+ASSISTANT: Retry launched. Polling:
+
+ASSISTANT (tool:compchem-tools_run_shell)

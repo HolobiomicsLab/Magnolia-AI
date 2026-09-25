@@ -1,0 +1,559 @@
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): This time the note got its own staging entry (no auto-merge mismatch). Good.
+
+Now the final report to the user — answer their three questions directly: worth doing / obsolete / missed, plus this-week list. Keep it tight; the full detail is in todo-triage.md.
+
+ASSISTANT: Round 3 complete — the panel triaged your actual backlog with full debate context in-session. Direct answers to your three questions:
+
+## What is OBSOLETE — almost nothing
+The backlog aged well. One bookkeeping item only: the **staging-GC parent** (both sub-items were already done in June; only the root-write bug remains separately filed). No direction was killed by the new generation. One source demoted: the **leaked Fable prompt** is superseded as a *source* by first-party Claude Code memory docs — but the patterns to borrow from it survive.
+
+## What is WORTH DOING — 6 raises (the priorities moved)
+- **Post the Ad Verum PR #2 reply** — unanimous #1 this week: drafted, unposted, zero cost, and it's the closing-window item. (GLM's addition: receipts should record *resolved* model identity — today's silent alias swap proved vendors reroute without notice.)
+- **Verifier subagent** — it *is* the deterministic non-model verifier arm the panel settled on.
+- **Per-tool gates** — and `pdb_has_chain_id` already exists un-wired: hours, not days.
+- **Notification bridge** (silence-on-finish is a defect in the unattended-run era), **Fable item #2** (listing-first catalogue = the settled index-plus-promotion pivot), **auto-retry** (makes long unattended runs safe).
+
+**3 reframes:** rules-saturation → the real fix is a *doctrine demotion loop* (monitoring without demotion is the exposed flaw); VLM sidecar → the deterministic rescan is the survivor, VLM stays parked; usage-based promotion → keep as telemetry/pre-filter, **never auto-promote** (that would erase the confirmation gate that differentiates you from vendor auto-memory).
+
+## What is MISSED — 7 absent items, ranked under the closing window
+1. **Provenance schema publication + bidirectional memory portability** (the deadline item; 10–15 pd)
+2. **Falsifier/verticalization watch** — nobody monitors the flip condition (~1 pd/quarter)
+3. **Retrieval pivot / reranker-vs-bulk-load bake-off** (4–10 pd)
+4. **Panel redesign** (lineage × effort × scaffold, machine-check escalation)
+5. **Memory-quality telemetry** — incl. post-swap distillation drift (the model changed *today*)
+6. **Off-peak distillation scheduling** — a 50% discount sitting unclaimed (0.5–2 pd)
+7. **Doctrine demotion loop** as an explicit recurring task
+
+**This week (merged):** ① post the PR reply, ② verifier subagent + wire the gate, ③ listing-first boot catalogue + off-peak scheduling — and write the one-page portability spec while the PR conversation is warm.
+
+Full triage with per-item verdicts: `runs/2026-09-10_debate-position-ds/todo-triage.md` (mirrored in all three workspaces; per-panelist originals in each `answer-r3.md`). Your `todo.md` was read-only for the panel — say the word if you want me to apply the triage to it (raises, reframes, and the seven misses as new items).
+
+USER: continue the debate, do we need to work on mechanism of long agentic run for autonomous research such as what is demostrated by anthropics and openai
+
+USER: continue the debate, do we need to work on mechanism of long agentic run for autonomous research such as what is demostrated by anthropics and openai, if so, what in the todo list is priority, what is missing
+
+ASSISTANT (reasoning): The user wants to continue the debate (round 4) with a new focused question: **should Magnolia work on mechanisms for long agentic runs for autonomous research** (like the 38-hour Ramp run, MongoDB 3-day prototype, Astra's multi-hour sessions, the Navier–Stokes 88-hour campaign)? And if so:
+- what in the todo list is priority
+- what is missing
+
+This is a sharp strategic question. The debate so far concluded: long-horizon autonomy is commoditized (models do it natively), Magnolia shouldn't compete there — BUT the todo has several items that are exactly the supporting infrastructure for long unattended runs (notification bridge, auto-retry, health monitor, verifier subagent, post-hoc panel review of long runs). The panel already hinted: "in the unattended-run era, silence-on-finish is a defect"; GLM's rec #5 included "cheap post-hoc panel review of every long unattended run"; the falsifier/verticalization watch.
+
+The question for round 4: does Magnolia need to build long-agentic-run mechanisms (multi-hour autonomous research campaigns) itself — i.e., orchestrating the main agent to run unattended for hours — or does it need only the *supporting rail* (lifecycle, verification, receipts, review) while the model+harness provide the agency?
+
+This is a genuinely debatable question with real stakes:
+- Pro (build mechanisms): the demos show models CAN run long, but they're vendor-harness demos; Magnolia's domain (compchem/HPC) has different failure modes; unattended runs need exactly the rail Magnolia has (submit/poll/assess); the moat argument (machine-observed ground truth over long runs) only pays if long runs actually happen in Magnolia; also lab-scale autonomous science (AI-scientist-style) could multiply research throughput; the notification/auto-retry/health items are the beginning.
+- Contra (don't build): the agency layer is the model's job now — building orchestration = racing vendor harness teams (already conceded as lost); Magnolia wraps opencode which already has session/agent machinery; long runs risk unbounded cost/errors without verification (the verifier arm must come FIRST); Claude Science/Rosalind are building exactly this vertically (the closing window) — competing head-on is the wrong side; a single lab can't maintain a long-run orchestrator; the 38h run was in Claude Code with memory features — the mechanism is the harness's, not the lab's.
+- Middle (likely convergence): Magnolia shouldn't build the *agency* mechanism (model+harness own that) but must build the *operational rail* that makes long runs safe and scientifically useful in its domain: verification-before-reporting, mid-run health checks, auto-retry on infra failure, notification, receipts of what happened, post-hoc panel review, cost/budget caps, checkpoints/resume. I.e., "supervised autonomy" — the run-boundary provenance layer IS the long-run mechanism for science. Plus: identify what in todo is that rail (notification bridge, auto-retry, health monitor, verifier, explorer) and what's missing (budget/cost governor, checkpoint/resume of agent sessions, unattended-campaign mode with human gates, post-run review pipeline, error-budget/kill criteria, record of agent decisions over the run = receipts spanning hours).
+
+Round-4 prompt design: resume all three sessions again (they have rounds 1-3 context: the debate conclusions + the todo triage). New question:
+
+"The lab asks: should Magnolia itself build mechanisms for LONG AGENTIC RUNS for autonomous research — multi-hour/multi-day unattended campaigns like Anthropic's and OpenAI's demos (38h Ramp run, MongoDB 3-day, Astra multi-hour Codex sessions, 88h Navier-Stokes campaign)? Or is that the model+harness's job now, with Magnolia's role being something else?
+
+1. Take a clear position: BUILD the long-run agency mechanism / DO NOT build it — build only the supporting rail / something sharper.
+2. If any form of yes: which EXISTING todo items become priority (name them, re-rank vs round 3), and what is MISSING for safe, scientifically-useful long autonomous runs in a compchem/HPC lab (concrete mechanisms: budget governors, checkpoints, verification gates, human-gate cadence, cost caps, kill criteria...)?
+3. What would you NOT build even if tempted (the trap items)?
+4. One paragraph: the 6-month test — what should exist by then if Magnolia is right about this?
+
+Under 600 words, cite your round 1-3 reasoning."
+
+Then chair merge. The chair has extra context: e.g., opencode's session/agent machinery, the poller, the AGENTS.md rules (long jobs >30min must go through submit_job), claim-critic, etc. The merge will map to concrete priorities.
+
+Let me write the r4 prompt and launch. Also keep in mind cost — these are cheap. Poll, extract, merge, report. This is round 4; todo-triage was round 3. The verdict file: append to todo-triage? Better: a new file `long-run-verdict.md` canonical in ds workspace + mirrored.
+
+One more consideration: the user's question "do we need to work on mechanism of long agentic run" — the answer should directly address whether Magnolia should attempt e.g. overnight autonomous docking campaigns, auto-driven research loops (like AiScientist), etc. The panel will likely converge on "rail yes, agency no" but let them debate it.
+
+ASSISTANT: Round 4 — the sharpest strategic question yet: should Magnolia build **long-agentic-run mechanisms** itself (the Anthropic/OpenAI demo class), or is that the model+harness's job with Magnolia's role elsewhere? Resuming the same three sessions with full rounds-1-3 context:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): All three done fast this time (no web research needed). Extract all three r4 answers.
+
+ASSISTANT: All three finished quickly (no web research needed — pure position work). Extracting:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): All three round-4 answers are in, and the convergence is complete and striking:
+
+**Positions:**
+- DS: "Build the rail, not the loop."
+- GLM: "Don't build agency — build the campaign rail. Agency is rented; the rail is owned." + the campaign ledger object (checkpointable, outside agent context, resumable by any session/model — "harness-agnostic").
+- Kimi: "Build the RAIL, not the AGENT." + "The Ramp testimonial shows the agency works; nothing shows anyone audited it."
+
+Unanimous: RAIL, not LOOP/AGENT. All three frame it consistently with their rounds 1-3 conclusions.
+
+**Priority re-ranks (all three converge):**
+- Notification bridge → FIRST (Kimi and GLM both explicitly raise it to first; DS raise)
+- Auto-retry → first-tier (Kimi explicit)
+- Health monitor → first (Kimi)
+- Verifier subagent + per-tool gates → anchor-prevention gates (all three)
+- Kill-children termination → "now mandatory" (Kimi: a governor that can't kill is not a governor)
+- PR #2 + derived-receipts extractor → spanning receipts (DS/Kimi)
+
+**Missing (union, all three):**
+1. Budget/cost governor (hard caps: $, core-hours, wall-clock, submissions; fail-stop + notify)
+2. Checkpoint-and-resume / campaign ledger object outside agent context (GLM's "campaigns/ ledger schema"; Kimi "extension of the run YAML, not a new planner"; DS "durable run manifest + boot-context/handover")
+3. Anchor gate / verification gate before results enter memory or anchor future work (all three — the anti-self-reinforcing-doctrine mechanism)
+4. Pre-registered kill criteria + human-gate cadence (all three)
+5. Campaign-level receipts spanning hours of decisions incl. resolved model identity (all three)
+6. Post-run panel review per campaign (GLM, DS)
+7. Off-peak scheduling pairing (DS)
+
+**Traps (all three converge):**
+- Orchestrator/planner loop (racing vendors — certain loss)
+- Context-compression/session-stretching tricks (models/harnesses own it; durable state belongs outside context)
+- VLM mid-run judgment
+- Auto-promotion of overnight results (erases confirmation gate; Kimi: "converts confident-wrong outputs into self-reinforcing doctrine")
+- Re-inventing scheduling (Slurm exists)
+- Phone UI (not moat — though GLM re-raises phone as the overnight kill-switch behind the bridge!)
+
+**6-month tests (all three gave vivid, convergent pictures):**
+- Overnight docking/MD campaign on unmodified opencode; budget/kill/anchor gates declared at entry; NODE_FAIL retries; morning report with every number receipted and verified; nothing entered durable memory unconfirmed; resumed across opencode restart AND model swap (GLM's clincher); 2 campaigns, zero silent failures (Kimi); vendor falsifier still unfired.
+
+Now I write the merged verdict (long-run-verdict.md), mirror, finalize, memory note, and report. The report is the direct answer: YES but rail-not-loop; priorities from todo (re-ranked); missing items; traps; 6-month test.
+
+Let me write the merged verdict file.
+
+ASSISTANT: Complete convergence — all three independently landed on the same sharp position, each with a memorable formulation (DS: *"build the rail, not the loop"*; GLM: *"agency is rented; the rail is owned"*; Kimi: *"the Ramp testimonial shows the agency works; nothing shows anyone audited it"*). Writing the merged verdict:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): The round-4 note bumped into the round-3 triage entry — actually this one is a reasonable merge (both are panel output on the same debate's continuation; the triage entry now has the round-4 outcome as an observation). Acceptable.
+
+Now report to the user. Direct answer: yes-but — rail not loop; priorities; missing; traps; 6-month test. Keep it tight.
+
+ASSISTANT: Round 4 complete — unanimous and sharp. The answer to your question:
+
+## Do we need to work on long-run mechanisms? **Yes — but build the RAIL, not the LOOP** (3/3)
+
+All three panelists independently converged, each with the same core insight in different words: *"Agency is rented; the rail is owned"* (GLM). *"The Ramp testimonial shows the agency works; nothing shows anyone audited it"* (Kimi). The 38-hour orchestration loop is a model+harness property — building one is the vendor race you already conceded. But a 38-hour run is not a 38-hour *agent* problem: **it's 38 hours of decisions that must be governed, checkpointed, verified, and receipted** — and no vendor harness does any of that against ground truth. That rail is your moat scaled up, and it's harness-agnostic (survives opencode restarts *and* model swaps — which also hedges the verticalization falsifier).
+
+## What in the todo becomes priority (re-ranked)
+
+**First tier:** notification bridge (a deaf campaign is dead) · auto-retry (NODE_FAIL = 8 h vs 20 min) · health monitor · verifier subagent + per-tool gates — **promoted to "anchor-prevention gates"**: no overnight number enters memory or a morning report without deterministic recompute · kill-children termination (**now mandatory** — a governor that can't kill isn't a governor) · PR #2 reply + derived-receipts extractor (the spanning-receipts foundation). GLM re-raises phone access from "lower": it's the overnight kill-switch, behind the bridge.
+
+## What's missing (the new core, ~3 of it is genuinely novel)
+
+1. **Campaign ledger** — checkpointable plan→runs→analyses→next YAML *outside* agent context; any session resumes from it, not predecessor context. Extension of the run YAML, not a planner.
+2. **Budget governor** — hard caps ($, core-hours, wall-clock, submissions), fail-stop + notify.
+3. **Anchor gate** — overnight results *queue* but never auto-promote or steer later iterations unverified. Kimi's sharpest point: this is "the most dangerous easy version" to skip — unverified confident-wrong output becomes self-reinforcing doctrine, attacking your ground-truth premise directly.
+4. **Pre-registered kill criteria + human-gate cadence** (plan approved at entry; autonomy overnight; human review before anything anchors).
+5. **Campaign-level receipts** incl. resolved model identity · 6. **post-campaign panel review**.
+
+**Traps (unanimous):** orchestrator/DAG loops, context-stretching tricks, re-inventing scheduling, VLM mid-run judgment, auto-promotion, iteration without the anchor gate.
+
+**6-month test:** campaign declared at 18:00 with budget/kill/anchor in the YAML → runs overnight on *unmodified* opencode → 08:00 report, every number receipted and verifier-gated, nothing in durable memory unconfirmed, resumed across a restart *and* a model swap. Two campaigns, zero silent failures, ASTRA-exportable.
+
+Verdict: `runs/2026-09-10_debate-position-ds/long-run-verdict.md` (mirrored ×3). The campaign rail is a strong candidate for the todo's next "to be discussed" entry — want me to draft it?
+
+USER: so what is the final workable items in order?
+
+ASSISTANT (reasoning): The user asks: "so what is the final workable items in order?" — they want the final ordered list of work items, merging everything from the debate (rounds 1-4), the todo triage, and the long-run verdict. This is a synthesis/recap question — answer directly from context, no tools needed.
+
+I need to produce a single, ordered, actionable list. Let me merge:
+
+From round 3 (todo triage) + round 4 (long-run rail) + rounds 1-2 (position):
+
+The user wants "final workable items in order" — practical, sequenced, with dependencies. Let me think about the dependency order:
+
+**Immediate (this week / zero-cost or hours):**
+1. Post the Ad Verum PR #2 reply — 3/3 first pick across rounds 3-4; drafted; unblocks the closing-window item. Zero cost.
+2. Off-peak distillation scheduling — 0.5–2 pd, 50% discount; independent, trivial.
+3. Wire `pdb_has_chain_id` into submit_job — hours (gate exists un-wired).
+4. Kill-children job termination fix — mandatory per round 4 (governor primitive), small.
+
+Actually, let me think about what groups together:
+
+**Tier 1 — unblockers & zero-cost (this week):**
+1. Post PR #2 reply (drafted; closing-window sensitive; seeds receipts work)
+2. Off-peak distillation scheduling + record resolved model identity (silent swap lesson)
+3. Wire pdb_has_chain_id into submit_job (hours)
+4. Job termination kills children (governor primitive; mandatory)
+
+**Tier 2 — the deterministic safety rail (the anchor-prevention core):**
+5. Verifier subagent (biggest structural win per person-day; anchor gate)
+6. Per-tool gates expansion (after the chain-id wiring)
+7. Derived-receipts extractor (Bucket 2 A0/A1: capture fidelity, resources in run record, uniform run_id) — spanning receipts foundation; feeds verifier and telemetry
+
+Wait — Bucket 2 (A0/A1/uniform run_id) was the queued work from the earlier session. The debate says derived-receipts extractor = Bucket 2. Order: capture fidelity (A1) → A0 (resources in run record) → uniform run_id. Actually from the Sep-8 verdict: A1 + stamp → CI manifest → extractor + gateway predicate deletion... and A0 got proposed ahead. Chair's revised order from response-to-panel: A0 → A1 + stamp → uniform run_id → CI manifest → extractor → A2 backfill.
+
+**Tier 3 — long-run campaign rail (the new core):**
+8. Notification bridge (first-tier; ~30 lines; gates phone + campaigns)
+9. Auto-retry infra failures
+10. Running-job health monitor
+11. Campaign ledger object (new)
+12. Budget governor (new)
+13. Anchor gate semantics (new — actually this is partly the verifier + staging discipline)
+14. Kill criteria + human-gate cadence (new)
+15. Campaign receipts (extends extractor)
+16. Post-campaign panel review
+
+**Tier 4 — memory/provenance strategic (closing window):**
+17. Publish ASTRA schema + portability layer (10–15 pd; the deadline item)
+18. Listing-first catalogue (index-plus-promotion first slice)
+19. Retrieval pivot/bake-off (reranker vs bulk-load)
+20. Memory-quality telemetry
+21. Doctrine demotion loop
+22. Panel redesign
+
+**Tier 5 — hygiene/kept:**
+- Notification bridge already above
+- FLAKE test, L5 sweep, Slurm ETA, resource right-sizing (reframed as receipts consumer), staging retirement, learnable consolidation (lower), phone (after bridge), explorer subagent, claim-critic fold, phase primaries, restart recap separation, UniCA rotation (parked)
+
+Hmm — the user wants "final workable items in order". Best to present a single prioritized sequence with dependencies and rough costs, merging everything into a numbered list, maybe grouped into phases. Keep it actionable. Maybe ~15-20 items max, ordered, with one-line rationale each and cost.
+
+The ordering logic — what comes first:
+- PR reply: yes #1 (zero cost, closing window).
+- Then the rail primitives that everything else needs:
+  - Kill-children fix (governor primitive)
+  - Wire gate
+  - Off-peak scheduling (trivial, independent)
+- Then safety/verification core:
+  - Verifier subagent
+  - Derived-receipts extractor = Bucket 2 (A0 → A1 → uniform run_id)
+- Then unattended viability:
+  - Notification bridge
+  - Auto-retry
+  - Health monitor
+- Then campaign core (new):
+  - Campaign ledger → budget governor → anchor gate → kill criteria/human cadence → campaign receipts → post-campaign review
+- Then the strategic memory items:
+  - Schema publication + portability (could actually be earlier — it's the deadline item; but it's 10-15pd and depends on receipts work partly. The panel said it's the first move of the strategy track. I placed PR reply (its 90% precursor) at #1; full schema publication is bigger. Maybe position it right after the receipts extractor.)
+  - Listing-first catalogue (cheap, do early)
+  - Retrieval bake-off
+  - Telemetry
+  - Doctrine demotion loop
+  - Panel redesign
+- Hygiene kept items at the end (or fold into "kept, low priority").
+
+Actually, let me reconsider: the user wants "workable items" — probably wants a concrete ordered to-do they can act on. I should give a numbered list with phases, dependencies, and costs, and note what's already done (V4.1 swap smoke test done; background model upgrade done via alias).
+
+Keep it concise but complete. Use a compact table or numbered list. Maybe:
+
+**Phase 0 — this week (zero/low cost, unblocks):**
+1. Post PR #2 reply (~0, drafted)
+2. Off-peak distillation scheduling (0.5–2 pd) + record resolved model identity on receipts
+3. Kill-children termination (small, governor primitive)
+4. Wire pdb_has_chain_id into submit_job (hours)
+
+**Phase 1 — deterministic safety core (anchor prevention):**
+5. Verifier subagent (2–5 pd)
+6. Bucket 2 receipts foundation: A0 (resources in run record) → A1 (capture fidelity + stamp) → uniform run_id (re-establish order per debate: A0 first? I'll put "derived-receipts extractor (Bucket 2: A0 → A1 → uniform run_id)" as one line ~5–10 pd)
+7. Per-tool gates expansion (after #4) (~2 pd)
+
+**Phase 2 — unattended viability:**
+8. Notification bridge (~30 lines–1 pd)
+9. Auto-retry infra failures (1–2 pd)
+10. Running-job health monitor (2–5 pd, needs parsing)
+
+**Phase 3 — campaign rail (new):**
+11. Campaign ledger schema + presence check (3–5 pd)
+12. Budget governor (2–3 pd)
+13. Anchor gate + kill criteria + human-gate cadence (part of ledger semantics; 2–3 pd)
+14. Campaign-level receipts (extends #6; 2–3 pd)
+15. Post-campaign panel review (1–2 pd)
+
+**Phase 4 — strategic memory & window defense:**
+16. Publish ASTRA schema + portability layer (10–15 pd) — the deadline item; start spec after #1
+17. Listing-first boot catalogue / index-plus-promotion first slice (2–3 pd) — cheap, reversible
+18. Reranker-vs-bulk-load bake-off (4 pd)
+19. Memory-quality telemetry (2–10 pd)
+20. Doctrine demotion loop (2–5 pd + recurring)
+21. Panel redesign (2–5 pd)
+
+**Kept/backlog (do when touching the area):** explorer subagent, claim-critic fold, phase primaries, resource right-sizing (reframed), staging retirement, learnable consolidation (later), restart-recap separation, FLAKE test, L5 sweep, Slurm ETA, UniCA rotation (parked), phone access (after bridge), doctrine saturation review (absorbed into #20).
+
+That's maybe too many items. "Final workable items" — maybe they want the definitive ordered list. I'll present phases with ~20 items, each one line with cost. Also flag: #1-4 are this week; #5-10 are the rail build; #11-15 campaign; #16-21 strategic.
+
+Should I mention what's already done? The V4.1-Flash swap smoke test done; PR reply drafted; todo triage done. Yes, briefly.
+
+Also note: user asked "final workable items in order" — I should be decisive (the debate converged; this is the chair synthesis). Not a question back.
+
+Do I need any tool call? This is a synthesis from context. No new tools needed. Maybe I should write this ordered list into the run dir as a file (a "final action list")? The user might appreciate it durable. But the rules say propose, don't do unnecessary writes... The user asked "what is the final workable items in order?" — a question, answer it. But given it synthesizes the whole debate into an actionable list, and the previous outputs were all filed durably, I think writing it as `action-plan.md` in the ds workspace + mirrored would be useful and consistent with the aftermath pattern. Hmm — but it's also fine to answer in chat. The user said "what is the final workable items in order?" — I'll answer in chat, and offer to file it. Actually, given the debate aftermath pattern and that this list is the operative output of four rounds, filing it is genuinely useful for future sessions. But per the discussion-vs-execution rule: answering a question doesn't require writing files. I'll answer, and offer. Hmm... Let me think again: the user has been building a durable record all session. A synthesis file would be low-cost and high-value. But it's also a mutation; the user didn't ask for a file. I'll just answer in chat. If they want it in todo.md or a file, they'll say. Actually — one more consideration: I could just present it and mention "say the word and I'll write this into todo.md / an action-plan file". That respects the rules.
+
+Let me craft the final list carefully, with:
+- What's done (so they don't redo)
+- Ordered items with cost + why
+- Dependency notes
+
+Format: compact markdown list grouped in phases. Keep under ~60 lines. Be decisive.
+
+ASSISTANT: Here's the final ordered list, merging all four debate rounds with the todo triage. Dependencies flow top to bottom; costs are panel estimates.
+
+## Already done (don't redo)
+V4.1-Flash background upgrade (+ smoke test passed) · PR #2 reply drafted · full todo triage + long-run verdict filed.
+
+## Phase 0 — this week (zero/low cost, unblocks the rest)
+1. **Post the PR #2 reply** (~0; drafted — 3/3 panelists' #1 pick; closing-window sensitive)
+2. **Off-peak distillation scheduling + record resolved model identity** (0.5–2 pd; claims the 50% discount; the alias-swap lesson)
+3. **Kill-children job termination** (small; round 4: "a governor that can't kill is not a governor")
+4. **Wire `pdb_has_chain_id` into submit_job** (hours; the gate already exists un-wired)
+
+## Phase 1 — deterministic safety core (anchor prevention)
+5. **Verifier subagent** (2–5 pd; deterministic recompute before any number anchors — the anti-confident-wrong gate)
+6. **Derived-receipts extractor — Bucket 2 in order: A0 → A1 + stamp → uniform run_id** (5–10 pd; spanning-receipts foundation; feeds #5, #14, telemetry)
+7. **Per-tool gates expansion** (2 pd; after #4; mechanical fail-closed doctrine is the only form safe with unsupervised agents)
+
+## Phase 2 — unattended viability
+8. **Job-completion notification bridge** (~1 pd; first-tier: a deaf campaign is dead; gates phone access)
+9. **Auto-retry on infra failures** (1–2 pd; NODE_FAIL = 8 h vs 20 min)
+10. **Running-job health monitor** (2–5 pd; only early warning against burning a night on a crashed job)
+
+## Phase 3 — the campaign rail (new work; the round-4 core)
+11. **Campaign ledger object** (3–5 pd; checkpointable plan→runs→analyses→next YAML outside agent context; resumable by any session/model)
+12. **Budget governor** (2–3 pd; hard caps $/core-hours/wall-clock/submissions; fail-stop + notify)
+13. **Anchor gate + pre-registered kill criteria + human-gate cadence** (2–3 pd; results queue, never auto-anchor; plan approved at entry)
+14. **Campaign-level receipts** (2–3 pd; extends #6 across hours; incl. resolved model identity)
+15. **Post-campaign panel review** (1–2 pd; cheap post-hoc debate per campaign)
+
+## Phase 4 — strategic memory & window defense
+16. **Publish ASTRA schema + bidirectional memory portability** (10–15 pd; the deadline item — start the spec now that #1 is posted)
+17. **Listing-first boot catalogue** (2–3 pd; cheap, reversible first slice of the index-plus-promotion pivot)
+18. **Reranker-vs-bulk-load bake-off** (4 pd; keep the reranker only if it wins)
+19. **Memory-quality telemetry** (2–10 pd; recall@k, staleness, action-change, post-swap drift)
+20. **Doctrine demotion loop** (2–5 pd + half-day/quarter; absorbs the old rules-saturation item)
+21. **Panel redesign** (2–5 pd; lineage × effort × scaffold + machine-check escalation)
+
+## Kept, unscheduled (do when touching that area)
+Explorer subagent · claim-critic fold · phase-primaries · resource right-sizing (now reframed as receipts consumer) · staging retirement · restart-recap separation · FLAKE test root-cause · L5 sweep · Slurm ETA · UniCA rotation (parked) · phone access (after #8) · learnable consolidation (after telemetry corpus exists).
+
+**The one-line logic:** Phases 0–1 make results *trustworthy*; Phase 2 makes runs *survivable*; Phase 3 makes them *campaignable*; Phase 4 defends the position while all of it compounds.
+
+Want me to fold this into `todo.md` (or an `action-plan.md` next to the verdicts)?
+
+USER: I'd like to create an experimental branch, implement this list in order. The main branch will be release candidate. does this sound good?
+
+ASSISTANT (reasoning): The user proposes: create an experimental branch, implement the list in order. Main branch stays release candidate. Does this sound good?
+
+This is a discussion/planning turn. Per magnolia.md rules: "Default to proposing, not doing." The user asks "does this sound good?" — they want my assessment of the plan before executing. I should NOT start branching/implementing yet. I should give an honest evaluation: what's good, what needs adjusting.
+
+Let me think carefully about whether the plan is good:
+
+**The user's plan:**
+- Experimental branch (e.g. `experimental` or `dev`)
+- Implement the ordered list there
+- `master`/main stays "release candidate" (stable)
+
+**Is this good?** Broadly yes — feature-branch development with a stable main is standard practice. But there are real wrinkles specific to THIS repo and THIS list:
+
+1. **The list is not all code.** Many items are not things you implement in a branch:
+   - "Post the PR #2 reply" — an action on the adverum repo/GitHub, not a code change in Magnolia. No branch needed.
+   - "Off-peak scheduling" — a config/policy change (when distillation runs), maybe code in the memory server (schedule window). Could be in branch.
+   - "Record resolved model identity" — code change in receipts/run records.
+   - Some items are *ops* or *docs* (schema publication, panel redesign skill edits, doctrine demotion loop is a process).
+   
+2. **Repo structure wrinkle:** The repo is `project_magnolia` at `/home/tjiang/repos/project_magnolia`, with `opencode_cc_mem/` inside it (the tracked part?) — earlier memory says the projects/ tree is gitignored (machine-local), and the sanitized repo mirrors to HolobiomicsLab/Magnolia-AI. There's also the local `.venv`, the `compchem_tools` package, `mcp-servers/compchem-memory` and `compchem-tools`. The repo has a `.gitignore` boundary. So "create an experimental branch" means in `/home/tjiang/repos/project_magnolia` git repo. Need to check: current branch state? Earlier: "Local repo reset to rewritten master" (56bad7e) and docs branch. Also there's a mirror at /tmp/secaudit/magnolia-mirror.git and origin = HolobiomicsLab/Magnolia-AI (private now? it was being flipped public... last handover said still private, user action pending).
+
+3. **Live-system wrinkle (the big one):** This repo is not just source code — it's the LIVE system the user runs daily (opencode_cc_mem is the active agent home; the memory server runs from it; rules/AGENTS.md load every session; plugins are loaded from it). If you check out an experimental branch with unfinished changes, the live agent picks them up on next launch. A branch switch doesn't isolate runtime! This is a critical difference from typical software: the working tree IS the production environment (the memory MCP server runs from this venv/src; plugins load from `.opencode/plugins/`).
+
+   So "implement in order on an experimental branch" has a subtle problem: you can't leave the branch checked out while running Magnolia normally, because:
+   - Uncommitted/in-progress memory-server code would run live (the server imports from src/).
+   - The user runs opencode from this tree constantly.
+   
+   Solutions:
+   a. Develop the branch in a separate **worktree** (`git worktree add ../magnolia-exp experimental`) or a clone, and only merge to master when a phase is stable. The live tree stays on master.
+   b. But then testing the experimental changes requires *running* from the worktree — doable (a second launcher/venv config), but the user's memory system is stateful (project dirs under opencode_cc_mem/projects). Test runs would touch the same project state. Need care.
+   
+   Alternatively: implement in small increments directly on master (current practice?) — the user historically committed directly to master (e.g., "commit b060458", "4a54c21", etc.). The repo has been developed on master with occasional branches (docs/readme-and-documentation). The user now wants a safer model.
+
+4. **Some items interact with live behavior:** e.g., notification bridge is a plugin + poller change — testable locally; verifier subagent is a new `.opencode/agent/` file — live; campaign ledger — new schema. These are user-facing/live features. An experimental branch that's merged per-phase (or per-tier) is reasonable, but "implement the whole list in order on one branch" could become a long-lived branch (bad: divergence, big-bang merge).
+
+5. **Better framing: phase branches or trunk-based with feature flags.** Given the list is ~21 items in 4 phases, I'd suggest:
+   - Work in a **git worktree** of the same repo (`git worktree add /home/tjiang/repos/magnolia-exp experimental` or under /tmp) so the live tree stays on master.
+   - Actually, is a worktree possible? The repo is huge? It's fine.
+   - But the runtime dependencies: opencode.json points at `/home/tjiang/repos/project_magnolia/.venv/bin/python3` and plugins live in `opencode_cc_mem/.opencode/plugins/`. Running the experimental version would need separate paths — messy. Hmm.
+   
+   Alternative pragmatic approach: experimental branch checked out in the SAME tree, but only when the user isn't running Magnolia (i.e., development sessions happen in this very agent!). Wait — I AM the agent running from this tree. If I check out an experimental branch and edit files, then... the current session continues (plugins already loaded in memory), but the memory server (MCP) runs as a separate process launched at session start — code edits wouldn't hot-reload (it's a running process). Plugins are TS loaded at boot — also not hot-reloaded. So editing files on a branch while the session runs is actually OK-ish; changes take effect on next launch. But next launch would run the experimental code! The user launches `magnolia` → opencode with this tree. So as soon as we have in-progress changes on the experimental branch and the user restarts, the live system runs experimental code. That's exactly what "release candidate main" wants to avoid.
+
+   So the real options:
+   A. **Separate worktree + separate launch config**: develop and test in `~/repos/magnolia-exp/` worktree; the user's daily `magnolia` stays on master. Testing the experimental system = run opencode from the worktree with a test project dir (or a copy). This is clean but requires setup: separate venv or reuse, separate MAGNOLIA_PROJECT_DIR for test runs (e.g., a throwaway project), separate opencode config scope.
+   
+   Hmm, but opencode config: the worktree would have its own `opencode.json` (rendered?) — the launcher `magnolia` renders opencode.json from template + side files, and sets MAGNOLIA_PROJECT_DIR etc. The worktree could be launched with the same `magnolia` if root detection works... this is getting complicated. Maybe simpler:
+   
+   B. **Phase-gated merges on a long-lived `experimental` branch**: work on the branch in the live tree, but only when actively developing; when the user needs to *use* Magnolia for real work, merge completed phases to master or stash/checkout master. This is fragile for daily use.
+   
+   C. **Small increments directly on master, behind per-item discipline**: the repo's history suggests master has been the working branch all along; features were built in small commits and sometimes branches. For a single-user research system, a "release candidate" main + experimental in the same tree is only coherent if experimental changes are safe-by-default (additive, feature-flagged) — otherwise daily use breaks.
+   
+   D. **Hybrid — recommended**: 
+   - Use the `experimental` branch as planned for **code that only takes effect on next launch**, and adopt a rule: after each item (or small item group), run tests; after each *phase*, merge to master. Never leave the live tree on experimental while doing daily work — or, if you do, accept the risk consciously.
+   - Actually wait. Let me reconsider: the user's proposal "main = release candidate" suggests they want stability. The cleanest way to honor that with a live system: the launcher should keep pointing at the stable tree (master), and experimental development+testing happens in a **second worktree** with its own venv/config for smoke tests. 
+
+Let me check what the actual repo layout is and whether there's already a branching convention, to ground my recommendation. I should look at:
+- `git -C /home/tjiang/repos/project_magnolia status/branch`, remotes, existing branches
+- Check if there are tests and how heavy (406 tests mentioned)
+- Check the launcher to understand what the live tree is
+
+Actually the user asked "does this sound good?" — a discussion question. I should answer with assessment + a concrete recommendation, and per the rules I can do read-only investigation first to ground it. Let me do a quick check of the git state and repo structure so my answer is grounded. I'll run a few read-only commands.
+
+Wait, one more consideration about scope: the user says "implement this list in order" — 21 items, phases 0-4. That's a large program (person-days estimate total: roughly 60-100 pd!). Some items are not code:
+- #1 post PR reply — an external action, not branch work
+- #2 off-peak scheduling — small code/config
+- #16 publish schema — includes external publication (needs user approval)
+- #20 doctrine demotion loop — process + code
+- #21 panel redesign — skill edits
+
+I should flag that the list includes non-code actions, and suggest the branch approach applies to code items; the rest run in parallel as ops/docs.
+
+Also: is there a risk with the memory data? The projects/ tree is gitignored/machine-local, so branch switching doesn't touch memory data. Good. But .magnolia/ at repo root — some of it is tracked? Earlier memory: `.magnolia/` trees were purged from history (filter-repo) — so project memory is untracked. OK.
+
+Another practical wrinkle: The repo also vendors into adverum (`~/repos/ad_verum/project_magnolia` is a vendored copy, sync scripts exist: `sync-magnolia.sh`). Changes to Magnolia get vendor-synced to adverum — the process note from earlier: "anything in perspicacite_v2/ has to be back-ported... or the next vendor-sync reverts it". For our list, some changes (ASTRA-related, receipts) interact with the vendored tree. Worth a note: the experimental branch strategy should include the vendor-sync flow at phase merges.
+
+Let me also think: is an experimental branch even the right granularity? Alternative: one branch per phase (exp/phase-0, exp/safety-core, exp/campaign-rail, exp/strategy) merged sequentially into an integration branch `next`, with `master` as release candidate. This matches "implement in order" and keeps merges reviewable. Given no CI maybe, but tests exist (pytest suites: memory 406 tests, compchem-tools tests). A key requirement: each item should keep the test suite green; phase branches merge when green.
+
+Test/verification approach for a live agent system:
+- Unit/integration tests: pytest (both packages), plus opencode config validation.
+- Smoke tests: run a headless test session against a scratch project to exercise memory server changes (like we did for smoke.py).
+- For plugin changes (notification bridge), test in a session.
+
+My recommendation (to present):
+1. Yes to branch isolation, with one correction: don't develop directly in the live tree if daily use must stay on RC. Two concrete modes:
+   - **Preferred: a second worktree** for the experimental branch (`git worktree add ~/repos/project_magnolia-exp experimental`), with the live `~/repos/project_magnolia` staying on master. Test changes by launching opencode from the worktree against a scratch project (or a copy of xiulian). Hmm — but the user's data (projects/) is under the live tree. A worktree has its own working dir; the projects/ dir would be... the worktree checkout wouldn't contain the untracked projects/ data (git worktree checks out tracked files only; untracked machine-local data like projects/ would need copying or symlinking). The memory server needs the project dir; MAGNOLIA_PROJECT_DIR can point at the live projects/xiulian (read/write) — but then experimental server code writes to live memory. For testing, better a scratch project dir. Doable.
+   - **Simpler, acceptable: branch in the live tree + strict phase-merge discipline + never leave the tree dirty on experimental for normal use.** Honestly for a single user, this might be pragmatic: when developing, stay on experimental; when done for the day / merging a phase, checkout master. But that's fragile.
+   
+   Actually, maybe I'm overcomplicating. Let me reconsider the actual runtime: which parts of Magnolia reload per session? On `magnolia` launch:
+   - opencode.json is rendered and read → MCP servers launched fresh (compchem-memory via .venv python; compchem-tools remote at 127.0.0.1:8001 — a separate daemon? "compchem-tools remote tool" at localhost:8001 — started how? Possibly a long-running daemon).
+   - Plugins loaded fresh per TUI session.
+   So changes take effect at next launch/restart of the daemon. If the compchem-tools server is a long-running daemon (started outside), it needs restart to pick changes.
+   
+   So "developing on experimental in the live tree" means: any restart while on experimental runs experimental code. If the user does daily work during development, they must switch to master first. The worktree approach keeps the launch tree always master.
+
+2. Branch granularity: `experimental` as integration branch is fine, but merge to master **per phase** (Phase 0-1 first), keeping RC always test-green. Or feature branches per item → experimental → master per phase. For a solo dev, item branches may be overhead; phase checkpoints are the sweet spot. I'll recommend: one `experimental` branch, commit per item, merge to master at each phase boundary (or at any item that's independently safe + tested).
+
+3. Non-code items: keep them out of the branch (PR reply already a todo action; schema publication involves external repos; panel redesign is skill text — could be branch but merges early since docs-only). I'll note the split: code items go on the branch; ops/docs items proceed in parallel.
+
+4. Tests per item: pytest suites green before commit; smoke test for memory-server changes; plugin changes tested in a scratch session. Define "phase gate": all tests green + smoke pass + 1 real use case.
+
+5. Vendor-sync note: after merging to master, run the adverum vendor-sync (or know that it will be picked up) — especially for items touching vendored paths.
+
+6. Also: the RC branch name. They said "main branch will be release candidate" — the repo's main is `master` (I believe). Keep `master` as RC; branch `experimental` (or `dev`). Fine. Maybe they want to rename? No, keep master.
+
+7. One more point: some items are *interdependent with external repos* (PR #2 reply, ASTRA schema). The branch plan should sequence: code items that are purely local first (Phase 0 items 2-4, Phase 1), then the external-facing pieces.
+
+Should I do any tool calls? Let me do a quick read-only git check to ground the state (current branch, worktrees, remotes, whether tests are runnable, adverum sync tooling). This informs the answer concretely. A couple of quick commands via run_shell.
+
+Let me check:
+- git -C /home/tjiang/repos/project_magnolia branch -a; status -sb; log -3
+- ls of repo root for structure
+- the sync script existence in adverum
+
+Then compose the answer: "Yes, with adjustments" + specifics. Since the user asked "does this sound good?", the answer should be an assessment + proposal, ending with asking for go-ahead (or asking which mode they prefer). Per rules, don't start executing (no branch creation) until confirmed. But read-only checks are fine.
+
+Let me run the checks.
+
+ASSISTANT: Good instinct — but there's one critical wrinkle specific to this repo: **the working tree IS the live system** (the memory server runs from it, plugins load from it, `magnolia` launches against it). A branch switch changes what your next session runs, which is exactly what "main = release candidate" is meant to prevent. Let me check the current state before giving you a grounded answer:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Current state:
+- Branch: master (RC), with one uncommitted modification (the adversarial-review SKILL.md edits from today — panel list + tools section!). I should note that.
+- Branches: master, pr-14 (local), old-origin remotes (leftovers from the sanitization; the "prune local leftovers" item mentioned refs/backup/pre-mailmap-* and old-origin).
+- No worktrees currently.
+- Remote origin = HolobiomicsLab/Magnolia-AI.
+- Repo root has: todo.md, projects/ (machine-local, gitignored), opencode_cc_mem/ (the tracked agent home), plus docs, old_files, opencode_3_tier_mem, plans.
+- Tests exist (opencode_cc_mem/tests + mcp-servers packages have their own suites; earlier "406 tests" memory suite).
+- adverum has sync-magnolia.sh.
+
+Also important: the user asked a yes/no + "does this sound good?" I should answer with assessment. Key points:
+
+1. **Yes to the branch model in principle** — master as release candidate, experimental branch for the work. Standard and sound.
+
+2. **The wrinkle: live tree = runtime.** The launcher runs from `/home/tjiang/repos/project_magnolia`. If `experimental` is checked out here, the user's daily Magnolia sessions run experimental code (memory server from src, plugins from .opencode/plugins, rules/skills from the tree). "RC main" only holds if the *launch tree* stays on master. Options:
+   - **A. Worktree** (recommended): `git worktree add ../project_magnolia-exp experimental`. Live tree stays on master. But: worktrees don't carry untracked machine-local data (projects/, .venv, opencode.json rendered files, node_modules in .opencode?). Testing experimental code needs: reuse the live .venv? The venv has the packages installed in *editable* mode? Let me think — compchem-memory is launched as `/home/tjiang/repos/project_magnolia/.venv/bin/python3 -m compchem_memory.server` per opencode.json. If the venv installs the package editable from the live tree (`pip install -e`), then running from worktree wouldn't pick up worktree code unless PYTHONPATH points there. Could run with PYTHONPATH=$worktree/opencode_cc_mem/mcp-servers/compchem-memory/src. Doable but fiddly.
+   - **B. Branch in-place + discipline**: develop on experimental in the live tree, switch back to master for daily use. Fragile: user must remember; if they launch while experimental is checked out, RC is violated. Also the currently-dirty SKILL.md edit would need committing first.
+   - **C. Hybrid**: phase-level, short-lived: implement item-group on experimental in place, test, merge to master immediately (phases are ~days each). During each development window the tree is on experimental and daily use is degraded/avoided; between merges it's master. For a single user this can work but needs scheduling (e.g., "development happens today; daily use tonight uses master").
+   
+   Given a single user + a live system, I lean **A (worktree)** for the safest RC guarantee, with a practical twist: the experimental worktree can share the venv via PYTHONPATH for tests, and for full-system smoke tests we can temporarily run a session against a scratch project dir. Actually — do we even need to run the experimental system interactively? Many items are testable via pytest + headless smoke (we did headless fixtures today: debate.sh, smoke.py). For items needing a live session (notification bridge plugin), we can do a controlled test run.
+
+   Hmm, but wait: there's a simpler consideration. How does the user work? They daily-drive Magnolia from this tree. If we develop in a worktree, *I* (the agent) still run from the live tree (master) — I can edit files in the worktree via paths, run tests there. That works fine! The agent edits anywhere; only the runtime is pinned. So worktree is quite workable.
+
+   One catch: `.venv` paths. Tests for compchem-memory run with `/home/tjiang/repos/project_magnolia/.venv/bin/python -m pytest` — if the package is installed editable from the live tree, running pytest in the worktree might import live-tree code instead of worktree code. Need to check installation mode (editable? PYTHONPATH?). Quick check: `pip show compchem-memory` or check .pth files. If editable pointing at live tree, we can set PYTHONPATH to the worktree src dirs so the local source shadows the editable install (import order: PYTHONPATH before site-packages... editable installs often use __editable__ finder that can take precedence depending). Safer: create a dedicated venv for the worktree, or use `pip install -e worktree` — heavier. Simpler: tests likely use `sys.path` manip or the packages live in mcp-servers/*/src — pytest with `PYTHONPATH=src` in the worktree works if imports resolve locally first. I shouldn't overengineer in the answer; I can verify at execution time.
+
+3. **Scope reality check**: of the 21 items, not all are branch code:
+   - #1 post PR reply — external action (not branch)
+   - #2 off-peak scheduling — small code (memory server scheduling) + policy
+   - #16 publish schema — external publication + spec
+   - #20/#21 — process/skill docs (could be branch, docs-only)
+   I'd map: branch work = code items; ops actions proceed in parallel. Fine.
+
+4. **Branch naming/strategy**: `experimental` as integration, commit per item; merge to master at **phase boundaries** (0+1, 2, 3, 4) — or even per-item for trivially safe ones (#3, #4). RC stays green: run full test suites before each merge. Since user says "implement in order", phase checkpoint merges preserve that.
+   
+   Also: keep the current dirty SKILL.md edit in mind — it's uncommitted change from today (panel list + tools section). That should be committed to master first (it's docs-only, reviewed content) before branching. Good hygiene step: commit it (small, factual edits from today's session). The user hasn't asked me to commit... they said don't commit unless asked? The system prompt says "NEVER commit changes unless the user explicitly asks". The user is now asking about creating a branch and implementing — implicit approval for git operations? They asked "does this sound good?" — still discussion; I should propose the plan and ask to proceed. Mention the dirty file needs handling.
+
+5. **One more thing**: pr-14 local branch and old-origin leftovers — the handover mentioned pruning as optional. The new branch strategy makes cleanup slightly relevant (housekeeping), but not blocking.
+
+6. **Testing gates**: define per-phase "definition of done": tests green (memory suite ~406, compchem-tools suite), smoke of affected subsystem, and for live-behavior items a controlled headless run. Merge to master only after the gate. That's how RC stays RC.
+
+7. **Vendor sync**: after master merges, `~/repos/ad_verum/scripts/sync-magnolia.sh` exists — adverum vendors Magnolia. Any changes to vendored paths should be synced/reviewed so adverum doesn't drift or revert. Note it at merge time.
+
+8. Also worth noting: some items might not be implementable as planned (e.g., #16 schema publication needs the user's decision on where to publish; #21 panel redesign is docs). And "in order" will hit dependencies: Phase 1 #6 (receipts) is substantial; Phase 3 campaign ledger needs #6/#8. The order stands.
+
+So my answer: "Yes, with three adjustments: (1) worktree (or strict discipline) because the tree is the runtime; (2) phase-boundary merges, not one big-bang experimental; (3) split code vs ops items. Plus housekeeping: commit the dirty SKILL.md first. Then propose the concrete setup: branch name, worktree path, test gates, and ask for go-ahead."
+
+Should I ask which mode they prefer (worktree vs in-place)? Yes — a short question with recommendation. Per the question tool guidance... I can just ask in prose, but the question tool is available. The user's message ends with "does this sound good?" — a question to me. I'll answer + propose. I could use the question tool to offer options. Given the interaction style so far (plain text), I'll answer in prose with a clear recommendation and a concrete first step. Keep it concise (4 lines is too short for this; it's a planning answer — moderate length).
+
+Actually, let me reconsider the worktree feasibility more concretely, because I don't want to recommend something that breaks:
+
+Worktree at `/home/tjiang/repos/project_magnolia-exp` (or `~/repos/magnolia-exp`). Tracked files checkout cleanly. Untracked needed pieces:
+- `.venv/` — not in worktree. Tests can run with live venv + PYTHONPATH to worktree srcs. Or create a lightweight venv there. For running the full Magnolia from the worktree, the launcher (`softwares/bin/magnolia` in opencode_cc_mem) renders opencode.json and config; it might assume paths. We probably won't run the full launcher from the worktree; instead for smoke tests run the MCP server directly with PYTHONPATH. Plugin changes (notification bridge) would need a live-ish test: could run headless opencode with the worktree's plugin dir? Complex. Pragmatically: merge plugin changes after unit-level review + test in the worktree via a minimal harness, then verify on master post-merge with a scratch session. Acceptable.
+
+Alternative B (in-place): simpler operationally; risk is controlled by discipline: "while experimental is checked out, do not run production Magnolia; use it only for dev/testing; switch back to master when done." Since the user often works *with me* in sessions (and the session itself runs from the tree), in-place switching mid-session is fine (running processes keep their loaded code), but *next launch* must be considered. Actually wait — if the user launches a new session while the tree is on experimental, that session runs experimental. To avoid confusion, worktree is cleaner.
+
+Hmm, but there's a cost: working in a worktree means my file edits go to different paths, and every shell command needs explicit paths. That's fine — I do that already.
+
+Also consider: maybe simplest robust option is **clone** not worktree? Worktree shares .git (branches stay in one repo, single fetch). Worktree is right.
+
+One more practical point: the experimental worktree needs a rendered `opencode.json` if we ever run opencode there. We can check whether it's tracked: opencode.json is in the repo root? Earlier I saw `opencode_cc_mem/opencode.json` (the project config). Repo layout: /home/tjiang/repos/project_magnolia has opencode_cc_mem/ containing opencode.json. Hmm, actually the workspace root is /home/tjiang/repos/project_magnolia and the project under it. The launcher renders opencode.json — from template. It's likely gitignored/untracked (contains API keys and machine paths — sanitized versions tracked?). `opencode.json.template` is tracked, `opencode.json` probably gitignored. So in the worktree, opencode.json won't exist unless rendered. For test runs we could render/copy it. OK — details for execution.
+
+I think my answer should be: Yes with adjustments, and propose:
+1. First: commit the pending SKILL.md edit to master (docs-only, today's approved content) so we branch from a clean tree. Also decide pr-14 (leave it; housekeeping later).
+2. Create `experimental` branch + worktree at `~/repos/project_magnolia-exp` (recommended) — live tree stays on master, always RC.
+3. Implement in ordered phases; commit per item; **merge to master at each phase boundary after test gates** (unit suites + smoke); tag/record phase merges.
+4. Ops items (#1 PR reply, #16 publication, external coordination) happen outside the branch in parallel; I'll track them separately.
+5. Adverum vendor-sync at each master merge.
+6. Phase 0/1 have two items that are hours (gate wiring, kill-children) — those can merge individually.
+7. Ask: worktree vs in-place? Recommend worktree; and confirm go-ahead.
+
+Also mention estimated scope: phases 0-1 ~2 weeks part-time, full list ~2 months; suggests milestones. Eh, keep the answer focused.
+
+Let me also quickly double check: is there an existing `experimental` branch remote? No. Branch names: `experimental` fine.
+
+One more thing — the user says "The main branch will be release candidate" — maybe they intend to eventually release/公开 the repo (HolobiomicsLab/Magnolia-AI, currently private, flip to public pending). So RC = what's released. That reinforces: master stays stable, experimental carries the work. Good.
+
+I'll answer now. No more tool calls needed. Actually — should I ask via the question tool? I'll put the recommendation in prose and end with "Say the word and I'll set it up" + the worktree/in-place question. Keep it tight.
+
+ASSISTANT: Yes, the model is sound — but this repo has one property a normal codebase doesn't: **the working tree is the runtime**. `magnolia` launches against `/home/tjiang/repos/project_magnolia`; the memory server imports from `mcp-servers/*/src`, plugins load from `.opencode/plugins/`, rules/skills load from the tree. So if `experimental` is checked out here, your next daily session runs experimental code — which defeats "main = release candidate." Three adjustments:
+
+**1. Isolate the worktree, not just the branch.** Recommended: `git worktree add ~/repos/project_magnolia-exp experimental` — the live tree stays on master permanently, and I develop/test in the worktree (testing via the live `.venv` + `PYTHONPATH` to the worktree sources, plus headless smoke runs). Alternative: branch in-place with strict discipline (only dev on experimental, switch back to master before any real session) — simpler, but one forgotten checkout = RC violated. I recommend the worktree.
+
+**2. Merge at phase boundaries, not one big-bang branch.** `experimental` as the integration branch, commit per item, but merge to master at each phase gate after: full test suites green (memory ~406, compchem-tools) + a smoke run of the touched subsystem. Phases 0–1 are small enough that items #3/#4 (kill-children, gate wiring — combined ~hours) can merge individually. This keeps master genuinely shippable at all times.
+
+**3. Split code from ops.** Not everything in the list is branch work: #1 (post PR reply), #16 (publish schema), #20/#21 (doctrine loop, panel redesign — docs/process) run outside the branch in parallel. The branch carries the code items.
+
+**Housekeeping before branching:** the tree has one uncommitted change — today's `adversarial-review/SKILL.md` edits (panel list + tools/web-access section, all reviewed content from this session). Commit that to master first so we branch from clean. (The `pr-14` branch and `old-origin` refs are harmless leftovers; prune when convenient.)
+
+**Also:** at each master merge, run the adverum vendor-sync (`~/repos/ad_verum/scripts/sync-magnolia.sh`) so the vendored copy doesn't drift — that's the ritual that bit us before.
+
+Scope sanity: phases 0–1 are ~1–2 weeks of part-time work; the full list is a ~2-month program — phase-boundary merges make that visible and interruptible.
+
+Want me to proceed: commit the SKILL.md edit → create `experimental` → worktree → start Phase 0? (And worktree or in-place — your call.)

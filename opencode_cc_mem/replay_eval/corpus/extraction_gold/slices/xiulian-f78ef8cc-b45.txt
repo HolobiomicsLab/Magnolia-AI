@@ -1,0 +1,516 @@
+ASSISTANT (reasoning): GLM is still running (141727 bytes — barely moved from 141423). Hmm, it may be stalled or just slow. Let me check its err log and process state.
+
+Actually GLM's out size went from 141423 to 141727 in 80 seconds — very slow progress, or stuck. Let me check the process and the err log tail. The pid 86632 — check if alive, and check the last line of err/r2.log for activity.
+
+ASSISTANT: GLM's output has barely moved (141.4→141.7 KB in 80s). Checking if it's alive:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM's process is alive (03:04 elapsed). The last event is a step_start. It seems GLM may be in a long tool call or thinking. The output size isn't moving much. Let me wait a bit more — maybe it's stuck on a fetch that's slow, or thinking. Let me check how many events there are and the most recent events more carefully — count webfetch calls in r2 so far and look at the last few events' timestamps if available.
+
+Actually, let me look at the last ~5 events (not just last 2) to understand what it's doing. The out file might have partial last line. Let me parse the last few complete lines.
+
+ASSISTANT: Still alive, last event is a step-start (likely a slow fetch or long thinking). Let me look deeper at recent events:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The GLM r2 process has produced its final text (7943 chars) and the last event is step_finish. The process itself (bash wrapper) is still shown as alive (03:04) — perhaps it's just finishing/flushing, or the opencode process is exiting. The `status` shows RUNNING because the pid is still alive, but the stream shows the final text part complete and step_finish. It's likely just about to exit. Let me check status again after a short wait.
+
+Wait — interesting: the events list shows only 16 events total for r2. The final text part exists with 7943 chars. The process may be hanging on shutdown or just slow. Let me poll status again; if still RUNNING but the stream complete, I can wait a bit more. Let me sleep 30 and check.
+
+ASSISTANT: GLM's stream actually has its final text (7,943 chars) and a step-finish — the process is just slow to exit. Short wait:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM round 2 is DONE (EXIT=0). Now let me extract GLM's round 2 answer and read it. Then chair the final merge.
+
+Let me extract GLM r2 answer.
+
+ASSISTANT: GLM round 2 DONE. Extracting its final assessment:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM's round 2 answer got clipped at the beginning again in the display, but the file is complete on disk (the extract wrote it). The display starts mid-sentence "asoning, knowledge reliability)..." — again the display clips the top, or the answer r2 file starts with narration. Let me check the file head to see the start (section 1 and 2).
+
+Also GLM revised: verdict WAIT-LIST (downgraded from lean-include). Points:
+1. License: excludes on license grounds rejected as inconsistent (same conclusion as DS).
+2. Capability: AA v4.3 GLM 45 / Kimi 44 / Qwen 40 / DS-Flash — Qwen third; slow/verbose.
+3. Access: open checkpoint servable via HF Inference Providers (Novita) — so accessible; but every capability number measured on API; checkpoint has zero independent evals, two API snapshots behind.
+4. PaperBench: dropped as decision-grade (vendor-run, API-measured; benchlm marks display-only).
+
+Final verdicts:
+- DS: **INCLUDE — conditionally** (checkpoint via open-weight host; exclude proprietary Max API).
+- GLM: **WAIT-LIST** (downgraded from lean-include; license/access settled in Qwen's favor but capability trails existing anchors; checkpoint unproven).
+
+So after round 2, both converge on:
+- License objection dead (Kimi K3 stricter, already fielded).
+- API `qwen3.8-max` excluded (proprietary, policy violation).
+- Checkpoint access possible via open-weight hosts (OpenRouter per DS; HF Inference Providers/Novita per GLM) — no self-hosting needed.
+- Capability: AA v4.3: GLM 45, Kimi 44, Qwen (checkpoint) 40, DS V4-Pro 36; Arena WebDev has Qwen ahead of GLM; Qwen slow (~39 tok/s) and verbose; all Qwen scores measured on API, checkpoint has no independent evals.
+- PaperBench: withdrawn as decision-grade by both.
+- Missing evidence (both): independent harness-matched eval of the checkpoint vs GLM/K3.
+
+Remaining disagreement: INCLUDE-conditional (DS) vs WAIT-LIST (GLM). The difference: DS says the checkpoint at AA 40 is within the panel's band and ahead of DeepSeek (which is already used), license/access fine → include conditionally. GLM says it trails GLM/K3 and its only standout is vendor-run on the API → wait-list until checkpoint proves itself.
+
+For the chair's merged verdict, the sensible synthesis: **WAIT-LIST** is the more defensible outcome for the panel — because the decisive criterion for a debate adversary is whether the checkpoint (the policy-compliant artifact) delivers value; every capability number is API-measured, and the checkpoint is two snapshots behind with zero independent evals. But DS's point that it would still be within the band vs DeepSeek matters. Hmm. As chair, I should weigh: the user's policy is open-weight-only; the checkpoint is the only admissible artifact; it has no independent evaluation; also practical: panel already has 3-4 adversaries; adding a fourth that trails the anchors is marginal. The Qwen checkpoint on OpenRouter/HF providers may also be served by third parties whose quality is unverified.
+
+Actually, let me think about what the user needs: they wanted to assess qwen3.8-max as a potential panel member. The answer: don't add it now; wait-list. The strongest, best-evidenced position: the *API* Max is out on policy; the *checkpoint* is legitimately accessible and license-clean, but unproven (no independent evals, two snapshots behind, trails GLM/K3 on the composite). Verdict: WAIT-LIST. That aligns with both final positions (DS include-conditional vs GLM wait-list) — as chair I can note the split and rule wait-list as the operational recommendation, with a concrete trigger: if someone runs an independent eval of the checkpoint showing parity, add it.
+
+Alternatively, "include conditionally" is also defensible: the panel is not harmed by adding it; it's within the band; access via OpenRouter works with the same pattern as Kimi. Hmm. But the debate's own logic: adding a fourth adversary costs tokens; the value is decorrelation/coverage. DS said "competitive, not a clear loser", "ahead of DeepSeek". GLM said "trails both existing anchors". The evidence: AA 40 vs GLM 45, Kimi 44, DS-Pro 36, and DS-Flash (V4.1) unscored. The panel uses DS V4.1-Flash as the cheap arm (not Pro). So comparing Qwen to the actual panel: GLM-5.3 (45), Kimi K3 (44), DS V4.1-Flash (unscored; older V4-Flash 50 on old index — unverifiable). Actually the panel's cheap arm scored... unknown. If Qwen is at 40 and is slow/verbose, it's not clearly better than the cheap arm, and it's worse than the two substantive anchors. So WAIT-LIST is right.
+
+Chair's merged verdict: **WAIT-LIST** for the panel; the API Max is excluded outright (proprietary). Trigger for reconsideration: independent, same-harness eval of the open checkpoint showing ≥ parity with GLM-5.3/Kimi K3 on the composite or on our own debate tasks. Also note: if the user wants a fourth adversary for coverage now, use the checkpoint via OpenRouter (open-weight host), accepting the checkpoint≈API transfer risk — but that's optional, not required.
+
+Now, I need to:
+1. Check GLM r2 file head for completeness (see sections 1-2 start).
+2. Write the merged verdict to one canonical location. Which one? Mirroring the Sep-8 convention: canonical merged verdict in the DS dir? The prior convention put canonical in the ds dir. Hmm, actually for this one, maybe write verdict.md in BOTH? The skill says: "Write the merged verdict to <run>/verdict.md" — for a panel there are two run dirs. The Sep-8 example wrote one canonical file in the ds dir and referenced the sister. I'll do the same: canonical in `2026-09-10_debate-qwenmax-ds/verdict.md`? Or glm? Let me pick the ds dir for symmetry with the last debate, and reference the glm dir. Hmm — actually why not write it to both, a short copy? That duplicates. I'll write canonical in ds, note sister. Actually, hmm, wait: maybe better to write to glm? No rationale. Keep ds canonical, same as Sep-8.
+
+Hmm, actually — for discoverability, maybe write the verdict in both dirs? The skill's aftermath says write verdict.md to <run>; for panels it's ambiguous. Previous case: "Sister workspace: ../2026-09-08_debate-astra-receipts-glm/ (glm-5.3 side; this file is the canonical merged verdict for both)". So one canonical + pointer in the other. I'll do that: canonical in ds dir; and maybe write a tiny pointer file in glm dir? The Sep-8 didn't even have a pointer in the sister (just referenced). OK, canonical in ds only, and both memory records reference it.
+
+Wait, actually, let me reconsider: the user might look in either. I'll add a small `verdict-pointer.md` in the glm dir pointing to the canonical. Hmm, over-engineering? Cheap and helpful. Actually the verdict can just be in both... no, canonical + pointer is cleaner. Let me do: canonical `verdict.md` in ds dir; pointer file in glm dir "Merged verdict: see ../2026-09-10_debate-qwenmax-ds/verdict.md". Fine. Hmm, but the finalize checklist in each workspace says "write verdict.md to $ROOT". To satisfy both, maybe I should just write the canonical to both dirs (copy). That's simplest for anyone browsing either run. Slight duplication but these are run artifacts; the run-history record can note both. I'll write the same verdict.md to both, with a note in the header that it's the canonical merged verdict for the panel and lists both workspaces. Actually — no. Duplicated files can drift; but this is a frozen artifact, no drift risk. Simplicity wins: write to both.
+
+Hmm, let me just mirror the established convention exactly (canonical in one, note in the file). The precedent is clear in the prior debate: canonical in the ds dir. I'll write verdict.md in the ds dir and a one-line pointer in the glm dir. Decide and move on.
+
+3. Save round answers durably: already have answer-r1.md and answer-r2.md in each dir (I extracted). Also run `debate.sh answer` is the official way but my extraction is equivalent and complete. The skill says "Save durable round answers: debate.sh answer $NAME <round> > file (or reference out/rN.json)" — I've saved them (even better, full text incl. narration for GLM). Good.
+
+4. Run `debate.sh finalize qwenmax-glm` and `qwenmax-ds` → get run-record JSON.
+
+5. memory_record_run for both (tool="debate").
+
+6. memory_record_learning (note) with the converged outcome + pointer.
+
+7. Protocol-level learning: "tools in debates" — this was the user's question: Are they allowed to use tools? YES: headless adversaries (opencode run with OPENCODE_DISABLE_PROJECT_CONFIG=1) retain built-in tools; webfetch worked excellently (DS 20+6=26 calls; GLM 14+7=21 calls). This is a protocol-level learning worth drafting into the SKILL.md: a section noting that web access is available and should be explicitly authorized/required when the topic needs fresh facts; plus the caution that web-derived claims must be cited and that stale/JS-blocked pages return garbage (Bing returned garbage per GLM; qwen.ai JS-only). Also maybe note: adversaries narrate fetches in text (GLM) — the final assessment needs extraction of the last text part... Actually both extracted fine via last-part method. Hmm, the GLM answer-r1 included narration in earlier text parts — my concatenation included them in order; the final assessment is at the end. Fine.
+
+Should I edit the SKILL.md now? The skill aftermath says "Protocol-level learnings (about debating itself) promote editorially: draft a line/section into this skill or a rules/ file, pointer back to the evidence entry — never a verbatim file copy". I think yes: add a short "Tools and web access" note in the SKILL.md. This directly answers the user's question and encodes the finding for future debates. The user asked "Are they allowed to use tools?" — documenting it in the skill is the natural durable outcome. I'll add a compact subsection after "Adversary model selection" or under Mechanics: 
+
+"## Tools and web access
+Headless adversaries inherit opencode's built-in tools (webfetch et al.); Magnolia MCP servers are disabled by blindness. For topics requiring fresh facts, instruct the adversary explicitly to verify via webfetch and to cite URLs + mark UNVERIFIED items; search through duckduckgo.com/html or bing.com/search result pages, then fetch primary sources (JS-heavy sites like qwen.ai may return no content; Bing can return garbage). Verified 2026-09-10: GLM-5.3 × DS V4.1-Flash panel, 40+ webfetch calls total, all completed."
+
+Also include the quote from the evidence? Pointer to the run dir. Something like that. I'll draft it.
+
+Also should I update the panel list? The user earlier asked to add qwen3.8-max as "potentially... haven't assess it yet". Now we've assessed it (via debate). Result: WAIT-LIST, exclude the API. So update the SKILL.md panel table row for qwen: from "UNASSESSED" to "assessed 2026-09-10: WAIT-LIST — API Max is proprietary; open checkpoint (2.4T-A95B) accessible via open-weight hosts (OpenRouter) but unproven and trails GLM/K3 on AA v4.3; add only after an independent checkpoint eval". That's a useful update. And update the STACK CONSTRAINT memory entry? Its pool line says "opencode-go/qwen3.8-max as UNASSESSED candidate (user to pilot...)". Now assessed → update. Hmm, but the user might want to review first. The debate outcome is a recommendation; the user asked us to do the test debate. Updating the skill/conservative docs with the assessment result is editorial. I think it's in scope: the assessment replaced "unassessed". But careful: maybe the user wants qwen as panel member regardless? The debate's conclusion is wait-list; but the user's earlier framing was "potentially qwen 3.8 max, I haven't assessed it yet" — so they wanted an assessment. We produced one. Updating docs to reflect "assessed: wait-list, reasons" is the natural record. I'll do it but phrase it as an assessment result, noting it's a recommendation not a user decision. Hmm — or should I not edit the skill/constraint entry and just record the debate + memory note? The user may disagree with wait-list; but they can override. The memory note records the outcome. For the skill: the panel table row saying "UNASSESSED as of 2026-09-10 — pilot in one debate before relying" — we just did the pilot debate. Updating with result is correct maintenance. I'll update it to reflect: assessed 2026-09-10 → wait-list (reasons; trigger condition). Similarly the constraint entry pool line: change "UNASSESSED candidate (user to pilot...)" to "assessed via debate 2026-09-10 → wait-list; API Max proprietary (use checkpoint 2.4T-A95B via open-weight hosts if ever included)". Hmm, but this is a project-tier promoted entry — editing it is fine (corrections are learnings). Let me do a light touch: update the pool line.
+
+Wait — actually, should I? The user's last instruction was just "proceed on the debate". The aftermath checklist (skill) requires: verdict.md, memory_record_run, memory_record_learning. Skill updates are "protocol-level learnings promote editorially" — I'll do the small tools note + qwen row update as part of aftermath. I think that's within the mandate and clearly beneficial. But I should be careful not to overstep: these are documentation updates reflecting the debate's outcome; the user can review. I'll report them.
+
+Also — the debate came with a finding about DeepSeek V4.1-Flash AA score: GLM found https://artificialanalysis.ai/models/deepseek-v4-1-flash → 404. DS found no separate score. Minor: note in verdict as unverified.
+
+Let me now:
+1. Read GLM r2 head (check completeness of sections 1-2).
+2. Write verdict.md (canonical, both dirs? decide: canonical in ds dir + pointer note in glm? I said earlier maybe both. Let me finally decide: write the full verdict to BOTH dirs. Reasons: both are run dirs for the panel; finalize checklist per workspace says write verdict.md to that workspace; cost negligible. The Sep-8 convention differed but there's no rule against both. Hmm... but duplication could double-count in future searches. It's fine — same content. Actually, you know what, I'll follow the established convention (canonical in one, sister referenced) to stay consistent with the prior panel. Canonical: which? The prior: ds dir canonical. For no strong reason, I'll pick the DS dir again? Hmm, or GLM because glm was the more thorough revision? Arbitrary. Keep ds (consistent with prior panel pattern). Write verdict.md in ds; write a one-line pointer verdict.md in glm? A pointer file named verdict.md in glm could confuse ("where's the content?"). Alternative: don't write anything in glm; memory record for glm run references the canonical verdict in ds. The finalize checklist for glm run says write verdict to $ROOT... The skill's aftermath is written for single debates; panels are an extension. Compromise: write full verdict in ds; write in glm a short "canonical verdict" note file named `verdict-pointer.md`? Meh.
+
+Let me just write the full verdict to both dirs with identical content and a header noting it's the panel's canonical merged verdict, duplicated for either workspace. Simplest for humans, no drift (frozen). GO.
+
+3. Run finalize for both.
+4. memory_record_run ×2.
+5. memory_record_learning note.
+6. Update SKILL.md (tools note + qwen row).
+7. Update constraint entry pool line.
+8. Report to user: tools answer (yes; evidence), debate outcome, files.
+
+Let me first read GLM r2 head quickly, then write verdict. Actually let me get GLM r2 file head to see sections 1-2.
+
+ASSISTANT: GLM revised too: **WAIT-LIST downgraded** — same license/access conclusions, but capability trails the anchors and PaperBench withdrawn. Checking the start of GLM's round-2 for completeness:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM's r2 file is complete (starts mid-first clause quoted, which is just the top of the extracted text — the first line begins with a quoted license fragment; there's likely some narration cut? Actually the file starts " make the Software, its outputs..." — it seems the beginning is a quote from license: "**...shall not apply... provided that such Use does not make the Software...**". The head of the file started mid-quote because... hmm, maybe GLM's final message itself started with the quote (continuation from earlier narration). It doesn't matter — both answers are complete enough for the record. Actually wait, it's possible the first text part of GLM r2 also has earlier content (section 1 heading). The sed showed from line 1: " make the Software, its outputs..." — so the file's first line is that. Hmm, maybe the r2 message's first text part started with part of section 1 already in progress (the model may have streamed "## 1. License & policy — I revise" and the quote in a previous part that got... no. Whatever — the substance is all there; section headings "## 2.", "## 3.", "## 4.", "## FINAL ASSESSMENT" present.
+
+Wait, let me check: does the file contain "## 1."? The head I printed began with the tail of the quote, then "An internal-only research panel...", then "## 2. Capability...". So section 1's heading may be missing from the start (the text part started mid-section-1?). That's an extraction quirk: possibly the first text part was overwritten... but whatever, the record preserves the essential reasoning. The out/r2.json raw has everything for forensics. Not worth fixing now — hmm, but for the durable record, it'd be nice to have the complete answer. Let me quickly check the raw r2.json text events for GLM to see how many text parts and whether the very beginning differs.
+
+Actually — my extraction concatenated all text parts with last-snapshot-per-id in first-seen order. If the beginning of the answer is missing, maybe the very first text part had id X and the very first stream entry for it was partial, and the final snapshot is complete — unless the part started mid-stream because opencode streams text deltas as separate parts with same id? We saw for DS r1: exactly 1 text event with the full text. For GLM r2: 16 total events (the ones counted earlier were only before completion; the final file now has more). Let me not obsess — check quickly: count text parts in GLM r2 and their first 60 chars.
+
+Actually, let me do that check as part of writing the verdict just to make sure I quote accurately. Quick python.
+
+ASSISTANT: GLM's answer is substantively complete (starts mid-quote due to streaming — let me verify the raw stream isn't hiding an earlier segment):
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): There are 3 text parts for GLM r2:
+1. Narration 1 (228 chars): "Settling the disagreements requires re-verification: AA pages for GLM-..."
+2. Narration 2 (302 chars): "GLM-5.3 = 45 (#1 in AA's open-weights class), Kimi K3 = 44 (#2)..."
+3. Final full answer (7943 chars): "# Settling the four disagreements\n\n## 1. License & policy — I hold my ..."
+
+My extraction took last-snapshot per id in first-seen order and joined: that would give narration1 + narration2 + full answer. But the file I read started with " make the Software, its outputs..." — which suggests the final part (7943 chars) starts with "# Settling the four disagreements\n\n## 1. License & policy — I hold my ..." — so the file should start with narration1! Let me re-check: my extraction wrote the file BEFORE these last events? I extracted GLM r2 after status DONE — the extraction printed "GLM r2 answer chars: ..." — wait no, the extraction output earlier said "GLM r2 tool usage: ... / GLM r2 answer chars: ..." hmm, actually that command output only showed tool usage and then... Let me look: the command output was:
+
+"GLM r2 tool usage: {...}
+GLM r2 answer chars: ..." — hmm, I don't see it in the output shown. The output shown started with "asoning, knowledge reliability)..." which was from `cat answer-r2.md`. So the extraction did run; the file starts with " make the Software..." per the later sed.
+
+Wait, there's an inconsistency: if the file = join(parts in first-seen order), and part 1 head is "Settling the disagreements requires re-verification...", the file's first line should be that. But sed showed first line " make the Software, its outputs...". Unless the extraction wrote the file before the final part arrived? I extracted after status DONE (round done, EXIT=0). Hmm, but wait — actually I extracted GLM r2 in the command where I ALSO printed tool usage... Let me re-read that command: yes, after status DONE, I ran python that counts tools and extracts. Output showed "GLM r2 tool usage: ..." — actually no! Looking at the output of that call: it printed "GLM r2 tool usage: {...}" — hmm, the output I saw was:
+
+```
+GLM r2 tool usage: (...)
+GLM r2 answer chars: ...
+```
+No wait, I never saw that. The output shown for that call was the cat of answer-r2.md ("asoning, knowledge reliability)..."). Hmm, the actual result was:
+
+```
+asoning, knowledge reliability) maps onto ...
+...
+- https://duckduckgo.com/html/?q=PaperBench+Qwen3.8-Max+independent+leaderboard
+...
+(First-round URLs ...)
+```
+
+So the python print lines weren't displayed — same display-clipping issue as before (stdout beginning clipped). OK.
+
+So why does the file start mid-sentence? Let me actually check the file's true head again, and also check whether the extraction happened before all events were flushed. The r2.json may have been incomplete when I extracted (I extracted right after status DONE, but maybe more events were being flushed). The file answer-r2.md starts " make the Software..." — mid sentence. And the raw stream now shows 3 text parts where part 3 = 7943 chars starting with "# Settling the four disagreements". If the extraction had included part 3, the file would start with narration1 or part3's heading. It starts mid-sentence of part 3's middle? " make the Software, its outputs..." — that looks like text from INSIDE section 1 (quote). So maybe the extraction file was written from an earlier state where part3's snapshot was partial (mid-stream), and later events updated part3 to full. I extracted after DONE, but perhaps the last flush happened at process exit slightly after. The out size at extraction was 150554 bytes; the status DONE came from EXIT=0. Hmm.
+
+Simplest fix: re-extract now (all events flushed) and overwrite answer-r2.md. Do it for both GLM r2 (and maybe re-verify DS r2 file which looked complete). Let me re-extract GLM r2 and check head.
+
+ASSISTANT: The extraction raced the final flush — re-extracting now that all events are written:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Both answer files are now complete:
+- GLM r2: 8475 chars (narration + final assessment)
+- DS r2: 8020 chars
+
+Now let me:
+1. Write the verdict.md (canonical merged verdict) — write to both dirs.
+2. Run finalize for both.
+3. memory_record_run ×2 + memory_record_learning note.
+4. Update SKILL.md (tools note + qwen row assessment result).
+5. Update the STACK CONSTRAINT entry pool line.
+6. Report to user.
+
+Let me compose the verdict. Key content:
+
+# Verdict — Qwen3.8-Max as a debate adversary (panel: GLM-5.3 × DeepSeek V4.1-Flash)
+
+Panel debate: zai-coding-plan/glm-5.3 + opencode-go/deepseek-flash (= V4.1), blind round 1 + cross-examination round 2, chaired by the k3 main agent. Trigger: user request to assess qwen3.8-max as a fourth adversary + test tool-enabled debates. First panel with web access enabled — both adversaries verified claims via webfetch (DS 26 calls, GLM 21 calls, all completed).
+
+## Converged findings (both, independently)
+1. The product `qwen3.8-max` (API) is proprietary: weights of the served entity are not published; AA classifies it Proprietary. Per the open-weight-only policy, **exclude the Max API from panel use** — both settled this after round 2.
+2. The open checkpoint `Qwen/Qwen3.8-2.4T-A95B` (released 2026-08-12, ungated, 2.4T/95B MoE, 4.89 TB BF16) is a **stripped sibling**: text-only, thinking-only, 262K native context (vs API's vision/non-thinking/1M). It is license-clean for internal use: custom "Qwen3.8-Max License" with high-threshold riders (attribution >100M MAU/$20M-mo; separate license only for MaaS businesses >$50M TTM) and an explicit internal-use carve-out. **No stricter than Kimi K3's license** ($20M MaaS trigger) which the panel already accepts — exclusion on license grounds was unanimously rejected as inconsistent.
+3. Access is possible without self-hosting: OpenRouter serves `qwen/qwen3.8-2.4t-a95b` (DS found), HF Inference Providers lists Novita serving it (GLM found). Both open-weight hosts.
+4. Capability: AA Intelligence Index v4.3 (current, checked 2026-09-08): GLM-5.3 45 > Kimi K3 44 > **Qwen3.8-Max 40** > DeepSeek V4-Pro-0813 36; DS V4.1-Flash has no AA page (404). Qwen is slow (~39 tok/s) and very verbose. Arena WebDev (preliminary) favors Qwen over GLM — but that's frontend preference, orthogonal to debate; both agree AA dominates for this role. All Qwen numbers measured on the API entity; the checkpoint has zero independent evals and is two snapshots behind.
+5. PaperBench 93.0 (vendor-reported, API-measured, display-only per benchlm) — **withdrawn as decision-grade evidence by both**.
+
+## Chair's merged verdict: **WAIT-LIST**
+- Do not add `qwen3.8-max` (API) — policy violation (proprietary).
+- The open checkpoint is admissible on license/access grounds but unproven: no independent eval, stripped capabilities, trails both substantive anchors on AA. Adding a fourth adversary costs tokens for coverage we already have (GLM + Kimi + DS).
+- Trigger to reconsider: independent, same-harness evaluation of the downloadable `Qwen3.8-2.4T-A95B` checkpoint showing ≥ parity with GLM-5.3/Kimi K3 — or a decision that its distinct lineage alone improves decorrelation enough to justify a slot despite the slower/verbose profile.
+
+## Panel divergence
+DS revised to INCLUDE-conditionally (checkpoint via open-weight host; argues band-parity with DeepSeek); GLM held WAIT-LIST (trails anchors; everything unverified on the checkpoint). Chair adopts WAIT-LIST as the operational recommendation; the include-conditional path stays open if the trigger fires. Not a hard disagreement: both exclude the API and both name the same missing evidence.
+
+## Protocol findings (tools/web)
+- Adversaries have built-in tools; webfetch worked: DS 26 calls, GLM 21 calls across both rounds, all completed. Searches via DuckDuckGo HTML + Bing; primary sources fetched (HF raw LICENSE, HF API, Arena, AA). JS-heavy sites (qwen.ai) return nothing; Bing sometimes garbage (GLM). No Magnolia MCP (by design, blindness).
+- URL citations in answers made every claim checkable; the cross-examination converged because each side could re-verify.
+
+Artifacts: workspaces 2026-09-10_debate-qwenmax-{glm,ds}; transcripts out/r{1,2}.json; extracted answers answer-r{1,2}.md. Canonical verdict mirrored in both workspaces.
+
+Hmm — "mirrored in both workspaces"? I decided to write to both. Let me finalize that decision: write verdict.md to both dirs, identical content with slight header noting mirror. OK.
+
+Also finalize each workspace via debate.sh finalize → run-record JSON for metrics. Let me do that after writing verdicts, then record runs.
+
+Let me write the verdict file content once and copy to both.
+
+Then finalize both (sequential commands in one call), then memory records.
+
+Then SKILL.md updates. Let me draft the tools section addition:
+
+In SKILL.md after "Adversary model selection" section add:
+
+## Tools and web access
+
+Headless adversaries inherit opencode's built-in tools (read/glob/grep/webfetch, etc.); Magnolia MCP servers stay disabled for blindness. `webfetch` works and is the way to ground fresh claims: instruct the adversary explicitly to verify via web (search `https://duckduckgo.com/html/?q=...` or `https://www.bing.com/search?q=...`, then fetch primary sources) and to cite a URL per claim + mark unverifiable items UNVERIFIED. Blast radius: JS-rendered sites (e.g. qwen.ai) return no content; Bing results can be garbage — DuckDuckGo HTML is the more reliable search surface. Verified 2026-09-10 (GLM-5.3 × DS V4.1-Flash panel: 47 completed webfetch calls across two rounds; the cited evidence is what let round 2 settle disagreements rather than entrench them).
+
+And update the qwen row:
+
+| `opencode-go/qwen3.8-max` | ASSESSED 2026-09-10 → WAIT-LIST: the API id is proprietary (policy-excluded); the open checkpoint `Qwen3.8-2.4T-A95B` is license-clean and hostable (OpenRouter/HF-Novita) but unproven (AA v4.3 40 vs GLM 45 / Kimi 44; no independent checkpoint eval). Reconsider only if a checkpoint eval shows parity. |
+
+Also update the pool paragraph line below the table: it says "Panel pool is open-weight only (user mandate 2026-09-10); decorrelation rule still decides which..." — fine, maybe adjust to keep.
+
+And the constraint entry: update pool line "opencode-go/qwen3.8-max as UNASSESSED candidate (user to pilot; not yet relied on)" → "opencode-go/qwen3.8-max assessed via panel debate 2026-09-10 → WAIT-LIST (API proprietary; open checkpoint 2.4T-A95B license-clean/accessible but unproven vs anchors; reconsider on independent checkpoint eval)".
+
+Let me also decide about the two run records: finalize outputs run-record JSON with run_id, metrics. memory_record_run for each: tool="debate", run_id=e.g. "2026-09-10_debate-qwenmax-glm", status="success", metrics={rounds:2, models:[...], ...}.
+
+Then memory_record_learning: entry_type="note" with the converged outcome + pointer. Confidence 0.85. Tags: debate, qwen3.8-max, panel-assessment, tools-webfetch, open-weight, license.
+
+Also: should I save round answers via the official command? Done via extraction to answer-r{1,2}.md in each dir.
+
+Let me write verdict.md now. I'll write with the write tool to the ds dir (read? not needed, new file), then cp to glm dir. Actually since write tool requires no read for new files, write to ds, then use run_shell cp to glm. Or write twice. cp is fine.
+
+One more thing: the in the verdict I should note the caveat that this tested "GLM-5.3 × DS V4.1-Flash" as the user's requested pairing, and that for real panels the decorrelation rule applies (main agent currently = deepseek family, so DS would normally not be a panelist...). Hmm — should I mention? The debate was a test; the verdict content is still valid. I'll note in the protocol findings: "test pairing was user-specified; note main-agent family was DeepSeek for this session, so in routine panels the decorrelation rule would swap the DS arm."
+
+Actually wait — is that right? The main agent for THIS session is opencode-go/deepseek-flash per system prompt ("You are powered by... opencode-go/deepseek-flash"). Yes. So the DS panelist shared family with the chair. For a test it's okay; I'll note it once.
+
+Let me write the verdict file.
+
+ASSISTANT: Both answers complete. Now writing the merged verdict (both workspaces), then finalizing:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Verdict written to ds dir. Now copy it to glm dir, and finalize both workspaces. Then memory records.
+
+Let me cp verdict.md to glm dir and run finalize for both.
+
+ASSISTANT: Now mirror the verdict to the GLM workspace and finalize both runs:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Both finalized successfully:
+- glm: 2 rounds, session ses_f75bf49a4ffe4kKEPgLr58woo2, 371KB transcript
+- ds: 2 rounds, session ses_f75bf489bfferdiC5TRGoKrIEh, 427KB transcript
+
+Now memory aftermath:
+1. memory_record_run ×2
+2. memory_record_learning note
+3. Update SKILL.md (tools section + qwen row)
+4. Update constraint entry pool line
+
+Then report to user.
+
+Let me do memory_record_run for both, and the note in parallel (3 calls). Then the edits (SKILL.md + constraint entry) after reading the relevant file sections. Let me batch the memory calls now.
+
+ASSISTANT: Both runs finalized (2 rounds each; 371 KB + 427 KB transcripts). Recording runs and the learning:
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): Hmm — the learning note got "bumped" into the `20260910_073403_025003_opencode_go_deepseek_flash_V4_1_definition_verified_correct.md` entry (the model definition verification note). That's a topic mismatch — the Qwen debate outcome is a different topic from the model definition verification. The memory system saw they're similar (both about deepseek/opencode-go/models?) and merged it as an observation.
+
+This is the second time the auto-merge conflated distinct topics (earlier the frontier-models assessment got merged into the ASTRA adoption entry). The Qwen debate outcome is important and deserves its own entry — being buried as an observation in the "model definition verified" entry is not great.
+
+Options:
+1. Accept the merge (like last time) — the content is preserved as an observation; the entry title doesn't describe the Qwen debate though. Future retrieval of "qwen3.8-max" might not surface it well... though the content includes tags? When bumped, does it merge tags? Probably appends the observation text only. Let me check the entry to see.
+
+2. Create a dedicated entry manually with a distinct title — but record_learning auto-merges to the similar entry again. I could use memory_annotate to create a human-authored note in the project tier directly (that tool creates entries in the active entries area, not staging). Hmm — memory_annotate is "Create a human-authored lab notebook entry (type 'note') with optional references... Entries are created directly in the active entries area (not staging)." That could host the Qwen verdict as a lab-notebook note. But is that the right use? It's for human-authored notes; I'm the agent. Alternatively, I could accept the merge.
+
+Let me first check the entry to see how the observation landed and whether it's findable. If the merged entry now has observation_count=2 with my text as Observation 2, it's preserved. The title stays "opencode-go/deepseek-flash (V4.1) definition verified correct — 5 flags incl. stale sibling entry and integer-effort gateway error" — a future session searching "qwen3.8-max" would search content and find the observation. memory_search does keyword search across content, so it would match. It's not ideal but acceptable.
+
+Hmm, but the Qwen assessment is a significant decision-relevant result. Per the AGENTS.md "After a significant scientific result" — record with quantitative grounding. The bump preserves it. But for retrievability, a dedicated entry would be better. Let me check if the merge appended tags too, and decide.
+
+Actually, let me look at the entry.
+
+ASSISTANT: The note auto-merged into the deepseek-definition entry (second merge mismatch this session). Let me check how it landed:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The Qwen debate outcome is now Observation 2 of the "opencode-go/deepseek-flash definition verified" entry. The text is preserved but topically buried. Given the significance and likely retrieval (user will want "what did we decide about qwen"), I think a dedicated project-tier entry is warranted. Options:
+
+1. `memory_annotate` — creates a human-authored lab-notebook entry directly in the active entries area (project tier, not staging). It has title/content/tags/references parameters. This seems designed for placing a distinct entry directly. Since the content is already written and this is a lab-notebook-style outcome, I could use it. But "human-authored" — it's meant for the user/human to annotate. Using it as the agent... The tool description says "Create a human-authored lab notebook entry (type 'note')". Hmm, the agent calling it would create a note as if human-authored. That seems semantically off, but it does create a project-tier entry directly.
+
+2. Manually edit the staging entry to split? No — staging entries are managed; splitting isn't a supported tool operation.
+
+3. Use memory_confirm on the staging entry to promote it (with both observations) — the entry would be the deepseek-definition + qwen outcome combined in project tier. Odd but retrievable.
+
+4. Just accept it. The content is searchable; memory_search with keyword "qwen3.8" will find it. Also the run YAMLs and verdict.md exist. And the verdict will be in the handover when distilled.
+
+Given the user asked for a test debate and the qwen assessment, the key durable artifacts are the verdict + run records + memory observation + handover. I think accepting is okay, but I feel the topical mismatch will hurt future retrieval ("qwen3.8-max" search still hits it via content). Hmm.
+
+Actually — wait. There's a cleaner tool: `memory_annotate` is explicitly "Create a human-authored lab notebook entry... Entries are created directly in the active entries area (not staging)." I'm operating on behalf of the user; creating a notebook entry summarizing the debate verdict is reasonable and gives a clean, dedicated, project-tier entry with proper title/tags. The AGENTS.md knowledge-placement rules don't prohibit this. Prior sessions probably used it. Hmm, but is it appropriate for the agent to author "human-authored" entries? The user asked me to run the debate; summarizing the outcome as a notebook note seems aligned. I'd title it "Qwen3.8-Max debate assessment — WAIT-LIST" with the verdict summary and pointers.
+
+Alternatively, accept the staging merge and wait for user confirmation to promote. The user tends to confirm important entries. But the merge already happened automatically... 
+
+Let me weigh the cost: memory_annotate creates a duplicate-ish entry (the observation also exists in the other entry). Duplication is a minor sin; retrievability is a major virtue. The AGENTS.md warns against duplicates ("already filed means already remembered") — hmm, that's for the memory system's own calibration. But this is a distinct-topic entry, not a rephrase.
+
+Actually, let me reconsider: maybe the right move is to promote the combined entry to project tier via memory_confirm? No — mixing topics in one entry is worse.
+
+Or: record_learning again with a more distinctive title that won't match the definition entry? The similarity matcher might still merge. Could add "debate verdict" keywords... risky, may bump again.
+
+I think memory_annotate is the intended tool for a human/curated note placed directly. Let me use it to create the dedicated Qwen verdict note in the project tier. Title: "Qwen3.8-Max panel assessment & debate-tools test (2026-09-10) — verdict WAIT-LIST". Content: concise summary + pointers. Tags: debate, qwen3.8-max, wait-list, webfetch, panel. References: maybe the two run dirs (references param takes DOIs/URLs/PDB IDs — run dirs aren't references; skip references or use file paths? "references (paper DOIs, PDB IDs, URLs)" — URLs only. Skip.)
+
+Hmm, wait — but should I? Let me think about what the user would prefer. They said "proceed on the debate". The aftermath protocol is mine to execute. Creating a clean project-tier note for a real assessment outcome seems right. But there's also the principle "don't over-create entries". The system already filed the observation; a second entry duplicates ~90% content. 
+
+Alternative middle ground: leave the staging observation as-is (it's preserved + searchable), and mention to the user that it merged; if they want, I can split it out. But future sessions might miss it... Actually memory_search keyword matches content, and the action-retrieval plugin scans entries by similarity for actions — content matters more than title. The title mismatch mainly affects browsing/scan_headers.
+
+Hmm, let me look at this from the "memory hygiene" angle: two merges in one session indicate the auto-merge similarity threshold is aggressive. That itself is a system observation worth noting (maybe the user cares). But not now.
+
+Decision: I'll create a dedicated project-tier note via memory_annotate. Rationale: this is a decision-grade outcome the user explicitly asked for; it should be retrievable by its own title/tags; the staging observation stays as the auto-distilled record. Actually... hmm, hold on. Let me reconsider once more. memory_annotate's description: "Create a human-authored lab notebook entry (type 'note') with optional references (paper DOIs, PDB IDs, URLs) and notebook section label. Entries are created directly in the active entries area (not staging). Call this when: creating a human-authored lab notebook note entry directly in the active project tier." — The design intent is clearly for the human's own notes. Agent-created entries should go through record_learning (staging, auto-merge). I shouldn't misuse the tool. 
+
+OK — different approach: accept the merge. The content is preserved. I'll note it to the user in my report: "the outcome got auto-merged as an observation into the model-definition entry; content preserved, pointer in the verdict; say the word if you want a standalone entry". That's honest and leaves the choice.
+
+Hmm, but actually, maybe I can manually create the entry file? No — entries are managed by the memory system; hand-creating files risks breaking metadata. The sanctioned flows are record_learning (staging) / record_learning+confirm / annotate. 
+
+Hmm, let me reconsider using memory_confirm on the staging entry: it promotes the combined entry (definition flags + qwen outcome) to project tier. Mixed topic, but it would surface in future sessions' context whenever deepseek/model topics come up — actually the qwen outcome is about a model assessment, so the topical neighborhood isn't crazy. But the title says "definition verified correct — 5 flags"; nobody searching qwen would read it from the title. Still not great.
+
+I'll accept and flag. Actually — one more option: record_learning with entry_type="note" and a very different title related to debates ("Debate panel pilot: web-enabled adversaries..."), which might match a debate-related entry instead... there may be a debate-related entry (the panel list update? the skill?). The similarity matcher picked the deepseek definition entry — likely because both mention opencode-go/deepseek-flash, licenses, AA scores. A retitled entry would still contain those terms. Merge likely again.
+
+Fine — accept; mention to user. Moving on.
+
+Next: update SKILL.md (tools section + qwen row) and the constraint entry pool line. Then report.
+
+Let me update SKILL.md now. I need to re-read the current table area (I edited earlier). Current table (after my edit):
+
+| Model | Use for |
+|---|---|
+| `kimi-for-coding/k3` | Substantive research/design debate (proven strong) |
+| `zai-coding-plan/glm-5.3` | Substantive adversary — full model, NOT the flash variant (proven in the 2026-09-07/08 panels) |
+| `deepseek/deepseek-v4-flash` | Cheap, fast smoke tests and narrow verdict-format tasks (alias now serves V4.1-Flash) |
+| `opencode-go/qwen3.8-max` | UNASSESSED as of 2026-09-10 — pilot in one debate before relying; weights/license status unverified |
+
+Panel pool is open-weight only (user mandate 2026-09-10); decorrelation rule
+still decides *which* of these is eligible per session — e.g. k3-chaired
+debates use glm-5.3 + deepseek, GLM-chaired debates use k3 + deepseek.
+
+Updates:
+1. qwen row → assessed result: WAIT-LIST with reasons (API proprietary; checkpoint license-clean/accessible but unproven vs anchors; trigger = independent checkpoint eval).
+2. Add a "Tools and web access" section (mechanism + verified note + pointer).
+
+Also should I update the deepseek row? "deepseek/deepseek-v4-flash" — the debate used opencode-go/deepseek-flash. Both serve V4.1. Maybe add "(or opencode-go/deepseek-flash)" — the user's setup now uses opencode-go. Let me update: `deepseek/deepseek-v4-flash` or `opencode-go/deepseek-flash` — both serve V4.1-Flash. Keep it brief.
+
+Let me read the current SKILL.md around the table to make the exact edits.
+
+Actually I have the current content in context from my earlier edits. The table text is as above (my edit). Let me construct the edits:
+
+Edit 1 — replace the qwen row:
+old: `| `opencode-go/qwen3.8-max` | UNASSESSED as of 2026-09-10 — pilot in one debate before relying; weights/license status unverified |`
+new: `| `opencode-go/qwen3.8-max` | ASSESSED 2026-09-10 (GLM×DS panel) → **WAIT-LIST**: the Max API id is proprietary (policy-excluded); open checkpoint `Qwen3.8-2.4T-A95B` is license-clean and hostable (OpenRouter / HF-Novita) but unproven — AA v4.3 40 vs GLM 45 / Kimi 44, no independent checkpoint eval. Reconsider only on a checkpoint eval showing parity. |`
+
+Hmm, the table is "Practical choices" for adversary models; qwen not currently a choice. Fine.
+
+Edit 2 — update deepseek row:
+old: `| `deepseek/deepseek-v4-flash` | Cheap, fast smoke tests and narrow verdict-format tasks (alias now serves V4.1-Flash) |`
+new: `| `deepseek/deepseek-v4-flash` (or `opencode-go/deepseek-flash`) | Cheap, fast smoke tests and narrow verdict-format tasks (both serve V4.1-Flash) |`
+
+Edit 3 — add the tools section. Where? After the "Adversary model selection (decorrelation rule)" section (before Mechanics). Insert:
+
+```
+## Tools and web access
+
+Headless adversaries inherit opencode's built-in tools (read/glob/grep/webfetch; Magnolia MCP stays disabled for blindness). **Web verification works and materially improves cross-examination** — verified 2026-09-10 (GLM-5.3 × DS V4.1-Flash panel: 47 completed webfetch calls; round 2 settled disagreements instead of entrenching them). For topics needing fresh facts, instruct the adversary explicitly to verify via web and cite a URL per claim:
+
+- Search: `https://duckduckgo.com/html/?q=...` (reliable) or `https://www.bing.com/search?q=...` (can return garbage).
+- Then fetch primary sources (vendor pages, GitHub, HF — including raw LICENSE files at `/raw/main/LICENSE`).
+- JS-rendered sites (e.g. qwen.ai) return no content; mark such claims UNVERIFIED.
+- Require a final "URLs actually fetched" list — it makes the answer auditable and cheap to spot-check.
+```
+
+That's good. Let me apply these edits. I need to read the SKILL.md first? I already read it (lines 36-46, 104-128). The edit tool requires the file to have been read in this conversation — I did read parts of it (the skill tool loaded it too, but that's a different mechanism; I also read it with the read tool earlier — yes, I read lines 36-65 and 104-128 with the read tool). So edits should be allowed.
+
+Let me apply the three edits.
+
+ASSISTANT: Run records done; the outcome note auto-merged as Observation 2 of the definition entry (content preserved, searchable — flagging for a standalone split later if you want). Now updating the skill — the qwen row and a new tools/web-access section:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): SKILL.md updated. Now update the STACK CONSTRAINT entry pool line to reflect the qwen assessment result. I read this file earlier in the session (the edit tool requires a prior read — I did read it earlier). Current text:
+
+"Value chosen: open-weight-only stack. Current shape: memory model = DeepSeek V4.1-Flash (MIT, served via the `deepseek-v4-flash` alias); main model = per user config (Kimi k3 today). Debate panel pool (user-specified 2026-09-10, encoded in the adversarial-review SKILL.md): `kimi-for-coding/k3`, `zai-coding-plan/glm-5.3` (FULL model — user said "no flash"), `deepseek/deepseek-v4-flash` (cheap arm), and `opencode-go/qwen3.8-max` as UNASSESSED candidate (user to pilot; not yet relied on). V4.1 Pro joins when it ships (Pro does NOT exist as of 2026-09-10 — Flash only)."
+
+Update: "and `opencode-go/qwen3.8-max` as UNASSESSED candidate (user to pilot; not yet relied on)" → "and `opencode-go/qwen3.8-max` — assessed via panel debate 2026-09-10 → WAIT-LIST (API id proprietary; open checkpoint `Qwen3.8-2.4T-A95B` license-clean + hostable but unproven: AA v4.3 40 vs GLM 45 / Kimi 44; no independent checkpoint eval; reconsider on a parity eval)".
+
+Let me apply the edit.
+
+ASSISTANT: Now sync the project-tier stack constraint entry with the qwen assessment result:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): All aftermath done. Let me update the todo list to completed, and then write the final report to the user.
+
+Summary for user:
+1. **Tools question answered**: YES — adversaries can use tools. In headless mode (blind, no Magnolia MCP), they keep opencode's built-in tools including webfetch. Empirically: DS made 26 webfetch calls, GLM 21 across 2 rounds, all completed. Web search via DDG HTML/Bing worked; primary sources (HF, GitHub, Arena, AA) fetched. Caveats: Bing sometimes garbage; JS sites nothing. I added a "Tools and web access" section to the skill.
+2. **Debate done**: GLM-5.3 × DS V4.1-Flash, 2 rounds (blind + cross-exam), both revised positions:
+   - License objection dead (Kimi K3 stricter, already fielded)
+   - API qwen3.8-max proprietary → excluded by policy (both)
+   - Open checkpoint Qwen3.8-2.4T-A95B: license-clean, hostable (OpenRouter/HF-Novita), but stripped (text-only/thinking-only/262K) and unproven (AA 40 vs GLM 45/Kimi 44; no independent checkpoint evals; two snapshots behind API)
+   - PaperBench withdrawn
+   - DS: include-conditionally; GLM: wait-list; chair: **WAIT-LIST** with trigger (independent checkpoint eval showing parity)
+3. Artifacts: run dirs with verdict.md, answers, transcripts; run records; memory note (merged as Obs 2 — flag); skill updated (qwen row + tools section); constraint entry updated.
+
+Keep the report concise but complete. The user will likely want to know the verdict + tools answer. Let me write it.
+
+Also update todos to all completed.
+
+ASSISTANT: All done. Final todo update and report:
+
+ASSISTANT (tool:todowrite)
+
+ASSISTANT (reasoning): Now the final report to the user. Structure:
+1. Tools answer (the user's direct question) — yes, with evidence
+2. The debate result (qwen assessment)
+3. Artifacts + edits made
+
+Concise but complete.
+
+ASSISTANT: Debate complete. Here's everything:
+
+## Your tools question — answer: **yes, and it changed the debate**
+
+Headless adversaries keep opencode's built-in tools (`webfetch` included); only Magnolia MCP is disabled (that's the blindness guarantee). Empirically, this panel was **web-enabled**: DS made 26 `webfetch` calls, GLM 21, all completed — search engines, GitHub, HF (including the raw LICENSE file), Arena, Artificial Analysis. The fetched evidence is exactly what let round 2 *settle* disagreements instead of entrench them. Quirks found: DuckDuckGo HTML is reliable, Bing sometimes returns garbage, JS-heavy sites (qwen.ai) return nothing. I've added a **"Tools and web access" section** to the adversarial-review skill encoding this, plus a requirement to end answers with a "URLs actually fetched" list.
+
+## The debate: Qwen3.8-Max as a fourth adversary — **verdict: WAIT-LIST**
+
+Panel: `glm-5.3` × `deepseek-v4.1-flash` (= opencode-go/deepseek-flash), blind round 1 + cross-exam round 2. Both revised positions materially in round 2:
+
+- **License objection — dead, unanimously.** The open checkpoint `Qwen/Qwen3.8-2.4T-A95B` (released Aug 12, 2.4T/95B MoE, 4.89 TB BF16) uses a custom license with high-threshold riders and an internal-use carve-out — **no stricter than Kimi K3's license, which the panel already accepts**. Excluding Qwen on license grounds was rejected as inconsistent by both.
+- **The `qwen3.8-max` API is proprietary** (weights unpublished, classified Proprietary) → policy-excluded. Both agree — keep it out.
+- **The catch:** the downloadable checkpoint is a *stripped sibling* — text-only, thinking-only, 262K context vs the API's vision/1M/tools. Every capability number is API-measured; the checkpoint has zero independent evals and is two snapshots behind. AA Index v4.3: GLM-5.3 45 > Kimi K3 44 > **Qwen 40** > DS V4-Pro 36. It's slow (~39 tok/s) and very verbose.
+- **PaperBench 93.0 withdrawn** as decision-grade (vendor-run, API-measured).
+- Split at the end: DS revised to *include-conditionally*; GLM held/downgraded to *wait-list*; I adopted **WAIT-LIST**, with a clear trigger: an independent, same-harness eval of the actual checkpoint showing ≥ parity with GLM-5.3/Kimi K3. Access is ready if that fires (OpenRouter and HF/Novita both serve the open checkpoint).
+
+## Artifacts
+
+- `runs/2026-09-10_debate-qwenmax-{glm,ds}/` — `verdict.md` (mirrored), `answer-r{1,2}.md`, raw transcripts. Both runs finalized and recorded in run history.
+- Skill updated: qwen row now carries the assessment outcome; tools/web section added. Stack-constraint entry synced.
+- Memory note recorded — auto-merged as Observation 2 of the deepseek-definition entry (searchable, but if you want it as a standalone entry say so and I'll split it next session).
+- One caveat recorded: the main agent was DeepSeek-family for this test, so routine panels would swap the DS arm per the decorrelation rule.
+
+The PR #2 reply and Bucket 2 / A0 remain on deck whenever you want them.
+
+USER: how does deepseek v4.1 fair against glm 5.3 in the debate?
+
+ASSISTANT (reasoning): The user asks how DeepSeek V4.1-Flash fared against GLM-5.3 in the debate. This is a recap/evaluation question about the debate that just concluded. I have all the evidence in context: both adversaries' round 1 and round 2 answers, tool-call counts, timing, and the final verdicts.
+
+Let me compare them across dimensions:
+
+**Web research (round 1):**
+- DS: 20 webfetch calls, all completed. Found: Alibaba Model Studio page, AA classification, GitHub, HF model card, raw LICENSE, aitoolsrecap license explainer, diaryfolio cross-vendor table, aiscopehub, AA page. Also identified license conditions with thresholds, API pricing $1.65/$4.95, GA date 2026-08-03, snapshot qwen3.8-max-0902, no Qwen3.8-Plus found (UNVERIFIED), Flash variant details.
+- GLM: 14 webfetch calls. Found: press release, GitHub, HF card + LICENSE, QwenCloud pages, DataNorth, diaryfolio, AA page, arena. Got pricing $2/$6 (Singapore region), preview date 2026-07-19, plus Arena WebDev leaderboard which DS missed.
+
+Round 1 quality: DS's round-1 answer was tighter on the decisive question (weights/license) — it nailed the API-vs-checkpoint distinction and the license conditions with exact thresholds. GLM's round 1 also got the license right ("MIT-style grant with two conditions... internal-use carve-out") AND added Arena WebDev data and the "52k downloads" detail. GLM's answer was longer (7296 chars vs 6595). GLM narrated its research process in text (visible trace), DS didn't.
+
+DS round-1 verdict: exclude API outright; checkpoint WAIT-LIST leaning exclude (4 reasons: non-OSI license, stripped, underperforms AA 40 vs 44, 4.89TB deployment).
+GLM round-1 verdict: WAIT-LIST lean include (open-weight ✔, license clean ✔, frontier ✔; narrow edge = PaperBench; stripped checkpoint; Sept-2 snapshot not in weights).
+
+**Round 2 (cross-examination):**
+- DS: 6 more fetches. Made a genuine concession: "License & policy — I revise. I over-weighted the 'not open-source / MaaS restriction' framing." Did the consistency check itself (fetched Kimi K3 LICENSE — found its MaaS trigger is $20M, stricter than Qwen's $50M) → license drops as disqualifier. Corrected AA numbers with a new source (computingforgeeks: GLM-5.3 45, Kimi 44, GLM-5.3-Flash 42, Qwen 40, DS V4-Pro 36). Crucially found OpenRouter serves the checkpoint — resolving the access crux. Assessed PaperBench properly (vendor-run, BasicAgent setting, Claude Opus 4.6 judge). Revised verdict: INCLUDE-conditionally. One-line justification was crisp.
+- GLM: 7 more fetches (AA pages for GLM/Kimi/DS — including discovering deepseek-v4-1-flash 404s; HF API for exact storage bytes 4,892,378,458,656 = 4.89TB exact; arena leaderboard; PaperBench search). Held license position, did its own consistency test (with license tags per AA). Produced a comparison TABLE (AA v4.3 with class ranks). Settled signal hierarchy: AA dominates for debate role, Arena orthogonal. Downgraded verdict from lean-include → WAIT-LIST, explicitly withdrawing PaperBench. Found Novita on HF Inference Providers.
+
+Both did independent verification in round 2 rather than just arguing — that's the web-access dividend.
+
+**Differences in style/quality:**
+- DS was more decisive and self-correcting: it flipped its own verdict (lean-exclude → include-conditionally) based on evidence it fetched itself (Kimi license, OpenRouter availability). Genuine concession on the license point.
+- GLM was more systematic in presentation: comparison table, exact byte-level verification (4.89TB from HF API metadata), arena data, and it downgraded its own lean-include to wait-list — also a self-correction, but in the opposite direction.
+- Interesting: they crossed — DS moved toward include, GLM moved toward wait-list, converging on the middle with the same trigger evidence ("independent same-harness eval of the checkpoint").
+- DS made more fetches total (26 vs 21) and was faster (round 1 done in ~75s poll interval vs GLM ~3+ min; round 2 also faster).
+- GLM is the heavyweight per AA (45 vs 40) but on this task the quality gap was not visible in DS's favor or against — both produced auditable, well-cited analyses.
+
+Speed: DS round 1 finished before first poll (~75s); GLM took ~4 min. DS r2 done at second poll (~2.5 min); GLM r2 ~5-6 min (with a slow tail where the process lingered after final text). DS is the faster model (per AA, Qwen is slow; DS V4.1 is a fast flash model).
+
+Cost: both cheap. Not measured precisely here, but opencode-go/deepseek-flash is subscription; GLM via zai plan.
+
+Where each erred:
+- DS round 1: leaned exclude partly on license grounds that its own round-2 consistency check demolished; called AA "44 for GLM-5.3" then round 2 corrected to 45 (max); minor pricing region confusion ($1.65/$4.951 vs $2/$6).
+- GLM round 1: cited older-generation AA scores (K3 57/GLM-5.2 51/DS 50) as UNVERIFIED (later withdrawn); leaned include partly on PaperBench which it later withdrew; claimed "Kimi K3 2.8T which you already field" — the panel does field Kimi via API, so "fielded" as weights was wrong-ish (chair's prompt flagged this in r2 and DS noted it doesn't change analysis); also initially framed deployment as comparable without checking bytes (later verified 4.89TB exact).
+
+Verdict-quality: GLM's final wait-list position is arguably the more defensible (and the chair adopted it), but DS's conditional-include is defensible too and the chair kept it open behind the same trigger. Both ended at the same missing-evidence statement — strong convergence.
+
+Also worth noting: decorrelation — in this test both were adversaries to a deepseek-family chair; in routine panels DS couldn't sit when the main agent is deepseek.
+
+So the honest answer: on this task they performed at a comparable, high level — V4.1-Flash fully held its own against the bigger GLM-5.3, was faster, more self-correcting (bigger verdict flip driven by its own fetched evidence), while GLM-5.3 was more systematic (tables, byte-exact verification, arena data) and its final stance was the one the chair adopted. Cheap arm vs substantive arm distinction blurs on research-debate tasks with web access.
+
+Format: this is a conversational recap question — answer from context, no tool calls needed (all evidence already gathered this session). Keep it reasonably concise, use a small table maybe. No new work needed. Should be a medium-length answer — a table plus a few bullets. Not more than ~350 words of body.
+
+ASSISTANT: Short version: **they tied on substance, with different strengths — V4.1-Flash fully held its own against the bigger model, and the flash-tier label didn't show on this task.**
+
+| Dimension | DeepSeek V4.1-Flash | GLM-5.3 |
+|---|---|---|
+| Web research | 26 fetches; found the decisive items (raw LICENSE, AA page, cross-vendor table) | 21 fetches; found things DS missed (Arena WebDev, HF download counts, QwenCloud pricing) |
+| Round-1 analysis | Tighter on the decisive question — nailed API-vs-checkpoint split + exact license thresholds first try | Broader — same license reading, plus Arena data and PaperBench emphasis (later withdrawn) |
+| Round-2 behavior | **Biggest self-correction**: fetched Kimi K3's LICENSE itself, found it *stricter* than Qwen's, and withdrew its own license objection; found OpenRouter serving the checkpoint (resolved the access crux) | Most systematic: built the AA comparison table, verified 4.89 TB *byte-exact* via HF API, discovered `deepseek-v4-1-flash` has no AA page (404) |
+| Verdict movement | lean-**exclude** → **include-conditionally** | lean-**include** → **wait-list** |
+| Speed | Notably faster (r1 done in ~75 s; r2 ~2.5 min) | ~3–6 min per round, with a slow exit tail |
+
+The interesting dynamic: **they crossed** — DS moved toward include, GLM moved toward wait-list, and both landed on the *identical* missing-evidence statement (independent same-harness eval of the actual checkpoint). That's genuine convergence, not anchoring.
+
+Judged as debate work:
+- **DS's strongest moment**: the round-2 consistency check against its own position — it didn't just defend, it fetched the evidence that defeated its own round-1 reasoning. That's the ideal adversary behavior.
+- **GLM's strongest moment**: precision and presentation — the AA table, byte-level verification, the signal-hierarchy ruling (AA composite dominates for debate roles; Arena is orthogonal), and withdrawing PaperBench once shown it was display-only.
+- **Errors each**: DS's round-1 lean-exclude rested on a license reading its own round-2 check demolished; GLM's round-1 lean-include leaned on vendor-run PaperBench and stale AA snippets it later withdrew.
+
+The chair's final WAIT-LIST adopted GLM's landing position, but DS's conditional-include stays open behind the same trigger — both defensible. Bottom line: for **research debates with web access, the cheap arm is not a downgrade**; GLM-5.3 earns its keep as the more meticulous analyst, V4.1-Flash as the faster, more self-correcting one. (Caveat: one task, one topic — and this pairing had the chair in DeepSeek's family, so routine panels would swap the DS arm per the decorrelation rule.)

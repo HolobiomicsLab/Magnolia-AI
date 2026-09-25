@@ -1,0 +1,376 @@
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): DS's round 2 is excellent — three genuine concessions plus a sharpened final:
+
+1. **Retrieval conceded** with a concrete decision rule: load 100% of confirmed durable tier while ≤~150-200k tokens; reranker = precision filter for staging/cross-project only; re-enable selection above budget or with measured A/B gains.
+2. **Pricing conceded**: $0.15/$0.60 off-peak confirmed; $0.28 was beta-blog wrong.
+3. **Science claims**: accurate characterization — vendor testimonial for 38h; binder ~2x discount (26.8% independent).
+4. **Verticalization adopted as TOP risk** — and DS actually fetched Claude Science + Rosalind + MHS pages: Claude Science (Jun 30) submits HPC jobs over SSH with "auditable history" (!), Rosalind "traceable, reviewable outputs", MHS model-agnostic MCP + open-source slated. This reorders DS's recs: portability/schema #1, receipts #2.
+5. **Panel design**: cross-organization open-weight arms + same-model/different-effort + artifact-citation requirement + **deterministic non-model verifier arm** (compiler/tests/invariants/scheduler states) — the only arm decorrelated from ALL LLMs. That's a great addition.
+6. Verdict: "Strengthened, narrowly and conditionally" — become the portability+receipts layer.
+7. Falsifier: vendor ships machine-observed decision provenance + import/export reading Magnolia's ledger; OR open-weight ≤$0.10/M with ≥500k context making distillation+retrieval measurably unnecessary in A/B.
+
+The Claude Science detail is significant for us: "submits jobs to HPC over SSH, produces auditable history, runs on lab infrastructure with reusable skills and a knowledge base" — that's directly attacking Magnolia's run-lifecycle moat! This is a major update vs our in-house assessment which said "run lifecycle: nothing touches it." Claude Science DOES touch HPC job submission. This needs to be in the verdict — the moat claim needs a caveat: vendor workbenches are entering the run-lifecycle space (Claude Science), though vendor-locked and not machine-observed-provenance-first.
+
+Now poll GLM and Kimi.
+
+ASSISTANT: DS's final: **"Strengthened, narrowly and conditionally"** — with three genuine concessions (retrieval decision rule accepted, pricing corrected, science claims characterized) and one major escalation: it fetched the Claude Science page and found it **submits HPC jobs over SSH with "auditable history"** — a direct hit on the "run lifecycle = untouched moat" assumption. Polling the other two:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT: Both done. Extracting both round-2 answers:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): All three round-2 finals are in, and they've converged remarkably. Let me map the final state:
+
+**Converged final verdicts:**
+- DS: "Strengthened, narrowly and conditionally" — become the portability+receipts layer
+- GLM: "Strengthened, conditionally" — conditions: publish schemas before verticalization reaches records layer, prune doctrine, pivot retrieval to index-plus-promotion
+- Kimi: "Strengthened, with a closing window" — "The bet is unchanged; the deadline is new"
+
+ALL THREE: strengthened + conditions + verticalization as the top risk + schema publication as first move.
+
+**Converged decisions:**
+
+1. **Retrieval layer** — all three converged on a hybrid decision rule:
+   - DS: concede — load 100% durable tier by default while ≤150-200k tokens; reranker = precision filter for staging/cross-project
+   - GLM: index-plus-promotion — full-tier as one-line-per-entry index (~1-2k tokens/100 entries) always in context; reranker does top-k promotion of full bodies + staleness/contradiction flagging + ablation; delete fitting-era plumbing (token budgeting, window compression, ordering)
+   - Kimi: revise toward C with B's caveat — curated small boot-context (goal+handover+pinned) + bulk-load durable tier via cache at task start + reranker survives only if it beats bulk-load on held-out tasks; delete fitting-era code regardless
+   
+   Synthesis: the three differ slightly (full bodies vs index; whether boot-context stays curated) but the core is unanimous: (i) delete scarcity-era fitting plumbing, (ii) bulk presence of the durable tier in context (whether as index or full bodies within ~150-200k), (iii) reranker survives only as measured precision component (promotion/filter/ablation), (iv) keep curation for handover/goal/staleness. GLM's index-plus-promotion is the most concrete and matches Claude Code's own design (MEMORY.md index + on-demand files). 
+
+2. **Pricing — settled unanimously**: $0.15/$0.60 off-peak, 2x peak, cache $0.003; DS's $0.28 retracted (beta blog). Plus action item: schedule distillation off-peak (peak = 01:00-04:00, 06:00-10:00 UTC weekdays). Note: our memory server distills on a timer + boot — mostly off-peak already; worth noting.
+
+3. **Science claims — settled characterization**:
+   - 38h run: vendor-published customer testimonial (Ramp) — real claim, not independent
+   - Binder "~50%": vendor-reported for Mythos 5.1 (trusted-access variant!), two unnamed external validations; independent Adaptyv measured 26.8% overall for the previous generation per Kimi (with 80% on TREM2); GLM couldn't verify DS's 26.8% number on Proteinbase and gives platform baseline 9.7%; DS re-cited Adaptyv blog for 26.8% + "beating competition winners 5/6". There's residual disagreement on whether 26.8% applies to this generation or the previous one (Kimi says previous generation Mythos Preview/Opus 4.8!). Net: "~2-5x the independent field baseline, conditional on vendor ranking" (GLM). 
+   - Lean/Navier-Stokes: verification method unstated — UNVERIFIED.
+   
+   All three: analysis unchanged strategically; the binder episode is itself Exhibit A for machine-observed independent validation (DS made that point explicitly).
+
+4. **Verticalization — the top strategic risk, now unanimous**: 
+   - DS: fetched Claude Science page — HPC over SSH, auditable history; Rosalind "traceable reviewable outputs"; MHS model-agnostic MCP open-source slated. "Attacks run lifecycle, doctrine, and record-keeping at once." Reordered recs: portability #1.
+   - GLM: refined, not retracted — threat at workflow layer, NOT YET records layer (MHS is device control; Claude Science is demand capture; vendor records retention-swept proprietary). Window closes only if vendor ships provenance-grade locally-exportable run records + HPC lifecycle in open format. Watch items: MHS extending to job orchestration; vendor adopting open provenance schema.
+   - Kimi: conceded as top risk; reorders priorities; "shadow ledger avoided only if Magnolia's records are the interchange format"; notes Adaptyv exposes wet-lab loop via API/MCP — the closed loop is being built in public.
+   
+   Synthesis: verticalization is real and at the workflow layer already (Claude Science does HPC submission); the records/provenance layer is NOT yet claimed by any vendor — that's the race. The counter: publish the schema + portability FIRST.
+
+5. **Panel design — converged concrete proposals**:
+   - All: family/lineage decorrelation within open-weight (multiple orgs: DeepSeek/GLM/Kimi/Qwen/MiniMax/Hunyuan/MiMo), effort ladders (low/max arms), scaffold variance (GLM: opencode vs DeepSeek Harness vs raw API), role variance (Kimi: forced dissent + web-grounded), blind-first + post-hoc review of long runs, artifact-citation requirement (DS).
+   - DS + GLM both add: **deterministic non-model verifier arm** / machine-check escalation (re-execution with perturbed seeds, physics sanity checks, held-out validation, Lean/compiler/unit tests) — "panels decorrelate pretraining blind spots; only machine checks catch frontier blind spots" (GLM). Kimi: record panel verdicts as receipts so panel failure modes are measurable.
+
+**Ranked changes (merged, near-unanimous ordering):**
+1. Publish ASTRA-linked provenance schema + bidirectional memory portability (vendor harnesses as views) — 10-15 pd — ALL THREE put schema/portability #1 (GLM puts receipts #1 and portability #2; DS/Kimi put portability #1). First move: schema publication (all three; GLM says receipts-on-run-YAMLs + schema ~2 weeks).
+2. Machine-grounded receipts as flagship product (deliberate-vs-default on run records, benchmarked vs self-report) — 10-30 pd.
+3. Retrieval pivot (index-plus-promotion / bulk-load + reranker-as-filter, delete fitting plumbing, A/B reranker vs bulk-load) — 4-10 pd.
+4. Doctrine prune/demotion loop (delete frontier-answerable, keep site-local; quarterly eval; split site-facts from protocols) — 2-8 pd + recurring.
+5. Panel redesign (lineage × effort × scaffold × role + post-hoc review + deterministic verifier escalation) — 2-5 pd.
+Plus Kimi's: upgrade background model to V4.1-Flash (already done via alias! + re-distill backlog, off-peak scheduling) — 2 pd. DS's memory telemetry (recall@k, staleness, "did entry change action") — 5-10 pd.
+
+**Falsifiers (all three gave one):**
+- DS: vendor ships machine-observed decision provenance + import/export reading Magnolia's ledger; OR open-weight ≤$0.10/M with ≥500k context making distillation+retrieval measurably unnecessary in A/B.
+- GLM: any vendor/open harness shipping provenance-grade decision records with local export + HPC lifecycle (e.g., DeepSeek Harness Memory MCP absorbing typed memory with receipts; opencode adding native provenance) → Magnolia reduced to curation layer.
+- Kimi: by ~2027-03, vendor harness ships machine-verified run/provenance records for HPC AND Magnolia's schema has zero external adopters.
+
+Converged falsifier: a vendor ships provenance-grade, exportable records covering HPC lifecycle before Magnolia's schema becomes an interchange standard.
+
+**Chair's merge considerations (my judgment + project reality):**
+- The in-house assessment (this morning) said "run lifecycle — nothing touches it" — the panel CORRECTED this: Claude Science already does HPC job submission over SSH with auditable history. This is a genuine update to our assessment.
+- The panel validated our moat claims (provenance receipts, machine-observed ground truth, cost arbitrage, vendor-memory lock-in gaps) with independent evidence: Codex per-user/off-by-default/tool-heavy-excluded (Kimi), Claude machine-local + 25KB cap + transcript retention sweeps (GLM), anti-distillation context-editing (chair-verified), AA Astra cost/turn data (GLM), CoT opacity (DS).
+- The panel's #1 recommendation (publish schema + portability) aligns with the ASTRA/Bucket-2 work already in flight — the debate says its priority rises and adds a deadline dimension ("the only item whose value decays with delay").
+- The retrieval recommendation is actionable and concrete for Magnolia (boot-context 6000-token budget → index-plus-promotion; scan_headers catalogue idea from the Fable analysis matches GLM's index pattern exactly — nice convergence with our internal design idea).
+- Panel design upgrades: matches what we just did today (web-enabled panel!). Deterministic-verifier arm is a strong new idea.
+- Caveats to record: single-panel-of-3 on one day; all numbers vendor/web-sourced; the three adversaries share open-weight/single-geography correlation (which they themselves flagged); chair is deepseek-family (decorrelation caveat for this test panel).
+
+Now write the verdict.md (canonical, mirrored in all three dirs), then finalize ×3, memory records (3 runs + 1 learning note — this one is significant; risk of auto-merge into something — let's see), update the assessment.md with the corrections (38h=vendor-testimonial, binder=26.8% independent discount, AA 53/53/45/44, Claude Science touches run lifecycle), and report.
+
+The verdict should be thorough — the user asked for "solid conclusion". Structure:
+1. Setup: panel, protocol, grounding volume
+2. Fact-check settlements (pricing, science claims) — including chair verifications
+3. Component verdict table (round 1 → round 2 movements)
+4. The five settled decisions
+5. Merged verdict paragraph
+6. Ranked changes w/ costs
+7. First move + falsifiers (converged)
+8. What the panel found that our in-house assessment missed/corrected
+9. Caveats
+
+Let me write it. Then finalize + records + assessment.md corrections + report.
+
+One more check on GLM's claim: "Adaptyv 26.8% not verifiable on competitions index" vs DS/Kimi citing adaptyvbio.com/blog/anthropic-1 for 26.8%. Kimi adds nuance: 26.8% was for the PREVIOUS generation (Mythos Preview/Opus 4.8), 16 targets, blind; 80% on TREM2. The verdict should capture: independent Adaptyv number exists on Adaptyv's blog (2 panelists fetched it) but applies to the previous generation; the "~50%" for Mythos 5.1 remains vendor-reported with unnamed external validations; platform baseline ~9.7%; so "2-5x field baseline conditional on vendor ranking" is the safe characterization.
+
+Also GLM's off-peak note: peak hours 01:00-04:00 & 06:00-10:00 UTC weekdays (matches official docs footnote).
+
+Now write verdict.md.
+
+ASSISTANT: All three finals are in — and the convergence is remarkable. All three landed on **"strengthened" + a closing window**, all three independently converged on the same first move (publish the provenance schema + portability), and the retrieval dispute resolved into a concrete hybrid rule. Writing the merged verdict:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Verdict written to the ds workspace. Now:
+1. Copy to glm and kimi workspaces.
+2. Finalize all three.
+3. memory_record_run ×3 + memory_record_learning.
+4. Correct the morning assessment.md (the panel corrected two claims: "run lifecycle — nothing touches it" and the science claims framing).
+5. Report to the user.
+
+ASSISTANT: Mirroring the verdict to all three workspaces and finalizing:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): All three finalized. Now the memory aftermath: 3 run records + 1 learning note. Then correct the morning assessment.md. Then report.
+
+ASSISTANT: All finalized. Recording the three runs and the converged learning:
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): The learning note got bumped into the "Anthropic binder design campaign prompt" staging entry — another topical mismatch by the auto-merger (binder prompts vs Magnolia positioning strategy — related only via "Anthropic"). Content preserved but buried. I'll flag this to the user; the canonical verdict.md is the durable artifact anyway.
+
+Now correct the morning assessment.md — the panel corrected two things:
+1. "run lifecycle: nothing touches it" → Claude Science ships HPC submission
+2. Science claims framing (38h = vendor testimonial — actually our digest DID source it to the launch page, so it was vendor-reported already; but our assessment presented "~50% hit rate" without the independent discount; and "38-hour unattended Ramp ML run" is fine but should be labeled vendor testimonial)
+
+Let me make two surgical edits to assessment.md:
+- In "What is NOT absorbed" section, item 1 says "Magnolia's run lifecycle (submit_job → poller → post_run_assess → run YAMLs) spans days, cluster boundaries, and model generations" — add the Claude Science caveat.
+- In section 2 achievements: add the discount note.
+
+Then report to the user. Let me do the edits.
+
+ASSISTANT: The note auto-merged into the binder-prompt entry — third mismatch this session, but the canonical verdict.md carries the content. Now correcting the morning assessment where the panel overturned us:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): All aftermath complete. Update todos and give the final report. The report should present the solid conclusion the user asked for — the verdict, the key movements, what was corrected, and the recommended path. Keep it well-structured but not bloated since the verdict.md has the full detail.
+
+ASSISTANT (tool:todowrite)
+
+ASSISTANT: Done — full panel, two rounds, 66 web-grounded tool calls, everything settled with primary sources. The solid conclusion:
+
+## Verdict: **STRENGTHENED — conditionally, with a closing window and a deadline** (unanimous after cross-examination)
+
+**What the era commoditizes** (stop defending): context-fitting/retrieval plumbing ($0.003/M cache hits killed it), generic preference memory (Claude/Codex ship it natively), generic protocol doctrine (TB-Science jumped 24.7→52.6% in one generation).
+
+**What it inflates** (double down): machine-grounded run records and provenance receipts — the only layer with *zero* vendor competition, made more valuable by rising autonomy + falling vendor observability (CoT-regressing models, transcript retention sweeps, anti-distillation restrictions). The open-weight policy was **validated**: V4.1-Flash beat DeepSeek's own retired flagship at ~1/3 price.
+
+**Where the panel corrected us** (this matters):
+1. **"Run lifecycle — nothing touches it" is now false.** Claude Science (shipping) submits HPC jobs over SSH with "auditable history"; Rosalind Workbench ships traceable outputs. The *workflow* layer is under attack — the *records* layer is not, yet. That's the race.
+2. **The science claims needed discounting**: 38-h run = vendor-published Ramp testimonial (I verified the page myself); "~50% binders" = vendor-reported for Mythos 5.1, independent Adaptyv number is 26.8% (previous gen; baseline ~9.7%). Settled framing: *"2–5× the independent field baseline, conditional on vendor ranking."* The episode is itself Exhibit A for Magnolia's thesis.
+3. **Retrieval settled** (the one real fight, resolved): index-plus-promotion — full durable tier always in context as a one-line-per-entry index (~1–2k tokens/100 entries), reranker demoted to promotion/staleness/ablation, delete scarcity-era plumbing, A/B it against bulk-load.
+
+**The deadline item — unanimous first move:** **publish the ASTRA-linked provenance schema + bidirectional memory portability** (10–15 pd; "the only item whose value decays with delay"). It lands directly on the ASTRA/Bucket-2 work already in flight. **Converged falsifier:** a vendor ships provenance-grade, exportable HPC run records before our schema has external adopters.
+
+Full verdict with component table, five settled decisions, ranked changes, and falsifiers: `runs/2026-09-10_debate-position-ds/verdict.md` (mirrored in all three workspaces). Three runs recorded; morning assessment.md corrected in place. One footnote: the memory note auto-merged into an unrelated staging entry (third time today — worth a look at the similarity matcher sometime).
+
+USER: can the panel evaluate '/home/tjiang/repos/project_magnolia/todo.md' , with the debate results in mind? I want to know what is worth doing, what is obsolete, what is missed.
+
+ASSISTANT (reasoning): The user wants the panel (DS × GLM × Kimi) to evaluate `/home/tjiang/repos/project_magnolia/todo.md` — the human-curated idea backlog — with the debate results in mind. They want to know:
+1. What is worth doing
+2. What is obsolete
+3. What is missed
+
+This is a continuation of the position debate. The panel workspaces still exist with their round-1 and round-2 sessions — I can resume those sessions (round 3) so each panelist already has their debate context in-session! That's exactly the debate.sh resume pattern: `-s <sid>` keeps context. So round 3 = "now read the actual todo.md of the lab and triage it against everything you just concluded."
+
+This is much better than a fresh blind panel: they have the full debate context (their own analysis + cross-examination settlements) and can now apply it to the concrete backlog.
+
+Plan:
+1. Read todo.md first (I need to know what's in it — also to include it as context). Note: todo.md is at repo root /home/tjiang/repos/project_magnolia/todo.md. From memory: it holds "## to be discussed" sections with dated checkbox items — human-curated backlog (VLM-audit idea etc.).
+2. Copy todo.md into each panelist's ctx/ dir (debate.sh init already created ctx/; the adversary runs INSIDE ctx/, so I copy the file there and reference it by bare filename). Actually — the sessions run with cwd = ctx/. For resume, the same session continues; the cwd is still the workspace ctx/. So copy todo.md into each workspace's ctx/ and reference "todo.md" by bare filename in the prompt.
+3. Write a round-3 prompt (identical for all three):
+   - "The lab's actual idea backlog is in todo.md in your working directory. Read it. Triage every item against the settled debate conclusions: WORTH DOING (priority + why + rough cost, note sequencing), OBSOLETE (why — what commoditized/superseded it), MISSED (what the debate concluded matters but the backlog lacks — especially the deadline item: provenance schema publication/portability, retrieval pivot, doctrine demotion loop, panel redesign, off-peak scheduling...)."
+   - Ask for a table-like structure with per-item verdicts and a short "top misses" list.
+   - The chair (me) will merge into a triage verdict.
+4. Launch resume ×3, poll, extract, merge verdict, write verdict file (e.g., triage.md or append to verdict.md — better: separate `todo-triage.md` in the ds workspace canonical + mirrored), memory record.
+
+Important: the todo.md may contain items whose context the adversaries lack (internal shorthand). The prompt should tell them to mark items they can't evaluate due to missing context as "UNCLEAR — needs chair context" rather than guessing.
+
+Also the user's intent: "with the debate results in mind" — resume sessions are perfect. Cost: 3 more adversary calls, fine.
+
+Let me first read todo.md to know its size/content. Then copy to the three ctx/ dirs, write the r3 prompt, launch.
+
+One consideration: the todo.md is the user's personal curated file — read-only for the panel; copying into ctx/ is safe (originals untouched). Hygiene fine.
+
+Also: after the panel triage, the chair's merge should include my own read (I know the internal context — e.g., which items already got done today: the VLM-audit entry, the model landscape assessment...). Let me read todo.md now.
+
+ASSISTANT: The panel sessions still hold their full debate context — this is the perfect round-3 resume: each panelist reads the actual backlog and triages it against what they just settled. First let me read the todo myself:
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): I've read todo.md. Now the plan: round-3 resume for all three panelists. Their sessions still have the debate context. The prompt:
+
+- Tell them the lab's actual backlog is in `todo.md` in their working directory (I'll copy it into each ctx/).
+- Triage every OPEN item against their settled debate conclusions:
+  - WORTH DOING (keep/raise priority — with sequencing note)
+  - OBSOLETE (superseded/commoditized — by what)
+  - REFramed (partially obsolete — what changes)
+  - UNCLEAR (insufficient context)
+- Also: what is MISSED — items the debate verdict says matter but absent from the backlog (schema publication/portability deadline item, retrieval pivot, doctrine demotion loop, panel redesign + deterministic verifier escalation, off-peak scheduling, memory telemetry, demotion, verticalization watch items/falsifier monitoring).
+- Constraints: they have the debate context in-session (rounds 1-2); mark anything they can't judge as UNCLEAR with what info is needed; be specific per item; end with top-5 misses.
+
+The todo has many [x] done items — tell them to skip done items (only triage open ones). Open items:
+1. rules/*.md context saturation monitor
+2. Better local job termination (kill children)
+3. L5 reconciliation sweep; Slurm ETA; running-job health monitor; auto-retry; resource right-sizing (HPC deferred sub-items ×5)
+4. Restart recap separation (learning tasks vs rest)
+5. Rotate UniCA password (parked)
+6. Some learning went to magnolia root (bug)
+7. FLAKE test_phase5_tools_return_json
+8. Ad Verum PR #2 review (HIGH PRIORITY — note: this has since evolved! The 09-08 debate + response + pr2-reply-draft happened; the todo item is the 09-07 state. The panel doesn't know the 09-08 updates. Hmm — should I tell them? The item says "review with lfnothias, merge conditioned on..." — the current state: reply drafted, not posted; debate 09-08 refined conditions; Bucket structure. For triage purposes: still worth doing (post the reply). I could add a chair note in the prompt that the 09-08 follow-up debate and draft reply exist. Yes — give them that fact so they don't call it obsolete.)
+9. Usage-based staging promotion (score on usefulness → auto-promote)
+10. Enforcement gap → per-tool gates in submit_job
+11. Staging pruning/GC (mostly done; remaining: superseded cleanup judgment path)
+12. Learnable consolidation (accept/reject signal → few-shot examples)
+13. Retire old staging entries (no expiry/cap; design constraints)
+14. VLM anomaly-flagging sidecar (deterministic-first order of work)
+15. Fable patterns borrowing (calibration checklist, listing-first retrieval, application test, if_version)
+16. Verifier subagent; claim-critic fold; explorer subagent; phase primaries
+17. Job-completion notification bridge
+18. Cross-device phone access
+
+Round 3 prompt (identical for all three):
+
+```
+Round 3 — applied triage. The lab's actual development backlog is in the file `todo.md` in your current working directory (read it with your file tools; it is the lab's own human-curated TODO list). Two facts the file doesn't contain: (1) the Ad Verum PR #2 item has since evolved — a follow-up panel debate (2026-09-08) refined the merge conditions and a concrete PR reply is drafted but not yet posted; (2) the background model was silently swapped to V4.1-Flash today and passed a distillation smoke test.
+
+Triage EVERY open (unchecked) item in todo.md against the conclusions you reached in rounds 1-2. For each item, one line:
+- VERDICT: WORTH DOING (priority: raise/keep/lower + one-clause why) | OBSOLETE (what superseded it — name the mechanism/vendor/model) | REFRAME (what part survives, what changes) | UNCLEAR (what context you'd need).
+Group by the file's own sections. Skip [x] done items.
+
+Then: THE MISSES LIST — what the rounds-1-2 verdict says matters that this backlog lacks entirely (e.g. anything about publishing the provenance schema / memory portability, retrieval pivot, doctrine demotion loop, panel redesign, off-peak scheduling, memory telemetry, verticalization watch items). Rank the misses by urgency given the "closing window" framing, each with rough cost.
+
+End with the THREE items you would start this week. Be concrete; cite debate-round reasoning, not new web research (no fetches needed this round). Under 800 words.
+```
+
+Copy todo.md into each ctx/ dir. The adversary cwd is ctx/, so "todo.md" bare filename works with their read tool.
+
+Launch resume ×3, poll, extract, merge into a triage verdict (canonical file, e.g. `todo-triage.md` in the ds workspace + mirrored), memory aftermath, report to user with the merged worth/obsolete/missed table.
+
+Note the chair merge: I have context they lack — e.g. item 8's evolution (draft reply exists), the retrieval-pivot connection to boot-context budget (6000 tokens; the Fable "listing-first" item #78 IS the index-plus-promotion idea — the panel will likely connect it), item 2 (job termination) relates to run lifecycle (moat, worth doing), etc.
+
+Also worth remembering: todo.md is user's file — I must not edit it without permission. The panel triage output goes to a run dir + my report; editing todo.md is the user's call afterward.
+
+Let me execute: copy todo.md to 3 ctx dirs; write r3 prompt; launch ×3.
+
+ASSISTANT: Round-3 resume it is — the panelists still hold their full debate context in-session. Copying the backlog into their workspaces and writing the triage prompt:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): todo.md copied to all three ctx/ dirs, r3 prompt written. Now launch resume ×3 in parallel.
+
+ASSISTANT: Launching round 3 for all three panelists:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): DS done again. Extract its r3 answer while the others run.
+
+ASSISTANT: DS done. Extracting while GLM and Kimi finish:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): DS's triage is sharp and dense. Everything mapped to the rounds-1/2 conclusions. Note the interesting calls:
+- VLM sidecar → REFRAME (keep deterministic rescan as the non-model verifier arm — matches the deterministic-verifier escalation!)
+- Fable patterns → WORTH DOING raise (maps listing-first to the index-plus-promotion rule!)
+- Resource right-sizing → REFRAME as first consumer of derived receipts
+- Misses list: schema+portability, telemetry, panel redesign, retrieval pivot, doctrine demotion, off-peak, verticalization watch
+- Start this week: post PR reply, build derived-receipts extractor, ship verifier subagent
+
+Nothing called OBSOLETE by DS except implicitly... DS marked nothing obsolete outright. Hmm. Let me wait for GLM and Kimi.
+
+Poll again.
+
+ASSISTANT: DS's triage is dense and well-mapped — notably reframing the VLM sidecar's deterministic rescan as the non-model verifier arm, and the Fable "listing-first" idea as the index-plus-promotion rule. Polling the other two:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT: All done. Extracting GLM's and Kimi's round-3 answers:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): All three round-3 triages are in. Now let me build the chair's merged triage. Convergence map:
+
+**Unanimous WORTH DOING + raise (3/3 "raise"):**
+1. Ad Verum PR #2 reply posting — all three: raise to top; "the only closing-window-sensitive move"; drafted, blocking.
+2. Verifier subagent — all three: raise; operationalizes the deterministic-verifier escalation.
+3. Per-tool gates (enforcement gap) — all three: raise; GLM notes pdb_has_chain_id exists un-wired ("hours, not days").
+4. Job-completion notification bridge — DS raise, Kimi raise, GLM keep (~30 lines). 2 raise + 1 keep.
+5. Fable-patterns borrowing — DS raise, GLM raise, Kimi reframe(keep); specifically item #2 listing-first = the settled index-plus-promotion pivot. Kimi adds: leaked prompt superseded by first-party Claude Code docs (fetched R1).
+
+**Unanimous/strong WORTH DOING (keep):**
+- Job termination kills children (3/3 keep) — moat hygiene
+- Running-job health monitor (keep/raise)
+- Auto-retry (keep; Kimi raise — unattended-run era)
+- Resource right-sizing (keep/raise; DS+GLM REFRAME/raise as receipts consumer/parameter_guidance — converging on "first consumer of derived receipts")
+- Learning-went-to-root bug (3/3 keep — write-path correctness prerequisite)
+- UniCA rotation (keep parked)
+- Explorer subagent, claim-critic fold, phase primaries (keep)
+- Retire staging entries (keep; fold into demotion/staleness workstream)
+- FLAKE test (keep/lower)
+
+**REFRAME (majority):**
+- rules/*.md saturation → doctrine demotion loop (all three reframe/raise: monitoring without demotion insufficient)
+- VLM sidecar → keep deterministic rescan (the machine-check layer); VLM pilot stays parked (all three)
+- Usage-based staging promotion → GLM REFRAME (telemetry + weak pre-filter; NOT auto-promotion — would erase confirmation gate); Kimi keep (promotion-signal telemetry); DS raise (index-plus-promotion needs promotion gating). Merge: keep as telemetry/prefilter, keep human gate.
+- Learnable consolidation → lower (downstream of telemetry/corpus)
+
+**OBSOLETE (explicit):**
+- GLM: Staging GC parent item (both sub-items done; only root-write bug remains) — that's bookkeeping-obsolete.
+- Kimi: Fable leaked prompt as source → superseded by first-party docs (but the patterns themselves stay).
+- Notably NO panelist called any big direction obsolete — the backlog aged well. The verdict: nothing major is obsolete; several items need reframing; the misses are the real gap.
+
+**MISSES (union, all grounded in R2 verdict):**
+1. Provenance schema publication + portability layer (all three #1; the "deadline item")
+2. Falsifier/verticalization watch (all three; quarterly, dated)
+3. Reranker-vs-bulk-load bake-off / retrieval pivot (all three; Kimi most explicit as a bake-off)
+4. Panel redesign (all three)
+5. Memory-quality telemetry (all three; incl. post-swap drift measurement)
+6. Off-peak distillation scheduling (all three; trivial cost, unclaimed 50%)
+7. Doctrine demotion loop as explicit recurring task (folded from rules-saturation reframe)
+
+**Start this week (3/3 unanimity on #1):**
+- Post the PR #2 reply (all three, #1)
+- Verifier subagent (DS #3, Kimi #2; GLM has listing-first + gate-wiring instead)
+- DS: derived-receipts extractor; GLM: listing-first retrieval + wire pdb_has_chain_id + first demotion eval; Kimi: off-peak scheduling + portability spec
+
+Chair's synthesis for "start this week": (1) post PR reply — zero cost, unblocks the window item; (2) verifier subagent + wire pdb_has_chain_id (hours) — the deterministic arm; (3) listing-first boot catalogue (index-plus-promotion first slice) + off-peak scheduling (1 pd) — cheap wins. And the derived-receipts extractor is Bucket-2 A0/A1 territory already queued.
+
+Now write the merged triage verdict. File: todo-triage.md canonical in ds workspace + mirrored. Then memory aftermath (no new runs — this is round 3 of the same runs; finalize again? finalize checks all rounds EXIT=0 and prints record. Run finalize again to include r3. And update run records? The run YAMLs already recorded; re-finalize updates metrics. Let me just re-run finalize to verify and skip re-recording runs (they're recorded; metrics could be updated but memory_record_run creates new records — actually it appends. Skip re-recording; the yaml files were created at finalize time with rounds=2. Hmm — the run records say rounds:2. Re-recording would duplicate. Better: re-run finalize (verification only) and note r3 in the learning note. Actually memory_record_run with same run_id might update/append — uncertain; skip it, the learning note covers it.)
+
+Write todo-triage.md, mirror, memory_record_learning, report to user.
+
+The report to the user should be the answer to their three questions: worth doing / obsolete / missed, plus this-week list. Make it a tight summary table + lists.
+
+Let me write the triage file now.
+
+ASSISTANT: All three triages in — remarkable convergence again. Writing the merged triage verdict:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (tool:compchem-tools_run_shell)

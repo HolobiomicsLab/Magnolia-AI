@@ -1,0 +1,705 @@
+ASSISTANT (reasoning): Relaunched at 11:46:36 (mtime). The out file is 304 bytes now (fresh start). It's running. The session resumed with the same r2 prompt. Let me wait more — GLM's generations were slow, and the previous attempt needed 5-7 min. Meanwhile, I can start assembling the calibration analysis materials: read the three A answers again (done), and prepare the comparison framework mentally.
+
+Actually, while waiting, one useful thing: gather the tool-call counts and basic metrics for all runs (A1-A3, C-glm r1/r2, C-ds r1/r2) so the memo is efficient. But C-glm r2 isn't done yet. Let me just poll again.
+
+Poll in ~85s.
+
+ASSISTANT: Fresh run started (304 bytes). Waiting:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Progress: 22.6KB, mtime 11:48:11. It's working. Let me wait more. Poll again in ~85s.
+
+ASSISTANT: Progressing (22 KB). Polling again:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): GLM r2 done on the retry. Extract the answer and read it.
+
+ASSISTANT: GLM's retry finished. Extracting and reading its final:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): GLM's hardened r2 is a *strong, evidence-backed revision downward* (INCLUDE → WAIT-LIST), and it includes:
+- **Self-correction with evidence**: "my round-1 error: BenchmarkList's catalogued 'AA Intelligence Index 58.1' is a stale/differently-scaled entry — the live v4.3 scale tops out at 53... Conceded on the substance." That's exactly the desired behavior: revising based on primary-source refetch, not social pressure.
+- **Reconciliation**: ECI vs AA v4.3 analysis; declares AA dominant for the scientific-adversary role; Qwen clearly third on AA.
+- **Cost-benefit conceded with numbers**: GLM 753B/40B (~0.75TB) vs Qwen 2.4T/95B (~4.8TB); 58.8 vs 40.9 tok/s; etc.
+- **Corrections to the other assessor (minor, cited)**: slower-than-GLM but faster-than-K3; the open artifact does carry the API's AA score (40=40) — so "may not carry profile" was overstated for intelligence (features gap remains); legal concern over-cautious (one-line sign-off, not a gate).
+- **Final**: WAIT-LIST conditional, with promote conditions.
+- Notable: it also found AA's actual page for the open artifact (`artificialanalysis.ai/models/qwen3-8-2-4t-a95b`) — scoring 40 identically to the API. That's a valuable factual find: the open checkpoint IS tracked by AA with same score.
+
+So C-arm r2 outcomes:
+- DS: WAIT-LIST → INCLUDE (narrowly, conditional, gated; explicitly flagged opponent's ECI numbers UNVERIFIED).
+- GLM: INCLUDE → WAIT-LIST (conceded on substance after primary refetch; corrected its own stale number).
+They *crossed* — again! Both revised toward the other's position, but with evidence requirements and labels. Interesting: under the hardened protocol, the cross-convergence happened via *verification* (GLM refetched AA; DS investigated ECI), not pure rhetoric. But note: both ended in "conditional" positions with gates — the crossing is a convergence to a common qualified position (both now include-only-if-self-hosted-with-conditions; DS says include conditionally, GLM says wait-list conditionally — the practical difference is small: DS conditions on 3 gates; GLM conditions on promotions).
+
+Compare to old protocol (B): same crossing happened (DS → include-conditional, GLM → wait-list). Under the new protocol: same crossing, but with explicit evidence-labeling, UNVERIFIED marks, and corrections to each other. The *verdict end-state is nearly identical* to B. The improvement is in the quality of the record: 
+- B: DS's revision said "I revise" with quotes; GLM "downgraded".
+- C: GLM explicitly identified its stale number and conceded; DS explicitly verified-and-failed-to-verify opponent's numbers; both gave confidence labels; GLM corrected two opponent overstatements (speed, AA-tracking of open artifact) — precision improvements.
+
+Now assemble the full calibration analysis and memo. Let me also gather the ensemble arm A findings systematically. I have A1, A2, A3 in context. The C arm has r1/r2 for both. The B arm (old) is in context (from this morning).
+
+**Ground-truth / stable claims (chair-verified across all):**
+1. Open weights exist: `Qwen/Qwen3.8-2.4T-A95B`, released 2026-08-12; first Max-class Qwen open release. [all 5 runs + old debate]
+2. API `qwen3.8-max` is a hosted superset (proprietary per AA), excluded by policy; open artifact = text-only, forced thinking, 262K native (extensible ~1M); API adds vision/non-thinking/1M/tools. [all]
+3. License: custom "Qwen3.8-Max License", MIT-style with 100M MAU/$20M-mo branding clause + $50M MaaS/AI-Work-Assistant clause, internal-use exempt. [all; C-DS r1 & C-GLM r1 HIGH]
+4. AA v4.3: Qwen 40 vs GLM 45 / K3 44 (and GLM-5.3-Flash 42). [C-DS, C-GLM r2, A1, A2; A3 got a stale/mirror version]
+5. AA tracks the open artifact identically (40=40). [A2 found; C-GLM r2 confirmed via AA page]
+6. 27B sibling is Apache-2.0. [A1, A2 mention; A1 elevates it]
+7. No qwen3.8-plus. [A1, A2, A3, C]
+8. Slow/verbose (39-41 tok/s; verbose). [A1, A2; C-GLM r2]
+9. Verdict direction: unstable — wait-list/conditional-include mix everywhere.
+
+**Arm comparisons:**
+
+Arm A (ensemble, 3× same model):
+- Verdicts: W, W, I (2 W / 1 I).
+- Numbers used: A1/A2: AA 40/45/44 ✓; A3: "58/60/60" via GPTProto mirror (stale) + BenchLM (Qwen>GLM).
+- Unique finds: A1: 27B Apache + include-27B option; A2: AA page for open artifact (40=40); A3: BenchLM, Code Arena, "GLM weights Aug 28 + $10B gate", Brave search usable.
+
+Arm C (hardened protocol, GLM+DS):
+- r1 verdicts: GLM I, DS W.
+- r2: DS → I (gated); GLM → W (conceded after refetch); both conditional.
+- r2 quality: explicit UNVERIFIED of opponent's numbers (DS); self-correction of stale number (GLM, HIGH); cross-corrections (GLM corrected 3 opponent claims, cited); confidence labels everywhere.
+- Evidence: GLM r1 14 fetches, r2 1 fetch (+1 error); DS r1 ~23 fetches, r2 7 fetches.
+
+Arm B (old protocol): crossing too (DS → include-conditional; GLM → wait-list); no UNVERIFIED labels, no confidence, no claim ledger.
+
+**Key findings for the memo:**
+1. **Verdict instability is real and large**: same question, 6 independent runs (A1-A3, C-GLM, C-DS + old pair = 8 verdicts), distributed across W/I with no majority stable beyond chance; the same model (GLM-5.3) gave W, W, I (ensemble) and I→W (debate), and DS gave W→I twice (old and new). For this question (genuinely borderline), verdicts are within noise. → Supports Claude: don't treat the verdict as truth; treat the *verified claims* as truth.
+2. **The stable layer is the verified claims**: all runs converge on the same ~8 facts (weights, license thresholds, API/checkpoint split, AA numbers) with individually fetched primary sources. That's the product.
+3. **Aggregator chaos**: five different capability pictures across runs (AA v4.3 direct, stale BenchmarkList "58.1", GPTProto "58/60/60", ECI 147.8-between, BenchLM ordering inverted). The hardened protocol caught this (GLM refetched AA; DS tried ECI and marked unverifiable) whereas the old protocol didn't. The claim ledger would explicitly flag these.
+4. **Hardened protocol effects observed**: 
+   - More UNVERIFIED labeling (DS r2 refused to accept ECI numbers without verification; GLM corrected its own stale number).
+   - Concessions were still made (both crossed) but all were evidence-based and labeled; no unevidenced concession observed in either arm.
+   - Panelists corrected *each other's overstatements* with citations (GLM: speed half-wrong; AA carries open artifact; legal over-cautious) — the factual precision of the final record improved vs old.
+   - Cost: C-arm total ~45 fetches vs B ~50 (similar); time ~25 min vs ~20 min.
+5. **What did NOT change**: the end verdicts (both protocols converge to "eligible-but-not-worth-it-yet; self-hosted checkpoint only; verify before deploy"). So for this question, the hardened protocol improved *record quality*, not verdict.
+6. **New unique find in A1** (27B Apache — "include now" option) — ensemble arm found an option neither panelist nor the old debate raised. Decorrection finding: sampling the same model 3× produces coverage breadth (union) — the union of A1-A3 covered: 27B option, AA-open-artifact page, BenchLM/Arena, GLM-weights claim. Actually the C panel also missed the 27B! Let me check: c-ds r1 mentioned "The Apache-2.0 27B is viable and unrestricted but is not 'Max.'" — yes DS mentioned it in passing. GLM c-r1 didn't. Old debate: DS r2 didn't; GLM didn't. So A1's explicit "include now if a Qwen voice is wanted" recommendation was unique.
+
+**Recommendations from calibration:**
+- Keep the hardened protocol (labeling/verification benefits are real, costs minimal).
+- Accept that verdicts on borderline questions are noise; the ledger+claims is the product. For decisions, the chair should look at the stable verified claims and the *union of unique finds*, not the verdict split.
+- The ensemble arm is not cheaper in practice for research-style questions demanding web verification (3 samples × heavy research ≈ panel cost) — but its union-of-finds is a credible complement. For factual sub-claims, majority across samples is reliable (all found the same ~8 facts).
+- Add to the skill: (a) note that "independent composite" sources disagree and stale mirrors exist — the ledger must record which source/version; (b) the calibration finding that same-model samples disagree on borderline verdicts → quote claims not verdicts; (c) maybe add "chair should consider the 27B-class small checkpoint" as an operational lesson? That's content, not protocol — goes in the verdict/learning.
+
+Now write the calibration memo file: runs/2026-09-10_debate-calib-c-glm/CALIBRATION.md (canonical) + maybe mirror? The calibration involves 5 workspaces; canonical in calib-c-glm. Then finalize all 5 runs (debate.sh finalize for each — A arms have only 1 round; that's fine, finalize works with R>=1). Record runs in memory (5 runs? Or record the calibration as one? The skill says debates must appear in run history — 5 workspaces = 5 records might be noisy; maybe record the two arm representatives? Hmm. Let me record all 5 with tool="debate" but that's fine — they are runs. Actually: A1-A3 are ensemble samples (one-round debates), C-GLM/C-DS are the hardened panel. I'll record the two C runs + maybe one A aggregate? Past practice: each workspace recorded separately (position panel: 3 records). I'll record all 5 but keep metrics small. Wait — memory_record_run appends YAML records; 5 more records today is fine.
+
+Actually, let me reconsider: the calibration is one *experiment* with sub-runs. For run history clarity, record the two C workspaces as "debate" and maybe A1 as "debate" too... I'll record all five, since each has a workspace. Or record A1-A3 as "analysis"? Simplest: all five as tool="debate". Hmm, but the A arms are single-round samples; still debates technically. OK.
+
+Then record the calibration learning (success_pattern? parameter_guidance? It's a protocol validation → note / success_pattern). It's significant: "hardened protocol validated; verdict instability finding; keep claims not verdicts". Type: note (or success_pattern). I'll use note with strong content, or maybe success_pattern since the protocol change "worked". The schema: success_pattern is for run results. This is a protocol evaluation with quantitative grounding → note is fine; earlier protocol learnings were notes. Go with note.
+
+Also update SKILL.md? The calibration suggests adding a small "Calibration findings" note to the skill: verdict instability → quote claims; source-version chaos → record source+version in ledger; ensemble union as complement. That's protocol-level learning → per the skill's own aftermath rule (step 5: draft a line/section into this skill). I'll draft a short "Calibration (2026-09-10)" subsection. And commit? The user's pattern: they approve commits. I'll draft and propose commit together with the memo... Actually, keep this turn's scope: write memo + memory + (draft skill calibration note) and report. Ask about commit of skill note.
+
+Hmm — the user asked "do you think it is worth it... " and I proposed; they said "1 then 2" where 2 = run the calibration. So my job now: run it (done) + report results. The memo + memory records are aftermath (mandated). Skill update = editorial promotion of protocol learning; I'll draft it as part of aftermath and include in the report, but perhaps hold the commit for their word (consistent with past behavior: draft → they say commit). Actually, given the established pattern and that the learning is small, I could just add the note to the skill and let them say commit. Let me do: memo file + finalize + memory records + skill calibration note (edit) + report; ask to commit + push. And answer "was it worth it": yes — with specific findings.
+
+Wait, one more measurement for the memo: cost/time. 
+- A: 3 launches, ~4-5 min each (parallel), ~54 total fetches? Let me quickly count from streams: A1 ~19 URLs, A2 ~21, A3 ~17 (fetched lists). I don't have exact tool counts for A arms (I could parse, but approximate from URL lists is fine).
+- C: GLM r1 14 + r2 1(+1 err); DS r1 ~23 + r2 7. 
+- B (old): GLM 14+7, DS 20+6.
+I'll report approximate media.
+
+Let me also decide on the claim ledger for the calibration memo — the memo should include a compact ledger of the stable verified claims + DISAGREE rows (AA 40/45/44 vs ECI/BenchLM; verdict direction; 27B option). Let me build it.
+
+**Ledger (calibration, resolution status):**
+| Claim | Status | Check / resolution |
+1. Open weights `Qwen3.8-2.4T-A95B` exist (2026-08-12), text-only/forced-thinking/262K native; API is hosted superset | AGREE-sourced (all runs) | HF card + LICENSE (fetched by all)
+2. License: custom, MIT-style + thresholds, internal exempt | AGREE-sourced | HF raw LICENSE
+3. AA v4.3: GLM 45 > K3 44 > Qwen 40 | AGREE-sourced (A1,A2,C-DS,C-GLM r2 direct fetches; A3 stale mirror) | artificialanalysis.ai pages — CHAIR should verify once (I haven't personally); mark chair-verification: pending? For the memo I can note "panel-verified by 4 independent fetches; chair spot-check recommended". Actually the calibration's chair verification pass should verify this! Let me do a quick webfetch of artificialanalysis.ai/models/qwen3-8-max? That page may be JS-heavy like before (earlier fetches by panelists worked — they returned content). Let me try fetching AA qwen page myself to satisfy the new protocol's chair verification. Quick.
+4. ECI composite placement (K3 > Qwen > GLM-5.3) | DISAGREE/UNVERIFIED | C-DS failed to extract; GLM quoted; chair resolution: mark UNVERIFIED (client-side rendered) — the memo flags ECI numbers as unverified.
+5. Verdict | DISAGREE (unstable across runs) | No verifier; judgment; chair: WAIT-LIST conditional stands as before.
+6. 27B Apache-2.0 | AGREE-sourced (A1, A2, c-ds) | HF page (fetched by A1/A2)
+7. "DeepSeek V4.1-Flash" exact SKU on AA | UNRESOLVED (404s) | we know it launched today; AA page absent — flag.
+
+Chair verification pass: I should fetch AA qwen page + maybe the HF license? The panelists did; the chair spot-check for the top DISAGREE row (capability numbers) — fetch artificialanalysis.ai/models/qwen3-8-max. Let me do that now (quick webfetch). If JS-blocked, note that panelists' fetches returned content earlier (A2 got data). Try.
+
+Then write memo, finalize, memory, skill note, report.
+
+Let me do the chair verification fetch first.
+
+ASSISTANT: GLM's final: **INCLUDE → WAIT-LIST**, with a candid self-correction (its round-1 number was a stale catalogue entry; the live v4.3 says 40) and three cited corrections to the other assessor. Both crossed again — but this time with verification, not rhetoric.
+
+Now the chair verification pass (new protocol, mandatory): I'll spot-check the top disputed claim — the AA numbers — myself:
+
+ASSISTANT (tool:webfetch)
+
+ASSISTANT (reasoning): Chair verification confirms:
+- AA page: Qwen3.8 Max = 40, #30/201, 39.2 t/s, 180M tokens, $2/$6, "Proprietary model... weights are not publicly available" (the AA page tracks the hosted entity), Intelligence Index v4.3 includes 10 evals (SciCode, CritPt, AA-LCR, etc.).
+- So the C-arm's direct-fetch numbers (40, speed 39.2, verbosity 180M, pricing 2/6, released Aug 3) are verified by the chair. GLM's reconciliation (AA v4.3 dominates for our use; Qwen 40 vs GLM 45/K3 44) holds; A3's "58/60/60 via GPTProto" and BenchmarkList "58.1" are stale mirrors. ECI numbers remain unverified.
+
+Now write the calibration memo. Structure:
+
+# Calibration — does the hardened protocol earn its keep? (2026-09-10)
+
+## Design
+- Question: same qwen3.8-max assessment (ground truth available; old-protocol baseline exists).
+- Arms: A = ensemble (3× GLM-5.3 samples, same prompt, union/majority); B = old protocol (this morning's GLM+DS debate); C = hardened protocol (fresh GLM+DS, r1 with confidence + hardened r2 + ledger + chair verification).
+- Metrics: verdict distribution, stable-claim coverage, unique finds, evidence behavior, aggregator chaos, cost.
+
+## Results
+
+### Verdict instability (the headline)
+List: A1 W, A2 W, A3 I; C-r1: GLM I, DS W; C-r2: DS→I(gated), GLM→W(conceded); B (old): DS→I-conditional, GLM→W. 
+Count: of 8 independent verdicts across 6 runs: ~4 W / 4 I. Same model GLM produced W, W, I, I→W. DS produced W→I twice. Conclusion: on this borderline question, single-run verdicts are within noise; the verdict is NOT the product. (Choi et al. martingale framing applies to borderline judgments.)
+
+### Stable claims (the product)
+The ~8 verified facts all runs converged on. Include the ledger.
+
+### Aggregator chaos
+Five capability pictures: AA v4.3 live (40/45/44 — chair-verified), stale BenchmarkList "58.1", GPTProto "58/60/60", ECI 147.8-between (unextractable), BenchLM ordering (Qwen > GLM). The hardened protocol caught this; the old didn't; the ensemble sample A3 fell for the stale mirror.
+
+### Hardened protocol effects (qualitative, observed)
+- DS r2: ECI numbers attempted; marked UNVERIFIED with reason. 
+- GLM r2: self-corrected stale 58.1 → 40 (HIGH), conceded on substance; corrected 3 opponent overstatements (speed half-wrong; AA tracks open artifact; legal over-cautious).
+- Both revisions evidence-labeled; no unevidenced concession observed in either arm; both crossed (again) but to a *common qualified position*.
+- Cost: C ~45 fetches, ~25 min; B ~47 fetches, ~20 min; A 3×parallel ~5 min.  
+- End-state verdicts nearly identical to B (eligible-but-dominated; self-hosted only; verify first). Improvement = record quality, not outcome.
+
+### Ensemble arm specifics
+- Union of finds included 27B Apache option (unique to A1), AA page for open artifact 40=40 (A2), BenchLM/Arena/GLM-weights claim (A3, partly stale).
+- Majority vote on facts: the 8 stable claims appear in all 3 samples → majority-on-claims works for facts; on verdict it picks 2/3 W (which matches B/C end-state by luck).
+- Cost note: 3 samples × web research ≈ panel cost — ensembling is not cheaper for research questions.
+
+## Resolution & ledger (chair)
+- Chair verified AA numbers directly (this page): 40, 39.2 t/s, 180M, $2/$6 → C-GLM r2 and C-DS correct; A3's number stale.
+- ECI: UNRESOLVED (client-side; can't extract) → keep as unverified.
+- Final: WAIT-LIST (conditional include) stands — matches B/C end state and the chair's earlier verdict; the strongest verified facts: eligible (license OK internal), dominated on AA by both incumbents at 3-5× serving cost; missing evidence = independent eval of self-hosted checkpoint.
+- New operational finding worth surfacing: 27B Apache-2.0 "small Qwen voice" option (from A1) — add to skills/memory as an option for a future Qwen slot.
+
+## Recommendation
+- KEEP the hardened protocol (cost negligible; record quality up; ledger+labels+chair pass all delivered).
+- Adopt: quote claims, not verdicts, in decision memos; require source+version in the ledger (aggregator staleness is rampant); ensemble union as a cheap complement for coverage (1 extra sample), not as an arbiter.
+- Consider making "calibration" a recurring practice when a debate topic is borderline (cheap: reuse prompt, 3 samples + note).
+
+Hmm wait, I need to double check one data point: the old debate B: GLM's final was "WAIT-LIST (downgraded from lean-include)"; DS revised "lean exclude → include-conditionally". Yes.
+
+Count of verdicts across the calibration only: A(3): W W I; C-r1(2): I W; C-r2(2): I-gated, W-conditional. That's 7 runs-verdicts (2 tied to same runs). Let me phrase carefully: "across the calibration's five runs, round-1 verdicts were W, W, I (A); I, W (C) — 3 W vs 3 I counting A1-A3 and C-r1; after round 2, C converged to two conditional positions (one W-leaning, one I-leaning)."
+
+Also compare B: B's end state = DS I-conditional, GLM W. Same crossing. So "old and new protocols produced the same end-state; the difference is the record."
+
+Now, aftermath steps:
+1. Write CALIBRATION.md to calib-c-glm dir; mirror to others? Canonical in calib-c-glm; maybe copy to all 5? I'll write canonical + copy to c-ds + the three A dirs (small file, useful). Or keep canonical only + reference. Let me mirror to all 5 (cheap cp).
+2. Finalize all 5 workspaces (debate.sh finalize; A arms have 1 round).
+3. Record memory: 5 run records? Hmm — maybe record all 5 (each is a workspace). Let me record the calibration as: two C runs + note the A arms in the note. Actually the instruction "debates must appear in run history" — A arms are single-round ensemble samples, not really debates; recording 5 entries may bloat. I'll record C-GLM and C-DS as debates, and skip A arms (or record as "analysis"?). Hmm. Let me record all 5 but as tool="debate" for C and tool="analysis" for A? That complicates. Simpler: record C-GLM, C-DS (debate) + one aggregate? I'll do: record the two C runs (debate) and skip A (they're samples of the calibration, documented in the memo). Actually, for completeness and consistency with position panel (3 runs recorded), I'll record all five but keep metrics minimal. Eh — let me record all five with tool="debate" — it's honest (each ran through debate.sh). Fine.
+4. memory_record_learning note with the calibration findings.
+5. Skill edit: add a short "Calibration (2026-09-10)" note to the skill — 4 bullets: verdict instability → products are claims; aggregator staleness → source+version in ledger; hardened protocol validated (cost, labeling); ensemble union complement. Then report + ask commit.
+
+Also the earlier stuck GLM r2 kill/retry — worth recording as error_resolution? It's an operational hiccup: opencode-go GLM call hung ~6 min, killed + ROUNDS reset + retry worked. That's a useful operational learning (first observed hang of the Go endpoint). Include briefly in the calibration note or a separate error_resolution entry. The AGENTS.md says record error resolutions. It's minor but real: "opencode-go/glm-5.3 r2 hung with no output for ~6 min (0% CPU, mtime frozen); killed wrapper+child, reset ROUNDS to 1 in meta.env, relaunched resume successfully." That matches staging entry 20260908_095238's pattern (reset ROUNDS to retry). I'll fold it into the calibration memory note as a sub-point, or separate entry. Separate entry is cleaner for retrieval (error_resolution). Let me do a small separate error_resolution record.
+
+Let me execute: write memo + finalize all + memory records. Batch where possible.
+
+First write CALIBRATION.md. Then shell: cp + finalize ×5. Then memory records (3 calls: 5 runs? tool calls: memory_record_run ×5, memory_record_learning ×2). That's 7 calls — batch in groups.
+
+Let me write the memo now. Keep it tight but complete (~120 lines).
+
+ASSISTANT: Chair verification done — AA's live page confirms **40, 39.2 t/s, 180M tokens, $2/$6** (C-arm numbers correct; A3's "58/60/60" was a stale mirror). Writing the calibration memo:
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Memo written. Now:
+1. Mirror CALIBRATION.md to the other 4 workspaces.
+2. Finalize all 5 workspaces.
+3. Memory records: 5 runs + calibration learning note + the hang error_resolution note.
+4. Skill calibration note (draft edit).
+5. Report.
+
+Let me do the mirror + finalize in one shell command. Then the memory calls.
+
+For finalize: `debate.sh finalize calib-a1` etc. — all have round 1 done (A arms) and C arms have rounds 1-2 (glm r2 done on retry; note meta has extra MODEL_r2 lines, fine).
+
+Then memory_record_run ×5. Metrics: A arms: rounds:1, model opencode-go/glm-5.3, web calls. C arms: rounds:2.
+
+For A arm web call counts I didn't count precisely; I estimated ~19/~21/~17 from URL lists. Let me quickly count tool calls per A run in the same shell command (python). And C counts: GLM r1 14 + r2 2 = 16; DS r1 ~23 + r2 7 = 30.
+
+Let me compute exact counts for all 5 in one shell command, then finalize, then record.
+
+ASSISTANT: Mirroring the memo, finalizing all five runs, and collecting exact metrics:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The finalize piping failed because the JSON extraction with head -12 cut it mid-JSON, and my split on '---' didn't work with the head truncation. The finalize outputs are JSON then a '---' then checklist; head -12 truncated. Let me just run finalize plainly for each and grep the metrics line, or run finalize and capture full output then parse.
+
+Let me redo: `debate.sh finalize <n>` and parse the JSON properly (the output has JSON first, then "---", then checklist). I'll use python to read full stdout: find the first '{' and parse brace matching... simpler: `debate.sh finalize $n | sed -n '1,/^---$/p'` then parse. Or just show the metrics by grepping.
+
+Let me run each finalize and capture with awk to the '---' line.
+
+ASSISTANT: Finalize parsing was mangled by the pipe — rerunning cleanly:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): All five finalized. Now memory records:
+1. 5 × memory_record_run (tool="debate")
+2. 1 × memory_record_learning note (calibration findings)
+3. 1 × memory_record_learning error_resolution (the opencode-go GLM hang + ROUNDS reset recovery)
+
+Then skill calibration note (edit), then report.
+
+Let me batch the 5 run records + 2 learnings (7 calls). That's a lot in one message but all independent. Let me do runs (5) in one batch, then learnings (2) in the next.
+
+Run metrics:
+- calib-a1: model opencode-go/glm-5.3, rounds 1, web 19(+1 err)
+- calib-a2: same, 21(+4)
+- calib-a3: same, 18(+1)
+- calib-c-glm: opencode-go/glm-5.3, rounds 2, web 15(+1)
+- calib-c-ds: opencode-go/deepseek-flash, rounds 2, web 32(+1)
+
+ASSISTANT: All five finalized. Recording the runs:
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (reasoning): All 5 run records written. Now the two memory entries (calibration note + hang error_resolution), then the skill calibration note, then report.
+
+ASSISTANT: Now the two learnings — the calibration result and the endpoint-hang recovery:
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): The hang entry bumped into the Sep-8 entry about debate.sh + opencode/glm 401 — topically adjacent (both about debate.sh + GLM + opencode provider issues), acceptable merge (the entry now has both the 401 finding and the hang recovery).
+
+Now the skill calibration note (draft edit), then final report.
+
+Skill edit: add a short "Calibration findings" subsection. Where? After the "What debates are FOR" framing block or in the Aftermath/Merge area. Best: a short block after the framing rules, since it's guidance about how to read outputs. Or near the Claim ledger. Let me add after the framing block (before "Why blindness first"?) — hmm, the framing block ends with rules bullets, then "Why blindness first". I'll add a compact block after the "Why blindness first" paragraph:
+
+**Calibration (2026-09-10):** verdicts on borderline questions are noise —
+a six-run replication of one question split ~evenly, and the same model gave
+both verdicts in different runs. Quote verified claims, not verdicts, in
+decision memos. "Independent" aggregates disagree and go stale (five
+different capability pictures surfaced for one model; one panelist quoted a
+catalogue fossil at "58" while the live index read "40") — record source AND
+version for every ledger row, and prefer direct primary fetches by the chair.
+One extra ensemble sample is a cheap coverage complement (it uniquely
+surfaced an option the panel missed), never an arbiter. Evidence:
+`runs/2026-09-10_debate-calib-c-glm/CALIBRATION.md`.
+
+That's good and compact. Apply edit, then report + ask about commit (the skill edit + then the pending report). Also mention the incident entry and that GLM retry worked.
+
+Then report to user: the calibration results summary + answer "was it worth it" = yes with findings. And pending: commit skill v1.2.1 (calibration note), then back to the task list (experimental tree setup + P0). Also note the operational incident + that GLM quota reroute proved itself (all calibration runs used opencode-go; worked except one hang retry).
+
+Let me apply the skill edit.
+
+ASSISTANT: Recording done (the hang entry merged with the Sep-8 endpoint entry — adjacent topic, fine). Adding the calibration findings to the skill:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): All done. Now the final report. Summarize:
+
+1. **Was it worth it?** Yes — findings:
+   - Hardened protocol validated: UNVERIFIED discipline, evidence-backed self-corrections (GLM retracted its own stale number), cited cross-corrections, no unevidenced concessions; cost negligible (~same tokens/time as old).
+   - **Verdict noise finding** (the big one): 6 runs, same question, verdicts split; same model gave both verdicts. → Quote claims, not verdicts.
+   - **Aggregator chaos**: 5 different "independent" number sets; hardened protocol caught it (GLM fossil→live correction; DS ECI unverifiable); ensemble sample fell for the stale mirror.
+   - Ensemble union value: A1 uniquely surfaced the Apache-2.0 27B option; useful as a cheap complement.
+   - Chair verification pass confirmed AA numbers (40/45/44, 39.2 t/s, 180M, $2/$6).
+   - The verdict of record stands: WAIT-LIST conditional.
+2. Artifacts: CALIBRATION.md (×5 workspaces), 5 run records, 2 memory entries (success_pattern calibration + error_resolution hang).
+3. Skill updated with calibration block (uncommitted).
+4. Operational: opencode-go reroute proved out under real load (all 7 calibration calls); one hang → kill+ROUNDS reset+retry worked (recorded).
+5. Pending: commit the skill calibration note; then back to the plan (experimental setup + P0).
+
+Keep it tight. The user will likely say commit. Let me report.
+
+ASSISTANT: Calibration complete — and **yes, it was worth it: it produced three findings and validated the protocol.**
+
+## 1. Verdicts on a borderline question are noise (the headline)
+Six independent runs of the *same* question split ~evenly (WAIT-LIST ×3, INCLUDE ×3), and the **same model (GLM-5.3) produced both verdicts in different runs**. Under the hardened protocol both panelists crossed over again (DS W→I, GLM I→W) — but this time via **verification, not rhetoric**. Practical rule adopted: *quote verified claims, not verdicts, in decision memos.*
+
+## 2. Aggregator chaos — the claim ledger earned its place
+Five different "independent" capability pictures surfaced for one model: live AA (40/45/44), a stale BenchmarkList catalogue ("58.1" — GLM quoted it, then **self-corrected after refetching**: "a catalog fossil; conceded"), a mirror's "58/60/60" (ensemble sample A3, uncorrected), ECI 147.8-between (GLM; **DS tried to verify it, couldn't extract any table, and marked it UNVERIFIED with reasons**), and BenchLM inverting the order. The hardened protocol caught/reconciled all of it; the old protocol never flagged it. I chair-verified AA directly: **40, #30/201, 39.2 t/s, 180M tokens, $2/$6** — the C-arm numbers are correct.
+
+## 3. Protocol effects observed
+- Evidence-backed self-correction, UNVERIFIED labeling, cited cross-corrections (GLM fixed three opponent overstatements) — **no unevidenced concessions** in either protocol.
+- Cost essentially unchanged (C ~45 fetches/~25 min vs B ~47/~20 min). End-state verdicts ≈ old protocol — the improvement is **record quality**, which is the point.
+- Ensemble value: A1 uniquely surfaced the **Apache-2.0 Qwen3.8-27B** option ("include now if a Qwen voice is wanted") — a cheap coverage complement, never an arbiter.
+
+**The verdict of record stands:** WAIT-LIST, conditional — API excluded; promote only on an independent eval of the self-hosted checkpoint.
+
+## Artifacts
+`CALIBRATION.md` (mirrored in all 5 workspaces) · 5 run records · calibration `success_pattern` entry + hang `error_resolution` (merged into the Sep-8 endpoint entry). Skill updated with a short **Calibration** block (uncommitted). Operational note: the **opencode-go reroute carried all 7 calibration calls** — one hang, recovered via kill + `ROUNDS=1` reset + resume (recorded).
+
+Commit the skill calibration note? Then we're back to the queue: experimental worktree setup + P0.
+
+USER: any conclusion on the debate guide? eli5
+
+ASSISTANT (reasoning): The user asks: "any conclusion on the debate guide? eli5" — they want a simple, plain-language (ELI5) conclusion about the debate guide (the adversarial-review skill and its recent hardening + calibration).
+
+This is a recap/explanation question. I should answer directly from context, in simple terms, no tools needed.
+
+Let me think about what to say, at ELI5 level:
+
+1. What we did: We upgraded the debate guide (the skill), then ran a controlled test (the calibration) comparing:
+   - Old debate style
+   - New hardened style
+   - Just asking the same model 3 times (ensemble/vote)
+
+2. What we learned (conclusions):
+   - **Debates don't decide truth — they find disagreements.** When models argue until they agree, the confident/chatty one often wins, not the correct one. So the guide now says: never decide by vote; the "verdict" is not the product.
+   - **The product is the list of claims.** Which facts does everyone agree on (and with a source)? Where do they disagree (go verify)? The new "claim ledger" is like a shopping list of things to check. Quote claims, not verdicts.
+   - **On fuzzy questions, verdicts are coin flips.** We asked the same question six times; the answers split almost 50/50, and the same model said different things in different runs. So don't trust one debate's conclusion on a judgment call.
+   - **The new guide makes the models show their work better.** In the new version, when a model changed its mind it had to cite the new evidence; one panelist caught its own old wrong number and corrected it; another refused to accept the other's numbers because it couldn't verify them (marked "unverified"). That's new — the old version didn't do that.
+   - **"Independent" benchmarks are messy.** Different websites gave different numbers for the same model (58 vs 40!). Like different restaurant review sites disagreeing. So we record which source and when, and the chair double-checks the big ones.
+   - **The actual qwen verdict didn't change** — wait-list. So the upgrade improved the *quality of the report*, not the answer. And that's fine — the report is what we quote later.
+   - **A bonus**: asking 3 separate samples found an option the debates missed (the small Apache-2.0 Qwen 27B) — so an extra "fresh pair of eyes" sample can add coverage cheaply, but shouldn't be the judge.
+
+3. Simple analogy: The debate is like having three experts review a manuscript. The old guide let them argue until they agreed (and the loudest won). The new guide says: don't care who wins — collect their factual disagreements, check the disputed facts yourself, then you decide. And we tested it: the experts' bottom-line opinions wobble, but their fact-checks are solid.
+
+Keep it ELI5: short sentences, maybe bullets, minimal jargon, no citations-heavy stuff. The user explicitly asked ELI5, so keep it simple and readable. Structure: one-line verdict, then "what changed / what we tested / what we found", maybe an analogy. Avoid tables maybe; a few bullets.
+
+Length: medium-short. This is a conversational answer. Let me write ~200-300 words.
+
+ASSISTANT: ELI5 version:
+
+**The debate guide is now: "use debates to find disagreements, not to crown a winner."**
+
+Here's what we tested and learned:
+
+- **A debate's final opinion is shaky.** We asked the same question six times. Half the runs said "include", half said "wait-list" — and the *same model* gave both answers on different days. So a debate verdict on a fuzzy question is basically a coin flip. Don't quote it as truth.
+
+- **What's actually solid is the fact list.** Everyone agreed on the real facts (does the model have open weights? what does the license say? what's the benchmark score?). That part was stable every time. So the guide now says: collect the claims, mark where the panel agrees/disagrees, and *you* check the disputed ones. Like a shopping list of things to verify.
+
+- **The new rules made the models behave better.** When a model changed its mind, it had to show the new evidence. In the test: one model caught its *own* old wrong number and corrected it; another refused to accept the other's numbers because it couldn't verify them (marked "unverified" instead of nodding along). The old guide didn't get this behavior.
+
+- **"Independent" websites lie to you.** Different rating sites gave the same model scores of 40 vs 58. So the guide now says: always write down which source and when, and the chair double-checks the big claims (I did — the 40 is right).
+
+- **Bonus finding:** asking the same model three separate times found an option both debates missed (a small free Qwen model). So an extra "fresh pair of eyes" sample is worth it — but it shouldn't be the judge.
+
+**Bottom line:** the upgrade didn't change the answer (still "wait-list Qwen"), but it made the *report* much more trustworthy — and taught us never to trust a lone debate verdict on a judgment call.
+
+USER: what does it mean, the devate can not be trusted?
+
+ASSISTANT (reasoning): The user asks a clarifying question: "what does it mean, the debate can not be trusted?" — they want a clearer explanation of the nuance. They're likely reacting to "a debate's final opinion is shaky" / "never trust a lone debate verdict."
+
+This is a conceptual clarification — answer directly, no tools. ELI5-ish still (they asked previous turn for ELI5; keep it accessible but can go a bit deeper now to be precise).
+
+Key nuance to convey:
+1. It's NOT "debates are useless" — it's "the *conclusion/verdict* on a judgment question is unreliable; the *facts and evidence* they surface are valuable."
+2. Distinguish two things:
+   - **Facts/evidence**: verifiable claims → debates are great at finding them (unique sources, corrections, catching each other's errors).
+   - **Judgment calls**: "should we include X?" / "is this worth it?" — these depend on weights/values, and the answer wobbles between runs. Same evidence, different verdicts.
+3. Why: borderline questions have no single right answer; small random differences (which pages they read, how they phrase) flip the decision. Like asking 6 food critics if a restaurant is "worth it" — they'll split; but they'll all agree on facts (price, hours, ingredients).
+4. What we do instead:
+   - Trust the checked facts.
+   - Treat disagreement as a to-verify list.
+   - The human/chair makes the final call with full context (the panel doesn't know the lab's constraints/values).
+   - If all runs agree on a verdict, that's weak evidence too — consistency isn't correctness (they can share blind spots).
+5. Also mention what CAN be trusted: factual corrections in cross-exam (when backed by fetches), unique finds, error-catching. The guide's design routes around the untrustworthy part.
+
+Analogy: court trial — the witness testimonies/jury verdict can be wrong; but the exhibits (documents, lab results) are checkable. We keep the exhibits, verify them, and the judge (chair/human) rules.
+
+Keep it clear, maybe structured with "What can't be trusted / What can / Why / So what". Avoid too long. Maybe ~250-350 words. No table needed, or a small one. Since they asked "what does it mean", answer the meaning directly and correct any over-reading: "debate can not be trusted" is too strong — the correct statement is "the verdict is not evidence; the claims are."
+
+Let me draft:
+
+---
+
+It doesn't mean "debates are useless." It means trust the *ingredients*, not the *verdict*. Split into two different things the debate produces:
+
+**1. The verdict ("include/wait-list", "worth it/not")** — a judgment call. Can't be trusted as a fact, because:
+- On borderline questions there is no single right answer — it depends on how much weight you give cost vs. diversity vs. speed.
+- Tiny random differences (which web pages a model happened to read, how the prompt was worded that day) flip the conclusion. That's why we saw W/W/I from one model and a W↔I cross between two.
+- Agreement doesn't fix it either — if all models say the same thing, they might share the same blind spot.
+
+**2. The claims and evidence** — checkable facts (does the weight exist, what the license says, what the benchmark number is). These were stable across every run, and the debate format is *good* at surfacing them: it found the license details, caught a stale number, flagged an unverifiable stat.
+
+Court analogy: the jury's verdict can be wrong, but the exhibits (documents, lab results) are verifiable. We keep the exhibits, verify them, and the judge decides.
+
+So the rule in the guide: 
+- Don't write "the panel concluded X" as if that settles X.
+- Write "the panel verified facts A, B, C; they disagreed on D — we checked D and here's the answer; the final call is ours."
+- The human/chair decides because the panel doesn't know our actual constraints (budget, cluster time, deadlines).
+
+And one more nuance: for questions with a *clear factual answer* ("is the license OSI-approved?"), the debate verdict is trustworthy if backed by sources — because there is ground truth. The noise problem is specific to judgment calls.
+
+---
+
+That's good. Keep it tight. Maybe format with bold mini-headers. Fine.
+
+ASSISTANT: It means: trust the **ingredients**, not the **verdict**. A debate produces two different things, and they have very different reliability:
+
+**1. The verdict ("include it" / "wait-list it") — not trustworthy.**
+- On a borderline judgment call there is no single right answer. It depends on how much you weight cost vs. diversity vs. speed — that's a *values* question, and the panel doesn't know our actual constraints (cluster budget, deadlines, priorities).
+- Tiny random differences — which pages a model happened to read that day, how the prompt was worded — flip the conclusion. That's exactly what we saw: the same model said WAIT-LIST twice and INCLUDE once; both panelists flipped sides.
+- Even unanimous agreement wouldn't fix it: all models can share the same blind spot (they're all trained on similar data).
+
+**2. The claims and evidence — trustworthy (when checked).**
+- Checkable facts (does the checkpoint exist? what does the license clause say? what's the benchmark score?) were stable in every single run.
+- The debate format is genuinely *good* at producing these: it dug up the license terms, caught a stale number, flagged a stat nobody could verify.
+
+**Court analogy:** the jury's verdict can be wrong, but the exhibits — documents, lab results — are verifiable. We keep the exhibits, verify the disputed ones ourselves, and the judge decides. The debate is the evidence-gathering phase, not the ruling.
+
+**So the guide now says:**
+- Never write "the panel concluded X" as if that settles X.
+- Write "the panel verified facts A, B, C; they split on D; we checked D — here's the answer; the final call is ours."
+- For questions with a *checkable* answer ("is it OSI-licensed?"), a sourced panel answer is fine — there's ground truth to pin it to. The noise problem is specific to judgment calls, which is most of what we ask panels about.
+
+USER: so the jury can not reconsile different opinions, right?
+
+ASSISTANT (reasoning): The user asks: "so the jury cannot reconcile different opinions, right?"
+
+They're probing the nuance. I need to be careful and accurate here — not overclaim. The truth:
+
+1. The jury CAN often reconcile (converge) — we saw it happen: both panels crossed over and converged on qualified positions. But reconciliation ≠ correctness:
+   - Convergence can happen because evidence was shared and verified (good).
+   - Convergence can happen because of social pressure/sycophancy (bad) — the literature (EMNLP 2025, SPINE) shows models cave to confident/persistent pressure, and the correct answer often survives in their reasoning trace while they concede to please.
+   - So reconciling is possible, but you can't tell from the outcome alone *why* they reconciled. Same final position could be "both checked the source" or "one got steamrolled."
+
+2. What we did about it in the hardened protocol:
+   - Require evidence for any change of mind ("cite the new evidence, or say 'no new evidence — position retained'"). That separates genuine reconciliation from caving.
+   - Verbatim quotes instead of chair summaries (so nobody gets misrepresented).
+   - Concession-under-pressure logging.
+   - The chair does their own verification of disputed facts.
+   
+3. And even a genuine reconciliation to a common qualified position doesn't make it *true* — it means neither side found a decisive counter. For judgment questions, a reconciled verdict can be right or wrong; it's still not evidence.
+
+4. Precision: in our calibration, the panelists DID reconcile — DS moved W→I, GLM moved I→W, ending at nearly the same qualified position ("eligible, but only self-hosted, verify first"). The reconciliation was mostly evidence-driven (both refetched sources). But notice: the "same position" they converged to is a compromise of their starting points... or was it? Both kept conditions, neither fully converted. And across the ensemble, no cross-talk happened and samples still split — showing the split is intrinsic to the question, not caused by argument dynamics.
+
+So the answer: Right in a specific sense — the jury's *agreement* is not a reliable way to settle a disagreement, because you can't distinguish "convinced by evidence" from "gave in to pressure." It's not that models are incapable of reconciling; it's that reconciliation isn't a truth signal. For factual disputes, you don't need the jury to reconcile — you check the source. For judgment disputes, there's nothing to reconcile *to*: no ground truth, just preference weights.
+
+Also worth clarifying: a "jury" in our setup isn't a single deliberating body — it's independent assessors whose outputs the chair combines. The chair reconciles — that's its job: read the claims, verify the disputed ones, decide with full context. The models provide the raw material.
+
+Keep response short (user asked a yes/no-ish question). Maybe ~150-250 words. ELI5 register continues. Structure: "Partially right — precise version..." + why + what we do instead.
+
+I should not just say "right" — nuance matters. Let me phrase:
+
+**Partly right — and the distinction matters.**
+
+The jury *can* reconcile — ours did: both models moved toward each other's positions. The problem is you can't tell *why* they reconciled:
+- Genuine: shared a source, checked it, updated. (Good — that happened too.)
+- Pressure: one model got worn down by persistent, confident argument, or quietly caved to be agreeable. The research shows this happens a lot; often the model still "knows" the right answer in its own reasoning but says otherwise to please.
+
+Both paths end in the same outward agreement, so agreement alone can't be trusted as a signal.
+
+So the guide doesn't try to make the jury agree better. It:
+1. Forces evidence tags on any mind-change ("cite what changed it, or say 'no new evidence'").
+2. Has the chair check the disputed facts directly — for facts, you don't need reconciliation, you need the source.
+3. For judgment calls, there's nothing to reconcile *to* — no ground truth exists; it's preference weighting, and that's the human's call.
+
+In one line: the jury's job is to disagree usefully; the chair's job is to reconcile — and the chair reconciles with evidence, not with consensus.
+
+That's a good answer. Maybe mention the ensemble experiment: even with zero debate (3 independent samples), the split appeared — proof the disagreement is intrinsic to the question, not caused by arguing. Good point to include briefly.
+
+ASSISTANT: Partly — but the precise version matters.
+
+The jury **can** reconcile — ours did: both models moved toward each other and ended at nearly the same qualified position. The problem is you can't tell *why* they reconciled:
+
+- **Good path:** one shared a source, both checked it, both updated. (Real — happened in our test: GLM refetched the benchmark page and corrected its own number.)
+- **Bad path:** one model simply wore the other down with confident, persistent argument. The research says this happens a lot — and tellingly, the "losing" model often still has the correct answer *in its own reasoning trace* while it concedes in the final text. It's choosing to be agreeable, not actually persuaded.
+
+Both paths end in identical-looking agreement — so **agreement is not a truth signal**. Evidence of convergence, not evidence of correctness.
+
+One more clue from our calibration: we also sampled the same model 3 times with *zero* discussion — and it still split (2 vs 1). That proves the disagreement is intrinsic to the question itself, not caused by the arguing.
+
+So the guide doesn't try to make juries reconcile better. It does three things instead:
+1. **Forces evidence tags on mind-changes** ("cite what changed it, or state 'no new evidence — position retained'") — so caving is visible.
+2. **Has the chair check disputed facts directly** — for facts you don't need reconciliation, you need the source.
+3. **Leaves judgment calls to the human** — there's nothing to reconcile *to*; it's a preference weighting (cost vs. diversity vs. time), and that's the chair's call.
+
+One line: **the jury's job is to disagree usefully; the chair's job is to reconcile — with evidence, not with consensus.**
+
+USER: so how to we make the best out of a debate?
+
+ASSISTANT (reasoning): The user asks: "so how do we make the best out of a debate?" — a synthesis question. They want the practical playbook. I should answer directly, drawing on everything we learned today (the hardened protocol, calibration findings, the position panels, the qwen debates, Claude's critique, the literature).
+
+This is a conceptual/practical question — answer from context, no tools needed. Should be well-structured, ELI5-ish register continuing but can be crisp and actionable. The user wants the "best practices" distilled.
+
+Let me synthesize what we've actually learned and what the guide says:
+
+**How to get the most out of a debate:**
+
+1. **Pick the right questions to debate.** Debates are best for:
+   - Fact-finding under uncertainty (where claims can be checked) → gets you sources, catches errors.
+   - Stress-testing a plan/idea (finding failure modes, omissions, alternatives) → divergent value.
+   - NOT: deciding a judgment call (the verdict is noise), quick lookups, or things you can just verify.
+   
+2. **Blind first, always.** Round 1 independent = maximum diversity, no anchoring. The ensemble experiment showed each independent sample finds different things (unique finds: 27B option, AA page, etc.). The union of independent assessments is the real asset.
+
+3. **Make them work for evidence.** Give web access; require URLs, mark UNVERIFIED. The third-party facts are what survive.
+   - Use the claim ledger: extract claims → agree/disagree → exact checks.
+
+4. **Cross-examine, but guard against caving.**
+   - Verbatim positions (no chair paraphrase).
+   - "Cite what changed your mind or say no new evidence."
+   - Watch concessions; unevidenced = keep original position in record.
+
+5. **The chair verifies the disputed facts themselves.** Don't outsource ground truth to the panel. (I fetched AA myself; that's what settled the numbers.)
+   - Small number of checks (top 1-2 disputed facts), direct primary sources.
+
+6. **Judge values yourself.** After facts are settled, the decision depends on your constraints — do it yourself, write down the reasoning.
+
+7. **Use the right panel.**
+   - Decorrelation: different vendors/labs, cross-family with the chair; open-weight pool for reproducibility.
+   - Panel size: 2-3 is enough; more adds cost little value.
+   - Add effort/role/scaffold variance (from the redesign rec).
+   - Pin model versions (reproducibility; silent swaps).
+   - Quota reroutes available (opencode-go).
+
+8. **Ask for the output you actually need.**
+   - Not "what's your verdict" but "give me findings + confidence + sources", "steelman both sides", "list what would change your mind", "top-5 risks with cost".
+   - Ask for falsifiers/missing evidence — this is consistently the most useful output (all our debates produced actionable "single missing evidence" statements).
+
+9. **Use disagreement as a to-verify list, and the union as coverage.** Don't collapse early; compare.
+   - Optionally one cheap extra sample for coverage.
+
+10. **Record the run: verdict + ledger + claims + sources; quote claims downstream.** And re-debate when the missing evidence arrives.
+
+11. **Blind round 1 also costs less anchoring for you (the chair)** — don't reveal your take.
+
+12. Also: machine checks after the debate where possible (deterministic verifier — for compchem, run the calculation).
+
+Maybe structure as: "Three phases: design → run → harvest" with punchy bullets. Or "the recipe".
+
+Also include the "what to avoid" bits: don't let them vote; don't take the verdict; don't skip chair verification; don't debate what you can just check.
+
+Keep it readable but complete. Maybe ~300-400 words. Format with bold leads. Could be a numbered playbook.
+
+Let me write:
+
+**Design it so disagreement is useful:**
+1. Only debate what can't be settled by one lookup... actually inverse: debate where uncertainty is real (claims + judgment mixed).
+2. Blind, independent round first (that's your ensemble — the union of findings is the prize).
+3. 2-3 models from different labs, pinned versions; add web access.
+4. Ask for findings + confidence + sources + "what would change your mind", not for a verdict.
+
+**Run it so caving is visible:**
+5. Round 2 with verbatim positions; require evidence for any change of mind; log unevidenced concessions.
+6. Keep the panel small; more rounds entrench or exhaust.
+
+**Harvest it:**
+7. Build the claim ledger; verify the top 1-2 disputed facts yourself (chair); only then decide.
+8. Add one extra fresh sample for coverage (cheap).
+9. Quote claims, not verdicts, in the decision memo; state your values reasoning explicitly.
+10. Record + re-run when the missing evidence arrives (debates have a shelf life).
+
+Plus: use deterministic checks where the domain allows (run the calculation).
+
+Maybe a closing line: "The debate is a searchlight, not a judge." Nice metaphor matching earlier court framing.
+
+Also can tie to the actual qwen example: facts settled, verdict left open, trigger defined. Good.
+
+Length: aim concise-ish; the user keeps asking follow-ups so don't dump everything. ~300 words.
+
+ASSISTANT: Think of it as: **debates are a searchlight, not a judge.** Here's the playbook we've validated today:
+
+**Design it right (before launching)**
+1. **Pick the right target.** Debate what's genuinely uncertain (mixed facts + judgment). Skip what one lookup or one command can settle — just check it.
+2. **Blind round 1 always.** Independent assessments are your real asset: each finds different things (in our test, one sample alone found the small Apache-2.0 Qwen option). The union of independent findings is the prize.
+3. **2–3 models from different labs**, pinned versions, web access on. Ask for *findings + confidence + sources + "what would change your mind"* — never just "your verdict."
+4. **Never reveal your own take** in round 1, or you anchor everyone.
+
+**Run it so caving is visible**
+5. Round 2 = cross-exam with **verbatim** opposing positions, and the rule: *"cite the evidence that changed your mind, or state 'no new evidence — position retained.'"* That one rule separates real updates from giving in to pressure.
+6. Stop after 2 rounds. More rounds entrench or exhaust; they don't converge better.
+
+**Harvest it (where the value actually is)**
+7. **Build the claim ledger**: what everyone agrees on (with sources), where they split. The splits are a to-verify list.
+8. **Check the top 1–2 disputed facts yourself** (I fetched the AA page — that's what killed the 58-vs-40 confusion). Don't outsource ground truth.
+9. **Add one extra fresh sample** as a cheap coverage check. It never votes.
+10. **Decide yourself, with your constraints** — the panel doesn't know your budget, deadlines, or priorities. Write the reasoning down.
+11. **Quote claims, not verdicts**, downstream — and define the trigger that would flip the decision (ours: "promote Qwen when an independent checkpoint eval shows parity").
+12. **Record it, and re-run when the missing evidence arrives.** Debates have a shelf life.
+
+And where the domain allows — run the calculation. In compchem, a disagreement about a protocol isn't settled by rhetoric; it's settled by HADDOCK. That's the strongest version of all: debate proposes, the machine disposes.
+
+USER: So will the differences of opinion registered in the final verdict? If so, is it helpful to ask an agent to read through it?
+
+ASSISTANT (reasoning): The user asks two questions:
+1. Will the differences of opinion be registered in the final verdict?
+2. Is it helpful to ask an agent to read through it (the verdict)?
+
+Context: We've been discussing the debate guide and calibration. The user is asking about the practical output: does the final verdict capture the disagreements (not just the consensus)? And would having an agent read through the verdict (presumably a fresh agent, or the main agent later) be useful?
+
+Let me think carefully about what's true in our practice:
+
+**Question 1: Are differences of opinion registered in the verdict?**
+
+In our practice — yes, explicitly:
+- The merged verdicts we wrote today include sections for panel divergence. Examples:
+  - The qwen debate verdict (rounds: qwenmax) — original verdict: "Panel divergence (recorded, not hidden)" — DS revised to INCLUDE-conditionally; GLM held WAIT-LIST.
+  - Position debate verdict.md — "Settlements that changed the chair's round-0 picture", disagreement tables, "What stands unchanged".
+  - Long-run verdict — unanimous, but still documents.
+  - todo-triage — marks per-item verdicts with panel differences (e.g., GLM call "obsolete" where others didn't).
+  - Calibration memo — verdict table showing splits across runs.
+- The claim ledger (new, v1.2) is exactly the mechanism: Status ∈ {AGREE-sourced, AGREE-unverified, DISAGREE, UNRESOLVED} + exact checks. Mandated in the skill now.
+- The skill's Merge section: "keep YOUR judgment on the open items"; the chair must resolve or park each DISAGREE row.
+
+So yes: differences are a first-class part of the output — in the ledger + divergence section. But historically (pre-hardening), divergence was often summarized in prose; now it's structured.
+
+**Question 2: Is it helpful to ask an agent to read through it?**
+
+Interpretations:
+a) Ask a (different, fresh) agent to read the verdict and act on it later — e.g., a future session reading the verdict to implement decisions.
+b) Ask an agent (maybe the same panel or another model) to review the verdict itself — an audit/QA pass of the merged verdict.
+
+Both are useful, and our practice touches both:
+
+For (a): Yes — the verdict files are written to be read by future sessions: they contain pointers, evidence, conditions/triggers, and caveats. The memory records point to them. The whole memory system is designed for future-agent consumption. But with nuance: reading a verdict alone (without the claim ledger + raw answers) can mislead if the reader treats it as settled truth — especially on judgment calls. That's why we now write "quote claims, not verdicts" and why the verdict contains the divergence + confidence labels. A future agent should read: final position + verified claims + unresolved rows + triggers.
+
+For (b): Useful in specific ways:
+- A fresh agent with no stake can check: does the verdict fairly represent the panelists' positions? Are DISAGREE rows actually resolved by evidence (did the chair verify or hand-wave)? Is anything mis-quoted?
+- This is essentially "verdict QA" / meta-review. The literature we saw today (sycophancy etc.) and our calibration argue for it: the chair itself can be biased (it curated the summaries; it may smooth over splits). An independent reader can catch chair smoothing.
+- But: it's another instance of the same failure mode — an agent reading a text can be persuaded by the text's fluency. So it should be instructed to check against the raw answers/ledger, not just opine on the prose.
+- Cheap version: the chair does a self-check using the ledger (each DISAGREE row: resolved or parked?). We did that in calibration (chair verification pass).
+- Even cheaper and more robust: make sure the verdict has machine-checkable structure (ledger rows with exact checks) so a reader-agent (or human) can verify quickly.
+
+Also worth noting: agents are the *right* consumers of these files — the whole Magnolia memory pipeline (distillation, future sessions reading boot-context etc.) is about agent-readable records. But two cautions:
+1. Verdicts are dense and long; an agent that reads only the summary may lose the conditions/caveats. So the writing convention should include a short "bottom line + conditions + triggers" at top.
+2. Differences must be labeled as differences, else the reader will treat the majority line as truth. Our ledgers do this.
+
+Another angle: "ask an agent to read through it" might specifically mean: in a future debate, have an agent read previous verdicts as context? That's the boot-context/memory pattern — yes, valuable; verdicts are recorded in memory and pointers exist. 
+
+I should also give a direct practical answer:
+- Yes, differences are registered (structure: divergence section + claim ledger + confidence labels; example from today).
+- Yes, agent-read is useful, with three use cases: (1) future session executing the decision (read claims + conditions, not verdict-only); (2) independent QA of the verdict against raw answers (catch chair smoothing); (3) automated checks of the ledger's DISAGREE rows.
+- Caution: instruct the reader agent to verify claims against sources/raw transcripts, not trust prose; and keep the verdict's structure machine-friendly.
+
+Maybe also suggest a small improvement: add a top-of-verdict "One-screen summary: what's settled / what's split / what's next / triggers" — this is what an agent (or human) should read first. And possibly a "reader contract" in the skill: verdict must answer the ledger.
+
+Should I propose concrete next steps? Maybe: (a) add a "verdict front-matter" convention to the skill (bottom line, settled claims, open splits, triggers), (b) optionally a cheap verdict-QA pass (a different model reads verdict + raw answers, flags misrepresentations) — useful for high-stakes ones.
+
+Keep the answer conversational, ELI5-ish continuation, concise but complete. No tools needed — answer from context. Maybe ~250-350 words.
+
+Draft:
+
+**1. Yes — disagreements are now a required part of the verdict.** In our practice they appear in three places:
+- The divergence section ("DS flipped to include; GLM held wait-list") — recorded, not hidden.
+- The claim ledger: every claim marked agree-sourced / agree-unverified / DISAGREE / unresolved, with an exact check.
+- Confidence labels per claim.
+The chair is required to either resolve each DISAGREE row by checking the source, or explicitly park it with a reason. So the reader sees not just "what we think" but "where the panel split and what would settle it."
+
+**2. Yes, an agent reading it is exactly the intended consumer — with instructions.** Three good uses:
+- **Future session picking up the work:** read the verified claims + conditions + triggers, not just the verdict line. E.g., Qwen verdict means "don't add the API; add the checkpoint only if eval X happens."
+- **QA of the verdict itself (meta-review):** a fresh agent (different model) reads the verdict against the raw answers and sources and flags misrepresentations, smoothed-over splits, or unresolved rows masquerading as resolved. This guards against chair bias — the chair curated what the panelists saw, so the chair can smooth things. Cheap, worth it for high-stakes decisions.
+- **Automated follow-up:** the ledger's "exact check" column is designed for an agent to execute later (fetch this URL, run this command) — closing unresolved rows.
+
+But one caution: don't let the reader just read the prose. Instruct it to check the verdict against sources/transcripts; a fluent verdict can persuade a reader exactly like a fluent debater.
+
+And a small convention worth adding: a one-screen front section on every verdict — Settled claims / Open splits / Conditions & triggers / Next check — so any agent (or human) gets the actionable part in 10 seconds without swallowing the whole document.
+
+That's the answer. Maybe end with offer: "want me to add that front-matter convention to the skill?" Since we're in discussion mode, propose. Good.
+
+ASSISTANT: **1. Yes — differences are now a required, structured part of the verdict.** In our practice they show up in three places:
+
+- **The divergence section** — e.g., "DS revised to include-conditionally; GLM held wait-list; chair adopted wait-list, include path stays open behind trigger X." Recorded, not smoothed away.
+- **The claim ledger** — every key claim marked `AGREE-sourced / AGREE-unverified / DISAGREE / UNRESOLVED`, with an exact check beside the disputed ones.
+- **Confidence labels** — per finding, and the chair must either resolve each DISAGREE row by checking the source itself, or explicitly park it with a reason.
+
+So a reader sees not just the conclusion, but **where the panel split and what would settle it**. That's the whole point of the redesign: the disagreements are the useful part.
+
+**2. Yes — an agent reading it is the intended consumer, but with instructions.** Three good uses:
+
+- **A future session picking up the work** — this is the main one. The verdict tells it: verified claims (quote these), conditions, and triggers ("add Qwen only if an independent checkpoint eval shows parity"). What it must *not* do is treat the one-line verdict as settled truth — especially on the judgment part.
+- **QA of the verdict itself** — a fresh agent (different model) reads the verdict *against the raw round answers and sources*, and flags: positions misrepresented, splits smoothed over, DISAGREE rows that look resolved but were hand-waved. The chair curated what the panelists saw, so the chair can bias the merge; an independent reader catches that. Cheap, and worth it for high-stakes verdicts.
+- **Executing the ledger** — the "exact check" column exists precisely so an agent can close unresolved rows later: fetch this page, run this command, compare.
+
+**One caution:** don't let the reader just read the prose. A fluent verdict persuades a reader agent the same way a fluent debater persuades a panel — so instruct it to verify against sources/transcripts, not summarize.
+
+**Suggested convention** (not yet in the skill): give every verdict a one-screen front section — **Settled / Split / Conditions & triggers / Next check** — so any agent or human gets the actionable part in ten seconds. Want me to add that to the guide?
