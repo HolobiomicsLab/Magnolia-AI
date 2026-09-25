@@ -1,6 +1,7 @@
 """Automatic memory extraction: distill session logs into project-tier entries."""
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,6 +155,59 @@ prompt_version: v2.0
 """
 
 
+# Additive second-pass helpers — flag, prompt suffix, dedup, telemetry.
+
+SECOND_PASS_ENV = "MAGNOLIA_DISTILL_SECOND_PASS"
+
+_ADDITIVE_INSTRUCTION = """
+
+## ALREADY EXTRACTED IN A FIRST PASS (do NOT restate, rephrase, or refine these):
+{pass1}
+
+Return a JSON array containing ONLY durable learnings ABSENT from the list above —
+new findings, decisions, errors/fixes, or parameters the first pass missed. No
+rewrites, no duplicates, no marginal variants of listed items. Return [] if the
+first pass missed nothing.
+"""
+
+
+def _second_pass_enabled() -> bool:
+    return (os.environ.get(SECOND_PASS_ENV) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _sig_words(text: str) -> set[str]:
+    """Lowercase word tokens; pure numbers dropped (residue ids, run numbers,
+    timestamps cause spurious overlap between genuinely different titles)."""
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if not w.isdigit()}
+
+
+def _title_duplicate(a: str, b: str) -> bool:
+    """Conjunction rule (A1 dedup lesson): token-overlap ratio >= 0.6 AND at
+    least 2 shared significant words — an OR-style weak match bumped unrelated
+    entries twice in production."""
+    aw, bw = _sig_words(a), _sig_words(b)
+    if not aw or not bw:
+        return False
+    shared = aw & bw
+    return len(shared) >= 2 and len(shared) / min(len(aw), len(bw)) >= 0.6
+
+
+def _pass2_telemetry(row: dict[str, Any]) -> None:
+    """Best-effort append of one pass-2 outcome row. Silent truncation/parse
+    failure was the capture.py lesson — every second-pass run is accounted."""
+    pd = os.environ.get("MAGNOLIA_PROJECT_DIR")
+    if not pd:
+        return
+    try:
+        d = Path(pd) / ".magnolia"
+        d.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": datetime.now(timezone.utc).isoformat(), **row}
+        with open(d / "distill-second-pass.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
 CONVERSATION_EXTRACTION_PROMPT = """You are extracting durable learnings from the FULL TRANSCRIPT of a
 computational chemistry agent conversation — user messages, assistant reasoning, assistant
 responses, and tool use. Unlike a tool log, this contains the actual scientific reasoning,
@@ -220,7 +274,18 @@ class AutomaticMemoryExtractor:
         Returns ``None`` when the LLM call itself FAILED (no provider, network
         error, or context overflow — call_llm_json returns None), so the caller
         can retry rather than permanently marking the session done. Returns ``[]``
-        only when the LLM succeeded but found nothing worth keeping."""
+        only when the LLM succeeded but found nothing worth keeping.
+
+        Second (additive) pass, behind MAGNOLIA_DISTILL_SECOND_PASS: with the flag
+        on, a second LLM call re-reads the transcript WITH the first pass's
+        candidates in context and proposes only what the first pass missed
+        (Cadd shape from runs/2026-09-14_slice-validation: ~+18% valid learnings
+        at ~2x cost, precision 0.52 — hence the local dedup). Pass-2 additions
+        are deduped against pass 1 locally (title-token conjunction, pure-number
+        tokens ignored) with drops logged, and every pass-2 run appends one
+        telemetry row to <project>/.magnolia/distill-second-pass.jsonl. A pass-2
+        parse failure never loses pass 1 — the union falls back to pass 1.
+        """
         if not transcript or not transcript.strip():
             return []
         result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000,
@@ -229,7 +294,46 @@ class AutomaticMemoryExtractor:
             return None  # LLM failed — distinct from "ran and found nothing"
         if not isinstance(result, list):
             return []
-        return [r for r in result if isinstance(r, dict) and "title" in r]
+        pass1 = [r for r in result if isinstance(r, dict) and "title" in r]
+        if not _second_pass_enabled():
+            return pass1
+
+        pass1_brief = json.dumps(
+            [{"type": p.get("type"), "title": p.get("title")} for p in pass1],
+            ensure_ascii=False)
+        user2 = (transcript + _ADDITIVE_INSTRUCTION.format(pass1=pass1_brief))
+        outcome = "ok"
+        extra: list | None
+        try:
+            extra = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, user2,
+                                  max_tokens=4000, disable_thinking=True)
+        except Exception as e:  # noqa: BLE001 - pass 2 must never lose pass 1
+            print(f"[second-pass] call failed: {e}")
+            extra = None
+        added = list(pass1)
+        dropped = 0
+        if extra is None:
+            outcome = "parse_fail"
+        elif not isinstance(extra, list):
+            outcome = "not_list"
+        else:
+            for c in extra:
+                if not (isinstance(c, dict) and c.get("title")):
+                    continue
+                if any(_title_duplicate(str(c["title"]), str(p.get("title", ""))) for p in pass1):
+                    dropped += 1
+                    continue
+                added.append(c)
+        _pass2_telemetry({
+            "outcome": outcome,
+            "pass1": len(pass1),
+            "pass2_raw": len(extra) if isinstance(extra, list) else 0,
+            "added": len(added) - len(pass1),
+            "dedup_dropped": dropped,
+        })
+        print(f"[second-pass] outcome={outcome} pass1={len(pass1)} "
+              f"added={len(added) - len(pass1)} dedup_dropped={dropped}")
+        return added
 
     def __init__(self, project_dir: str | None = None):
         self.last_cursor: str = ""
