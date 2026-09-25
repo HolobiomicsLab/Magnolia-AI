@@ -267,20 +267,24 @@ def apply_proposals(
     store_dir: str, accepted: list[int], reject: list[int] | None = None
 ) -> dict[str, Any]:
     """Apply the accepted proposal indices via apply_merge and record `reject`ed
-    indices as durably handled (so they stop re-surfacing). Marks state in the
-    artifact and persists it AFTER EACH applied merge, so a later failure can't
-    lose earlier marks. A merge that raises is recorded in `failed` and never
-    aborts the batch. Unknown / out-of-range / already-handled indices are ignored.
-    Returns {"applied": int, "merged": [...], "skipped": [...], "rejected": int,
-    "failed": [...]}."""
+    indices as durably handled (so they stop re-surfacing). A proposal whose
+    sources no longer exist on disk (already merged / promoted / archived) is
+    STALE: it is durably DISMISSED (artifact `dismissed` list + its source pair
+    into `rejected_keys`) instead of staying pending forever. Marks state in the
+    artifact and persists it AFTER EACH handled proposal, so a later failure
+    can't lose earlier marks. A merge that raises is recorded in `failed` and
+    never aborts the batch. Unknown / out-of-range / already-handled indices are
+    ignored. Returns {"applied": int, "merged": [...], "dismissed": [...],
+    "rejected": int, "failed": [...]}."""
     store = Path(store_dir)
     artifact = store / "reflex" / "consolidation-proposal.json"
     if not artifact.exists():
-        return {"applied": 0, "merged": [], "skipped": [], "rejected": 0, "failed": []}
+        return {"applied": 0, "merged": [], "dismissed": [], "rejected": 0, "failed": []}
     data = json.loads(artifact.read_text())
     proposals = data.get("proposals", [])
     already = set(data.get("applied", []))
     rejected_set = set(data.get("rejected", []))
+    dismissed_set = set(data.get("dismissed", []))
     rejected_keys: set[tuple[str, ...]] = set()
     for k in data.get("rejected_keys", []):
         if isinstance(k, list) and len(k) >= 2:
@@ -289,12 +293,14 @@ def apply_proposals(
     def _persist():
         data["applied"] = sorted(already)
         data["rejected"] = sorted(rejected_set)
+        data["dismissed"] = sorted(dismissed_set)
         data["rejected_keys"] = _serialize_keys(rejected_keys)
         artifact.write_text(json.dumps(data, indent=2))
 
     rejected_count = 0
     for i in reject or []:
-        if isinstance(i, int) and 0 <= i < len(proposals) and i not in already and i not in rejected_set:
+        if (isinstance(i, int) and 0 <= i < len(proposals)
+                and i not in already and i not in rejected_set and i not in dismissed_set):
             rejected_set.add(i)
             key = _cluster_key(proposals[i].get("sources", []))
             if len(key) >= 2:
@@ -302,10 +308,11 @@ def apply_proposals(
             rejected_count += 1
 
     merged_paths: list[str] = []
-    skipped: list[int] = []
+    dismissed: list[int] = []
     failed: list[int] = []
     for i in accepted:
-        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in already or i in rejected_set:
+        if (not isinstance(i, int) or i < 0 or i >= len(proposals)
+                or i in already or i in rejected_set or i in dismissed_set):
             continue
         try:
             res = apply_merge(proposals[i].get("sources", []))
@@ -314,7 +321,16 @@ def apply_proposals(
             failed.append(i)
             continue
         if res["skipped"]:
-            skipped.append(i)
+            # Stale cluster: fewer than two sources survive on disk (the entries
+            # were already merged/promoted elsewhere). Dismiss it durably — a
+            # transient `skipped` left the index pending forever, so the review
+            # re-surfaced it every session.
+            dismissed_set.add(i)
+            key = _cluster_key(proposals[i].get("sources", []))
+            if len(key) >= 2:
+                rejected_keys.add(key)
+            dismissed.append(i)
+            _persist()
         else:
             merged_paths.append(res["merged"])
             already.add(i)
@@ -322,7 +338,7 @@ def apply_proposals(
 
     _persist()
     return {"applied": len(merged_paths), "merged": merged_paths,
-            "skipped": skipped, "rejected": rejected_count, "failed": failed}
+            "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
 
 
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
