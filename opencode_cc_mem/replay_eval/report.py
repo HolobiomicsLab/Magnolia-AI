@@ -51,13 +51,16 @@ def render_report(run_dir: Path) -> str:
 
     if judge:
         t = judge["totals"]
-        n = max(t["candidates"], 1)
+        ans = max(t.get("answered", t["candidates"]), 1)
+        comp = t["candidates"] and t.get("answered", t["candidates"]) / t["candidates"]
         judge_section = (
             f"| metric | value | rate |\n|---|---|---|\n"
-            f"| candidates judged | {t['candidates']} | — |\n"
-            f"| grounded | {t['grounded']} | {t['grounded'] / n:.0%} |\n"
-            f"| durable | {t['durable']} | {t['durable'] / n:.0%} |\n"
-            f"| specific | {t['specific']} | {t['specific'] / n:.0%} |")
+            f"| candidates | {t['candidates']} | — |\n"
+            f"| answered by judge | {t.get('answered', t['candidates'])} | {comp:.0%} completeness |\n"
+            f"| grounded (of answered) | {t['grounded']} | {t['grounded'] / ans:.0%} |\n"
+            f"| durable (of answered) | {t['durable']} | {t['durable'] / ans:.0%} |\n"
+            f"| specific (of answered) | {t['specific']} | {t['specific'] / ans:.0%} |\n"
+            f"| missing verdicts | {t.get('missing', 0)} | scored as missing, not negative |")
     else:
         judge_section = "_Not judged yet — run `python -m replay_eval judge`._"
 

@@ -44,8 +44,22 @@ def _blind_payload(slc, candidates):
     return user, items
 
 
+def _merge_verdicts(attempts):
+    """Merge verdict lists from repeated judge calls, first verdict wins per id.
+
+    LLM judges sometimes return short sheets (skip ids, truncate the array).
+    Scoring must never treat a missing verdict as a negative one."""
+    merged = {}
+    for verdicts in attempts:
+        for v in verdicts:
+            if isinstance(v, dict) and "id" in v and v["id"] not in merged:
+                merged[v["id"]] = v
+    return [merged[k] for k in sorted(merged)]
+
+
 def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = None,
-              workers: int = 4, temperature: float = 0.0, max_tokens: int = 8000):
+              workers: int = 4, temperature: float = 0.0, max_tokens: int = 8000,
+              max_attempts: int = 2):
     import os
 
     run_dir = Path(run_dir)
@@ -68,15 +82,23 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
     def one(name):
         cands = by_slice.get(name, [])
         if not cands:
-            return name, {"n": 0}
+            return name, {"n": 0, "answered": 0, "missing": 0}
         user, _ = _blind_payload(slices[name], cands)
-        text = llm_mod.call_llm(JUDGE_SYSTEM, user, max_tokens=max_tokens,
-                                temperature=temperature, disable_thinking=True)
-        verdicts, parse_ok = _parse_candidates(text)
+        attempts = []
+        for _ in range(max(1, max_attempts)):
+            text = llm_mod.call_llm(JUDGE_SYSTEM, user, max_tokens=max_tokens,
+                                    temperature=temperature, disable_thinking=True)
+            verdicts, parse_ok = _parse_candidates(text)
+            attempts.append(verdicts)
+            if len({v.get("id") for v in verdicts if isinstance(v, dict)}) >= len(cands):
+                break
+        verdicts = _merge_verdicts(attempts)
+        answered = len(verdicts)
         (judge_dir / f"{name}.json").write_text(
-            json.dumps({"parse_ok": parse_ok, "verdicts": verdicts},
+            json.dumps({"parse_ok": bool(verdicts), "verdicts": verdicts},
                        indent=1, ensure_ascii=False), encoding="utf-8")
-        return name, {"n": len(cands), "parse_ok": parse_ok,
+        return name, {"n": len(cands), "answered": answered,
+                      "missing": max(0, len(cands) - answered),
                       "grounded": sum(1 for v in verdicts if v.get("grounded")),
                       "durable": sum(1 for v in verdicts if v.get("durable")),
                       "specific": sum(1 for v in verdicts if v.get("specific"))}
@@ -90,6 +112,8 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
            "results": results,
            "totals": {
                "candidates": sum(r.get("n", 0) for r in results.values()),
+               "answered": sum(r.get("answered", 0) for r in results.values()),
+               "missing": sum(r.get("missing", 0) for r in results.values()),
                "grounded": sum(r.get("grounded", 0) for r in results.values()),
                "durable": sum(r.get("durable", 0) for r in results.values()),
                "specific": sum(r.get("specific", 0) for r in results.values()),
@@ -98,4 +122,46 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
         json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
     if arm_model:
         os.environ["MAGNOLIA_MEMORY_MODEL"] = arm_model
+    return out
+
+
+def rescore(run_dir, judge_subdir="judge"):
+    """Recompute judge totals from existing verdict files (no LLM calls).
+
+    judge_subdir selects which judge snapshot to rescore (e.g. 'judge-glm-a').
+    Scores against ANSWERED candidates and reports completeness separately —
+    a missing verdict is missing data, never a negative verdict. Use this to
+    re-grade runs judged before the completeness fix."""
+    run_dir = Path(run_dir)
+    judge_dir = run_dir / judge_subdir
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    old = json.loads((judge_dir / "judge_summary.json").read_text(encoding="utf-8"))
+
+    results = {}
+    for f in sorted(judge_dir.glob("*.json")):
+        if f.name == "judge_summary.json":
+            continue
+        name = f.stem
+        n = json.loads((run_dir / "outputs" / f"{name}.json").read_text(encoding="utf-8"))["n_candidates"]
+        verdicts = json.loads(f.read_text(encoding="utf-8"))["verdicts"]
+        results[name] = {
+            "n": n, "answered": len(verdicts), "missing": max(0, n - len(verdicts)),
+            "grounded": sum(1 for v in verdicts if v.get("grounded")),
+            "durable": sum(1 for v in verdicts if v.get("durable")),
+            "specific": sum(1 for v in verdicts if v.get("specific")),
+        }
+
+    totals = {
+        "candidates": sum(r["n"] for r in results.values()),
+        "answered": sum(r["answered"] for r in results.values()),
+        "missing": sum(r["missing"] for r in results.values()),
+        "grounded": sum(r["grounded"] for r in results.values()),
+        "durable": sum(r["durable"] for r in results.values()),
+        "specific": sum(r["specific"] for r in results.values()),
+    }
+    out = dict(old)
+    out["results"] = results
+    out["totals"] = totals
+    (judge_dir / "judge_summary.json").write_text(
+        json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
     return out

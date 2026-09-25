@@ -29,6 +29,10 @@ def main(argv=None):
     p_rep = sub.add_parser("report", help="render REPORT.md for a run dir")
     p_rep.add_argument("--run", required=True)
 
+    p_res = sub.add_parser("rescore", help="recompute judge totals from existing verdict files (no LLM)")
+    p_res.add_argument("--run", required=True)
+    p_res.add_argument("--judge-dir", default="judge")
+
     args = ap.parse_args(argv)
 
     from replay_eval import loader
@@ -61,6 +65,16 @@ def main(argv=None):
         from replay_eval import report
 
         print(report.write_report(args.run))
+        return 0
+
+    if args.cmd == "rescore":
+        from replay_eval import judge
+
+        t = judge.rescore(args.run, args.judge_dir)["totals"]
+        comp = t["answered"] / max(t["candidates"], 1)
+        print(f"answered {t['answered']}/{t['candidates']} ({comp:.0%}); "
+              f"grounded {t['grounded']} ({t['grounded'] / max(t['answered'], 1):.0%} of answered); "
+              f"durable {t['durable']}; missing {t['missing']}")
         return 0
 
 
