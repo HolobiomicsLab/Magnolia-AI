@@ -257,8 +257,44 @@ prompt_version: conv-v1.0
 
 class AutomaticMemoryExtractor:
 
+    # Slice 1 — distillation admission unit: stub memory-WRITING tool events.
+    # The learning was already recorded explicitly by these calls; letting the
+    # extractor see the full payload is the dual-capture bug (the recurring
+    # duplicate-pair batches). The occurrence stays visible (tool name +
+    # marker) so the extractor knows a write happened — but not the content
+    # to re-extract. Transcript path is already covered by
+    # opencode_ingest._is_memory_plumbing_tool (all memory_* outputs excluded).
+    MEMORY_WRITE_TOOLS = frozenset({
+        "memory_record_learning",
+        "memory_record_session",
+        "memory_annotate",
+    })
+    _MEMORY_WRITE_STUB = "[stubbed: learning already recorded via memory tool]"
+
+    @classmethod
+    def stub_memory_write_events(
+        cls, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Return events with memory-write payloads replaced by a marker.
+        Non-matching events pass through untouched (shallow copy for matches
+        only — callers' originals are never mutated)."""
+        out: list[dict[str, Any]] = []
+        for ev in events:
+            if (
+                isinstance(ev, dict)
+                and str(ev.get("tool") or "").lower() in cls.MEMORY_WRITE_TOOLS
+            ):
+                ev = {**ev}
+                for k in ("args", "args_summary", "arguments", "result",
+                          "result_summary", "error"):
+                    if ev.get(k):
+                        ev[k] = cls._MEMORY_WRITE_STUB
+            out.append(ev)
+        return out
+
     def _llm_distill(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Use LLM to extract structured knowledge from session events."""
+        events = self.stub_memory_write_events(events)
         events_json = json.dumps(events, indent=2, default=str)
         result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000,
                                disable_thinking=True)
