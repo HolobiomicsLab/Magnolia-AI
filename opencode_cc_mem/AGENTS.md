@@ -120,7 +120,9 @@ and fires auto-assessment for recognized scientific tools.
 
 Call `memory_confirm` to promote useful staging entries to the durable project
 tier. The staging area is a low-pass filter; without confirmation, useful
-learnings stay below the surface.
+learnings stay below the surface. Unlike dedup and elevation, no notice fires
+for this gate: when any review is surfaced and ≥5 staging entries hold
+`observation_count >= 3`, propose a confirmation shortlist in the same review.
 
 ## Knowledge placement — three homes, one rule
 
