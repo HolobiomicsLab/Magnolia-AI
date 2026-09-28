@@ -872,8 +872,9 @@ def memory_apply_consolidation(
     """Apply the accepted consolidation proposals (by index): merge each cluster's
     duplicate findings into one entry, then commit to the versioning repo
     (reversible via git). `reject` durably dismisses proposals so they stop
-    re-surfacing. The magnolia-review/ dir is removed once every proposal has been
-    handled (accepted or rejected).
+    re-surfacing. A proposal whose sources no longer exist (stale) is durably
+    dismissed automatically. The magnolia-review/ dir is removed once every
+    proposal has been handled (accepted, rejected, or dismissed).
 
     Call this after the user confirms which proposals to accept/reject. Pass the
     accepted indices in `accept` and the explicitly-rejected ones in `reject`."""
@@ -884,8 +885,10 @@ def memory_apply_consolidation(
     if result["applied"]:
         _safe_version_commit(store, f"consolidate: {result['applied']} merge(s)")
     artifact = store / "reflex" / "consolidation-proposal.json"
-    data = json.loads(artifact.read_text()) if artifact.exists() else {"proposals": [], "applied": [], "rejected": []}
-    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
+    data = json.loads(artifact.read_text()) if artifact.exists() else {
+        "proposals": [], "applied": [], "rejected": [], "dismissed": []}
+    handled = (set(data.get("applied", [])) | set(data.get("rejected", []))
+               | set(data.get("dismissed", [])))
     if len(handled) >= len(data.get("proposals", [])):
         _drop_review_file(pd, "proposals.md")
     return json.dumps({"status": "applied", **result}, indent=2)

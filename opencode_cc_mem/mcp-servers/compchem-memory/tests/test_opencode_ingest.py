@@ -38,6 +38,104 @@ def test_reconstruct_transcript_orders_roles_text_and_reasoning():
     assert t.index("dock KILDQ") < t.index("Cluster 2 is best")
 
 
+# ---- tool-result inclusion (MAGNOLIA_TRANSCRIPT_TOOL_CHARS) -----------------
+
+def _tool_part(name, output=None, error=None, status="completed"):
+    st = {"status": status}
+    if output is not None:
+        st["output"] = output
+    if error is not None:
+        st["error"] = error
+    return {"type": "tool", "tool": name, "state": st}
+
+
+def test_tool_results_excluded_by_default():
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [
+            _tool_part("run_shell", output="Kd ≈ 57 nM secret finding"),
+        ]},
+    ])
+    t = oi.reconstruct_transcript(export)
+    assert "(tool:run_shell)" in t
+    assert "Kd ≈ 57 nM" not in t
+
+
+def test_tool_results_included_when_tool_chars_set(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "400")
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [
+            _tool_part("webfetch", output="amyloid binding\nSBD contact\nshort result"),
+        ]},
+    ])
+    t = oi.reconstruct_transcript(export)
+    assert "(tool:webfetch): amyloid binding SBD contact short result" in t
+    assert "...[truncated]" not in t         # short output included whole, unmarked
+
+
+def test_tool_results_truncated_with_explicit_marker(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "50")
+    long_out = "x" * 500 + " tail-token-that-must-not-appear"
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [_tool_part("read", output=long_out)]},
+    ])
+    t = oi.reconstruct_transcript(export)
+    assert "x" * 50 + " ...[truncated]" in t
+    assert "tail-token-that-must-not-appear" not in t
+
+
+def test_tool_error_used_when_no_output(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "200")
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [
+            _tool_part("gnina_dock", status="error", error="receptor file missing"),
+        ]},
+    ])
+    t = oi.reconstruct_transcript(export)
+    assert "(tool:gnina_dock): receptor file missing" in t
+
+
+def test_tool_part_without_output_stays_stub(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "200")
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [_tool_part("think")]},
+    ])
+    assert "(tool:think)" in oi.reconstruct_transcript(export)
+
+
+def test_tool_chars_param_overrides_env(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "0")   # env says off
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [_tool_part("read", output="content")]},
+    ])
+    assert "(tool:read): content" in oi.reconstruct_transcript(export, tool_chars=100)
+
+
+def test_tool_chars_env_garbage_is_off(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "not-a-number")
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [_tool_part("read", output="content")]},
+    ])
+    assert "(tool:read)" in oi.reconstruct_transcript(export)
+    assert "content" not in oi.reconstruct_transcript(export)
+
+
+def test_memory_plumbing_outputs_never_included(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "4000")
+    export = _export([
+        {"info": {"role": "assistant"}, "parts": [
+            _tool_part("compchem-memory_memory_get_context", output='{"content": "[PROJECT GOAL] dump"}'),
+            _tool_part("memory_search", output="plumbing results"),
+            _tool_part("run_shell", output="science payload"),
+        ]},
+    ])
+    t = oi.reconstruct_transcript(export)
+    assert "(tool:compchem-memory_memory_get_context)" in t      # stub, no output
+    assert "[PROJECT GOAL] dump" not in t
+    assert "(tool:memory_search)" in t
+    assert "plumbing results" not in t
+    assert "(tool:run_shell): science payload" in t              # science tool included
+
+
 # ---- scrub_secrets ----------------------------------------------------------
 
 def test_scrub_secrets_redacts_keys_keeps_prose():

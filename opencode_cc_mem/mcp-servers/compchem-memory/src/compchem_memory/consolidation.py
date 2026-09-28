@@ -267,20 +267,24 @@ def apply_proposals(
     store_dir: str, accepted: list[int], reject: list[int] | None = None
 ) -> dict[str, Any]:
     """Apply the accepted proposal indices via apply_merge and record `reject`ed
-    indices as durably handled (so they stop re-surfacing). Marks state in the
-    artifact and persists it AFTER EACH applied merge, so a later failure can't
-    lose earlier marks. A merge that raises is recorded in `failed` and never
-    aborts the batch. Unknown / out-of-range / already-handled indices are ignored.
-    Returns {"applied": int, "merged": [...], "skipped": [...], "rejected": int,
-    "failed": [...]}."""
+    indices as durably handled (so they stop re-surfacing). A proposal whose
+    sources no longer exist on disk (already merged / promoted / archived) is
+    STALE: it is durably DISMISSED (artifact `dismissed` list + its source pair
+    into `rejected_keys`) instead of staying pending forever. Marks state in the
+    artifact and persists it AFTER EACH handled proposal, so a later failure
+    can't lose earlier marks. A merge that raises is recorded in `failed` and
+    never aborts the batch. Unknown / out-of-range / already-handled indices are
+    ignored. Returns {"applied": int, "merged": [...], "dismissed": [...],
+    "rejected": int, "failed": [...]}."""
     store = Path(store_dir)
     artifact = store / "reflex" / "consolidation-proposal.json"
     if not artifact.exists():
-        return {"applied": 0, "merged": [], "skipped": [], "rejected": 0, "failed": []}
+        return {"applied": 0, "merged": [], "dismissed": [], "rejected": 0, "failed": []}
     data = json.loads(artifact.read_text())
     proposals = data.get("proposals", [])
     already = set(data.get("applied", []))
     rejected_set = set(data.get("rejected", []))
+    dismissed_set = set(data.get("dismissed", []))
     rejected_keys: set[tuple[str, ...]] = set()
     for k in data.get("rejected_keys", []):
         if isinstance(k, list) and len(k) >= 2:
@@ -289,12 +293,14 @@ def apply_proposals(
     def _persist():
         data["applied"] = sorted(already)
         data["rejected"] = sorted(rejected_set)
+        data["dismissed"] = sorted(dismissed_set)
         data["rejected_keys"] = _serialize_keys(rejected_keys)
         artifact.write_text(json.dumps(data, indent=2))
 
     rejected_count = 0
     for i in reject or []:
-        if isinstance(i, int) and 0 <= i < len(proposals) and i not in already and i not in rejected_set:
+        if (isinstance(i, int) and 0 <= i < len(proposals)
+                and i not in already and i not in rejected_set and i not in dismissed_set):
             rejected_set.add(i)
             key = _cluster_key(proposals[i].get("sources", []))
             if len(key) >= 2:
@@ -302,10 +308,11 @@ def apply_proposals(
             rejected_count += 1
 
     merged_paths: list[str] = []
-    skipped: list[int] = []
+    dismissed: list[int] = []
     failed: list[int] = []
     for i in accepted:
-        if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in already or i in rejected_set:
+        if (not isinstance(i, int) or i < 0 or i >= len(proposals)
+                or i in already or i in rejected_set or i in dismissed_set):
             continue
         try:
             res = apply_merge(proposals[i].get("sources", []))
@@ -314,7 +321,16 @@ def apply_proposals(
             failed.append(i)
             continue
         if res["skipped"]:
-            skipped.append(i)
+            # Stale cluster: fewer than two sources survive on disk (the entries
+            # were already merged/promoted elsewhere). Dismiss it durably — a
+            # transient `skipped` left the index pending forever, so the review
+            # re-surfaced it every session.
+            dismissed_set.add(i)
+            key = _cluster_key(proposals[i].get("sources", []))
+            if len(key) >= 2:
+                rejected_keys.add(key)
+            dismissed.append(i)
+            _persist()
         else:
             merged_paths.append(res["merged"])
             already.add(i)
@@ -322,7 +338,7 @@ def apply_proposals(
 
     _persist()
     return {"applied": len(merged_paths), "merged": merged_paths,
-            "skipped": skipped, "rejected": rejected_count, "failed": failed}
+            "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
 
 
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
@@ -371,14 +387,36 @@ def render_review_markdown(store_dir: str) -> str | None:
         "the duplicates into one entry. For each: leave `action: accept` to merge, or",
         "change it to `reject`. Then tell the agent which to apply (e.g. \"apply 0 and 2\").",
         "",
+        "How to read this file:",
+        "",
+        "- **confidence** is the clustering model's own certainty that the entries",
+        "  assert the SAME claim: **>= 0.8** same claim, near-duplicate (accepting",
+        "  is safe); **0.5-0.79** grouped despite doubt, usually same topic with",
+        "  different claims (read the `why` line; default to reject); **< 0.5** weak.",
+        "- **accept** merges the sources into one entry under the title below;",
+        "  member bodies are kept as corroborating observations; the merge is",
+        "  committed to the versioning repo (git-reversible). **reject** durably",
+        "  dismisses this proposal; the entries stay separate.",
+        "- Nothing is applied until you tell the agent.",
+        "",
     ]
     for i in pending:
         p = proposals[i]
         mp = p.get("merged_preview", {})
+        try:
+            conf = float(p.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf >= 0.8:
+            conf_words = "same claim, near-duplicate"
+        elif conf >= 0.5:
+            conf_words = "grouped despite doubt — usually same topic, different claims"
+        else:
+            conf_words = "weak grouping"
         lines += [
             f"## [{i}] {mp.get('title', '')}",
             "- action: accept",
-            f"- confidence: {p.get('confidence')}  |  distinct sessions: {mp.get('observation_count')}",
+            f"- confidence: {conf} — {conf_words}  |  distinct sessions: {mp.get('observation_count')}",
             f"- why: {p.get('rationale', '')}",
             "- sources:",
         ]

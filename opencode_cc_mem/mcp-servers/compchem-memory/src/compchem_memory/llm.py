@@ -279,11 +279,11 @@ def call_llm(
     provider, model = _resolve_call()
     if not provider:
         _record_timing(None, None, 0, "no_provider")
-        return None
+        return (None, None) if return_finish_reason else None
     key = _get_api_key(provider)
     if not key:
         _record_timing(provider, None, 0, "no_key")
-        return None
+        return (None, None) if return_finish_reason else None
     t0 = time.monotonic()
     try:
         if provider == PROVIDER_ANTHROPIC:
@@ -420,17 +420,25 @@ def call_llm_json(
     *,
     temperature: float | None = None,
     disable_thinking: bool = False,
-) -> dict | list | None:
+    return_finish_reason: bool = False,
+) -> dict | list | None | tuple[dict | list | None, str | None]:
     """Call LLM and parse JSON from the response. Strips a single
-    ```json fenced block if present. Returns None on parse failure."""
-    text = call_llm(system_prompt, user_content, max_tokens,
-                    temperature=temperature, disable_thinking=disable_thinking)
+    ```json fenced block if present. Returns None on parse failure.
+
+    With ``return_finish_reason=True`` returns ``(result, finish_reason)``
+    so the caller can tell a complete answer from one cut off at
+    ``max_tokens`` (``finish_reason == "length"``) — a clipped response may
+    still parse by luck, so the caller decides whether to trust it."""
+    text, finish = call_llm(system_prompt, user_content, max_tokens,
+                            temperature=temperature, disable_thinking=disable_thinking,
+                            return_finish_reason=True)
     if not text:
-        return None
+        return (None, finish) if return_finish_reason else None
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     if m:
         text = m.group(1)
     try:
-        return json.loads(text.strip())
+        result = json.loads(text.strip())
     except json.JSONDecodeError:
-        return None
+        result = None
+    return (result, finish) if return_finish_reason else result
