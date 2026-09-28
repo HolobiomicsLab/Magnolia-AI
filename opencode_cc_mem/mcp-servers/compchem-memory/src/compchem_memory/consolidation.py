@@ -387,14 +387,36 @@ def render_review_markdown(store_dir: str) -> str | None:
         "the duplicates into one entry. For each: leave `action: accept` to merge, or",
         "change it to `reject`. Then tell the agent which to apply (e.g. \"apply 0 and 2\").",
         "",
+        "How to read this file:",
+        "",
+        "- **confidence** is the clustering model's own certainty that the entries",
+        "  assert the SAME claim: **>= 0.8** same claim, near-duplicate (accepting",
+        "  is safe); **0.5-0.79** grouped despite doubt, usually same topic with",
+        "  different claims (read the `why` line; default to reject); **< 0.5** weak.",
+        "- **accept** merges the sources into one entry under the title below;",
+        "  member bodies are kept as corroborating observations; the merge is",
+        "  committed to the versioning repo (git-reversible). **reject** durably",
+        "  dismisses this proposal; the entries stay separate.",
+        "- Nothing is applied until you tell the agent.",
+        "",
     ]
     for i in pending:
         p = proposals[i]
         mp = p.get("merged_preview", {})
+        try:
+            conf = float(p.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf >= 0.8:
+            conf_words = "same claim, near-duplicate"
+        elif conf >= 0.5:
+            conf_words = "grouped despite doubt — usually same topic, different claims"
+        else:
+            conf_words = "weak grouping"
         lines += [
             f"## [{i}] {mp.get('title', '')}",
             "- action: accept",
-            f"- confidence: {p.get('confidence')}  |  distinct sessions: {mp.get('observation_count')}",
+            f"- confidence: {conf} — {conf_words}  |  distinct sessions: {mp.get('observation_count')}",
             f"- why: {p.get('rationale', '')}",
             "- sources:",
         ]

@@ -89,6 +89,12 @@ def test_render_review_markdown_to_visible_dir(tmp_path):
     assert "[0]" in md
     assert "action: accept" in md
     assert "N-term ALA wins" in md or "ALA beats C-term" in md
+    # Self-explanatory review: glossary + plain-words confidence + effects.
+    assert "How to read this file" in md
+    assert ">= 0.8" in md and "0.5-0.79" in md
+    assert "git-reversible" in md
+    assert "Nothing is applied until you tell the agent" in md
+    assert "confidence: 0." in md and ("near-duplicate" in md or "doubt" in md or "weak grouping" in md)
 
 
 def test_render_review_markdown_none_when_no_unapplied(tmp_path):
