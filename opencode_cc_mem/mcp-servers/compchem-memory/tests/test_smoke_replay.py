@@ -137,7 +137,10 @@ def test_killgate_replay_1_broken_model_id_trips_canary(tmp_path, monkeypatch):
     monkeypatch.setattr(llm_mod, "call_llm", spy)
     report = smoke.run_all(proj, run_canary_check=True)
     assert seen.get("called"), "replay must go through the real LLM path"
-    assert seen["result"] is None            # 400 on the unknown model id
+    # 400 on the unknown model id — call_llm_json (master sync) always passes
+    # return_finish_reason=True, so the failed call returns the (None, None)
+    # tuple rather than bare None; both spell "failure" under the contract.
+    assert seen["result"] is None or seen["result"] == (None, None)
     assert canary.is_frozen(proj), "kill-gate: broken model id must freeze the canary"
     assert report["status"] == "fail"
     canary.clear(proj)
