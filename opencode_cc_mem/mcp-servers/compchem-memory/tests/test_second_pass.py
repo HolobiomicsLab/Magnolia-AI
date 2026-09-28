@@ -33,7 +33,10 @@ def _patch_llm(monkeypatch, responses):
 
     def fake(system, user, max_tokens=2000, **kw):
         calls.append({"system": system, "user": user})
-        return responses[len(calls) - 1] if len(calls) <= len(responses) else []
+        val = responses[len(calls) - 1] if len(calls) <= len(responses) else []
+        if kw.get("return_finish_reason") and not isinstance(val, tuple):
+            val = (val, None)
+        return val
 
     monkeypatch.setattr(extraction, "call_llm_json", fake)
     return calls
@@ -89,6 +92,20 @@ def test_non_list_returns_pass1(monkeypatch, store):
     ext = extraction.AutomaticMemoryExtractor()
     assert ext.distill_transcript("transcript text") == PASS1
     assert _telemetry_rows(store)[0]["outcome"] == "not_list"
+
+
+def test_length_clipped_keeps_pass1_and_records(monkeypatch, store):
+    """2026-09-14 lesson: a pass-2 answer cut off at max_tokens must be
+    recorded as length_clipped (with finish_reason) and never merged — even
+    if the truncated text happened to parse."""
+    monkeypatch.setenv(extraction.SECOND_PASS_ENV, "1")
+    _patch_llm(monkeypatch, [PASS1, ([NEW], "length")])
+    ext = extraction.AutomaticMemoryExtractor()
+    assert ext.distill_transcript("transcript text") == PASS1
+    rows = _telemetry_rows(store)
+    assert rows[0]["outcome"] == "length_clipped"
+    assert rows[0]["finish_reason"] == "length"
+    assert rows[0]["added"] == 0
 
 
 def test_numeric_only_tokens_do_not_block_new_title(monkeypatch, store):

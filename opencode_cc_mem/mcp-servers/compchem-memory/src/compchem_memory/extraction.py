@@ -304,15 +304,23 @@ class AutomaticMemoryExtractor:
         user2 = (transcript + _ADDITIVE_INSTRUCTION.format(pass1=pass1_brief))
         outcome = "ok"
         extra: list | None
+        finish: str | None = None
         try:
-            extra = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, user2,
-                                  max_tokens=4000, disable_thinking=True)
+            extra, finish = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, user2,
+                                          max_tokens=4000, disable_thinking=True,
+                                          return_finish_reason=True)
         except Exception as e:  # noqa: BLE001 - pass 2 must never lose pass 1
             print(f"[second-pass] call failed: {e}")
             extra = None
         added = list(pass1)
         dropped = 0
-        if extra is None:
+        if finish == "length":
+            # Output was cut off at max_tokens: even if the truncated text
+            # parses, the list is incomplete — record and keep pass 1 only
+            # (2026-09-14 lesson: 16k state-first clip returned None silently).
+            outcome = "length_clipped"
+            extra = None
+        elif extra is None:
             outcome = "parse_fail"
         elif not isinstance(extra, list):
             outcome = "not_list"
@@ -326,6 +334,7 @@ class AutomaticMemoryExtractor:
                 added.append(c)
         _pass2_telemetry({
             "outcome": outcome,
+            "finish_reason": finish,
             "pass1": len(pass1),
             "pass2_raw": len(extra) if isinstance(extra, list) else 0,
             "added": len(added) - len(pass1),
