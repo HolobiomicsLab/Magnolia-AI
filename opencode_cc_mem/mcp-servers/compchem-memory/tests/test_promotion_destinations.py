@@ -170,3 +170,94 @@ def test_apply_shared_rules_destination_unchanged(tmp_path):
     assert res["deferred_to_cluster_file"] == 0
     assert (rules / "lesson.md").exists()
     assert not Path(src).exists()                 # archived as before
+
+
+# ---------------------------------------------------------------------------
+# shared-skill destination (task-shaped protocols; 2026-09-28)
+# ---------------------------------------------------------------------------
+
+from compchem_memory.promotion import DESTINATION_SHARED_SKILL
+
+
+def _draft_skill(entry):
+    return {"name": "docking-connectivity-check", "description": "d",
+            "tags": [], "body": "PROTOCOL", "home": "skill",
+            "skill": "haddock3"}
+
+
+def _propose_with(tmp_path, body, drafter):
+    rules = _layout(tmp_path)
+    store = _store(tmp_path, body)
+    propose_promotions(str(store), rules_dir=str(rules),
+                       judge=_approve_all, drafter=drafter, checker=_ok_checker)
+    return rules, store
+
+
+def test_propose_routes_task_shaped_to_skill(tmp_path):
+    rules, store = _propose_with(
+        tmp_path, "workflow: dock then verify contacts with contactmap", _draft_skill)
+    art = json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    p = art["proposals"][0]
+    assert p["destination"] == DESTINATION_SHARED_SKILL
+    assert p["skill"] == "haddock3"
+
+
+def test_cluster_facts_win_over_skill_home(tmp_path):
+    rules, store = _propose_with(
+        tmp_path, "fakelab needs --account chem42 before docking", _draft_skill)
+    art = json.loads((store / "reflex" / "promotion-proposal.json").read_text())
+    assert art["proposals"][0]["destination"] == DESTINATION_CLUSTER_FILE
+
+
+def test_render_shows_skill_destination(tmp_path):
+    rules, store = _propose_with(
+        tmp_path, "a task-shaped protocol with no cluster words", _draft_skill)
+    md = Path(render_promotions_markdown(str(store))).read_text()
+    assert ".opencode/skills/haddock3/SKILL.md" in md
+
+
+def test_apply_creates_new_skill(tmp_path):
+    rules, store = _propose_with(tmp_path, "protocol body", lambda e: {
+        "name": "connectivity-check", "description": "d", "tags": [],
+        "body": "PROTOCOL", "home": "skill", "skill": "docking-checks"})
+    res = apply_promotions(str(store), str(rules), accept=[0])
+    skill_file = tmp_path / ".opencode" / "skills" / "docking-checks" / "SKILL.md"
+    assert skill_file.exists()
+    text = skill_file.read_text()
+    assert "PROTOCOL" in text and "last_verified" in text
+    assert "elevated from project entry `a.md`" in text
+    assert res["skills"] == [str(skill_file)]
+    assert not (store / "entries" / "a.md").exists()   # archived
+
+
+def test_apply_appends_section_to_existing_skill(tmp_path):
+    rules = _layout(tmp_path)
+    skill_file = tmp_path / ".opencode" / "skills" / "haddock3" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("---\nname: haddock3\ndescription: x\n---\n\n# Haddock3\n")
+    store = _store(tmp_path, "protocol body")
+    propose_promotions(str(store), rules_dir=str(rules),
+                       judge=_approve_all, drafter=_draft_skill, checker=_ok_checker)
+    apply_promotions(str(store), str(rules), accept=[0])
+    text = skill_file.read_text()
+    assert text.startswith("---\nname: haddock3")           # frontmatter untouched
+    assert "## Docking Connectivity Check" in text
+    assert "PROTOCOL" in text
+
+
+def test_apply_skill_duplicate_header_fails_not_duplicates(tmp_path):
+    rules, store = _propose_with(tmp_path, "protocol body a", _draft_skill)
+    _entry(store / "entries", "b.md", "Lesson2", "protocol body b")
+    propose_promotions(str(store), rules_dir=str(rules),
+                       judge=_approve_all, drafter=_draft_skill, checker=_ok_checker)
+    res = apply_promotions(str(store), str(rules), accept=[0, 1])
+    text = (tmp_path / ".opencode" / "skills" / "haddock3" / "SKILL.md").read_text()
+    assert text.count("## Docking Connectivity Check") == 1
+    assert res["failed"] == [1]
+
+
+def test_promote_raw_to_skill_refused(tmp_path):
+    rules, store = _propose_with(tmp_path, "protocol body", _draft_skill)
+    res = apply_promotions(str(store), str(rules), promote_raw=[0])
+    assert res["failed"] == [0]
+    assert res["skills"] == []

@@ -4,11 +4,15 @@ human-confirm. Eligibility is deterministic (session count); verification is an
 LLM consensus panel + consistency check; the merged/drafted rule is human-confirmed.
 
 Detect with intelligence, gate with determinism, human-confirm — same contract as
-consolidation. Accepted rules land in their proposal's DESTINATION: the
-git-tracked rules/ directory (always-on doctrine) by default, or the user's
-private cluster file (never shared) when the lesson contains cluster-specific
-facts (see magnolia-destinations.yaml). The skill tier was retired 2026-09;
-the raw-copy memory_promote tool was removed with it."""
+consolidation. Accepted rules land in their proposal's DESTINATION, routed by
+content class: the git-tracked rules/ directory (always-on behavioral
+discipline) by default; a shared on-demand SKILL document (.opencode/skills/,
+task-shaped protocols — appended as a section when the skill exists, created
+as a new skill otherwise); or the user's private cluster file (never shared)
+when the lesson contains cluster-specific facts (see
+magnolia-destinations.yaml). The retired .magnolia/skills tier and the
+raw-copy memory_promote tool are gone; skill placement is draft-plus-edit,
+never a verbatim copy."""
 
 import hashlib
 import json
@@ -43,6 +47,7 @@ _DEFAULT_DESTINATIONS = {
 }
 
 DESTINATION_SHARED_RULES = "shared-rules"
+DESTINATION_SHARED_SKILL = "shared-skill"
 DESTINATION_CLUSTER_FILE = "cluster-file"
 
 
@@ -89,13 +94,18 @@ def collect_cluster_fact_patterns(destinations: dict[str, str]) -> list:
     return patterns
 
 
-def destination_for(entry: dict[str, Any], fact_patterns: list) -> str:
-    """Your cluster file when the entry mentions a cluster fact; else shared
-    rules. Title + body are both checked so a lesson named after a private
-    hostname is caught too."""
+def destination_for(entry: dict[str, Any], fact_patterns: list,
+                    drafted: dict[str, Any] | None = None) -> str:
+    """Routing by content class, deterministic-first: your cluster file when
+    the entry mentions a cluster fact (regex, checked over title + body);
+    else the drafter's home verdict — shared skill for task-shaped protocols,
+    shared rules for always-on discipline. Title + body are both checked so a
+    lesson named after a private hostname is caught too."""
     text = f'{entry["meta"].get("title", "")}\n{entry["body"]}'
     if any(p.search(text) for p in fact_patterns):
         return DESTINATION_CLUSTER_FILE
+    if drafted and drafted.get("home") == "skill":
+        return DESTINATION_SHARED_SKILL
     return DESTINATION_SHARED_RULES
 
 
@@ -176,10 +186,16 @@ def run_panel(
 # ---------------------------------------------------------------------------
 
 _DRAFT_SYSTEM = (
-    "Rewrite ONE project learning as a durable RULE for a computational-chemistry "
+    "Rewrite ONE project learning as durable guidance for a computational-chemistry "
     "agent. Keep it faithful to the source — do not invent facts. Make it "
-    "prescriptive and general. Return JSON: {\"name\": kebab-case slug, "
-    "\"description\": one line, \"tags\": [str], \"body\": markdown guidance}."
+    "prescriptive and general. Also choose its HOME by content class: "
+    '"home": "rule" for always-on behavioral discipline (checks, gates, '
+    "pitfalls that must shape every session), 'home': 'skill' for a task-shaped "
+    "protocol (how to run a tool or workflow; loaded only when a task matches). "
+    "For home='skill', set 'skill' to the existing skill name it extends, or a "
+    "new kebab-case slug if none fits. Return JSON: {\"name\": kebab-case slug, "
+    "\"description\": one line, \"tags\": [str], \"body\": markdown guidance, "
+    "\"home\": \"rule\"|\"skill\", \"skill\": name-or-null}."
 )
 
 
@@ -201,16 +217,21 @@ def draft_rule(
     entry: dict[str, Any],
     drafter: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
-    """Draft a rule preview from a project entry. On drafter failure, fall back to
-    a faithful copy (title→name, entry body verbatim) so a proposal still forms."""
+    """Draft a rule/skill preview from a project entry. On drafter failure, fall
+    back to a faithful copy (title→name, entry body verbatim, home=rule) so a
+    proposal still forms."""
     drafter = drafter or _default_drafter
     d = drafter(entry) or {}
     title = entry["meta"].get("title", "")
+    home = d.get("home") if d.get("home") in ("rule", "skill") else "rule"
+    skill = _slug(d["skill"]) if home == "skill" and d.get("skill") else None
     return {
         "name": _slug(d.get("name") or title),
         "description": d.get("description") or title,
         "tags": d.get("tags") or entry["meta"].get("tags") or [],
         "body": d.get("body") or entry["body"],
+        "home": home,
+        "skill": skill,
     }
 
 
@@ -364,7 +385,8 @@ def propose_promotions(
                       "correctness_flag": panel["correctness_flag"]},
             "consistency": consistency,
             "drafted_rule": drafted,
-            "destination": destination_for(entry, fact_patterns),
+            "destination": destination_for(entry, fact_patterns, drafted),
+            "skill": drafted.get("skill"),
             "confidence": round(panel["approvals"] / _PROMOTION_PANEL_PASSES, 2),
         })
 
@@ -423,6 +445,13 @@ def render_promotions_markdown(store_dir: str) -> str | None:
                          "written into shared files. On accept, nothing is "
                          "written — copy the draft into your `hpc-<cluster>` "
                          "skill yourself.")
+        elif dest == DESTINATION_SHARED_SKILL:
+            lines.append(f"- destination: shared skill "
+                         f"(`.opencode/skills/{p.get('skill') or dr.get('skill') or '?'}/SKILL.md`) "
+                         "— appended as a new section if that skill exists, "
+                         "created as a new skill otherwise. Edit the skill file "
+                         "afterward; the draft carries a pointer back to the "
+                         "source entry.")
         else:
             lines.append("- destination: shared rules (`rules/`)")
         if flag:
@@ -474,6 +503,40 @@ def _write_rule(rules_dir: str, drafted: dict[str, Any]) -> str:
     return str(dest)
 
 
+def _write_skill_section(
+    shared_skills_dir: str, skill: str, drafted: dict[str, Any],
+    source: str,
+) -> str:
+    """Land a drafted task-shaped protocol in the shared skills tree
+    (<shared_skills>/<skill>/SKILL.md). If the skill exists, append a new
+    `## <title>` section (refusing a duplicate header — re-applying the same
+    proposal must not double-append); else create a new skill with full
+    frontmatter. Both paths append a pointer line back to the source entry
+    (promotion is editorial, never a verbatim copy without provenance)."""
+    skill_dir = Path(shared_skills_dir) / skill
+    skill_file = skill_dir / "SKILL.md"
+    header = f"## {drafted.get('name', '').replace('-', ' ').title()}"
+    pointer = (f"*(elevated from project entry `{Path(source).name}` "
+               f"on {_today()}; edit freely)*")
+    body = drafted.get("body", "").strip()
+    if skill_file.exists():
+        text = skill_file.read_text(encoding="utf-8")
+        if header in text:
+            raise FileExistsError(f"section already present in {skill}: {header}")
+        skill_file.write_text(
+            text.rstrip("\n") + f"\n\n{header}\n\n{body}\n\n{pointer}\n",
+            encoding="utf-8")
+        return str(skill_file)
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"name": skill, "description": drafted.get("description", ""),
+            "version": "1.0", "tags": drafted.get("tags") or [],
+            "last_verified": _today()}
+    skill_file.write_text(
+        "---\n" + yaml.dump(meta, default_flow_style=False, allow_unicode=True)
+        + f"---\n\n{header}\n\n{body}\n\n{pointer}\n", encoding="utf-8")
+    return str(skill_file)
+
+
 def _archive_entry(source: str, store_dir: str) -> None:
     """Back up then remove the project entry (it is now a rule)."""
     p = Path(source)
@@ -496,8 +559,8 @@ def apply_promotions(
     `failed`). Deterministic over the artifact — no markdown parsing."""
     store = Path(store_dir)
     artifact = store / "reflex" / "promotion-proposal.json"
-    empty = {"applied": 0, "rules": [], "promoted_raw": 0, "rejected": 0,
-             "deferred_to_cluster_file": 0, "failed": []}
+    empty = {"applied": 0, "rules": [], "skills": [], "promoted_raw": 0,
+             "rejected": 0, "deferred_to_cluster_file": 0, "failed": []}
     if not artifact.exists():
         return empty
     data = json.loads(artifact.read_text())
@@ -516,10 +579,13 @@ def apply_promotions(
             rejected_set.add(i); rejected_n += 1
 
     rules: list[str] = []
+    skills: list[str] = []
     raw_n = 0
     deferred = 0
     failed: list[int] = []
     accept_list = accept or []
+    shared_skills_dir = str(
+        Path(rules_dir).parent / load_destinations(rules_dir)["shared_skills"])
     for i in accept_list + (promote_raw or []):
         if not isinstance(i, int) or i < 0 or i >= len(proposals) or i in applied_set or i in rejected_set:
             continue
@@ -536,6 +602,27 @@ def apply_promotions(
             else:
                 # Raw-copying cluster-specific content into shared rules is
                 # refused outright.
+                failed.append(i)
+            continue
+        if p.get("destination") == DESTINATION_SHARED_SKILL:
+            if i not in accept_list:
+                # promote_raw into a skill is refused: verbatim elevation is
+                # the retired pattern; skills take the drafted section.
+                failed.append(i)
+                continue
+            try:
+                skill = p.get("skill") or p.get("drafted_rule", {}).get("skill")
+                if not skill:
+                    failed.append(i)
+                    continue
+                path = _write_skill_section(
+                    shared_skills_dir, skill, p["drafted_rule"], p["source"])
+                _archive_entry(p["source"], store_dir)
+                applied_set.add(i)
+                _persist()
+                skills.append(path)
+            except Exception as ex:  # noqa: BLE001 - one bad apply must not abort the batch
+                print(f"[promotion] skill apply failed for proposal {i}: {ex}")
                 failed.append(i)
             continue
         try:
@@ -563,6 +650,7 @@ def apply_promotions(
             failed.append(i)
 
     _persist()
-    return {"applied": len(rules) - raw_n, "rules": rules, "promoted_raw": raw_n,
+    return {"applied": len(rules) + len(skills) - raw_n, "rules": rules,
+            "skills": skills, "promoted_raw": raw_n,
             "deferred_to_cluster_file": deferred,
             "rejected": rejected_n, "failed": failed}
