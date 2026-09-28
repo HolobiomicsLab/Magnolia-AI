@@ -145,12 +145,24 @@ outside the shared repository. To connect a new cluster, start from
 
 ## Language
 
-The audience is chemists who write code, not software engineers. Write every
-user-facing text — rules, skill descriptions, review files, error
-explanations, chat replies — in plain language: reuse the word the docs
-already use; name chemistry actions rather than sysadmin abstractions; gloss
-unavoidable proper nouns on first use. Full directive: memory entry
-`20260916_073725_261570`.
+The audience is chemists who write code, not software engineers, and English
+is not their native language. Write every user-facing text — rules, skill
+descriptions, review files, error explanations, chat replies — in plain
+language: reuse the word the docs already use; name chemistry actions rather
+than sysadmin abstractions; gloss unavoidable proper nouns on first use.
+Full directive: memory entry `20260916_073725_261570`.
+
+**Strengthened (user request 2026-09-24; entry `20260924_124050_848131` —
+the original rule proved insufficient, the user had to ask again):**
+
+- Simple words first: "let it run for a week and watch it", not "soak";
+  explain "merge", "branch", "regime" if you must use them.
+- Every codename (C1, A1, P3, M2 …) gets one clause saying what it is, on
+  first use in any explanation.
+- Short sentences. One idea per sentence.
+- Process explanations get an everyday analogy.
+- Numbers, file paths, and commit hashes stay exact — only the words around
+  them get simpler.
 
 ## Project structure
 

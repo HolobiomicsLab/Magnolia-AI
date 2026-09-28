@@ -89,6 +89,12 @@ def test_render_review_markdown_to_visible_dir(tmp_path):
     assert "[0]" in md
     assert "action: accept" in md
     assert "N-term ALA wins" in md or "ALA beats C-term" in md
+    # Self-explanatory review: glossary + plain-words confidence + effects.
+    assert "How to read this file" in md
+    assert ">= 0.8" in md and "0.5-0.79" in md
+    assert "git-reversible" in md
+    assert "Nothing is applied until you tell the agent" in md
+    assert "confidence: 0." in md and ("near-duplicate" in md or "doubt" in md or "weak grouping" in md)
 
 
 def test_render_review_markdown_none_when_no_unapplied(tmp_path):
@@ -249,3 +255,53 @@ def test_consolidation_cleanup_preserves_sibling_review_file(tmp_path, monkeypat
 
     assert not (review_dir / "proposals.md").exists()      # own file removed
     assert sibling.exists()                                 # promotion review untouched
+
+
+# ---- Stale proposals (sources gone from disk) are durably dismissed ----
+
+def test_stale_proposal_is_durably_dismissed(tmp_path):
+    """A proposal whose sources no longer exist (already merged / promoted) must
+    be durably dismissed on accept — not left pending to re-surface every
+    session (the 2026-09-25 loop: skipped [2, 16], review re-rendered each time)."""
+    store, a, b, c = _store_with_proposal(tmp_path)
+    Path(a).unlink(); Path(b).unlink()          # sources vanished after the proposal
+
+    res = apply_proposals(str(store), [0])
+
+    assert res["applied"] == 0
+    assert res["dismissed"] == [0]
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["dismissed"] == [0]
+    assert sorted(map(sorted, data["rejected_keys"])) == [["a.md", "b.md"]]
+    assert render_review_markdown(str(store)) is None       # nothing pending -> no review
+
+
+def test_dismissed_stale_key_survives_regeneration(tmp_path):
+    """The stale cluster's content key lands in `rejected_keys`, so it is carried
+    forward across artifact regenerations — the pair can never re-propose even if
+    same-named entries ever reappear."""
+    store, a, b, c = _store_with_proposal(tmp_path)
+    Path(a).unlink(); Path(b).unlink()
+    apply_proposals(str(store), [0])
+
+    consolidate_project_findings(str(store), clusterer=lambda p: [])   # next sweep
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert sorted(map(sorted, data["rejected_keys"])) == [["a.md", "b.md"]]
+    assert render_review_markdown(str(store)) is None
+
+
+def test_apply_tool_dismisses_stale_and_cleans_review_dir(tmp_path, monkeypatch):
+    from compchem_memory import server
+    store, a, b, c = _store_with_proposal(tmp_path)
+    Path(a).unlink(); Path(b).unlink()
+    pd = str(tmp_path); monkeypatch.setattr(server, "PROJECT_DIR", pd)
+    review = getattr(server.memory_review_consolidation, "fn", server.memory_review_consolidation)
+    apply = getattr(server.memory_apply_consolidation, "fn", server.memory_apply_consolidation)
+
+    review(project_dir=pd)
+    assert (tmp_path / "magnolia-review").exists()
+    out = json.loads(apply(accept=[0], project_dir=pd))
+
+    assert out["dismissed"] == [0]
+    assert not (tmp_path / "magnolia-review").exists()      # all handled -> cleaned

@@ -17,6 +17,7 @@ here before any content reaches the (external) distillation LLM.
 """
 
 import json
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -44,13 +45,59 @@ def scrub_secrets(text: str) -> str:
     return out
 
 
-def reconstruct_transcript(export: dict) -> str:
+def _tool_chars_from_env() -> int:
+    """Per-tool-part output budget from MAGNOLIA_TRANSCRIPT_TOOL_CHARS.
+    0 / unset / unparsable = exclude tool outputs (legacy behavior)."""
+    raw = (os.environ.get("MAGNOLIA_TRANSCRIPT_TOOL_CHARS") or "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def _tool_output_text(part: dict) -> str:
+    """Tool-result text from an opencode tool part: state.output, falling back
+    to state.error for failed calls. Empty when neither carries text."""
+    st = part.get("state")
+    if not isinstance(st, dict):
+        return ""
+    out = st.get("output")
+    if not isinstance(out, str) or not out.strip():
+        err = st.get("error")
+        out = err if isinstance(err, str) else ""
+    return out if isinstance(out, str) else ""
+
+
+def _is_memory_plumbing_tool(name: str) -> bool:
+    """True for the memory system's OWN tools (memory_get_context, compchem-
+    memory_memory_search, ...). Their outputs are high-volume plumbing the
+    extraction prompt already declares out of scope; including them both
+    dilutes the transcript and makes the model over-apply the 'ignore memory
+    plumbing' rule (observed: 4000-char get_context dump → 0 candidates)."""
+    n = name.lower()
+    return n.startswith("memory_") or n.startswith("compchem-memory_")
+
+
+def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) -> str:
     """Build an ordered text transcript from `opencode export` JSON.
 
-    Export shape: {info, messages:[{info:{role}, parts:[{type,text}]}]}.
+    Export shape: {info, messages:[{info:{role}, parts:[{type,text}]}]}; tool
+    parts carry their result at state.output (state.error on failure).
     Keeps user/assistant text and assistant reasoning (the scientific content);
     tool parts are noted briefly.
+
+    Tool RESULTS are excluded by default. Setting tool_chars > 0 (or env
+    MAGNOLIA_TRANSCRIPT_TOOL_CHARS, read at call time) includes up to that many
+    characters of each science-tool result, whitespace-collapsed onto the tool
+    line and ALWAYS marked when truncated ("...[truncated]") — silent truncation
+    is how the capture fidelity bug hid content. Memory-system tool outputs are
+    never included (_is_memory_plumbing_tool). Callers scrub_secrets() the whole
+    transcript afterwards, which covers included tool output too.
     """
+    if tool_chars is None:
+        tool_chars = _tool_chars_from_env()
     lines: list[str] = []
     for m in export.get("messages", []) or []:
         role = ((m.get("info") or {}).get("role") or "?").upper()
@@ -63,7 +110,17 @@ def reconstruct_transcript(export: dict) -> str:
                 lines.append(f"{role} (reasoning): {txt}")
             elif t == "tool":
                 name = p.get("tool") or p.get("name") or "tool"
-                lines.append(f"{role} (tool:{name})")
+                if tool_chars and tool_chars > 0 and not _is_memory_plumbing_tool(name):
+                    out = _tool_output_text(p)
+                else:
+                    out = ""
+                if not out:
+                    lines.append(f"{role} (tool:{name})")
+                    continue
+                flat = " ".join(out.split())
+                if len(flat) > tool_chars:
+                    flat = flat[:tool_chars] + " ...[truncated]"
+                lines.append(f"{role} (tool:{name}): {flat}")
     return "\n\n".join(lines)
 
 

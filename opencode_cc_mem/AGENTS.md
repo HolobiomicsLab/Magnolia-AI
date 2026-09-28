@@ -120,7 +120,9 @@ and fires auto-assessment for recognized scientific tools.
 
 Call `memory_confirm` to promote useful staging entries to the durable project
 tier. The staging area is a low-pass filter; without confirmation, useful
-learnings stay below the surface.
+learnings stay below the surface. Unlike dedup and elevation, no notice fires
+for this gate: when any review is surfaced and ≥5 staging entries hold
+`observation_count >= 3`, propose a confirmation shortlist in the same review.
 
 ## Knowledge placement — three homes, one rule
 
@@ -173,7 +175,8 @@ If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposal
 
 1. Call `memory_review_consolidation` — it writes a readable review to
    `magnolia-review/proposals.md` and returns a summary.
-2. Present the proposed merges briefly and ask the user to accept/reject/modify.
+2. Present the proposed merges in the standard review format below and ask
+   the user to accept/reject/modify.
    The user may also edit `magnolia-review/proposals.md` directly.
 3. Call `memory_apply_consolidation(accept=[accepted indices], reject=[rejected
    indices])`. Accepted merges are applied deterministically and committed
@@ -182,6 +185,31 @@ If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposal
    handled (accepted or rejected).
 
 Never apply a proposal the user did not confirm.
+
+### Consolidation review format (mandatory)
+
+Never make the user ask what a proposal means. For each proposal:
+
+- **#N — title (confidence X, in plain words)** — then "what merges": how
+  many source entries and one line on what each says.
+- **Why grouped**: quote the proposal's rationale, then classify it as
+  either *same claim* (true duplicate) or *same topic only* (different
+  claims — the rationale usually admits this).
+- **What accept does**: one merged entry under the canonical title; member
+  bodies are kept as "corroborating observations"; merged confidence = the
+  highest member value. **What reject does**: the proposal is durably
+  dismissed; the entries stay separate.
+- **Recommendation** (accept/reject) with a one-line reason.
+
+Confidence glossary — the number is the clustering model's own certainty
+that the entries assert the same claim (`consolidation.py`):
+
+- ≥ 0.8 — same claim, near-duplicate; accepting is safe.
+- 0.5–0.79 — grouped despite doubt; usually same topic, different claims.
+  Read the rationale; default to reject.
+- < 0.5 — weak; reject unless obviously a duplicate.
+
+Always say up front that nothing is applied without the user's confirmation.
 
 ## Reviewing rule-elevation proposals
 
@@ -198,3 +226,21 @@ If `.magnolia/reflex/promotion-proposal.json` exists with unapplied proposals
    the resulting rule file afterward if needed.
 
 Never elevate a proposal the user did not confirm.
+
+### Promotion review format (mandatory)
+
+Same principle as the consolidation format: never make the user ask what a
+proposal means. For each elevation, present:
+
+- **Entry title + observation count** (eligibility = observed in ≥3 distinct
+  sessions).
+- **Panel verdict**: approvals vs vetoes (e.g. 2/3 with one correctness
+  veto), and any ⚠ correctness or duplicate/conflict flags.
+- **Destination**: shared `rules/`, or your private `hpc-<cluster>` skill
+  (cluster-fact proposals are never written to shared files — say what to
+  copy where).
+- **The drafted rule in two lines** (what it would say, where it lands).
+- **Recommendation** (accept / reject / `promote_raw`) with a one-line
+  reason.
+
+Always say up front that nothing is applied without the user's confirmation.

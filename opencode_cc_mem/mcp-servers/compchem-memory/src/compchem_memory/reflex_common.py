@@ -29,8 +29,10 @@ def parse_frontmatter_file(path: str | Path) -> dict[str, Any] | None:
 
 
 def pending_indices(data: dict[str, Any]) -> list[int]:
-    """Proposal indices that are neither applied nor rejected."""
-    handled = set(data.get("applied", [])) | set(data.get("rejected", []))
+    """Proposal indices that are neither applied, rejected, nor dismissed
+    (dismissed = stale: the cluster's sources no longer exist on disk)."""
+    handled = (set(data.get("applied", [])) | set(data.get("rejected", []))
+               | set(data.get("dismissed", [])))
     return [i for i in range(len(data.get("proposals", []))) if i not in handled]
 
 
