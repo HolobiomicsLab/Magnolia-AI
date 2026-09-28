@@ -17,10 +17,14 @@
  * RESULT (soft injection — the agent sees the knowledge at the moment the
  * action's outcome is produced). No gating, no blocking in v1.
  *
- * Noise control: only hits with score >= 2 (distinct query tokens matched) or
- * confidence >= 0.8 are injected, capped at 4. Identical queries within 120 s
- * reuse the cached result. The retrieval child is killed at 2500 ms; on any
- * failure the tool result passes through untouched.
+ * Noise control (v2, 2026-09-18): only hits with query-match score >= 3 are
+ * injected — confidence alone must never substitute for relevance (it injected
+ * two June entries on 209 of 258 staging injections in 3 weeks) — capped at 4,
+ * at most 8 injection events per session, and the same entry at most twice per
+ * session. Every instrumented call (injected or not) is logged with a coarse
+ * outcome marker so retrieval value becomes measurable. Identical queries
+ * within 120 s reuse the cached result. The retrieval child is killed at
+ * 2500 ms; on any failure the tool result passes through untouched.
  *
  * Safe by design: retrieval is READ-ONLY and every failure is swallowed —
  * this plugin must never break a tool call.
@@ -49,6 +53,9 @@ const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "
 const QUERY_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 120_000
 const MAX_HITS = 4
+const MIN_SCORE = 3
+const MAX_INJECTIONS_PER_SESSION = 8
+const MAX_PER_ENTRY_PER_SESSION = 2
 
 // Tools whose invocation is an "action" worth checking memory for first:
 // state-changing shell, submissions, file writes/edits, and the main
@@ -91,7 +98,7 @@ function argsToQuery(args: any): string {
   return parts.join(" ").slice(0, 400)
 }
 
-export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
+export const MagnoliaActionRetrieval: Plugin = async ({ client, directory }) => {
   if (DISABLED) return {}
 
   // Resolve the active project the same way magnolia-auto-retrieval does
@@ -125,6 +132,34 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
   // query -> { ts, lines } result cache
   const cache = new Map<string, { ts: number; lines: string[] }>()
 
+  // P3 memory-quality telemetry: injections awaiting an application probe,
+  // keyed by session (bounded: oldest dropped at 40). Flushed at session.idle.
+  const injectedTurns = new Map<string, Array<{ callID: string; tool: string; titles: string[]; paths: string[] }>>()
+
+  // C1 noise-control state, keyed by session (bounded: oldest dropped at 40)
+  const sessionInjections = new Map<string, number>()
+  const entryLatch = new Map<string, Map<string, number>>()
+  const skipLogged = new Map<string, Set<string>>()
+  const touchSession = (sid: string) => {
+    if (!sid || sessionInjections.has(sid)) return
+    if (sessionInjections.size >= 40) {
+      for (const k of [...sessionInjections.keys()].slice(0, sessionInjections.size - 20)) {
+        sessionInjections.delete(k)
+        entryLatch.delete(k)
+        skipLogged.delete(k)
+      }
+    }
+    sessionInjections.set(sid, 0)
+  }
+  const logSkip = (sid: string, tool: string, callID: unknown, reason: string) => {
+    const seen = skipLogged.get(sid) ?? new Set<string>()
+    skipLogged.set(sid, seen)
+    if (!seen.has(reason)) {
+      seen.add(reason)
+      log({ sessionID: sid, tool, callID, skipped: reason })
+    }
+  }
+
   async function retrieve(query: string): Promise<{ lines: string[]; ms: number } | null> {
     if (!query.trim()) return null
     const hit = cache.get(query)
@@ -149,7 +184,72 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
     }
   }
 
+  // --- P3 memory-quality telemetry: application probe -----------------------
+  // At session.idle, test whether the turn's reply lexically engages the
+  // entries injected during that turn. LEXICAL PROXY, not semantic proof:
+  // >=2 distinctive tokens (len>=5, from entry titles/paths) present in the
+  // reply counts as "applied". Rows are appended to the same ledger with
+  // event="application", joined later by (sessionID, callID).
+
+  const STOP = new Set(["about", "there", "these", "those", "which", "while",
+    "their", "would", "could", "should", "where", "after", "before", "under",
+    " learning", "memory", "project", "entry", "staging", "magnolia"])
+
+  function distinctiveTokens(titles: string[], paths: string[]): string[] {
+    const raw = (titles.join(" ") + " " + paths.join(" "))
+      .toLowerCase()
+      .replace(/[^a-z]+/g, " ")
+    const out = new Set<string>()
+    for (const w of raw.split(/\s+/)) {
+      if (w.length >= 5 && !STOP.has(w)) out.add(w)
+    }
+    return [...out]
+  }
+
+  async function probeApplication(sessionID: string): Promise<void> {
+    const items = injectedTurns.get(sessionID)
+    if (!items || items.length === 0) return
+    injectedTurns.delete(sessionID)
+    try {
+      const resp: any = await client.session.messages({ path: { id: sessionID } })
+      const msgs: any[] = resp?.data ?? resp ?? []
+      if (!Array.isArray(msgs) || msgs.length === 0) return
+      let lastUser = -1
+      msgs.forEach((m, i) => { if (m?.info?.role === "user") lastUser = i })
+      const replyParts: string[] = []
+      for (const m of msgs.slice(lastUser + 1)) {
+        if (m?.info?.role !== "assistant") continue
+        for (const p of m?.parts ?? []) {
+          if (p?.type === "text" && !p?.synthetic && p?.text) replyParts.push(p.text)
+        }
+      }
+      const reply = replyParts.join("\n").toLowerCase()
+      for (const item of items) {
+        const tokens = distinctiveTokens(item.titles, item.paths)
+        const matched = tokens.filter((t) => reply.includes(t))
+        const applied = tokens.length > 0 && matched.length >= Math.min(2, tokens.length)
+        log({
+          event: "application",
+          sessionID,
+          tool: item.tool,
+          callID: item.callID,
+          applied,
+          matched,
+          distinct: tokens.length,
+        })
+      }
+    } catch { /* never throw into opencode */ }
+  }
+
   return {
+    event: async (input: any) => {
+      try {
+        if (input?.event?.type === "session.idle") {
+          const sid = input?.event?.properties?.sessionID
+          if (sid) await probeApplication(String(sid))
+        }
+      } catch { /* never throw into opencode */ }
+    },
     "tool.execute.before": async (input: any, output: any) => {
       try {
         const tool = String(input?.tool ?? "")
@@ -168,20 +268,47 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
     "tool.execute.after": async (input: any, output: any) => {
       try {
         const callID = input?.callID
+        const sessionID = String(input?.sessionID ?? "")
+        const tool = String(input?.tool ?? "")
+        touchSession(sessionID)
         const prom = pending.get(callID)
         pending.delete(callID)
         if (!prom || typeof output?.output !== "string") return
         const res = await prom
-        if (!res || res.lines.length === 0) return
 
-        const hits = res.lines
+        // D1 coarse outcome marker (heuristic: keyword scan of the result head;
+        // a precise application link needs the callID join against the session log).
+        const outText = output.output
+        const outcome = /\b(error|failed|traceback|exception)\b/i.test(outText.slice(0, 400))
+          ? "error?"
+          : "ok"
+        const logCall = (injected: number) =>
+          log({ sessionID, tool, callID, outcome, injected })
+
+        if (!res || res.lines.length === 0) { logCall(0); return }
+
+        // C1: relevance floor — query-match score only; confidence must never
+        // substitute for relevance.
+        const all = res.lines
           .map((l) => { try { return JSON.parse(l) } catch { return null } })
-          .filter((h): h is any => !!h)
-          .filter((h) => (h.score ?? 0) >= 2 || (h.confidence ?? 0) >= 0.8)
-          .slice(0, MAX_HITS)
-        if (hits.length === 0) return
+          .filter((h): h is any => !!h && typeof h.path === "string")
+          .filter((h) => (h.score ?? 0) >= MIN_SCORE)
 
-        const tool = String(input?.tool ?? "")
+        // C1: per-entry latch — the same entry at most twice per session.
+        const latch = entryLatch.get(sessionID) ?? new Map<string, number>()
+        entryLatch.set(sessionID, latch)
+        const fresh = all.filter((h) => (latch.get(h.path) ?? 0) < MAX_PER_ENTRY_PER_SESSION)
+
+        // C1: per-session budget.
+        const used = sessionInjections.get(sessionID) ?? 0
+        if (fresh.length === 0) { logSkip(sessionID, tool, callID, "latch"); logCall(0); return }
+        if (used >= MAX_INJECTIONS_PER_SESSION) {
+          logSkip(sessionID, tool, callID, "budget")
+          logCall(0)
+          return
+        }
+
+        const hits = fresh.slice(0, MAX_HITS)
         const bullet = (h: any) => {
           const badge = [h.tier, h.type].filter(Boolean).join("/")
           const prov = h.provisional ? " [unconfirmed]" : ""
@@ -196,14 +323,38 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
           `\n(read-only auto-injection; opt out MAGNOLIA_ACTION_RETRIEVE=0)\n\n`
 
         output.output = block + output.output
+        sessionInjections.set(sessionID, used + 1)
+        for (const h of hits) latch.set(h.path, (latch.get(h.path) ?? 0) + 1)
+        logCall(hits.length)
         log({
-          sessionID: input?.sessionID,
+          sessionID,
           tool,
           callID,
           ms: res.ms,
           hits: hits.length,
           titles: hits.map((h) => h.title).slice(0, 4),
+          entries: hits.map((h) => ({
+            path: h.path,
+            tier: h.tier,
+            score: h.score,
+            confidence: h.confidence,
+            provisional: !!h.provisional,
+          })),
         })
+        // P3 telemetry: remember this injection so the session.idle probe can
+        // test whether the turn's reply actually used it.
+        if (injectedTurns.size > 40) {
+          const oldest = injectedTurns.keys().next().value
+          if (oldest) injectedTurns.delete(oldest)
+        }
+        const turnItems = injectedTurns.get(sessionID) ?? []
+        turnItems.push({
+          callID: String(callID),
+          tool,
+          titles: hits.map((h) => String(h.title ?? "")),
+          paths: hits.map((h) => String(h.path ?? "")),
+        })
+        injectedTurns.set(sessionID, turnItems)
       } catch { /* never throw into opencode */ }
     },
   }
