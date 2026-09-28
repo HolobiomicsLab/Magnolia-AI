@@ -190,6 +190,12 @@ def _distill_timer_tick(project_dir: str) -> None:
     memory_distill_session are deliberately ungated. Never raises — a timer
     failure must not crash the server."""
     try:
+        # Smoke detector (Phase 0): cadence-gated, off the boot path. Runs the
+        # distiller canary + boot-duplication + dead-man checks; on drift the
+        # canary freeze flag halts auto-promotion. MAGNOLIA_SMOKE_INTERVAL_H
+        # (default 12, 0 = off).
+        from compchem_memory import smoke
+        smoke.maybe_run_scheduled(project_dir)
         if not _offpeak_gate_disabled() and _is_peak_time():
             print("[distill_timer] peak hours (UTC) — skipping sweep; "
                   "backlog will run at the next off-peak tick")
