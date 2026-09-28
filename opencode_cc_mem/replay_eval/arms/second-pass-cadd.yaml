@@ -1,0 +1,14 @@
+# Second-pass arm — additive-only re-read (Cadd shape from
+# runs/2026-09-14_slice-validation: pass-1 candidates placed AFTER the
+# transcript; +18% valid learnings at production sizes, +32% on tails,
+# ~2x extraction cost). Dedup by title-token conjunction mirrors the
+# master MAGNOLIA_DISTILL_SECOND_PASS implementation (4b7931d).
+name: second-pass-cadd
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v2-secondpass
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null

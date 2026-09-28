@@ -1,0 +1,233 @@
+[
+ {
+  "name": "xiulian-f78ef8cc-b41",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 41,
+  "chars": 24045,
+  "messages": 4,
+  "started": "2026-09-10 06:35",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b42",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 42,
+  "chars": 32626,
+  "messages": 38,
+  "started": "2026-09-10 06:50",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b43",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 43,
+  "chars": 58055,
+  "messages": 32,
+  "started": "2026-09-10 07:08",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b44",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 44,
+  "chars": 169037,
+  "messages": 29,
+  "started": "2026-09-10 07:29",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b45",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 45,
+  "chars": 64493,
+  "messages": 17,
+  "started": "2026-09-10 07:46",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b46",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 46,
+  "chars": 41877,
+  "messages": 16,
+  "started": "2026-09-10 08:16",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b47",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 47,
+  "chars": 34730,
+  "messages": 22,
+  "started": "2026-09-10 08:28",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b48",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 48,
+  "chars": 60561,
+  "messages": 18,
+  "started": "2026-09-10 08:47",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b49",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 49,
+  "chars": 113581,
+  "messages": 27,
+  "started": "2026-09-10 09:09",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b50",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 50,
+  "chars": 73485,
+  "messages": 36,
+  "started": "2026-09-10 09:26",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b51",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 51,
+  "chars": 68314,
+  "messages": 22,
+  "started": "2026-09-10 09:47",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "xiulian-f78ef8cc-b52",
+  "project": "xiulian",
+  "session": "ses_f78ef8ccfffeP18oREdDgzDGTW",
+  "bin": 52,
+  "chars": 78350,
+  "messages": 26,
+  "started": "2026-09-10 10:07",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b06",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 6,
+  "chars": 10060,
+  "messages": 16,
+  "started": "2026-06-16 08:41",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b07",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 7,
+  "chars": 21330,
+  "messages": 28,
+  "started": "2026-06-16 08:47",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b08",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 8,
+  "chars": 18260,
+  "messages": 21,
+  "started": "2026-06-16 09:06",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b09",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 9,
+  "chars": 35208,
+  "messages": 36,
+  "started": "2026-06-16 09:26",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b10",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 10,
+  "chars": 28361,
+  "messages": 50,
+  "started": "2026-06-16 09:45",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b11",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 11,
+  "chars": 21097,
+  "messages": 27,
+  "started": "2026-06-16 10:09",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b12",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 12,
+  "chars": 25416,
+  "messages": 43,
+  "started": "2026-06-16 10:25",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b13",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 13,
+  "chars": 36705,
+  "messages": 40,
+  "started": "2026-06-16 10:45",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ },
+ {
+  "name": "hsc70-130e4d4e-b14",
+  "project": "hsc70",
+  "session": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+  "bin": 14,
+  "chars": 4518,
+  "messages": 5,
+  "started": "2026-06-16 11:07",
+  "capture_version": "capture-1-2026-09-no-tool-outputs",
+  "source": "runs/2026-09-14_slice-validation (xiulian production slices)"
+ }
+]

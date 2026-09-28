@@ -1,0 +1,6 @@
+# Run outputs stay local; keep only compact provenance in git.
+*
+!.gitignore
+!.gitkeep
+!REPORT.md
+!summary.json

@@ -1,0 +1,92 @@
+USER: problem is, we are still learning to use haddock3. the set of parameters was working for previous batch, it may still change for the next. 
+
+ASSISTANT (reasoning): The user is making a good point. We're still learning what parameters work for HADDOCK3. A static template would become stale. 
+
+The real structural fix is different: the config should come from a single validated source rather than being re-written each time. The approach could be:
+
+1. Keep the most recent working config as a reference file
+2. When setting up new runs, copy the reference config, not write from scratch
+3. When we discover a better parameter, update the reference
+4. Only change what's different per run (sampling, peptide-specific params)
+
+This way the protocol evolves with our learning, but we never lose the working version by re-creating from memory.
+
+Also — the prejob check rule could be extended to include a simple diff check: "does this config match the reference except for run-specific parameters?" That's a single check that catches the whole class of "forgot a module" errors.
+
+What do you think — a reference config that evolves, plus a prejob diff check?
+
+USER: Is there a way to selective loading rules instead of loading all?
+
+ASSISTANT (reasoning): The user is asking about selective loading of rules in opencode. They want to know if they can control which rules get loaded for a session, rather than loading all of them. This is a technical question about opencode's configuration capability.
+
+Let me check the opencode docs for rules loading.
+
+ASSISTANT (tool:webfetch)
+
+ASSISTANT (reasoning): Yes, there are ways to control rule loading:
+
+1. **`instructions` field in `opencode.json`** — list specific files to include
+2. **`AGENTS.md` with lazy-loaded `@file` references** — rules loaded on demand
+3. **Agent-specific instructions** — per-subagent rules via `agents` config
+
+The current setup has ALL rules loaded every session via `AGENTS.md` referencing everything in `rules/`. The user could:
+- Move less-frequently-needed rules into reference files loaded on demand (`@rules/p2rank.md`)
+- Keep only the always-needed rules (magnolia.md, slurm.md, job_execution.md) in the instructions field
+- Load tool-specific rules (haddock3.md, gromacs.md) only when the task involves that tool
+
+The ideal approach: 
+1. Always load: `rules/magnolia.md`, `rules/slurm.md`, `rules/job_execution.md`
+2. Load on task detection: `rules/haddock3.md`, `rules/prejob_check.md`, `rules/hpc_azzurra.md` (only when submitting jobs or running haddock3)
+3. Reference-only: `rules/p2rank.md`, `rules/boltzgen.md`, `rules/gnina_covalent.md`, `rules/gromacs.md`, `rules/qm.md`, `rules/nature-skills.md`
+
+But the key constraint is: I, as the agent, need to be told to load certain rules. The `AGENTS.md` instruction pattern can handle this — "When working on HADDOCK3 docking, also read `@rules/haddock3.md`."
+
+Or even simpler: the `instructions` field in `opencode.json` could control which subset of rules load at startup.
+
+Let me present the options.
+
+ASSISTANT: Yes, there are two mechanisms:
+
+### Option 1 — `opencode.json` instructions field
+
+Move less-frequently-needed rules to reference files, load them only when relevant via `opencode.json`:
+
+```jsonc
+{
+  "instructions": [
+    // Always loaded — core behavior
+    "rules/magnolia.md",
+    "rules/slurm.md", 
+    "rules/job_execution.md",
+    // Task-specific — loaded via AGENTS.md @-reference pattern
+    // "@rules/haddock3.md" — "when docking"
+    // "@rules/qm.md" — "when running ORCA/Gaussian"
+  ]
+}
+```
+
+### Option 2 — AGENTS.md lazy loading
+
+Create a loader instruction that loads tool rules on task detection:
+
+```markdown
+## Tool-specific rules — load when relevant
+- Docking/HADDOCK3: @rules/haddock3.md, @rules/prejob_check.md
+- QM calculations: @rules/qm.md
+- Pocket prediction: @rules/p2rank.md
+- Bead design: @rules/boltzgen.md
+```
+
+### What stays vs. what moves
+
+| Always load | Load on demand | Reference only |
+|-------------|---------------|----------------|
+| magnolia.md | haddock3.md | p2rank.md |
+| slurm.md | prejob_check.md | boltzgen.md |
+| job_execution.md | hpc_azzurra.md | gnina_covalent.md |
+| | gromacs.md | qm.md |
+| | | nature-skills.md |
+
+That takes you from 12 rules to 3 always-loaded + 4 task-loaded = 7 context, freeing ~2000 tokens. The trade-off is that task-specific rules are loaded when I detect the task, not pre-loaded — but we already have the AGENTS.md instruction saying "when doing X, load Y."
+
+Want me to set this up?

@@ -213,7 +213,7 @@ def _get_base_url(provider: str) -> str:
     env_name = _BASE_URL_ENV.get(provider)
     if env_name and (raw := os.environ.get(env_name)):
         base = raw.rstrip("/")
-        if not base.endswith("/v1"):
+        if not re.search(r"/v\d+$", base):
             base += "/v1"
         return base
     return _DEFAULT_BASE[provider]
@@ -388,8 +388,13 @@ def _call_openai_compat(
     if temperature is not None:
         body["temperature"] = temperature
     # DeepSeek reasoning models (v4-flash/pro) put output in reasoning_content and
-    # exhaust max_tokens on it; disabling thinking gives a direct, cheaper answer.
-    if disable_thinking and provider == PROVIDER_DEEPSEEK:
+    # Reasoning models spend their whole budget on reasoning_content and then
+    # return empty content. DeepSeek and Z.ai (GLM) accept the same
+    # thinking-disabled switch; OpenAI proper defines no such field, so the
+    # allowlist avoids 400s on unknown parameters.
+    _disable_base = _get_base_url(provider)
+    if disable_thinking and (provider == PROVIDER_DEEPSEEK
+                             or "z.ai" in _disable_base or "bigmodel" in _disable_base):
         body["thinking"] = {"type": "disabled"}
     resp = httpx.post(
         url,

@@ -1,0 +1,12 @@
+# Baseline arm — mirrors the current production memory-extraction config.
+# code_ref points at the exp worktree checkout; for a true master-vs-proposal
+# bake-off, point competing arms at different checkouts/worktrees.
+name: baseline-master
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v1
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null

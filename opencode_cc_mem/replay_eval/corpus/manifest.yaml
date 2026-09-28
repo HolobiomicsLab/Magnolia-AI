@@ -1,0 +1,18 @@
+# Replay-eval corpus — FROZEN
+corpus_version: 1
+created: 2026-09-25
+frozen: true
+capture_version: capture-1-2026-09-no-tool-outputs
+changes:
+  - version: 1
+    date: 2026-09-25
+    reason: >
+      Initial freeze: the 21 production extraction slices from
+      projects/xiulian/runs/2026-09-14_slice-validation (xiulian sessions,
+      4-message bins, 10-24k chars). Transcripts predate tool-output
+      inclusion in reconstruction, hence capture-1-2026-09-no-tool-outputs.
+rules:
+  - Never extend this corpus after seeing arm results on it (Goodhart
+    guard). Add NEW sessions as a new corpus version instead.
+  - Every change is a version bump with a reason in changes.
+  - Arms are never compared across capture regimes.

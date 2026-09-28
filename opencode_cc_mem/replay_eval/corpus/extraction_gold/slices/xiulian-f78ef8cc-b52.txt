@@ -1,0 +1,806 @@
+USER: yes. then, what would be a good workflow integrating the debate, if it is useful?
+
+ASSISTANT (reasoning): The user says "yes" (add the front-matter convention to the skill) "then, what would be a good workflow integrating the debate, if it is useful?"
+
+Two tasks:
+1. Add the one-screen front-matter convention to the skill (edit SKILL.md).
+2. Propose/answer: what's a good workflow integrating the debate, if it is useful?
+
+For (1): Edit the skill. Where? Probably in the Aftermath section (verdict writing step) or the Claim ledger section. Add a requirement: every verdict starts with a one-screen front section: Settled / Split / Conditions & triggers / Next check. Let me place it in the Aftermath item 2 (write the merged verdict) and/or a small "Verdict format" block. Best: modify Aftermath step 2 to specify the front section, or add a new section right after Claim ledger. Let me look at the current skill structure mentally:
+
+Sections: framing (What debates are FOR), Why blindness, When to use/not use, Adversary selection, Tools/web access, Mechanics, Round 1 template, Round 2 template, Panels, Claim ledger, Merge, Aftermath, Hygiene.
+
+I'll add the verdict front-matter spec to the Aftermath step 2, expanding it:
+
+"2. Write the merged verdict to `<run>/verdict.md` — name the final artifact path in your reply (turn-closing contract). **Every verdict opens with a one-screen front section:** `## Front matter` / Settled (verified claims, with sources) / Split (unresolved disagreements + exact checks) / Conditions & triggers (what would flip the call) / Next check (the single next action to close an open row). Readers (agents or humans) should get the actionable part in ten seconds; details follow below."
+
+Also maybe add a "Reader contract" line: when a future session reads a verdict: quote the Settled claims; do not treat the verdict line as settled for judgment calls; execute the Next check.
+
+Let me keep it tight — modify step 2 and maybe add a sentence in the Claim ledger section referencing the front section.
+
+For (2): The workflow question — "what would be a good workflow integrating the debate, if it is useful?" They want the operational workflow for when/how debates fit into the project lifecycle (not the internal mechanics, which we know). This means: at what points in Magnolia's development/research process should a debate be invoked, what are the inputs/outputs, who reads what, and how it links to the rest of the system (memory, runs, decisions, implementation/review).
+
+Let me design a practical workflow, grounded in our actual practice and the skill's rules:
+
+**The workflow (debate lifecycle in the project):**
+
+Phase A — Trigger: when to fire a debate (from skill "When to use/not use" + our practice):
+- High-stakes decisions that anchor future work: protocol changes, design docs, architecture calls, external-facing moves (publication, PR policy, schema publication).
+- Before committing to a big investment (e.g., experimental branch program — debate on position; priority lists).
+- When a claim/plan will be hard to reverse (cost).
+- Trigger mechanism: user request, or agent proposes one line and user confirms (not automatic).
+- Anti-trigger: things settleable by lookup/command; execution of decided plans; quick calls.
+
+Phase B — Prep (chair):
+- Write the self-contained question; decide the arms/panel (2-3 models, decorrelated, pinned; reroute via opencode-go if quota).
+- Define the output contract up front: findings + confidence + sources; what would change your mind.
+- Copy context into workspaces; blind round 1 prompt.
+
+Phase C — Run: blind r1 → read → cross-exam r2 (verbatim, evidence-required) → stop at 2 (round 3 only if real disagreement remains).
+
+Phase D — Harvest (chair):
+- Build the claim ledger; chair-verify top 1-2 disputed facts (primary sources).
+- Write verdict with front matter (Settled/Split/Conditions/Next check).
+- Record: run records, memory note, file the verdict in runs/.
+
+Phase E — Consumption (future sessions/agents):
+- Decisions quote claims, not verdicts.
+- Next check executes unresolved rows.
+- Triggers monitored (e.g., falsifier watch).
+- Re-debate when missing evidence arrives or trigger flips.
+
+Phase F — Learning loop (the Magnolia-specific integration):
+- The verdict's Split rows and triggers become memory entries / checklist items.
+- Debate protocol learnings (meta) go to the skill editorially.
+- Optionally: post-decision review (did the adopted recommendation survive?) — feeds memory telemetry (action-change rate).
+- For high stakes: verdict QA pass (fresh agent checks verdict vs raw answers).
+
+**When is it *not* useful / where debates shouldn't be integrated** (to answer "if it is useful"):
+- Routine execution, well-verified facts, anything with a cheap deterministic check (run the calc instead).
+- As an automatic gate on everything (claim-critic failure mode).
+- As a decision-maker for value trade-offs (the human decides).
+
+**Concrete integration points in Magnolia today:**
+1. **Design/architecture decisions** → e.g., the ASTRA placement debate, PR merge conditions, todo triage, positioning.
+2. **Before major implementation programs** (like the experimental branch plan — debated; execution plan — debated).
+3. **Before external commitments** (schema publication, PR replies, positioning claims for the paper).
+4. **Recurring risk watch** (falsifier checks — could be a mini-debate or just a check).
+5. **Result interpretation** for ambiguous scientific findings (not yet exercised; when a run's outcome is ambiguous).
+6. Where NOT: per-run parameter choices with prior data (use memory + rules), routine code review (use tests/verifier), factual lookups.
+
+Also: the workflow ties to the experimental plan: debates are how strategic choices get stress-tested BEFORE the branch work; the verifier subagent is the deterministic counterpart AFTER.
+
+Maybe present as a numbered lifecycle + a "when to use / when not" table + a small ASCII flow? Keep concise. Maybe a compact flow:
+
+Question → (propose+confirm) → blind r1 ×2-3 → ledger draft → cross-exam r2 → chair verify + verdict(front matter) → memory + decisions → monitor triggers → re-debate on new evidence.
+
+And note where the deterministic verifier slots in (after debate, before decisions that touch numbers), and where the memory system slots (records).
+
+I should also answer the conditional "if it is useful": summarize where it's useful (from our findings): fact-gathering under uncertainty, stress-testing plans, surfacing options/omissions; not for verdicts on judgment calls, not as automatic gate.
+
+Let me do the skill edit first, then compose the workflow answer in the same turn. The user said "yes" to adding the front-matter convention — that's an explicit go-ahead to edit. Then "what would be a good workflow" — answer in text.
+
+Should I also commit the skill edit? They haven't said commit. Earlier pattern: I draft, they say commit. I'll draft and note it's uncommitted, then answer the workflow question. Maybe ask to commit at the end.
+
+Skill edit: modify Aftermath item 2. Current text (from my earlier read + edits):
+
+```
+## Aftermath (Magnolia memory flow — mandatory)
+
+A debate is a **run**: its workspace under `projects/<proj>/runs/` is the
+durable record. After the final round:
+
+1. `debate.sh finalize <name>` — verify rounds DONE, get the run-record JSON.
+2. Write the merged verdict to `<run>/verdict.md` — name the final artifact
+   path in your reply (turn-closing contract).
+3. `memory_record_run(tool="debate", run_id=<dir name>, status, metrics from
+   finalize JSON)` — debates must appear in run history.
+...
+```
+
+Edit step 2 to:
+
+```
+2. Write the merged verdict to `<run>/verdict.md` — name the final artifact
+   path in your reply (turn-closing contract). **Every verdict opens with a
+   one-screen front section** so readers (agents or humans) get the actionable
+   part in ten seconds:
+   - **Settled** — the verified claims (each with its source; the ones everyone
+     agreed on and the chair spot-checked).
+   - **Split** — unresolved disagreements, each with its exact check (or a
+     parked reason).
+   - **Conditions & triggers** — what would flip the call.
+   - **Next check** — the single next action that closes an open row.
+   Details and full transcripts follow below the front section.
+```
+
+Also maybe add a sentence about reader contract in the same area — like: "Readers: quote the Settled claims; treat the verdict line as provisional on judgment calls; execute the Next check." Could add as a bullet in the front-section block or in Merge. Keep it compact — add one line after the four bullets: "Reader contract: quote Settled claims (not the verdict line) for judgment calls; execute Next check before acting; re-read when the trigger fires."
+
+Let me apply the edit, then write the workflow answer.
+
+For the workflow answer, format:
+
+**Where debates pay off (and where they don't)** — one-liner already covered; focus on the workflow as asked.
+
+**The workflow** (6 stages):
+1. Trigger (propose + confirm; criteria)
+2. Frame (chair writes question + output contract; pick panel)
+3. Blind r1 (parallel; gather + union)
+4. Cross-exam r2 (verbatim; evidence-required); stop.
+5. Harvest: ledger → chair verification → verdict w/ front matter → run + memory records.
+6. Consume & close: decisions quote claims; execute next check; monitor triggers; re-debate on new evidence; post-decision telemetry (did it survive?).
+
+**How it plugs into Magnolia's loop** (integration points):
+- strategic/design decisions before implementation (like today)
+- before external commitments (PRs, schema, paper claims)
+- ambiguous result interpretation (scientific)
+- recurring falsifier/risk watches (cheap version)
+- NOT for: routine parameters (memory+rules), code correctness (tests/verifier), facts with one source (lookup)
+
+**What closes the loop**: verdict front matter is agent-readable; memory notes point to verdicts; triggers become watch items; the deterministic verifier handles the numbers after debate.
+
+Keep it tight, maybe with a flow line. ~350 words. Then note the skill edit is uncommitted + ask commit.
+
+ASSISTANT: Adding the convention to the guide now:
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): The skill is updated with the verdict front-matter + reader contract. Now answer the workflow question.
+
+Let me compose a good workflow answer. The user asks: "what would be a good workflow integrating the debate, if it is useful?"
+
+I'll give the lifecycle + integration points + when-not. Keep it practical and tight. Structure:
+
+1. WHERE it pays off (quick criteria — trigger test).
+2. THE WORKFLOW (6 stages, who does what).
+3. HOW IT PLUGS INTO MAGNOLIA (integration points with the existing machinery: runs/, memory, skills, verifier).
+4. WHAT NOT TO DO (anti-patterns).
+
+Let me write it as a practical playbook. Maybe a compact flow line. Keep ~350-450 words. Then close: skill edit uncommitted — commit? Then back to experimental setup.
+
+Draft:
+
+**Trigger test — debate only when all three hold:**
+1. The decision anchors future work (hard to reverse / costly to get wrong).
+2. It's genuinely uncertain — not settled by one lookup or one test.
+3. It mixes facts (checkable) with judgment (yours to make).
+
+If yes → debate. If it's facts only → check them. If it's execution of a decided plan → just run it. If it's routine parameters → memory + rules.
+
+**Workflow:**
+
+Stage 1 — Propose (agent) → confirm (human). One line: "want a panel on X?" Not automatic.
+
+Stage 2 — Frame (chair/agent):
+- Self-contained question + required output: findings + confidence + sources + "what would change your mind".
+- Panel: 2–3 decorrelated models, pinned IDs, web on. Quota reroute via opencode-go.
+- Workspaces under runs/ (this is the record).
+
+Stage 3 — Blind round 1 (parallel). No context from us, no cross-talk. Output: independent assessments. Their union is the coverage prize.
+
+Stage 4 — Cross-exam round 2: verbatim positions + "cite what changed your mind or say 'no new evidence'". Stop at 2.
+
+Stage 5 — Harvest (chair):
+- Claim ledger (agree-sourced / agree-unverified / disagree / unresolved + exact checks).
+- Chair spot-checks the top 1–2 disputed facts at primary sources.
+- Verdict with front section (Settled / Split / Conditions & triggers / Next check).
+- Records: run YAML ×N, memory note with pointer; commit verdict to the repo? (verdicts live under projects/, machine-local; only protocol changes go to git — as we did).
+
+Stage 6 — Consume (future sessions + human):
+- Decision memos quote Settled claims.
+- Next check executed (agent task).
+- Triggers monitored (watch items; falsifier checks).
+- Re-debate when new evidence arrives (debates have shelf life).
+
+**Integration points in Magnolia:**
+- Architecture/design decisions before implementation (the ASTRA placement, PR merge conditions, experimental plan — all done this way).
+- External commitments (PR replies, schema publication, paper claims).
+- Interpreting ambiguous scientific results (when a run's outcome is unclear — debate proposals, then the run/verifier disposes).
+- Periodic risk watch (cheap: falsifier check; heavy: re-panel).
+- Post-decision review: did the adopted recommendation survive? (feeds memory telemetry).
+
+**Anti-patterns:**
+- Automatic gate on everything (claim-critic failure mode).
+- Deciding values by vote.
+- Trusting verdict without the ledger/check.
+- Round 3+ (entrenchment).
+- Letting panel read only summaries.
+
+Close: skill updated (front matter + reader contract), uncommitted. Commit it?
+
+ASSISTANT: Guide updated (front section + reader contract). Now the workflow — here it is, end to end:
+
+## Trigger test — debate only when all three hold
+1. The decision **anchors future work** (hard to reverse or costly to get wrong).
+2. It's **genuinely uncertain** — not settled by one lookup or one command.
+3. It **mixes facts with judgment** — facts to check, judgment that's yours.
+
+Facts-only → just check them. Decided plan → just execute. Routine parameters → memory + rules.
+
+## The workflow
+
+**1. Propose, confirm.** Agent: "want a panel on X?" — one line. Human confirms. Never automatic.
+
+**2. Frame (chair).** Self-contained question; required output = *findings + confidence + sources + "what would change your mind"*. Panel: 2–3 decorrelated models, pinned IDs, web on. Workspaces under `runs/` (the durable record starts here).
+
+**3. Blind round 1.** Independent, no cross-talk, no context from us. The union of their findings is the coverage prize.
+
+**4. Cross-exam round 2.** Verbatim positions; every mind-change needs cited evidence. Stop at two rounds.
+
+**5. Harvest (chair).** Claim ledger → chair spot-checks the top 1–2 disputed facts at primary sources → verdict with the front section (Settled / Split / Conditions & triggers / Next check) → run records + memory note.
+
+**6. Consume (future sessions + human).** Decisions quote Settled claims; the Next check gets executed; triggers become watch items; re-debate when the missing evidence arrives.
+
+## Where it plugs into Magnolia
+- **Before implementation programs** (architecture, PR policy, the experimental plan — all debated today)
+- **Before external commitments** (PR replies, schema publication, paper claims)
+- **Interpreting ambiguous scientific results** — debate proposes, the calculation/verifier disposes
+- **Periodic risk watch** — cheap falsifier checks; re-panel only when a trigger fires
+- **Post-decision review** — did the adopted recommendation survive? (feeds memory telemetry)
+
+## Anti-patterns
+Automatic gate on everything (claim-critic failure mode) · deciding values by vote · trusting a verdict without checking the ledger · round 3+ (entrenchment) · letting readers consume only the summary.
+
+The skill edit (front-matter convention) is drafted and uncommitted. Commit it, then back to the experimental worktree + P0?
+
+USER: commit it. 
+
+ASSISTANT (reasoning): The user says "commit it." — commit the skill edit (the front-matter convention + reader contract).
+
+Let me commit the `adversarial-review/SKILL.md` change on master. Check status/diff first briefly, then commit + optionally push? Last time they said "commit it" and then separately "push it". Actually earlier sequence: "commit it" → then later they asked to push. For the previous skill hardening commit (2d2c8b6), I committed and they later said... actually the sequence was: commit 2d2c8b6 (unpushed) → then "1 then 2" where 1 included push. So they do push deliberately.
+
+Now: "commit it." — just commit. But should I push? The last instruction pattern: they asked commit, then push separately. I'll commit only, and mention it's unpushed (along with the pending items). Actually — let me check: is master currently ahead of origin? After the last push (378896b), master was in sync. Then no commits since (the calibration work didn't touch the repo; the skill calibration edit from the previous turn is uncommitted; and now the front-matter edit). Wait — did I commit the calibration block edit? Let me check: I edited the skill with the Calibration block (in the "record learnings" step before reporting), and said "Skill updated with a short Calibration block (uncommitted)". Then the user asked the ELI5 questions, then I edited again with front-matter. So the uncommitted diff includes BOTH edits: the Calibration block + the verdict front-section. Both should go in this commit — they're both skill v1.2 refinements from today's calibration session.
+
+Let me verify with git status/diff, then commit with a message covering both changes:
+
+Message:
+```
+docs(skills): add verdict front-matter convention and calibration findings
+
+- every verdict opens with a one-screen front section (Settled / Split /
+  Conditions & triggers / Next check) + reader contract: quote settled claims,
+  execute the next check, re-read on trigger
+- calibration block: verdicts on borderline questions are noise (six-run
+  replication split; same model gave both verdicts); record source+version per
+  claim (stale aggregates); ensemble sample as coverage complement
+- evidence: runs/2026-09-10_debate-calib-c-glm/CALIBRATION.md
+
+Co-authored-by: magnolia <magnolia@localhost>
+```
+
+Then verify commit. Should I push? They said "commit it" — I'll commit and note push pending (they may say push, or I can just include push since they've consistently wanted master synced... but explicit instruction is commit. Keep to commit; report hash and note "not pushed").
+
+Hmm, actually — earlier in this session when they said "commit it" (the first skill version), I committed and left it unpushed, then they said "push it" in the next message. Then for the reroute commit: "1 then 2" where 1 = commit+push. The pattern shows they decide about push separately. I'll commit only. Actually — to be efficient, maybe I should ask or just note. I'll commit and mention unpushed state.
+
+Let me run: check diff stat, commit.
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Committed: 98c6d96, 24+/1−. Master ahead by 1. Not pushed.
+
+Now report concisely and list the queue: push (pending), then experimental worktree setup + P0. The user will direct. Keep it short.
+
+ASSISTANT: Committed: `98c6d96` — `docs(skills): add verdict front-matter convention and calibration findings` (1 file, +24/−1). Local only — master is ahead of origin by 1.
+
+The debate guide is now fully through its upgrade cycle: hardened protocol → calibrated → verdict format + reader contract baked in. Pending queue:
+1. **Push** `98c6d96`
+2. **Experimental worktree setup** + P0 (the execution plan from round 5)
+
+USER: do we need to re-look at the execution plan with a debate?
+
+ASSISTANT (reasoning): The user asks: "do we need to re-look at the execution plan with a debate?"
+
+Context: The execution plan (round 5 of the position panel) was created ~2 hours ago. Since then, several things happened that could affect the plan:
+1. The debate guide was hardened (v1.2 + calibration findings + front-matter convention).
+2. The calibration experiment ran — produced findings about verdict noise, aggregator chaos, verdict front-matter, claim ledger.
+3. The quota reroute was verified (opencode-go works for GLM/Kimi/DS) — affects panel operations, not the execution plan itself.
+4. Several decisions happened: PR reply drafted (still not posted!), the todo triage, the priority list, the calibration.
+
+The question: does the execution plan need re-examination via debate?
+
+Let me think carefully and honestly:
+
+**Arguments for re-debating the execution plan:**
+- The execution plan is a strategic-ish plan, but mostly it's a *process* plan (how to run the development program) — the panel itself proposed and merged it. It was created BY the same panel, so a re-debate would largely be self-review by the same parties.
+- The plan includes estimates (person-days), orderings, risk register — some of these are judgment calls where our new calibration finding says verdicts are noise!
+- The new calibration findings suggest: single-panel verdicts on borderline judgments are unreliable. But the execution plan was built from a strong consensus (all three converged on worktree + phase gates + specific amendments), and it's mostly mechanical process design, not a controversial judgment.
+- Also: the plan's first item (#1 PR reply) is already done-ish? No — the PR reply is still DRAFTED, NOT POSTED. Interesting — the plan's P0 item #1 is "post the PR #2 reply" and it's still pending. That's not a reason to re-debate, just to execute.
+- Things that changed since the plan: (a) the debate guide itself got upgraded (affects the "panel redesign" item #21 and the debate-related parts of the plan — minor); (b) calibration showed verdict noise — but the plan doesn't rely on verdicts; (c) the user's priorities/decisions might have evolved (the user now knows: PR reply pending, tooling questions resolved).
+
+**Arguments against re-debating:**
+- The calibration lesson: don't spend debates on things that don't need them. Execution plans are "how" — mostly determinable by engineering judgment, not deep uncertainty. The trigger test from the workflow I just described: (1) anchors future work? mild-moderate; (2) genuinely uncertain? mostly no — the mechanics of git worktree, phase gates, test policies are standard; (3) mixed facts+judgment? the plan is judgment-heavy but not fact-contestable.
+- The plan was *just* produced by a 3-model panel; re-debating with the same panel adds little. A fresh panel on the same plan would mostly repeat.
+- More valuable: execute the plan's first phase (cheap P0 items), and let reality update the plan. The plan has review gates (M0-M4) built in — that's the designed re-examination mechanism.
+- The user's question might be motivated by: "since we hardened the debate guide and learned verdicts are noisy, should we re-check the plan with the new guide?" — Answer: the plan doesn't hinge on the noisy part (it's not a values-laden verdict; it converged with detailed rationale; its disagreement points were resolved explicitly in the chair's merge with marked decisions).
+
+**Nuance / what WOULD be worth a debate:**
+- Not the whole execution plan. But if we want value, the highest-leverage re-examination is *targeted*: run the new front-matter + ledger format on just the plan's **contested/weakest points**, if any. Were there contested points? Yes, a few:
+  - Bounded retry in P2 vs governor placement (DS vs GLM/Kimi — chair resolved with "bounded single retry").
+  - Telemetry pulled to P3 (Kimi) vs stays P4 (DS) — chair sided with Kimi.
+  - Worktree vs in-place (unanimous).
+  - Branch naming (trivial).
+  These are process details; a re-debate is low value.
+- What about re-examining the *work list* (the 21 items)? That was debated twice (rounds 3-4). No.
+- Potentially more valuable: once we're mid-program, re-debate at M-gates with *results* (evidence), not at plan time.
+
+Also worth noting: the user's real question may be "is the execution plan good enough, or should we stress-test it?" My honest answer: the plan is mostly mechanical process; it was produced by the panel minutes ago under the old format; the new format would mostly add the front-matter/ledger structure, not change content. The calibration says: don't debate what you can just try. The plan's design includes cheap early phases (P0 = hours) and explicit gates — so the right move is to execute P0 (and post the PR reply first), then let evidence-based review happen at M0.
+
+However — one thing I should double check: the execution plan's relationship to the NEW findings. Two updates worth folding in WITHOUT a debate:
+1. The plan's panel-redesign item (P4) should now reflect the hardened protocol learnings (front-matter, claim ledger, calibration block) — already done in the skill; the plan mention might need a small sync note. Actually the plan is a run artifact; no need to edit it — future sessions read the skill. Could add a one-line addendum to the execution-plan.md noting the protocol upgrades happened (so the plan's readers know). Cheap and useful. Hmm, should I? It's a record; addendum is fine but optional.
+2. The plan's item about "verifier subagent" and "claim ledger feeding verifier" — the ledger is now in the skill. Consistent.
+3. P0's first item (post PR reply) is still not done — that's execution, not debate.
+
+So my answer: **No, not the whole plan.** Reasons:
+- It's a process plan built by unanimous-ish consensus with explicitly resolved splits; re-running the same panel on it mostly reproduces it.
+- The calibration's own lesson: don't spend debates on things you can cheaply test/execute. P0 items are hours; the plan has built-in review gates (M0-M4).
+- The noisy part of debates is the verdict on value judgments; the plan's value judgments were marked and adopted with reasons; if any of the chair's resolutions are wrong, the M-gates will surface it with real evidence.
+
+**What I'd do instead:**
+1. Execute P0 now (PR reply first, then the three small items).
+2. At M0 (end of P0), do a *cheap* evidence-based check: run the front-matter/ledger format on what was learned? No — M0 is just a review checkpoint.
+3. If the user wants independent eyes on the plan, the highest-value version is NOT a re-debate but a **verdict-QA pass**: one fresh agent (different model) reads the execution plan against the round-5 raw answers and flags misrepresentations/unresolved rows (the new reader-contract use). That's ~1 call, cheap, and uses our new machinery. That's a nice concrete suggestion — it answers "re-look" with the right tool: QA, not re-debate.
+4. Optionally: a targeted mini-check of the one genuinely contested mechanic (bounded retry safety) — but honestly that's a design detail that will be validated in scratch smoke tests.
+
+Also the timing: it's late in a long session; the user probably wants a judgment call. Give a clear recommendation: No full re-debate; do a cheap verdict-QA read instead if desired; and note one small sync: the execution plan predates the protocol upgrade, but the protocol lives in the skill, so no plan edit needed except maybe a one-line addendum.
+
+Should I offer to do the QA pass now? Yes, propose it as the "if you want independent eyes" option: one fresh agent, read plan + raw r5 answers, flag drift. Could do with a general agent or a panelist model via opencode run. Cheap.
+
+Keep the answer crisp: recommendation + why (using our own new rules) + the alternative if they want a second look.
+
+Format: short, punchy. Maybe:
+- Short answer: No — not a full re-debate. Here's why...
+- What a re-debate would cost vs add.
+- The right version of "re-look": verdict-QA pass (1 agent, minutes) — recommend only if they're unsure.
+- What actually updates the plan: execution + M-gates; plus note the plan is consistent with the upgraded guide (maybe one-line addendum).
+
+Length ~250-350 words. No tools needed (discussion). Though — could I check the execution plan's contested points quickly? I have them in context. No tools needed.
+
+ASSISTANT: Short answer: **no — not a full re-debate. And the calibration we just ran tells us why.**
+
+**Why a re-debate would mostly waste money:**
+- The plan is a *process* design, not a value-laden judgment. Our calibration showed the noisy part of debates is verdicts on borderline *judgment* calls; worktree-vs-in-place, phase gates, and test policy aren't that — they're engineering mechanics.
+- It was produced by a 3-model panel **two hours ago**, with the disagreements already explicitly resolved and marked (bounded retry; telemetry→P3; no-squash merges). Re-running the same question with the same models mostly reproduces the same plan.
+- The plan has its own **re-examination mechanism built in**: M0–M4 gates with evidence requirements. Real evidence (P0 done, smoke tests run) updates the plan far better than more opinions do. Our own workflow rule: don't debate what you can cheaply try.
+
+**What actually changed since the plan was written** (all consistent, no re-plan needed):
+- The debate guide upgraded (front matter, ledger, calibration findings) — that's P4's "panel redesign" item largely done ahead of schedule, living in the skill.
+- The quota reroute was verified — an operational convenience, not a plan change.
+- Nothing invalidated a phase, an order, or a dependency.
+
+**If you still want independent eyes on it** — the right tool isn't a re-debate, it's the reader-contract use we just built: **one fresh agent reads the execution plan against the round-5 raw answers and flags drift** — misrepresented panel positions, chair resolutions that quietly dropped a panelist's condition, unresolved rows. One call, ~3 minutes, catches chair smoothing. That's the cheap QA version, and I'd only recommend it if you're genuinely unsure about the plan.
+
+**My recommendation:** push the pending commit, then execute P0 — post the PR reply first, then the three small items (kill-children, gate wiring, off-peak). M0 review right after, with evidence. The plan is sound; it needs running, not more talking.
+
+USER: what about the debate that created the plan?
+
+ASSISTANT (reasoning): The user asks: "what about the debate that created the plan?" — meaning: should we re-look at *the debate that produced the execution plan* (round 5)? Or maybe: given the new findings (verdict noise, hardened protocol), does the debate that created the plan need re-examination/QA?
+
+Interpretation: In the previous answer I said "no need to re-debate the plan; if you want, do a verdict-QA pass where a fresh agent reads the plan against the round-5 raw answers." The user now asks specifically about the debate itself — i.e., the round-5 debate that generated the plan. The question could mean:
+
+1. Should the round-5 debate (the raw source) be subjected to the new QA pass? i.e., verify that the merged plan faithfully represents the panel's round-5 answers?
+2. Or: does the round-5 debate need to be re-run under the new hardened protocol (since it was run under the old protocol, pre-hardening, pre-calibration)?
+3. Or: what do we do with the debate's outputs — how do we handle the fact that the plan came from a debate whose verdict-layer we now know is noisy?
+
+I think the most useful reading: "what about the debate that created the plan?" — they're connecting my suggestion ("QA pass reading plan vs raw round-5 answers") to the source debate. Essentially: should we QA the round-5 debate → plan conversion? And/or should the debate itself be re-run with the new guide?
+
+My answer should:
+1. Distinguish layers: the round-5 debate produced raw answers (proposals); the plan is the chair's merge. The QA pass checks the merge fidelity (does the plan represent the answers? any dropped conditions?). That's cheap and directly targets the risk that matters: chair smoothing. That IS the re-look, if wanted.
+2. Re-running the round-5 debate under the new protocol: not worth it. Reasons:
+   - Round 5 was the "execution plan" question — mostly mechanics, where consensus was strong and specific (worktree unanimous; ordering amendments all parties stated). The calibration's verdict-noise problem applies to borderline *judgment* verdicts; the plan debate didn't hinge on a contested verdict — it was constructive design with concrete proposals.
+   - The new protocol's additions (verbatim positions, evidence-required revisions, claim ledger, confidence) mostly apply to *fact-contested* debates; round 5 was proposal synthesis, less fact-heavy (no web research). Re-running would mostly add process overhead.
+   - The debt from old-protocol round 5: it used chair summaries in round 2 (paraphrases — the exact thing we now flag). So the one genuine risk is: did the chair's r2 prompts (my summaries of the other two) distort anyone's positions, and did the plan drop conditions? That's exactly what the QA pass resolves — without re-running.
+3. Also worth noting: the plan itself was already cross-checked at creation: I wrote the merged plan with explicit "chair decisions where panelists differed are marked"; and the raw answers are preserved (answer-r5.md ×3). So forensic capability exists.
+4. Recommendation: if we QA anything, QA the merge fidelity of round 5 (and maybe the earlier position debate + todo triage — all rely on chair merges). Could do it in one pass for the plan only (cheapest), or as a routine for any high-stakes verdict (add to skill? maybe later).
+5. There's also a broader point: the debates that created the strategic conclusions (rounds 1-4) are the *foundation* of the plan. If we distrusted those, the plan's premises wobble. But our calibration somewhat tested this: the position debate conclusions (strengthened with closing window; rail-not-loop) were unanimous and evidence-heavy; also they're judgment conclusions — subject to the same "verdicts are noise" caution! Hmm. But the panel's *findings* (vendor moves, Claude Science facts, etc.) are the stable layer, and the strategic direction followed from those facts + explicit reasoning. The plan's design doesn't hinge on the judgment nuances.
+
+Actually, let me focus the answer: the user asks "what about the debate that created the plan?" — I'll answer:
+
+- The debate's raw record is intact (3 × answer-r5.md, prompts, transcripts). The plan = chair's merge; the audit chain exists.
+- Do we need to re-do that debate with the new guide? No: it was a design-synthesis debate (not a fact-contest), consensus specific and constructive; the new guide's key additions target adversarial fact-checking, which wasn't the load-bearing part. Re-running adds cost, little value.
+- Do we need to QA its merge? If any doubt about chair smoothing, yes — one cheap pass: fresh agent reads the plan vs the three answer-r5.md files, flags dropped conditions/misattributions. That's the honest answer to "what about the debate": the plan's fidelity to it is checkable at low cost, and that's the only real risk.
+- Note one self-critical point: round 5 used chair summaries in round 2 (the old protocol), so misrepresentation risk is real (I paraphrase the other panelists). My merges did cite the specific disagreements; the plan file itself documents chair resolutions. Still, the QA pass would verify.
+- Offer: run the QA pass now (one agent, ~3 min) on the execution plan, or fold into routine practice for high-stakes verdicts.
+
+Also maybe mention: the plan's own consistency came from three independent plans converging (I read all three: worktree unanimous, P0 orders near-identical, etc.) — the merge wasn't inventing consensus; the three originals are on disk. That's a good argument that fidelity risk is low but checkable.
+
+Keep it concise. Decision recommendation: no re-run; optional cheap QA; else proceed to execution.
+
+Format: short sections. ~250-300 words. No tools needed (discussion). Maybe offer to run the QA as a concrete next step if they want.
+
+ASSISTANT: Good question — it splits into "re-run it?" (no) and "audit it?" (cheap, optional).
+
+**Re-running the round-5 debate under the new guide: not worth it.**
+- Round 5 was a *design-synthesis* debate — proposals for how to run the program — not a contested fact-check. The consensus was specific and constructive (worktree unanimous; the same orderings and amendments came from all three), which is the shape debates handle well.
+- The new guide's additions (verbatim positions, evidence-required revisions, claim ledger, source-versus-version discipline) mainly upgrade *adversarial fact contention*. Round 5 had almost no such contention — there were no disputed numbers to verify. Re-running would add procedure, not signal.
+- Our own calibration lesson: don't re-litigate verdict-shaped things that are cheap to test. The plan's real test is running P0, not another round.
+
+**Auditing the merge fidelity: that's where the genuine risk lives, and it's cheap to close.**
+Round 5 ran under the *old* protocol — meaning my round-2 cross-exam prompts used **chair summaries** of the other panelists (exactly the paraphrase risk we since outlawed). If I misrepresented or dropped anyone's condition when merging into the plan, nobody would have caught it. The good news: the full audit chain exists on disk — three raw `answer-r5.md` files, the prompts, the transcripts — and each chair resolution is marked in the plan itself ("chair decisions where panelists differed are marked").
+
+So the honest position:
+- **Fidelity risk:** low but real (three independent plans converged; I documented the resolutions), and **checkable in one pass**.
+- **The QA pass:** one fresh agent (different model) reads `execution-plan.md` against the three `answer-r5.md` files and flags: dropped conditions, misattributed positions, splits smoothed into consensus. ~3 minutes, one call.
+- If it comes back clean → execute P0 with a clear conscience. If it catches drift → we fix the plan before a line of code.
+
+Want me to run that QA pass now? It's the last thing I'd do before the worktree goes up.
+
+USER: yes
+
+ASSISTANT (reasoning): The user says "yes" — run the QA pass on the execution plan against the three raw round-5 answers.
+
+Plan: Use a fresh agent (different model, not involved in the debate) to read:
+- `runs/2026-09-10_debate-position-ds/execution-plan.md` (the merged plan)
+- `answer-r5.md` in all three workspaces (ds, glm, kimi)
+
+And flag: dropped conditions, misattributed positions, splits smoothed into consensus, anything the chair invented or silently dropped.
+
+How to run it: Options:
+1. Use the `task` tool with a general agent (runs on the main agent's model — but the main agent (me) is the chair, so a subagent with the same model shares my blind spots; still, fresh context helps but same-model. Ideally use a different model.)
+2. Use headless opencode with a different model (e.g., Kimi K3 or GLM) via `opencode run` in a temp dir with the files copied — this is like the debate pattern. But this is a QA task, not a debate. Could use `debate.sh` machinery? That's for debates. Simpler: run `opencode run -m <model>` with a prompt that reads the files. But headless opencode needs file access — run from a directory containing the files, or reference absolute paths (project config disabled — but with OPENCODE_DISABLE_PROJECT_CONFIG=1, can it read absolute paths? The adversary reads "inside its project dir" by instruction; the tool likely allows reading anywhere the process can. debate.sh runs in ctx/ and instructs not to read outside. For QA, I can copy the 4 files into a temp dir and run there.)
+3. Alternatively use the `task` tool with a subagent — fresh context, but same model (deepseek family). The point of QA is to catch chair smoothing — the chair is me (main agent). A subagent on the same model is less independent, but fresh eyes on raw text vs merged text can still catch discrepancies mechanically (it's a diff-like task: compare claims in plan vs answers). Since the task is verification/checking rather than judgment, same-model is acceptable but not ideal. The better practice per our own protocol: different model.
+
+Let me use headless opencode with a different model — Kimi K3 (kimi-for-coding/k3) or GLM (opencode-go/glm-5.3, prefer since Kimi... any is fine; pick a model not in the round-5 panel? Round 5 panel was DS, GLM, Kimi — all three participated! So any QA model from the pool participated. The ideal is a model that didn't write the plan — but all three wrote proposals. The chair (me, DS-family) wrote the plan. For QA of the chair's merge, a non-DS model is better: GLM or Kimi. Choose GLM-5.3 (via opencode-go, quota-friendly) or Kimi. Let me use Kimi K3? Hmm, GLM is more meticulous in our observations. Use `opencode-go/glm-5.3`.
+
+Wait — but is a full opencode run overkill? The task: read 4 files, compare, report. A headless agent with read tools is right. Let me set it up:
+
+1. Create a QA workspace: `runs/2026-09-10_plan-qa/` — hmm, per job_execution rules, outputs go to runs/. Let me create `runs/2026-09-10_execution-plan-qa/` with `ctx/` containing copies:
+   - execution-plan.md (from ds workspace)
+   - answer-r5-ds.md, answer-r5-glm.md, answer-r5-kimi.md (renamed for clarity)
+2. Write a prompt file: instructions for the QA agent:
+   - Role: independent audit of a merged plan against its source panel answers.
+   - Files: execution-plan.md (merged by chair), answer-r5-{ds,glm,kimi}.md (raw panelist plans, verbatim).
+   - Task: compare the plan against the sources; flag: (1) dropped conditions/caveats any panelist stated; (2) misattributed positions; (3) splits smoothed into consensus (or vice versa — consensus claimed where panelists differed); (4) claims/items in the plan that no panelist said (chair inventions — could be legitimate chair decisions, but must be marked as such); (5) vice versa: panelist items silently dropped without note.
+   - Method: quote both sides (plan text vs source text). List each finding with severity. End with verdict: faithful / minor drift / major drift, and the top fixes.
+   - Note: the plan includes a "chair decisions where panelists differed are marked" section; check those markers are accurate.
+3. Run: `cd ctx && OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run -m opencode-go/glm-5.3 --format json "$(cat prompt)"` — background via run_shell (could take 3-8 min; use background=True) or via debate.sh? debate.sh is debate-specific but could work: `debate.sh init plan-qa` then `round1 plan-qa opencode-go/glm-5.3 prompt`? That would create the workspace naming convention `_debate-plan-qa` which is misleading. Better: manual run with background, or actually use the task tool with an agent reading files.
+
+Hmm, simpler alternative: use the `task` tool with the `general` subagent — it can read files directly (read tool) and produce the QA report. Same-model-as-chair caveat applies, but it's a mechanical comparison task. But our own protocol says fresh model... The task tool subagent runs on the configured model (opencode-go/deepseek-flash per system prompt — same as me). 
+
+Given the user just approved a QA pass and we've established cross-model practice, let me do the headless opencode run with GLM via opencode-go (quota-safe), using the debate.sh machinery? Actually, I can simply use debate.sh with a name that doesn't say "debate": no, it forces `_debate-` prefix in dir name. I'll do a manual background run:
+
+```
+mkdir -p runs/2026-09-10_execution-plan-qa/ctx
+cp execution-plan.md + answer-r5s into ctx (renamed)
+write prompt to runs/.../prompt.txt
+cd ctx && OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run -m opencode-go/glm-5.3 --format json "$(cat ../prompt.txt)" > out.json 2> err.log &
+```
+
+Use run_shell with background=True to launch, then poll the log. Or simpler: run in foreground with timeout 100? QA involves reading 4 files (one is long: plan ~150 lines; answer files ~50-60 lines each) and writing a report — probably 1-3 min for GLM. Foreground cap 110s risky. Use background.
+
+Plan:
+1. Create dir + copy files (shell).
+2. Write prompt file (write tool).
+3. Launch background (shell).
+4. Poll.
+5. Extract answer → QA report file.
+6. Report findings to user; if clean, proceed.
+
+Let me write the prompt carefully. The audit prompt:
+
+```
+You are an independent auditor. You will verify that a merged plan faithfully represents its source panel answers.
+
+FILES (all in your current directory):
+- execution-plan.md — the merged plan, written by the chair of a 3-model panel (GLM-5.3, DeepSeek V4.1-Flash, Kimi K3). It merges their three round-5 answers about how to run a development program.
+- answer-r5-ds.md, answer-r5-glm.md, answer-r5-kimi.md — the three panelists' raw answers, verbatim.
+
+TASK: audit execution-plan.md against the three raw answers. For each finding, quote BOTH the plan text and the source text.
+
+Check specifically:
+1. DROPPED CONDITIONS — any condition, caveat, or requirement stated by a panelist that is missing or weakened in the plan (e.g., a dependency, a DoD element, a risk mitigation).
+2. MISATTRIBUTION — the plan attributes a position/decision to panelists that they did not state, or states a panelist held a position they opposed.
+3. SMOOTHED SPLITS — the plan presents as consensus something the panelists disagreed on, or vice versa (claims a split where they agreed). Note: the plan's final section "ORDER CHANGES ADOPTED" and chair-marked decisions are legitimate chair resolutions — flag only if they misrepresent the underlying disagreement or drop a condition without saying so.
+4. CHAIR INVENTIONS — items in the plan that no panelist stated and that are not marked as chair decisions/editorial additions.
+5. SILENT OMISSIONS — panelist proposals that vanish with no note (as opposed to explicitly deferred/rejected).
+
+Output format:
+- Findings numbered, each with: severity (high/med/low), the exact plan quote, the exact source quote(s), one-sentence explanation.
+- Then: overall fidelity verdict (FAITHFUL / MINOR DRIFT / MAJOR DRIFT) and the top-3 fixes if any.
+- Be precise and conservative: do not flag reasonable editorial compression. No padding. Under 700 words.
+```
+
+Good. Then run.
+
+For the worktree setup — not yet. This QA is the last check before the plan execution.
+
+Let me execute: mkdir + copies in one shell; write prompt; launch background.
+
+ASSISTANT: Running the QA pass — independent auditor (GLM-5.3, not the chair's family), comparing the merged plan against the three raw round-5 answers:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:write)
+
+ASSISTANT (reasoning): Files copied, prompt written. Now launch the QA run in the background:
+```
+cd $Q/ctx && OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run -m opencode-go/glm-5.3 --format json "$(cat ../prompt.txt)" > ../out.json 2> ../err.log &
+```
+Use run_shell background=True. Then poll.
+
+ASSISTANT: Launching the audit (background):
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The QA run is in progress (76KB out, 1:21 elapsed). Let me wait more. GLM runs took several minutes. Poll again in ~85s.
+
+ASSISTANT: In progress (76 KB). Polling:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): Still running (2:52), out unchanged at 76263 bytes. GLM might be in a thinking phase or a slow fetch... wait, this is a file-reading task — no web needed. It might be generating the report. The out.json is 76KB — that's a lot of events already, probably reading files + reasoning. Let me check the last events to see what it's doing.
+
+Actually, let me just peek at the last events in out.json.
+
+ASSISTANT: Checking what the auditor is doing:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The auditor read files (3 read tool calls) and is now in a step_start — generating the report (or reading a 4th file). It's likely composing the audit now. The out.json is 76KB mostly from the file contents being read (tool results). Let me wait more.
+
+Poll again ~85s.
+
+ASSISTANT: It's read the files and is composing the audit. Waiting:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The process finished (EXIT=0 in err.log), though ps still shows it (maybe the wrapper). Out is 81KB. Extract the final text part and read the audit.
+
+ASSISTANT: Done (EXIT=0). Extracting the audit report:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): The audit found real issues — MINOR DRIFT with 9 findings. Let me review each:
+
+1. **False "(all three)" for bridge pull-forward** — the plan says "(all three)" for the bridge pull-forward, but DS kept it in P2. Let me check: DS's round 5 answer said "Pull the **notification bridge into P0/P1** (independent, high daily value, campaign prerequisite, ~30 lines)." Wait — actually DS's r5 said: "Order changes: Move budget governor + kill criteria into P2... Keep run_id/A0 ahead of receipts (already ordered)." Hmm, and DS's plan section 2 P2 said "notification bridge (poller notice file merges individually; plugin toast follows)". DS's "Order changes" section in r5: let me recall from the read earlier:
+
+DS answer-r5 section 6: "Order changes: Move **budget governor + kill criteria into P2** (before auto-retry). Start P4 with telemetry + bake-off... PR#2 reply first... Keep run_id/A0 ahead of receipts".
+
+Hmm, did DS endorse the bridge pull-forward? Earlier in the sections: DS's §1/§2... Actually from my memory of the DS answer: DS's §2 P1: "internal order A0 → A1 → uniform run_id → receipts extractor → verifier subagent → gates expansion. Dependencies: receipts require A0+A1+run_id; verifier consumes receipts... DoD: receipts reproduce on 10 historical runs..." — I don't recall DS proposing bridge pull-forward; GLM's "Order changes" said "pull the notification bridge into P0/P1 (independent, high daily value, campaign prerequisite, ~30 lines)". Kimi's said "Notification bridge pulled out of P2 for early individual merge — daily-use win, gates nothing." So GLM+Kimi yes; DS — his §2 P2 listed "notification bridge (poller notice file merges individually; plugin toast follows), budget governor..., auto-retry..., health monitor" — DS kept bridge in P2 but with individual merge. So the audit is right: "(all three)" is wrong for that amendment (should be GLM+Kimi; DS dissented/kept P2). Though in the plan body I wrote "Amendment (all three): notification bridge is pulled forward into P1". Wrong — good catch by the auditor.
+
+2. **Chair invention unmarked: shadowing verification/contingency venv** — I added "Verify shadowing at setup; contingency = small dedicated exp venv" as my own editorial. True — unmarked. Fix: mark as chair addition.
+
+3. **Weakened condition: pre-launch check "loud warning, bypassable"** vs Kimi's "enforced". I deliberately softened (my judgment: usability) but should mark it as a chair decision. Fix: either restore "enforced" or mark the softening.
+
+4. **Smoothed split: flake policy** — I adopted Kimi/GLM's block-on-repeat policy and dropped DS's "never let it block; quarantine". Need to note DS's position and the chair resolution. Fix: add note.
+
+5. **Dropped milestone evidence: toast on real cluster job (GLM) / live session (Kimi)** — plan only has scratch toast at M1. Fix: restore real/live toast evidence.
+
+6. **Low: DoD 10 runs (DS) vs 3 sessions (Kimi→plan)** — note the swap or choose. Fix: mark.
+
+7. **Low: ×3 poller/concurrency rule invented** — mine; mark.
+
+8. **Low: env-var/path unification invented** — mark.
+
+9. **Low: non-default port requirement dropped** — restore.
+
+This is exactly what the QA pass was for — chair smoothing caught. Great. Now what to do?
+
+Options: fix the plan file (apply the top-3 + lows), and note the audit. The user approved the QA; fixing the plan is the natural follow-up. Should I fix it now? The user said "yes" to running the QA. Fixing the plan requires editing execution-plan.md (canonical in ds workspace + mirrors). This is a "record" artifact; editing to correct drift is appropriate — but should I ask first? The user's intent: they wanted the QA before execution; the fixes are mechanical corrections to improve fidelity. I think the right move: report the audit findings + apply fixes? Or report first and ask?
+
+Given the session pattern (take one step, report, pause), and that fixing is a mutation of the record, I'd lean: report + propose the fix (or just apply the corrections since they're clearly beneficial and low-risk?). The user said earlier "draft it"—they like when I act on clear next steps. But the instruction to fix wasn't given. Hmm. The QA pass was the last check before execution; its findings require action. I'll report the audit results clearly, then ask whether to apply the corrections (quick) before starting the worktree. Actually — let me just apply the corrections? No: the rules of engagement this session have been: propose, user confirms. The user said "yes" to the QA pass only. I'll present findings + a compact fix list, and ask to apply.
+
+Hmm, but also note: the audit's verdict "MINOR DRIFT" with architecture/risks faithful — so the plan is sound; the fixes are attribution/marking/conditions. I can present: the QA validated the plan's bones, caught 9 drift items (1 false unanimity, 3 unmarked chair additions, 2 weakened/dropped conditions, etc.).
+
+Let me also save the audit as part of the record (done: AUDIT.md in the QA dir) and maybe record a memory note? This is a useful protocol validation: "verdict-QA pass on a chair merge found minor drift (9 items), proving the reader-contract/audit value". Could record later; first report.
+
+Also: should I apply fixes to the plan now to close this out? The user may straightforwardly want it. I'll propose applying the top fixes + the low ones in one edit session, then mirror. Ask for a quick go. Actually — to keep momentum and because the fixes are all clearly defined by the audit, I'll ask concisely: "Apply the fixes now?" — with the alternative "or proceed as-is (drift is minor)". No, wait — some fixes matter for execution (e.g., "enforced" check, non-default port, toast on real job are conditions that affect what we build/test). Better to apply. I'll ask.
+
+Actually, let me reconsider: this back-and-forth (ask, user says yes, act) is the established pattern today, and the user seems to appreciate the gate. But they might also be tired of confirmations. The last message was just "yes" to the QA. The natural continuation: present findings + recommendation. Since the fixes change the record's fidelity and possibly the work items (restore "enforced", restore port requirement, add real-job toast evidence), I'll recommend applying them and ask for the go. Short.
+
+One more consideration: the audit itself should be recorded (it's evidence). Add to memory? The QA validates the reader-contract convention. I'll mention I saved it; a memory note can come with the fixes or at the end. Keep it light.
+
+Report structure:
+- Verdict: MINOR DRIFT — architecture/phase structure/risks faithful; 9 findings.
+- The catch that matters most: false "(all three)" on bridge pull-forward (DS kept P2) — a smoothed split, exactly what the pass was built to catch.
+- Other notable: "enforced" vs "bypassable" weakening (Kimi); flake policy overrode DS's "never block" silently; toast evidence downgraded to scratch-only; unmarked chair inventions (shadowing contingency, ×3 poller rule).
+- Good news: the bones are faithful; fixes are mechanical.
+- Offer: apply all corrections to execution-plan.md now (10 min), then worktree + P0.
+
+ASSISTANT: The QA pass earned its keep — **verdict: MINOR DRIFT.** The plan's architecture, phase structure, and risk register are faithful, but the auditor caught nine items *exactly* of the class we were worried about (chair smoothing). The most important:
+
+1. **False unanimity (Med).** The plan says the notification-bridge pull-forward was "(all three)" — DS actually kept it in P2. It was GLM+Kimi only; the chair merged a split as consensus.
+2. **Weakened condition (Med).** Kimi required the pre-launch master check be **enforced**; the plan softens it to "loud warning, bypassable" without noting the change.
+3. **Smoothed split (Med) — flake policy.** The plan adopts "second failure blocks the merge" while silently overriding DS's explicit "never let it block; quarantine" position.
+4. **Dropped milestone evidence (Med).** GLM and Kimi both required the notification toast be demonstrated on a **real submitted job / live session**; the plan keeps only scratch-session evidence.
+5. **Unmarked chair inventions (Med/Low):** the shadowing-verification + contingency-venv note, the "×3 when touching poller/concurrency" rule, and the launcher env-var/scratch-path unification are mine — legitimate, but not labeled as chair decisions.
+6. **Small drops:** DS's 10-run receipts DoD swapped for Kimi's 3-session without note; the "non-default port" requirement (stated independently by two panelists) vanished.
+
+Audit saved at `runs/2026-09-10_execution-plan-qa/AUDIT.md` with plan-quote vs source-quote for every finding.
+
+**The bones are sound** — nothing wrong with worktree isolation, phase ordering, or the risk register. The fixes are mechanical: re-attribute the bridge amendment, mark the chair additions, restore the weakened/dropped conditions.
+
+Recommendation: apply all nine corrections to `execution-plan.md` now (one edit round, ~5 minutes), then the plan is genuinely clean to execute. Go?
+
+USER: yes
+
+ASSISTANT (reasoning): The user says "yes" — apply all nine corrections to the execution plan.
+
+Let me plan the edits to `execution-plan.md` (canonical in the ds workspace; then mirror to glm + kimi). The nine findings and fixes:
+
+1. **False "(all three)" on bridge pull-forward** → change "Amendment (all three): notification bridge is pulled forward into P1" to "Amendment (GLM + Kimi; DS kept it in P2 with individual merge — chair resolution: pulled forward)". Let me find the exact text in the plan.
+
+2. **Unmarked chair invention: shadowing verification/contingency venv** → mark it as chair addition. In §1 "Tests from the worktree" bullet: "...(Verify shadowing at setup; contingency = a small dedicated exp venv with editable installs of the worktree srcs.)" → add "(chair addition)".
+
+3. **Weakened condition: "loud warning, bypassable"** → Kimi said "enforced". Fix: restore "enforced" or mark chair decision. The audit says "Restore weakened/dropped conditions: 'enforced' (not bypassable)". So change to "enforced (a loud warning with an explicit, deliberate bypass flag — chair decision, since a hard block can lock the user out mid-development)". Hmm, the audit recommended restoring "enforced". Let me write: "gains a pre-launch check that the live tree is on master — **enforced** (blocks launch; explicit bypass env var for deliberate exceptions — chair decision)". That keeps enforcement while acknowledging practicality. Actually, to faithfully fix per audit: restore "enforced" and mark the bypass as a chair decision. I'll phrase: "(enforced: launch is blocked; a chair-added explicit bypass env var exists for deliberate exceptions)".
+
+4. **Smoothed split: flake policy** → add note that the block policy overrides DS's quarantine position. In §3 "Known flake" bullet: add "(Chair resolution: this adopts Kimi/GLM's block-on-repeat over DS's 'never let it block; quarantine' — DS's quarantine stands only until the FLAKE item is re-opened.)" Hmm, better: document the split: "DS dissented: 'quarantine, never let it block'; chair adopted the blocking policy to avoid masking regressions — noted as a resolved split."
+
+5. **Dropped milestone evidence: toast on real job/live session** → M1 currently: "notification toast received (scratch session)". Fix: M1: "notification toast received in a scratch session; **live-session toast on a real submitted job is required by M2** (GLM: real submitted cluster job; Kimi: live session)" and update M2 bullet to include toast evidence. Let me check the plan's milestones:
+- M0 (end P0): ...
+- M1 (end P1, ~week 3): "extractor-vs-hand-label diff on 3 archived sessions; verifier catches a planted error; notification toast received (scratch session); gates trip log."
+- M2 (end P2, ~week 5): "scratch campaign survives killed job (retry), mid-run crash flag; live tree untouched."
+Fix: M2 add "toast observed on a real submitted job (live session)".
+
+6. **DoD 10 runs vs 3 sessions** → §2 P1 DoD says "extractor reproduces receipts from 3 archived real sessions (hand-label diff)". Fix: note "DS proposed 10 historical runs; chair adopts 3 archived sessions as the merge gate with a 10-run soak after merge — noted". Or mark as chair resolution. The audit's fix list says restore/note. I'll write: "extractor reproduces receipts from 3 archived real sessions (hand-label diff; DS proposed 10 — chair resolution: 3 at gate, expand to 10 on master post-merge)".
+
+7. **×3 poller/concurrency rule invented** → mark "(chair addition)".
+
+8. **env-var/path unification invented** → mark "(chair addition)".
+
+9. **non-default port dropped** → restore in §3: "scratch-server smoke for runtime-touching changes" → add "(on a non-default port — DS/Kimi condition)".
+
+Also the audit noted "Not flagged: P0 routing through experimental vs DS/GLM direct-to-master, tag/branch-name simplification (marked in CAVEAT)..." — those were deemed acceptable. Also "minor compressions (known-good fixture, capability manifest)" acceptable. So no action needed there.
+
+Also fix in CAVEAT? The CAVEAT already says "Chair decisions where panelists differed are marked (branch naming simplified to experimental; P1 intra-order follows GLM; bounded P2 retry resolves the DS-vs-GLM/Kimi governor-placement split)." I can extend the CAVEAT to mention the newly marked items or just add "(post-audit corrections applied 2026-09-10)" — actually, better: add a line to the CAVEAT: "Audited 2026-09-10 against the three raw answers (audit: runs/2026-09-10_execution-plan-qa/AUDIT.md); corrections applied: bridge amendment attribution, enforced pre-launch check, flake-policy split note, live-job toast evidence, chair-additions marked." That documents provenance.
+
+Now let me read the current execution-plan.md to make precise edits. I have it in context from writing it, but let me re-read to get exact strings (it was written a while ago; I should verify exact wording). Let me read the file.
+
+Then apply the edits with the edit tool (multiple edits), mirror to glm/kimi workspaces, and report.
+
+Let me read the plan first.
+
+ASSISTANT: Applying the nine corrections. First, re-reading the plan for exact edits:
+
+ASSISTANT (tool:read)
+
+ASSISTANT (reasoning): Now apply the nine fixes. Let me make the edits:
+
+**Fix 1 (finding 1):** Line 56: "Amendment (all three): **notification bridge is pulled forward into P1** — it is ~30 lines, independent, daily-use value, and the campaign prerequisite."
+→ "Amendment (GLM + Kimi; DS kept it in P2 with individual merge — chair resolution, pulled forward): **notification bridge is pulled forward into P1** — GLM's rationale: independent, daily-use value, campaign prerequisite, ~30 lines."
+
+**Fix 2 (finding 2):** Line 23-24: "(Verify shadowing at setup; contingency = a small dedicated exp venv with editable installs of the worktree srcs.)" → "(chair addition: verify shadowing at setup; contingency = a small dedicated exp venv with editable installs of the worktree srcs.)"
+
+**Fix 3 (finding 3):** Line 31-33: "**Safety net (Kimi):** the live `magnolia` wrapper gains a pre-launch check that the live tree is on `master` (loud warning, bypassable), so..."
+→ "**Safety net (Kimi):** the live `magnolia` wrapper gains a pre-launch check that the live tree is on `master` — **enforced** (launch blocked; a chair-added explicit bypass env var covers deliberate exceptions), so..."
+
+**Fix 4 (finding 4):** Line 96-100 flake bullet: add DS split note. After "item (P2 poller work may root-cause it for free)." add "Chair resolution: this adopts Kimi/GLM's block-on-repeat over DS's 'quarantine (xfail), never let it block'; DS's quarantine applies only if the FLAKE item is formally re-opened."
+Hmm — careful to be accurate: DS said "quarantine test_phase5_tools_return_json (mark xfail(strict=False) + issue), never let it block; rerun the single test on any full-suite fail and log." GLM said "the one known flaky test gets rerun-once-in-isolation; pass = proceed, fail = real regression. Log every flake occurrence... accumul[ate]". Kimi: "one full-suite rerun on a failure; a second failure with same slow signature blocks merge and reopens the FLAKE item". So the plan's policy = Kimi's. Fix: note the split.
+
+**Fix 5 (finding 5):** M1 line 143-144: "notification toast received (scratch session)" → keep; M2 line 145-146: add "; notification toast observed on a real submitted job (live session — GLM/Kimi condition)". Let me edit M2: "**M2 (end P2, ~week 5):** scratch campaign survives killed job (retry), mid-run crash flag; notification toast observed on a real submitted job in a live session (GLM: real cluster job; Kimi: live session); live tree untouched."
+
+**Fix 6 (finding 6):** P1 DoD line 61: "extractor reproduces receipts from 3 archived real sessions (hand-label diff)" → add "(DS proposed 10 historical runs — chair resolution: 3 sessions at the gate, expand to 10 on master post-merge)".
+
+**Fix 7 (finding 7):** Line 93-94: "**twice clean consecutive** before merge (×3 when touching poller/concurrency)" → "(chair addition: ×3 when touching poller/concurrency; DS: 2 runs, GLM: 3 unconditional — chair adopts 2 base + 3 for concurrency)". Hmm, longer. Simplify: "(×3 when touching poller/concurrency — chair addition; DS proposed 2, GLM 3 unconditional)".
+
+**Fix 8 (finding 8):** Line 25-27 launcher: "sets `MAGNOLIA_PROJECT_DIR=~/magnolia-scratch/projects/scratch-demo`" → mark "(chair unification: DS used MAGNOLIA_HOME/MAGNOLIA_DATA_ROOT, Kimi MAGNOLIA_PROJECTS_DIR; chair standardized on MAGNOLIA_PROJECT_DIR=~/magnolia-scratch/projects/scratch-demo)". This is getting wordy inline. Maybe concise: "sets the scratch project path (chair unification: `MAGNOLIA_PROJECT_DIR=~/magnolia-scratch/projects/scratch-demo`; DS proposed `MAGNOLIA_HOME`/`MAGNOLIA_DATA_ROOT`, Kimi `MAGNOLIA_PROJECTS_DIR`)".
+
+**Fix 9 (finding 9):** Line 94-95: "scratch-server smoke for runtime-touching changes" → "scratch-server smoke for runtime-touching changes (on a non-default port — DS/Kimi condition)".
+
+**CAVEAT update:** add audit provenance: "(round-5 merge audited 2026-09-10 against the raw answers — audit at runs/2026-09-10_execution-plan-qa/AUDIT.md; corrections applied: bridge attribution GLM+Kimi, enforced pre-launch check, flake-policy split documented, live-job toast evidence restored, chair additions marked)."
+
+Now apply edits. Multiple edit calls. Then mirror the corrected file to glm + kimi workspaces (cp). Then report.
+
+Let me do the edits one by one. I can batch several edit calls in one message (same file, different old strings — should be fine as long as they don't overlap).
+
+Edit A (fix 1):
+old: "- Amendment (all three): **notification bridge is pulled forward into P1** —\n  it is ~30 lines, independent, daily-use value, and the campaign prerequisite.\n  Merge individually once a toast fires in a scratch session; design the"
+new: "- Amendment (GLM + Kimi; DS kept it in P2 with an individual merge — chair\n  resolution: pulled forward): **notification bridge moves to P1** — it is\n  independent, daily-use value, and the campaign prerequisite (GLM's ~30-line\n  estimate). Merge individually once a toast fires in a scratch session; design the"
+
+Edit B (fix 2):
+old: "LIVE server to experimental code. (Verify shadowing at setup; contingency =\n  a small dedicated exp venv with editable installs of the worktree srcs.)"
+new: "LIVE server to experimental code. (Chair addition: verify shadowing at setup;\n  contingency = a small dedicated exp venv with editable installs of the\n  worktree srcs.)"
+
+Edit C (fix 3):
+old: "- **Safety net (Kimi):** the live `magnolia` wrapper gains a pre-launch check\n  that the live tree is on `master` (loud warning, bypassable), so a stray\n  checkout cannot silently ship experimental code into daily use."
+new: "- **Safety net (Kimi):** the live `magnolia` wrapper gains a pre-launch check\n  that the live tree is on `master` — **enforced** (launch blocked; a chair-added\n  explicit bypass env var covers deliberate exceptions), so a stray checkout\n  cannot silently ship experimental code into daily use."
+
+Edit D (fix 4):
+old: "  `--durations=15`, traceback) to `.flake-log`; a second failure with the\n  same slow-run signature BLOCKS the merge and reopens the FLAKE root-cause\n  item (P2 poller work may root-cause it for free)."
+new: "  `--durations=15`, traceback) to `.flake-log`; a second failure with the\n  same slow-run signature BLOCKS the merge and reopens the FLAKE root-cause\n  item (P2 poller work may root-cause it for free). Chair resolution: this\n  adopts Kimi/GLM's block-on-repeat over DS's \"quarantine (xfail), never let\n  it block\"; DS's quarantine applies only if the FLAKE item is re-opened."
+
+Edit E (fix 5):
+old: "- **M2 (end P2, ~week 5):** scratch campaign survives killed job (retry),\n  mid-run crash flag; live tree untouched."
+new: "- **M2 (end P2, ~week 5):** scratch campaign survives killed job (retry),\n  mid-run crash flag; notification toast observed on a **real submitted job in\n  a live session** (GLM/Kimi condition); live tree untouched."
+
+Edit F (fix 6):
+old: "DoD: extractor reproduces receipts from 3 archived real sessions\n(hand-label diff); verifier catches a planted wrong number (`w_air`-by-stage\nclass) in a scratch session; gates fail closed."
+new: "DoD: extractor reproduces receipts from 3 archived real sessions\n(hand-label diff; DS proposed 10 — chair resolution: 3 at the gate, expand\nto 10 on master post-merge); verifier catches a planted wrong number\n(`w_air`-by-stage class) in a scratch session; gates fail closed."
+
+Edit G (fix 7):
+old: "- **Memory-server Python:** full ~400-test suite **twice clean consecutive**\n  before merge (×3 when touching poller/concurrency); new code needs tests at\n  the layer it touches; scratch-server smoke for runtime-touching changes."
+new: "- **Memory-server Python:** full ~400-test suite **twice clean consecutive**\n  before merge (chair addition: ×3 when touching poller/concurrency; DS\n  proposed 2, GLM 3 unconditional); new code needs tests at the layer it\n  touches; scratch-server smoke for runtime-touching changes (on a\n  non-default port — DS/Kimi condition)."
+
+That covers fix 7 and fix 9 together (they're in the same bullet).
+
+Edit H (fix 8):
+old: "- **Exp launcher:** `magnolia-exp` script (in `softwares/bin/`, dev-only):\n  activates the live venv, exports the PYTHONPATH shadow, sets\n  `MAGNOLIA_PROJECT_DIR=~/magnolia-scratch/projects/scratch-demo`, refreshes\n  the worktree's rendered `opencode.json` with exp paths, and prints a loud\n  tree/branch banner. Config/plugins load per session from whichever tree the\n  session launched in."
+new: "- **Exp launcher:** `magnolia-exp` script (in `softwares/bin/`, dev-only):\n  activates the live venv, exports the PYTHONPATH shadow, sets the scratch\n  project path (chair unification: `MAGNOLIA_PROJECT_DIR=~/magnolia-scratch/\n  projects/scratch-demo`; DS proposed MAGNOLIA_HOME/MAGNOLIA_DATA_ROOT, Kimi\n  MAGNOLIA_PROJECTS_DIR), refreshes the worktree's rendered `opencode.json`\n  with exp paths, and prints a loud tree/branch banner. Config/plugins load\n  per session from whichever tree the session launched in."
+
+Edit I (CAVEAT):
+old: "Person-day estimates per item are in the round-3/4 verdicts; this plan adds\nthe process layer only. Chair decisions where panelists differed are marked\n(branch naming simplified to `experimental`; P1 intra-order follows GLM;\nbounded P2 retry resolves the DS-vs-GLM/Kimi governor-placement split)."
+new: "Person-day estimates per item are in the round-3/4 verdicts; this plan adds\nthe process layer only. Chair decisions where panelists differed are marked\n(branch naming simplified to `experimental`; P1 intra-order follows GLM;\nbounded P2 retry resolves the DS-vs-GLM/Kimi governor-placement split).\n**Audited 2026-09-10 against the three raw answers** (audit:\n`runs/2026-09-10_execution-plan-qa/AUDIT.md`); post-audit corrections applied:\nbridge attribution (GLM+Kimi, DS dissent noted), enforced pre-launch check,\nflake-policy split documented, live-job toast evidence restored, chair\nadditions marked."
+
+That's 9 edits (A-I). Let me batch them in one message — multiple edit calls to the same file. The edit tool requires oldString unique; all strings should be unique. I'll send them in batches (maybe 4-5 per message to be safe). Actually multiple edits to the same file in one parallel batch could conflict if applied concurrently? The tool applies them sequentially presumably. Earlier in the session I did two edits to the same file in one message successfully (the SKILL.md edits). So batch all 9? Risky but they're non-overlapping strings. Let me do them in two batches: A-E, then F-I.
+
+Then cp to mirrors. Then report.
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): First five edits applied. Now the remaining four: F (DoD 10 runs), G (×3 + non-default port), H (launcher unification), I (CAVEAT audit note). Plus mirror to glm/kimi.
+
+Note an interesting action-memory hit on the last edit: "In Ad Verum, perspicacite_v2 is the Run orchestrator, not a message relay" — not relevant now, but good context layer.
+
+Let me apply the remaining edits and mirror.
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (tool:edit)
+
+ASSISTANT (reasoning): All nine corrections applied. Now mirror the corrected plan to the glm and kimi workspaces, verify a diff of what changed (quick sanity), and report.
+
+Let me cp and do a quick grep to confirm the fixes are in.
+
+ASSISTANT: All corrections applied. Mirroring to the other two workspaces and verifying:
+
+ASSISTANT (tool:compchem-tools_run_shell)
+
+ASSISTANT (reasoning): All corrections verified in place (184 lines now, up from 169; all key fixes present). Mirrored to glm and kimi.
+
+Now record a memory note about the audit + corrections? This is a protocol-level learning: "verdict-QA pass found 9 drift items in a chair merge; the reader-contract audit works." Worth a short memory entry? We already have the calibration entry and the skill has the convention. A brief note about the audit outcome could be valuable for the "trust the merge" question. Actually — the audit result validates the QA-pass practice. Let me record a concise note referencing THE AUDIT.md. Or maybe wait — session is long, and the memory system will distill. But AGENTS.md mandates recording significant results; the audit is an operational validation. I'll add a short note. Hmm, but I've made many entries today; the auto-distill will also capture some. The QA finding ("chair merges drift ~9 items when smoothing; the audit pass catches them") is genuinely useful cross-session knowledge for high-stakes merges. Let me record it briefly (note, not too long).
+
+Actually — let me consider: could this bump-merge into something weird? Possibly into the calibration entry (related topics). That's acceptable.
+
+Also: the QA run itself (execution-plan-qa) — should it be memory_record_run? It's a QA run, not a debate. Maybe record as tool="analysis"? The run dir exists. Light touch: record it. Hmm — I'll skip run record for QA (not a scientific run; no recognized tool) — or record it for completeness? Past practice: recorded debates and analyses. The QA produced a durable artifact (AUDIT.md) in runs/. Let me record it as a run (tool="analysis", status=success) — cheap and keeps history complete. And the note.
+
+Then final report: 9 corrections applied (list top ones), plan mirrored, plan is now clean, AUDIT.md saved. Next: worktree setup + P0 (or push first — master had 98c6d96 unpushed? Wait: I committed 98c6d96 but never pushed (master ahead by 1). The user earlier said "commit it" for that one; push still pending. In my last queue I said "push pending". The user then asked about debates. So current state: master ahead 1 (skill front-matter commit). Also the execution plan edits are under projects/ (machine-local, untracked) — not committed to git. Fine.
+
+So report + queue: push 98c6d96, then worktree setup + P0.
+
+Let me do the two memory calls (run record + note) and then report. Actually — maybe fold into one step: record run + note, then report. Batch the two memory calls.
+
+ASSISTANT: Plan corrected (169 → 184 lines; all nine fixes verified) and mirrored. Recording the audit result:
+
+ASSISTANT (tool:compchem-memory_memory_record_run)
+
+ASSISTANT (tool:compchem-memory_memory_record_learning)
+
+ASSISTANT (reasoning): All done. Final report:
+
+- QA applied all 9 corrections to execution-plan.md (mirrored ×3), audit preserved.
+- Recorded run + learning.
+- Next: push the pending skill commit (98c6d96), then worktree setup + P0.
+
+Keep the report tight.
+
+ASSISTANT: Done — the plan is now audit-clean:
+
+**Corrections applied (all 9, mirrored in all three workspaces):**
+- Bridge amendment re-attributed: **GLM + Kimi; DS's keep-in-P2 stance noted** (was falsely "all three")
+- Pre-launch master check restored to **"enforced"** (with an explicitly marked chair bypass)
+- **Flake-policy split documented**: block-on-repeat (Kimi/GLM) over DS's "quarantine, never block" — DS's dissent recorded
+- **Live-job toast evidence restored** to M2 (GLM/Kimi condition)
+- Chair additions marked: shadowing contingency, ×3 poller rule, env-var unification, 3-vs-10-run DoD resolution, non-default-port condition restored
+- CAVEAT now records the audit provenance
+
+**Recorded:** audit run + a `success_pattern` on the QA pass itself — the recurring drift signature is exactly four modes (false unanimity, weakened conditions, smoothed splits, unmarked inventions), and one cheap pass catches all four.
+
+Current queue:
+1. **Push** `98c6d96` (front-matter convention commit, still local)
+2. **Worktree setup** (`~/repos/project_magnolia-exp` on `experimental`) + `exp-setup`/`magnolia-exp` + scratch env
+3. **P0** — starting with posting the PR #2 reply
+
+Say the word and I'll start with the push and the worktree.
