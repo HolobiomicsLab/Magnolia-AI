@@ -63,26 +63,55 @@ opencode-v2 migration item in todo.md).
 1. **Always pass `--model` explicitly.** Bare `opencode run` falls back to
    the GLOBAL config's default model, which here names a retired model
    (`zai-coding-plan/glm-4.6`) → ProviderModelNotFoundError. Default:
-   `zai-coding-plan/glm-5.3-flash`; override with `MAGNOLIA_AGENTS_MODEL`.
+   `deepseek/deepseek-flash` (DeepSeek-V4.1-Flash, official API; switched
+   from `zai-coding-plan/glm-5.3-flash` on 2026-09-29 after it ended its
+   turn without doing the task); override with `MAGNOLIA_AGENTS_MODEL`.
    (Fixing the stale global default is a user-level todo — it breaks any
    bare `opencode run`.)
-2. **Helpers answer via stdout, never by writing files.** Headless runs
-   cannot approve file-write permission asks; asking the helper to write the
-   reply file made it fight the permission wall for ~4 min and end with
-   empty output. The prompt now forbids file writes; the daemon captures the
-   final message and writes the reply itself (fallback: if the file already
-   exists, the agent's own write is kept).
-3. **A headless session takes ~2–4 min regardless of task size** (plugin +
-   MCP-server startup dominates). Timeout is 30 min; one task at a time.
-4. DeepSeek thinking models can yield empty visible output in this surface
-   (known quirk, entry `20260828_150519_679472`) — another reason for the
-   GLM default.
+ 2. **Helpers answer via stdout, never by writing files.** Headless runs
+    cannot approve file-write permission asks; asking the helper to write the
+    reply file made it fight the permission wall for ~4 min and end with
+    empty output. The prompt now forbids file writes; the daemon captures the
+    final message and writes the reply itself (always overwriting any earlier
+    reply, so a re-run never leaves a stale one).
+ 3. **A headless session takes ~2–4 min regardless of task size** (plugin +
+    MCP-server startup dominates). Timeout is 30 min; one task at a time.
+ 4. DeepSeek thinking models can yield empty visible output in this surface
+    (known quirk, entry `20260828_150519_679472`) — the answer gate below
+    turns this into a visible error instead of a silent empty reply.
+
+## Answer gate & auto-resume (2026-09-29)
+
+Three consecutive letter runs (two models) ended the helper's turn
+mid-investigation with narration instead of an answer; the daemon marked
+them done. Root cause class: the `opencode run` agent loop ends whenever the
+model produces a text message with no tool calls — nothing forces a final
+answer. The permanent fix is mechanical, in the daemon:
+
+- **Prompt contract**: the daemon's wrapper prompt requires the helper's
+  FINAL message to begin with the line `FINAL ANSWER:`.
+- **Gate**: `default_runner` invokes `opencode run --format json`, parses
+  the event stream, and checks the LAST assistant message for the marker.
+- **Auto-resume**: on a marker miss, the SAME session is resumed
+  (`--session <id>`) with a "stop investigating, answer now" note, up to
+  `RESUME_MAX` (2) times. Still no marker → the run raises, and the letter
+  is marked `error` with the narration embedded in the reply — never a
+  silent fake success.
+- **Run logs**: raw JSON events are kept per task under
+  `.magnolia-agents/runs/<ts>_<agent>.jsonl` (stderr was previously
+  discarded, which made a 0-byte failure undiagnosable).
+
+A short-task repro (2026-09-29) confirmed the same model answers cleanly
+when the task is small, so the gate is a completion contract, not a
+correctness guarantee.
 
 ## Test plan
 
 - Unit (pytest, `opencode_cc_mem/tests/test_agents_daemon.py`): task
   discovery (open/done/non-task), dedup via state, reopen-on-edit, reply +
-  status rewrite, runner-failure → error status, runner mock.
+  status rewrite, runner-failure → error status, runner mock, event parsing,
+  marker gate (first-pass / resume / give-up), prompt answer-contract,
+  stale-reply overwrite.
 - Integration: real end-to-end smoke — a trivial task for the literature
   agent through the real `opencode run`; assert the reply file appears.
 - Doorbell: transpile check (bun) + careful review; runtime check = first
