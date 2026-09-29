@@ -29,6 +29,19 @@ SCAN_INTERVAL_S = 10
 TASK_TIMEOUT_S = 30 * 60
 STATUS_RE = re.compile(r"^([\s>*-]*status:\s*)open\b", re.I | re.M)
 
+# Answer gate: the helper's LAST assistant message must begin with the
+# FINAL ANSWER marker. Without an enforced contract, flash-tier models end
+# their turn mid-investigation (verified 2026-09-29: three letter runs
+# returned narration-only replies) and the daemon had no way to tell.
+FINAL_MARKER_RE = re.compile(r"^\s*#*\s*FINAL ANSWER\s*:?", re.I | re.M)
+RESUME_MAX = 2  # resume attempts before giving up
+RESUME_NOTE = (
+    "Your previous turn ended WITHOUT the required final answer. Do not "
+    "repeat or continue the investigation. Give the complete answer to the "
+    "letter right now, beginning with the line 'FINAL ANSWER:'. Keep it "
+    "under 40 lines."
+)
+
 
 # ----------------------------------------------------------------- paths ---
 
@@ -104,32 +117,130 @@ def write_reply(task_file: Path, agent: str, body: str) -> Path:
     return reply
 
 
+def runs_dir(root: str) -> Path:
+    return state_dir(root) / "runs"
+
+
+def parse_run_events(jsonl_text: str) -> dict:
+    """Parse `opencode run --format json` NDJSON events.
+
+    Returns {"session_id", "final_text", "all_text", "n_tools"}:
+    final_text = concatenated text of the LAST assistant message (parts
+    grouped by messageID in event order); all_text = every text part
+    (the narration trail, for the error reply when the gate fails)."""
+    session_id = None
+    texts: dict[str, list[str]] = {}
+    order: list[str] = []
+    n_tools = 0
+    for line in jsonl_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            evt = json.loads(line)
+        except ValueError:
+            continue
+        session_id = session_id or evt.get("sessionID")
+        part = evt.get("part") or {}
+        if part.get("type") == "text" and part.get("text"):
+            mid = part.get("messageID") or "_"
+            if mid not in texts:
+                order.append(mid)
+                texts[mid] = []
+            texts[mid].append(part["text"])
+        elif part.get("type") == "tool":
+            n_tools += 1
+    all_text = "\n".join(t for mid in order for t in texts[mid])
+    final_text = "\n".join(texts[order[-1]]) if order else ""
+    return {"session_id": session_id, "final_text": final_text,
+            "all_text": all_text, "n_tools": n_tools}
+
+
+def is_final_answer(text: str) -> bool:
+    return bool(FINAL_MARKER_RE.search(text or ""))
+
+
+def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
+              extra_args: list, run_log: Path | None) -> dict:
+    """One headless `opencode run --model M --format json [extra_args]`.
+    Returns parse_run_events output plus "rc" and "stderr_tail"; appends
+    the raw events to run_log so failures stay diagnosable (the daemon
+    previously discarded stderr — 2026-09-29 0-byte run was undiagnosable)."""
+    proc = subprocess.run(
+        ["opencode", "run", "--model", model, "--format", "json", *extra_args],
+        cwd=project_dir, env=env, timeout=timeout_s,
+        capture_output=True, text=True,
+    )
+    parsed = parse_run_events(proc.stdout or "")
+    parsed["rc"] = proc.returncode
+    parsed["stderr_tail"] = (proc.stderr or "")[-2000:]
+    if run_log is not None:
+        try:
+            with run_log.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"_attempt": len(extra_args) and extra_args[0][:60] or "",
+                                     "_rc": proc.returncode}) + "\n")
+                fh.write(proc.stdout or "")
+                fh.write("\n")
+        except OSError:
+            pass
+    return parsed
+
+
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                    timeout_s: int) -> str:
-    """Real headless run. Separate function so tests can stub it.
+    """Real headless run with the answer gate. Separate function so tests
+    can stub it.
+
+    Contract enforcement (added 2026-09-29, after three narration-only
+    letter runs): the helper's LAST assistant message must begin with the
+    FINAL ANSWER marker (the daemon prompt requires it). If it does not,
+    the SAME session is resumed (`--session <id>` + RESUME_NOTE, "stop
+    investigating, answer now") up to RESUME_MAX times. A run that never
+    produces the marker raises; handle_task turns that into an error reply
+    carrying the narration instead of silently treating it as done.
 
     --model is REQUIRED in practice: without it, `opencode run` falls back to
     the GLOBAL config's default model, which on this machine names a retired
     model (zai-coding-plan/glm-4.6) and fails with ProviderModelNotFoundError
-    (found 2026-09-24, first smoke). MAGNOLIA_AGENTS_MODEL overrides."""
+    (found 2026-09-24, first smoke). MAGNOLIA_AGENTS_MODEL overrides.
+
+    Default deepseek/deepseek-flash = DeepSeek-V4.1-Flash on the official
+    api.deepseek.com (verified live 2026-09-29); needs DEEPSEEK_API_KEY in
+    the launcher env. Chosen after glm-5.3-flash ended its turn after one
+    60-char message without doing the task (2026-09-29 letter test)."""
     model = os.environ.get("MAGNOLIA_AGENTS_MODEL",
-                           "zai-coding-plan/glm-5.3-flash")
+                           "deepseek/deepseek-flash")
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
     env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
-    proc = subprocess.run(
-        ["opencode", "run", "--model", model, prompt],
-        cwd=project_dir, env=env, timeout=timeout_s,
-        capture_output=True, text=True,
-    )
-    log_line(root, f"[{agent}] opencode run rc={proc.returncode} "
-                   f"stdout={len(proc.stdout or '')}B "
-                   f"stderr={len(proc.stderr or '')}B model={model}")
-    out = (proc.stdout or "").strip()
-    if proc.returncode != 0:
-        raise RuntimeError(f"opencode run exit={proc.returncode}: "
-                           f"{(proc.stderr or '')[-500:]}")
-    return out or "(no output)"
+    try:
+        runs_dir(root).mkdir(parents=True, exist_ok=True)
+        run_log = runs_dir(root) / (f"{datetime.now(timezone.utc):%Y%m%d_%H%M%S}_"
+                                    f"{agent}.jsonl")
+    except OSError:
+        run_log = None
+
+    args: list = [prompt]
+    attempt = 0
+    while True:
+        attempt += 1
+        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log)
+        marker = is_final_answer(parsed["final_text"])
+        log_line(root, f"[{agent}] attempt {attempt} rc={parsed['rc']} "
+                       f"tools={parsed['n_tools']} "
+                       f"marker={'yes' if marker else 'no'} model={model}")
+        if parsed["rc"] != 0:
+            raise RuntimeError(f"opencode run exit={parsed['rc']}: "
+                               f"{parsed['stderr_tail']}")
+        if marker:
+            return parsed["final_text"]
+        if attempt > RESUME_MAX or not parsed["session_id"]:
+            break  # out of resumes, or nothing to resume (e.g. 0-byte run)
+        args = ["--session", parsed["session_id"], RESUME_NOTE]
+    narration = (parsed.get("all_text") or "(no output)").strip()
+    raise RuntimeError(
+        f"helper never produced a FINAL ANSWER after {attempt} attempt(s). "
+        f"Last narration:\n\n{narration[-3000:]}")
 
 
 def handle_task(task_file: Path, agent: str, root: str,
@@ -148,16 +259,17 @@ def handle_task(task_file: Path, agent: str, root: str,
         f"memory tools (this letter is self-contained); do NOT try to write "
         f"or edit any files — headless runs cannot approve file-write "
         f"permissions. Instead, give your complete answer as your final "
-        f"message text; the daemon captures it and writes the reply file.\n"
+        f"message. Answer contract: your FINAL message must BEGIN with the "
+        f"line 'FINAL ANSWER:' followed by the complete answer — never end "
+        f"your turn without it; if you are still investigating, keep "
+        f"calling tools instead of stopping.\n"
     )
     status = "done"
-    reply = task_file.with_name(task_file.stem.replace(".task", "") + "_reply.md")
     try:
         body = runner(agent, project_dir, root, prompt, timeout_s)
-        if not reply.exists():
-            # The agent printed the answer instead of writing the file
-            # (tool permissions vary headlessly) — the stdout IS the reply.
-            write_reply(task_file, agent, body)
+        # The agent printed the answer (stdout IS the reply); always
+        # overwrite so a re-run never leaves a stale earlier reply.
+        write_reply(task_file, agent, body)
     except Exception as e:
         status = "error"
         body = f"## Task failed\n\nThe helper run raised: {e}\n\n"
