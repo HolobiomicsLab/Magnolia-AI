@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from compchem_memory.atomic_io import atomic_write_text
+from compchem_memory.contradictions import ConflictCandidatesError
 from compchem_memory.storage import backup_file
 
 
@@ -330,7 +331,12 @@ class ProjectManager:
             entry.pop("_sort_date", None)
         return result[:limit]
 
-    def confirm_staging(self, project_dir: str, entry_name: str) -> str:
+    def confirm_staging(
+        self,
+        project_dir: str,
+        entry_name: str,
+        acknowledge: bool = False,
+    ) -> str:
         staging = self._staging_dir(project_dir)
         entries = self._entries_dir(project_dir)
         source = None
@@ -340,6 +346,12 @@ class ProjectManager:
                 break
         if not source:
             raise FileNotFoundError(f"Staging entry not found: {entry_name}")
+        if not acknowledge:
+            candidates = self._conflict_candidates(project_dir, source, entries)
+            if candidates:
+                raise ConflictCandidatesError(
+                    self._hold_message(source.name, candidates), candidates
+                )
         backup_file(source, project_dir)
         dest = entries / source.name
         dest.write_text(source.read_text())
@@ -347,9 +359,45 @@ class ProjectManager:
         self._update_index(project_dir)
         return str(dest)
 
+    def _conflict_candidates(self, project_dir: str, source: Path, entries_dir: Path) -> list[dict[str, Any]]:
+        """Conflict-candidate pairs between one staging entry and the project tier."""
+        from compchem_memory.contradictions import (
+            candidates_against_entry,
+            load_entries,
+            load_entry_file,
+        )
+        src = load_entry_file(source, "staging")
+        if src is None:
+            return []
+        targets = load_entries(entries_dir)
+        return candidates_against_entry(src, targets)
+
+    @staticmethod
+    def _hold_message(entry_name: str, candidates: list[dict[str, Any]]) -> str:
+        lines = [
+            f"Promotion held: '{entry_name}' may contradict {len(candidates)} "
+            "project entr(s) already in memory. Same parameter, different values:"
+        ]
+        for c in candidates:
+            for pc in c["param_conflicts"]:
+                lines.append(
+                    f"  - `{pc['param']}` vs {c['b']['filename']} "
+                    f"({c['b']['tier']}): here {{{', '.join(pc['a_values'])}}}, "
+                    f"there {{{', '.join(pc['b_values'])}}}"
+                )
+        lines.append(
+            "Review both entries: correct or archive the wrong side, then "
+            "re-run with acknowledge=True to promote anyway."
+        )
+        return "\n".join(lines)
+
     def auto_promote_staging(self, project_dir: str) -> list[str]:
         """Auto-promote staging entries with observation_count >= 2, confidence >= 0.85,
         AND observed_in_sessions containing >= 2 distinct session_ids.
+
+        Entries with conflict candidates are HELD in staging (never silently
+        promoted next to a contradicting claim); a distill notice surfaces the
+        hold for review.
 
         Closes cybernetics §3.4 (single-session auto-promotion risk).
         """
@@ -368,7 +416,25 @@ class ProjectManager:
                     promoted.append(f.name)
                 except FileNotFoundError:
                     pass
+                except ConflictCandidatesError as e:
+                    self._notice_held_promotion(project_dir, f, e)
         return promoted
+
+    @staticmethod
+    def _notice_held_promotion(
+        project_dir: str, f: Path, err: ConflictCandidatesError
+    ) -> None:
+        from compchem_memory.distill_log import push_distill_notice
+
+        push_distill_notice(
+            project_dir,
+            quote=f"auto-promotion held: {f.name}",
+            summary=(
+                "⚖️ Auto-promotion held — possible contradiction. Review the "
+                "pair, resolve the wrong side, then memory_confirm with "
+                "acknowledge=True if the staging entry is right."
+            ),
+        )
 
     def bump_observation_count(
         self,

@@ -83,3 +83,7 @@ opencode_cc_mem/rules/hpc_azzurra.md
 opencode_cc_mem/softwares/bin/p2rank
 opencode_cc_mem/softwares/bin/boltzgen
 opencode_cc_mem/softwares/boltzgen/.venv
+
+# Local backups of project memory stores (contain research-project data) — never track
+backups/
+opencode_cc_mem/backups/
