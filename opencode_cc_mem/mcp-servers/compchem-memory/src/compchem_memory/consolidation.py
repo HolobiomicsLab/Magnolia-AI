@@ -9,6 +9,7 @@ deterministic tool-output keeps the existing lexical dedup.
 """
 
 import json
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
 
@@ -141,6 +142,12 @@ def cluster_findings(
 # on large batches, silently dropping clusters).
 _CLUSTER_BATCH = 30
 
+# Only clusters the model itself scores at/above this certainty are surfaced
+# for review; lower-confidence groups (usually same-topic-different-claim)
+# are skipped fresh on every sweep — nothing is durably dismissed by the
+# floor alone, so a pair rescored higher later can still surface.
+PROPOSAL_CONFIDENCE_FLOOR = 0.8
+
 _CLUSTER_SYSTEM = (
     "You consolidate a computational-chemistry project's memory. Given a JSON "
     "list of finding entries (id, title, gist), group ONLY entries that assert "
@@ -186,6 +193,11 @@ def consolidate_project_findings(
     store = Path(store_dir)
     entries = _load_findings(store / "staging", types)
     clusters = cluster_findings(entries, clusterer)
+    # Confidence floor: the model's own certainty that a cluster asserts the
+    # SAME claim. Below-floor clusters (usually same-topic-different-claim)
+    # are never proposed — skipped fresh each sweep, not durably dismissed.
+    clusters = [c for c in clusters
+                if float(c.get("confidence") or 0.0) >= PROPOSAL_CONFIDENCE_FLOOR]
 
     proposals = []
     for c in clusters:
@@ -228,24 +240,35 @@ def _cluster_key(sources: list[str]) -> tuple[str, ...]:
     return tuple(sorted(Path(s).name for s in sources))
 
 
+def _key_pairs(key: tuple[str, ...]) -> set[tuple[str, ...]]:
+    """Pair-granular form of a cluster key: every 2-combination of its sorted
+    source basenames. Rejection memory is stored and matched at this granularity
+    so a clusterer that re-groups a rejected cluster's SUBSET (e.g. 3 of 4
+    members) is still suppressed — the 2026-09-30 fig7 regression."""
+    return set(combinations(sorted(key), 2))
+
+
 def _serialize_keys(keys: set[tuple[str, ...]]) -> list[list[str]]:
     """JSON-serializable, deterministically ordered form of a key set."""
     return sorted(list(k) for k in keys if len(k) >= 2)
 
 
 def _contains_rejected_pair(sources: list[str], rejected_keys: set[tuple[str, ...]]) -> bool:
-    """True if the proposed cluster CONTAINS any durably-rejected pair. Subset
-    semantics: 'these sources do not belong together' holds however the clusterer
-    re-groups them — including larger supersets that add a third member."""
+    """True if the proposed cluster contains any durably-rejected PAIR of
+    sources. Keys are stored at pair granularity (see `_key_pairs`): "these
+    sources do not belong together" holds however the clusterer re-groups them —
+    subsets, supersets, and partial regroups all trip the guard."""
     key_set = set(_cluster_key(sources))
     return any(set(k) <= key_set for k in rejected_keys if len(k) >= 2)
 
 
 def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
-    """Content keys of durably rejected clusters. Reads the artifact's
-    `rejected_keys` (persistent across regenerations); also folds in the legacy
-    index-based `rejected` list so artifacts written before `rejected_keys`
-    existed still contribute their rejections."""
+    """Content keys of durably rejected clusters, EXPANDED TO PAIRS. Reads the
+    artifact's `rejected_keys` (persistent across regenerations); also folds in
+    the legacy index-based `rejected` list so artifacts written before
+    `rejected_keys` existed still contribute their rejections. Cluster-level
+    keys written by older versions are expanded to their pairs on load, so old
+    artifacts gain subset suppression without any migration."""
     if not artifact.exists():
         return set()
     try:
@@ -255,11 +278,11 @@ def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
     keys: set[tuple[str, ...]] = set()
     for k in prior.get("rejected_keys", []):
         if isinstance(k, list) and len(k) >= 2:
-            keys.add(tuple(sorted(k)))
+            keys |= _key_pairs(tuple(sorted(k)))
     old = prior.get("proposals", [])
     for idx in prior.get("rejected", []):
         if isinstance(idx, int) and 0 <= idx < len(old):
-            keys.add(_cluster_key(old[idx].get("sources", [])))
+            keys |= _key_pairs(_cluster_key(old[idx].get("sources", [])))
     return keys
 
 
@@ -302,9 +325,7 @@ def apply_proposals(
         if (isinstance(i, int) and 0 <= i < len(proposals)
                 and i not in already and i not in rejected_set and i not in dismissed_set):
             rejected_set.add(i)
-            key = _cluster_key(proposals[i].get("sources", []))
-            if len(key) >= 2:
-                rejected_keys.add(key)
+            rejected_keys |= _key_pairs(_cluster_key(proposals[i].get("sources", [])))
             rejected_count += 1
 
     merged_paths: list[str] = []
@@ -326,9 +347,7 @@ def apply_proposals(
             # transient `skipped` left the index pending forever, so the review
             # re-surfaced it every session.
             dismissed_set.add(i)
-            key = _cluster_key(proposals[i].get("sources", []))
-            if len(key) >= 2:
-                rejected_keys.add(key)
+            rejected_keys |= _key_pairs(_cluster_key(proposals[i].get("sources", [])))
             dismissed.append(i)
             _persist()
         else:
@@ -390,9 +409,9 @@ def render_review_markdown(store_dir: str) -> str | None:
         "How to read this file:",
         "",
         "- **confidence** is the clustering model's own certainty that the entries",
-        "  assert the SAME claim: **>= 0.8** same claim, near-duplicate (accepting",
-        "  is safe); **0.5-0.79** grouped despite doubt, usually same topic with",
-        "  different claims (read the `why` line; default to reject); **< 0.5** weak.",
+        "  assert the SAME claim. Only clusters scoring **>= 0.8** (same claim,",
+        "  near-duplicate — accepting is safe) are proposed at all; lower-confidence",
+        "  groupings are never surfaced for review.",
         "- **accept** merges the sources into one entry under the title below;",
         "  member bodies are kept as corroborating observations; the merge is",
         "  committed to the versioning repo (git-reversible). **reject** durably",
