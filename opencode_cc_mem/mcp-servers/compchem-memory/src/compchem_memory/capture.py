@@ -3,6 +3,7 @@
 import json
 import os
 import time
+from datetime import date
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
@@ -62,20 +63,132 @@ def _summarize_result(result: Any) -> str:
     return s[:200] + ("..." if len(s) > 200 else "")
 
 
-def _attach_distill_notices(result: Any, project_dir: str) -> Any:
-    """Drain the .distill-notices queue and attach notices to a tool's result so
-    background/inline distillations surface in the dialogue. Never raises.
+# Tools whose result may be WITHHELD and replaced by the review envelope.
+# Read-only and cheap to re-call: the agent relays the notice, then calls the
+# tool again and gets the real result. Write tools (record_*, confirm, apply_*,
+# consolidate, ...) are never withheld — hiding their result could cause a
+# retry and a double write. The review tools themselves (review_consolidation,
+# review_promotions) are the relay action, so they are excluded too.
+_ENVELOPE_TOOLS = frozenset({
+    "memory_get_context",
+    "memory_search",
+    "memory_search_errors",
+    "memory_get_run_history",
+    "memory_get_goal",
+    "memory_select_relevant",
+    "memory_scan_headers",
+    "memory_health_check",
+    "memory_notebook",
+})
 
-    Most @captured tools return ``json.dumps(dict)`` — a JSON *string*. The
-    str path historically appended the notice text to that string, which
-    CORRUPTED the JSON (the gateway's _tool_result then falls back to a
-    ``{_text}`` preview and every structured consumer — the web workbench's
-    show_structure/submit_job/scores projections — silently misses). So for
-    JSON-object strings, re-serialize with a ``_distill_notices`` key instead
-    (the same shape the dict path has always produced). Plain-text strings
-    keep the old concatenated form; the agent model reads both fine."""
+_RELAY_LATCH_NAME = ".relay-latch.json"
+
+
+def _today() -> str:
+    """Injectable clock for tests."""
+    return date.today().isoformat()
+
+
+def _pending_review_counts(project_dir: str) -> dict[str, int]:
+    """Count proposals waiting for review in the project's reflex artifacts.
+    Mirrors startup_scan._has_pending_review but reports per-kind counts.
+    Never raises."""
+    counts: dict[str, int] = {}
+    try:
+        from compchem_memory.reflex_common import pending_indices
+        reflex = Path(project_dir) / ".magnolia" / "reflex"
+        for kind, name in (("consolidation", "consolidation-proposal.json"),
+                           ("promotion", "promotion-proposal.json")):
+            artifact = reflex / name
+            if not artifact.exists():
+                continue
+            try:
+                data = json.loads(artifact.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            n = len(pending_indices(data))
+            if n:
+                counts[f"{kind}_proposals"] = n
+    except Exception:
+        return {}
+    return counts
+
+
+def _relay_latched_today(project_dir: str, today: str) -> bool:
+    """True if the envelope already fired for this project today."""
+    latch = Path(project_dir) / ".magnolia" / "reflex" / _RELAY_LATCH_NAME
+    try:
+        return json.loads(latch.read_text()).get("last_envelope") == today
+    except (json.JSONDecodeError, OSError):
+        return False
+
+
+def _mark_relay_latch(project_dir: str, today: str) -> bool:
+    """Record today as an envelope day. False on write failure (caller then
+    falls back to the legacy notice tail instead of blocking every call)."""
+    latch = Path(project_dir) / ".magnolia" / "reflex" / _RELAY_LATCH_NAME
+    try:
+        latch.parent.mkdir(parents=True, exist_ok=True)
+        latch.write_text(json.dumps({"last_envelope": today}))
+        return True
+    except OSError:
+        return False
+
+
+def _review_envelope(project_dir: str, tool_name: str,
+                     counts: dict[str, int], notices: list[str]) -> str:
+    total = sum(counts.values())
+    kinds = " and ".join(f"{n} {k.replace('_proposals', '')} proposal(s)"
+                         for k, n in counts.items())
+    return json.dumps({
+        "status": "review_required",
+        "pending": counts,
+        "withheld_tool": tool_name,
+        "notices": notices,
+        "message": (
+            f"{total} memory review proposal(s) are waiting ({kinds}). "
+            "Memory reviews are messages for the user: tell them now, in plain "
+            "words, what is waiting and ask whether to review it. Nothing is "
+            "applied without the user's confirmation. The real tool result was "
+            "withheld — after relaying, call this tool again to get it."
+        ),
+    }, indent=2)
+
+
+def _attach_distill_notices(result: Any, project_dir: str,
+                            tool_name: str = "") -> Any:
+    """Surface pending review proposals and drained notices on a tool result.
+
+    Two channels, in priority order:
+
+    1. BLOCKING ENVELOPE — pending proposals + read-only tool + not yet fired
+       today: replace the result with a ``status: review_required`` payload
+       (the anatomy of project_switch_blocked, which agents reliably relay;
+       an advisory tail on a large success payload was ignored 8 times over
+       260 replies — see staging 20260930_153812). Fires once per project per
+       day (latch: .magnolia/reflex/.relay-latch.json).
+    2. LEGACY TAIL — otherwise attach drained notices as ``_distill_notices``.
+       While the latch is set (envelope already fired today), the repeated
+       tail nudges are suppressed: identical repeats across a day read as
+       already-handled (habituation was a measured failure factor).
+
+    Never raises.
+    """  # noqa: E501
     try:
         notices = distill_log.drain_distill_notices(project_dir)
+        counts = _pending_review_counts(project_dir)
+        if counts:
+            today = _today()
+            latched = _relay_latched_today(project_dir, today)
+            if tool_name in _ENVELOPE_TOOLS and not latched:
+                if _mark_relay_latch(project_dir, today):
+                    return _review_envelope(project_dir, tool_name, counts, notices)
+            if latched:
+                # Envelope already fired today: suppress the duplicate tail
+                # nudges (repeats read as already-handled), keep the result.
+                return result
+            # Latch write failed, or a non-withholdable tool hit a fresh day:
+            # fall through to the legacy tail so notices still surface.
         if not notices:
             return result
         notice_text = "\n".join(notices)
@@ -159,7 +272,7 @@ def captured(source: str):
             except Exception:
                 pass
             _maybe_inline_extract(mgr, project_dir)
-            return _attach_distill_notices(result, project_dir)
+            return _attach_distill_notices(result, project_dir, tool_name)
 
         return wrapper
 
