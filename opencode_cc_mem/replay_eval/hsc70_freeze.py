@@ -166,8 +166,10 @@ def compute_rent(
 
 
 def mapping_sessions(store: Path) -> list[dict]:
-    """Chronological mapping rows {ts, sid} from the store's session mapping."""
-    out = []
+    """Chronological mapping rows {ts, sid}, UNION marker-only sids (v2: the
+    mapping starts 2026-06-10 and missed early-June sessions that produced
+    the workhorse labels; their markers exist)."""
+    seen: dict[str, dict] = {}
     mapping = store / "opencode-sessions.jsonl"
     for line in mapping.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
@@ -179,8 +181,14 @@ def mapping_sessions(store: Path) -> list[dict]:
             continue
         sid = r.get("opencode_session_id")
         if sid:
-            out.append({"ts": r.get("ts", ""), "sid": sid})
-    return out
+            seen[sid] = {"ts": r.get("ts", ""), "sid": sid}
+    mdir = store / "opencode-distilled"
+    if mdir.is_dir():
+        for f in mdir.glob("*.json"):
+            sid = f.stem
+            if sid and sid not in seen:
+                seen[sid] = {"ts": "0000", "sid": sid}  # sort: unknown ts first
+    return sorted(seen.values(), key=lambda m: m["ts"])
 
 
 def freeze_corpus() -> int:
@@ -449,12 +457,16 @@ def finalize_corpus() -> int:
     )
     (CORPUS_DIR / "manifest.yaml").write_text(
         "frozen: true\n"
-        "corpus_version: 1\n"
+        "corpus_version: 2\n"
         "capture_version: export-1.18.33-whole-session\n"
         f"changes:\n  - version: 1\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
         "    reason: initial freeze of hsc70_new session transcripts for the "
         "distiller admission bake-off (plan 2026-09-30); one slice per "
-        "session, whole-transcript shape matching production ingest\n",
+        "session, whole-transcript shape matching production ingest\n"
+        f"  - version: 2\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
+        "    reason: add 7 pre-mapping sessions recovered from distill "
+        "markers (mapping starts 2026-06-10; workhorse-label sessions were "
+        "missing, causing bake-off run 1 fidelity/recall FAIL)\n",
         encoding="utf-8",
     )
     print(f"finalized {len(entries)} slices into extraction_gold/")
