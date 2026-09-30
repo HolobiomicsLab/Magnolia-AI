@@ -279,6 +279,21 @@ def memory_get_context(
         token_budget=token_budget,
         conversation_history=conversation_history,
     )
+    # R5 surfacing counter: log served entries with SERVING-STORE attribution
+    # (resolved .magnolia, not the calling project path).
+    try:
+        from compchem_memory.context_assembly import _memory_store
+        from compchem_memory.surfacing import guess_session_id, log_surfacing
+        _store = _memory_store(pd)
+        log_surfacing(
+            _store,
+            result.sources,
+            "get_context",
+            session_id=guess_session_id(_store),
+            task_description=task_description,
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never break the tool
+        pass
     return json.dumps(
         {
             "content": result.content,

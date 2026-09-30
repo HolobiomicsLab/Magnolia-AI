@@ -30,7 +30,7 @@
  */
 import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
-import { join, dirname, resolve } from "node:path"
+import { join, dirname, resolve, basename } from "node:path"
 import { promisify } from "node:util"
 
 import type { Plugin } from "@opencode-ai/plugin"
@@ -204,6 +204,31 @@ export const MagnoliaActionRetrieval: Plugin = async ({ directory }) => {
           hits: hits.length,
           titles: hits.map((h) => h.title).slice(0, 4),
         })
+        // R5 surfacing counter: one row per INJECTED entry, written to the
+        // SERVING store's surfacing.jsonl (store = two levels above the hit
+        // file: <store>/entries/x.md or <store>/staging/x.md). Always counts
+        // toward exposure — a real tool call just ran in this session.
+        for (const h of hits) {
+          try {
+            const p = String(h.path ?? "")
+            if (!p) continue
+            const storeDir = dirname(dirname(p))
+            const tier = p.includes("/staging/") ? "staging" : "project"
+            appendFileSync(
+              join(storeDir, "surfacing.jsonl"),
+              JSON.stringify({
+                ts: new Date().toISOString(),
+                channel: "action_memory",
+                store: storeDir,
+                session_id: input?.sessionID ?? null,
+                tier,
+                id: basename(p),
+                counts_for_exposure: true,
+                task_len: 0,
+              }) + "\n",
+            )
+          } catch { /* never throw into opencode */ }
+        }
       } catch { /* never throw into opencode */ }
     },
   }

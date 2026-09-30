@@ -27,6 +27,15 @@ def regenerate_boot_context(
         token_budget=token_budget,
     )
 
+    # R5 surfacing counter: log every entry include to the SERVING store's
+    # surfacing.jsonl. Boot regen never counts toward exposure (guard 1).
+    try:
+        from compchem_memory.context_assembly import _memory_store
+        from compchem_memory.surfacing import log_surfacing
+        log_surfacing(_memory_store(project_dir), result.sources, "boot_context")
+    except Exception:  # noqa: BLE001 - telemetry must never break boot
+        pass
+
     out_path = Path(project_dir) / ".magnolia" / "boot-context.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.content)
