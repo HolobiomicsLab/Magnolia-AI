@@ -1,0 +1,17 @@
+# Arm 2 — candidate: admission-gated distiller (R1–R4 from the
+# distill-admission plan), chronological session order so the R4
+# recent-titles window behaves as live. Pass/fail in TEST-PLAN.md:
+# workhorse recall >= 95% of clean-36, volume <= 40% of arm 1,
+# dead-weight rejection >= 70%, dup inflow ~ 0.
+# NOT RUNNABLE until the admission gate slice lands in the code_ref tree.
+name: hsc70-arm2-admission
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v1
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null
+  admission_gate: true
+  chronological: true

@@ -1,0 +1,12 @@
+# Arm 1 — fidelity: the CURRENT production distiller replayed over the
+# frozen hsc70 corpus. Tolerance vs Arm 0 history: title-token Jaccard >= 0.6
+# (pre-registered in TEST-PLAN.md 2026-09-30).
+name: hsc70-arm1-fidelity
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v1
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null

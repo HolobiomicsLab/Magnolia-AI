@@ -114,6 +114,20 @@ def run_arm(corpus, arm: dict, out_dir: Path, limit: int | None = None,
     flags = arm["flags"]
     slices = corpus.slices[:limit] if limit else corpus.slices
 
+    # Admission-gated arms (arm 2 of the distiller bake-off): apply the gate
+    # from the ARM's code_ref after extraction, isolated to a per-run store.
+    # Chronological requirement (R4 recent-titles window) forces workers=1.
+    admission_gate = None
+    if flags.get("admission_gate"):
+        try:
+            from compchem_memory.admission import AdmissionGate as _AG
+        except ImportError as e:
+            raise RuntimeError(
+                f"arm {arm['name']}: admission_gate flag set but code_ref has "
+                f"no compchem_memory.admission: {e}")
+        admission_gate = _AG(out_dir / "gate-store")
+        workers = 1
+
     def one(slc):
         user = X_PREFIX + slc.text + X_SUFFIX
         t0 = time.monotonic()
@@ -126,6 +140,21 @@ def run_arm(corpus, arm: dict, out_dir: Path, limit: int | None = None,
         )
         ms = int((time.monotonic() - t0) * 1000)
         cands, parse_ok = _parse_candidates(text)
+
+        gate_rec = None
+        if admission_gate is not None:
+            gres = admission_gate.admit(cands, transcript=slc.text, session=slc.session)
+            gate_rec = {
+                "admitted": len(gres.admitted),
+                "idle_skipped": gres.idle_skipped,
+                "judge_available": gres.judge_available,
+                "rejected": [
+                    {"stage": r["stage"], "reason": r["reason"],
+                     "title": r["candidate"].get("title", "")}
+                    for r in gres.rejected
+                ],
+            }
+            cands = gres.admitted
 
         second = {}
         if arm["prompt_version"] == "v2-secondpass":
@@ -166,6 +195,8 @@ def run_arm(corpus, arm: dict, out_dir: Path, limit: int | None = None,
                "ok": text is not None, "parse_ok": parse_ok,
                "n_candidates": len(cands), "candidates": cands,
                "finish_reason": finish, "ms": ms}
+        if gate_rec is not None:
+            rec["admission"] = gate_rec
         rec.update(second)
         (out_dir / "outputs" / f"{slc.name}.json").write_text(
             json.dumps(rec, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -187,6 +218,14 @@ def run_arm(corpus, arm: dict, out_dir: Path, limit: int | None = None,
         "total_ms": sum(r["ms"] for r in records),
         "records": records,
     }
+    if admission_gate is not None:
+        summary["gate"] = {
+            "admitted": sum(r["n_candidates"] for r in records),
+            "idle_skipped": sum(
+                1 for r in records if (r.get("admission") or {}).get("idle_skipped")),
+            "rejected": sum(
+                len((r.get("admission") or {}).get("rejected", [])) for r in records),
+        }
     if arm["prompt_version"] == "v2-secondpass":
         summary["second_pass"] = {
             "pass2_raw": sum(r.get("pass2_raw", 0) for r in records),
