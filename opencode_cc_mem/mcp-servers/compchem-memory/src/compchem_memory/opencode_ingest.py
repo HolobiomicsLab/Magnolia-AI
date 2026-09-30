@@ -358,6 +358,26 @@ def ingest_opencode_sessions(
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
+
+        # Admission gate (distill-admission plan R1-R4): when
+        # MAGNOLIA_ADMISSION_GATE is enabled, candidates pass through the
+        # idle-gate/dup-kill/judge pipeline before any staging write.
+        _admit_on = False
+        if kept:
+            try:
+                from compchem_memory.admission import admission_enabled
+                _admit_on = admission_enabled()
+            except ImportError:
+                _admit_on = False
+        if kept and _admit_on:
+            try:
+                from compchem_memory.admission import AdmissionGate
+                _gate = AdmissionGate(store)
+                _gres = _gate.admit(kept, transcript=transcript, session=sid)
+                kept = _gres.admitted
+            except Exception as e:  # noqa: BLE001 - gate failure never blocks distillation
+                print(f"[admission] gate error (fail-open): {e}")
+
         for c in kept:
             saved.append(_save_candidate(store, c, sid))
 
