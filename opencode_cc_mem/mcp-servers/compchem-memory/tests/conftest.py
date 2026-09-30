@@ -79,9 +79,9 @@ def _redirect_default_capture_dir(monkeypatch, tmp_path):
 
     real_notices = _capture._attach_distill_notices
 
-    def notices_redirected(result, project_dir):
+    def notices_redirected(result, project_dir, tool_name=""):
         if str(project_dir) in (".", ""):
             project_dir = str(tmp_path)
-        return real_notices(result, project_dir)
+        return real_notices(result, project_dir, tool_name)
 
     monkeypatch.setattr(_capture, "_attach_distill_notices", notices_redirected)

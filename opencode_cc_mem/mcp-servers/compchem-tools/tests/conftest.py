@@ -29,7 +29,7 @@ def _no_capture_writes(monkeypatch):
 
     monkeypatch.setattr(_capture, "get_session_manager", lambda *a, **k: None)
     monkeypatch.setattr(
-        _capture, "_attach_distill_notices", lambda result, project_dir: result
+        _capture, "_attach_distill_notices", lambda result, project_dir, tool_name="": result
     )
 
 
