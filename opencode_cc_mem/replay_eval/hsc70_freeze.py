@@ -188,7 +188,45 @@ def mapping_sessions(store: Path) -> list[dict]:
             sid = f.stem
             if sid and sid not in seen:
                 seen[sid] = {"ts": "0000", "sid": sid}  # sort: unknown ts first
+    # v3: DB-window recovery — sessions that PRODUCED store entries dated
+    # before the mapping era (2026-06-10). Time tags on entry filenames match
+    # to session windows in the opencode DB.
+    try:
+        seen.update(_pre_mapping_db_sids(store))
+    except Exception as e:  # noqa: BLE001
+        print(f"[v3] DB recovery skipped: {e}")
     return sorted(seen.values(), key=lambda m: m["ts"])
+
+
+def _pre_mapping_db_sids(store: Path) -> dict[str, dict]:
+    db = Path.home() / ".local/share/opencode/opencode.db"
+    con = sqlite3.connect(str(db))
+    cols = [r[1] for r in con.execute("PRAGMA table_info(session)")]
+    tcol = next(c for c in cols if "time" in c.lower() or "created" in c.lower())
+    rows = list(con.execute(f"SELECT id, {tcol} FROM session ORDER BY {tcol}"))
+    con.close()
+    sess = []
+    for sid, t in rows:
+        ts = datetime.fromtimestamp((t or 0) / 1000 if t and t > 10**12 else (t or 0),
+                                    tz=timezone.utc)
+        sess.append((sid, ts))
+    out: dict[str, dict] = {}
+    for sub in ("entries", "staging"):
+        for f in (store / sub).glob("*.md"):
+            m = re.match(r"(\d{8})_(\d{6})_", f.name)
+            if not m:
+                continue
+            ets = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S").replace(
+                tzinfo=timezone.utc)
+            if ets >= datetime(2026, 6, 10, tzinfo=timezone.utc):
+                continue  # mapping era — already covered
+            for i, (sid, st) in enumerate(sess):
+                nxt = sess[i + 1][1] if i + 1 < len(sess) else None
+                if st <= ets and (nxt is None or ets < nxt):
+                    if sid not in out:
+                        out[sid] = {"ts": st.isoformat(), "sid": sid}
+                    break
+    return out
 
 
 def freeze_corpus() -> int:
@@ -457,7 +495,7 @@ def finalize_corpus() -> int:
     )
     (CORPUS_DIR / "manifest.yaml").write_text(
         "frozen: true\n"
-        "corpus_version: 2\n"
+        "corpus_version: 3\n"
         "capture_version: export-1.18.33-whole-session\n"
         f"changes:\n  - version: 1\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
         "    reason: initial freeze of hsc70_new session transcripts for the "
@@ -466,7 +504,11 @@ def finalize_corpus() -> int:
         f"  - version: 2\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
         "    reason: add 7 pre-mapping sessions recovered from distill "
         "markers (mapping starts 2026-06-10; workhorse-label sessions were "
-        "missing, causing bake-off run 1 fidelity/recall FAIL)\n",
+        "missing, causing bake-off run 1 fidelity/recall FAIL)\n"
+        f"  - version: 3\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
+        "    reason: time-tag recovery — sessions that PRODUCED pre-mapping "
+        "store entries, matched by entry-timestamp to DB session windows "
+        "(run-2 recall 3/36 root cause: 17/36 workhorse-producers absent)\n",
         encoding="utf-8",
     )
     print(f"finalized {len(entries)} slices into extraction_gold/")
