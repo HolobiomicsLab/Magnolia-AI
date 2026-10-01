@@ -477,38 +477,58 @@ def finalize_corpus() -> int:
     gold.mkdir(parents=True, exist_ok=True)
     manifest = json.loads((CORPUS_DIR / "manifest.json").read_text(encoding="utf-8"))
     entries = []
+    SLICE_CHARS = 20000  # production cursor-slice median (hsc70: 19.6k, O-sizes entry)
     for s in manifest["sessions"]:
         if "sha256_transcript" not in s:
             continue
-        src = CORPUS_DIR / "transcripts" / f"{s['sid']}.txt"
-        shutil.copyfile(src, gold / f"{s['sid']}.txt")
-        entries.append({
-            "name": s["sid"],
-            "project": "hsc70_new",
-            "session": s["sid"],
-            "capture_version": "export-1.18.33-whole-session",
-            "chars": s["chars"],
-            "clean": s.get("clean", True),
-        })
+        text = (CORPUS_DIR / "transcripts" / f"{s['sid']}.txt").read_text(
+            encoding="utf-8", errors="replace")
+        # v4: chunk to production slice sizes at line boundaries (production
+        # distills ~20k-char cursor slices, not whole sessions; run-1..3
+        # whole-session shape caused hijack/clipping and failed fidelity).
+        chunks, buf = [], ""
+        for line in text.splitlines(keepends=True):
+            if buf and len(buf) + len(line) > SLICE_CHARS:
+                chunks.append(buf)
+                buf = ""
+            buf += line
+        if buf.strip():
+            chunks.append(buf)
+        for k, chunk in enumerate(chunks):
+            name = s["sid"] if len(chunks) == 1 else f"{s['sid']}__k{k}"
+            (gold / f"{name}.txt").write_text(chunk, encoding="utf-8")
+            entries.append({
+                "name": name,
+                "project": "hsc70_new",
+                "session": s["sid"],
+                "capture_version": "export-1.18.33-prodslice20k",
+                "chars": len(chunk),
+                "clean": s.get("clean", True),
+            })
     (CORPUS_DIR / "extraction_gold" / "slices_manifest.json").write_text(
         json.dumps(entries, indent=1), encoding="utf-8"
     )
     (CORPUS_DIR / "manifest.yaml").write_text(
         "frozen: true\n"
-        "corpus_version: 3\n"
-        "capture_version: export-1.18.33-whole-session\n"
+        "corpus_version: 4\n"
+        "capture_version: export-1.18.33-prodslice20k\n"
         f"changes:\n  - version: 1\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
-        "    reason: initial freeze of hsc70_new session transcripts for the "
+        "    reason: 'initial freeze of hsc70_new session transcripts for the "
         "distiller admission bake-off (plan 2026-09-30); one slice per "
-        "session, whole-transcript shape matching production ingest\n"
+        "session, whole-transcript shape matching production ingest'\n"
         f"  - version: 2\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
-        "    reason: add 7 pre-mapping sessions recovered from distill "
+        "    reason: 'add 7 pre-mapping sessions recovered from distill "
         "markers (mapping starts 2026-06-10; workhorse-label sessions were "
-        "missing, causing bake-off run 1 fidelity/recall FAIL)\n"
+        "missing, causing bake-off run 1 fidelity/recall FAIL)'\n"
         f"  - version: 3\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
-        "    reason: time-tag recovery — sessions that PRODUCED pre-mapping "
+        "    reason: 'time-tag recovery — sessions that PRODUCED pre-mapping "
         "store entries, matched by entry-timestamp to DB session windows "
-        "(run-2 recall 3/36 root cause: 17/36 workhorse-producers absent)\n",
+        "(run-2 recall 3/36 root cause — 17/36 workhorse-producers absent)'\n"
+        f"  - version: 4\n    date: {datetime.now(timezone.utc).date().isoformat()}\n"
+        "    reason: 'slice transcripts to production cursor-slice sizes "
+        "(~20k chars): production distills slices, not whole sessions; "
+        "whole-session shape caused truncation and fidelity/recall FAIL "
+        "in runs 1-3 (matches promoted hijack rule)'\n",
         encoding="utf-8",
     )
     print(f"finalized {len(entries)} slices into extraction_gold/")

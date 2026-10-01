@@ -96,8 +96,15 @@ def main() -> int:
     workhorses = cur["workhorses"]
     never = cur["never_surfaced"]
 
-    a1, s1 = load(Path(a.arm1))
-    a2, s2 = load(Path(a.arm2))
+    a1_by_slice, s1 = load(Path(a.arm1))
+    a2_by_slice, s2 = load(Path(a.arm2))
+    # v4 corpus: slice names are <sid> or <sid>__kN — group titles by session
+    def by_sid(d):
+        out: dict[str, list[str]] = {}
+        for name, titles in d.items():
+            out.setdefault(name.split("__")[0], []).extend(titles)
+        return out
+    a1, a2 = by_sid(a1_by_slice), by_sid(a2_by_slice)
 
     # 1. Fidelity: Arm-1 vs historical candidates, same sessions
     hist = historical_titles_by_sid(store)
