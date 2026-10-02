@@ -250,6 +250,8 @@ class ProjectManager:
             except OSError:
                 continue
             meta = self._parse_frontmatter(text)
+            if meta.get("parked"):
+                continue  # R9: parked entries never surface via staging search
             score = _keyword_score(text.lower(), keyword)
             if score == 0:
                 continue
@@ -364,6 +366,8 @@ class ProjectManager:
         for f in list(staging.glob("*.md")):
             text = f.read_text()
             meta = self._parse_frontmatter(text)
+            if meta.get("parked"):
+                continue  # R9: parked entries are auto-confirm-immune (freezer)
             obs = meta.get("observation_count", 0)
             conf = meta.get("confidence", 0.5)
             sessions = meta.get("observed_in_sessions", []) or []

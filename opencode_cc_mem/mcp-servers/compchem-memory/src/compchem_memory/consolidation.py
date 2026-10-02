@@ -101,6 +101,8 @@ def _load_findings(staging_dir: Path, types: tuple[str, ...] = NL_TYPES) -> list
                 except yaml.YAMLError:
                     meta = {}
                 body = parts[2]
+        if meta.get("parked"):
+            continue  # R9: parked entries stay out of the consolidation pool
         if meta.get("type") in types:
             out.append({"id": f.name, "path": str(f), "meta": meta, "body": body.strip()})
     return out
