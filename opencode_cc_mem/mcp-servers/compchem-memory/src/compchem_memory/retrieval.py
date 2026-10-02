@@ -60,9 +60,10 @@ def select_relevant_entries(
 
     # Phase 1: also expose warning-type staging entries as provisional
     # candidates, so a freshly-recorded lesson is recallable before promotion.
+    # R9: parked entries stay out of retrieval entirely.
     staging_warnings = [
         h for h in scan_memory_headers(Path(project_dir) / "staging")
-        if h.get("type") in _WARNING_TYPES
+        if h.get("type") in _WARNING_TYPES and not h.get("parked")
     ]
     for h in staging_warnings:
         h["provisional"] = True

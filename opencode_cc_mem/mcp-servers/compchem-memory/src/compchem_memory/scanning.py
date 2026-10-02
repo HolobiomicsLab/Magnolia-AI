@@ -34,6 +34,7 @@ def scan_memory_headers(directory: Path, max_files: int = 200) -> list[dict[str,
                 "observation_count": meta.get("observation_count", 0),
                 "last_verified": meta.get("last_verified", ""),
                 "date": meta.get("date", meta.get("created", "")),
+                "parked": bool(meta.get("parked", False)),
             }
         )
     return results
