@@ -89,7 +89,14 @@ def _tokens(title: str) -> set[str]:
 
 
 def is_same_claim(a: str, b: str, threshold: float = 0.6) -> bool:
-    """Title-token conjunction, mirroring runner.is_duplicate / second-pass."""
+    """Title-token conjunction, mirroring runner.is_duplicate / second-pass.
+
+    v6 guard: the shared set must contain at least one CONTENT-BEARING token
+    (>= 5 chars). Shared short/generic tokens ("job", "run", "oom") or shared
+    identifiers alone do not make two titles the same claim — the bake-off
+    diagnostic showed workhorses killed on identifier-led conjunctions
+    ("job 614716" pairing unrelated lessons).
+    """
     ta = _tokens(a)
     if not ta:
         return False
@@ -97,7 +104,9 @@ def is_same_claim(a: str, b: str, threshold: float = 0.6) -> bool:
     if not tb:
         return False
     shared = ta & tb
-    return len(shared) >= 2 and len(shared) / min(len(ta), len(tb)) >= threshold
+    if len(shared) < 2 or len(shared) / min(len(ta), len(tb)) < threshold:
+        return False
+    return any(len(t) >= 5 for t in shared)
 
 
 def session_has_signal(transcript: str) -> tuple[bool, list[str]]:
