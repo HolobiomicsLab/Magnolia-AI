@@ -601,6 +601,42 @@ def memory_confirm(
     return proj_m.confirm_staging(pd, entry_name)
 
 
+@mcp.tool()
+@captured(source="compchem-memory")
+def memory_park(
+    entry_name: str,
+    project_dir: str | None = None,
+) -> str:
+    """Park a staging entry: it stays in staging but is excluded from retrieval,
+    staging search, consolidation proposals, auto-promotion, and shortlists.
+
+    Call this when: an entry should be kept as history but must stop surfacing (e.g. literature-derived entries pending a design decision)."""
+    pd = _resolve_project_store(project_dir)
+    proj_m = _get_project_mgr()
+    name = proj_m.set_parked(pd, entry_name, True)
+    if name is None:
+        return json.dumps({"error": f"Staging entry not found: {entry_name}"})
+    return json.dumps({"parked": True, "entry": name})
+
+
+@mcp.tool()
+@captured(source="compchem-memory")
+def memory_unpark(
+    entry_name: str,
+    project_dir: str | None = None,
+) -> str:
+    """Clear the parked flag on a staging entry, re-enabling retrieval,
+    consolidation, auto-promotion, and shortlists for it.
+
+    Call this when: a parked entry should become active knowledge again."""
+    pd = _resolve_project_store(project_dir)
+    proj_m = _get_project_mgr()
+    name = proj_m.set_parked(pd, entry_name, False)
+    if name is None:
+        return json.dumps({"error": f"Staging entry not found: {entry_name}"})
+    return json.dumps({"parked": False, "entry": name})
+
+
 # ── v2 New Tools ─────────────────────────────────────────────────────────────
 
 

@@ -410,6 +410,21 @@ class ProjectManager:
                 return True
         return False
 
+    def set_parked(
+        self, project_dir: str, entry_name: str, parked: bool = True
+    ) -> str | None:
+        """Set or clear the `parked` flag on a staging entry (R9).
+
+        A parked entry stays in staging but is excluded from retrieval,
+        staging search, consolidation, auto-promotion, and shortlists.
+        Returns the entry filename, or None if not found."""
+        staging = self._staging_dir(project_dir)
+        for f in staging.glob("*.md"):
+            if f.name == entry_name or entry_name in f.name or entry_name in f.stem:
+                self._update_entry_frontmatter(f, "parked", parked)
+                return f.name
+        return None
+
     # Common words that carry no topic; ignored when comparing titles.
     _STOPWORDS = frozenset({
         "a", "an", "the", "to", "of", "for", "and", "or", "is", "are", "be",
