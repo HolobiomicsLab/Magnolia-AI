@@ -223,6 +223,12 @@ own plumbing, not a scientific or computational finding, and recording it makes 
 memory learn about itself. (Genuine errors/fixes in the SCIENCE tools — haddock3, p2rank,
 gromacs, xtb, bindcraft, etc. — remain in scope.)
 
+IN SCOPE (do NOT skip these): operational lessons about JOB LIFECYCLE and compute
+tooling — submission errors, output-file collisions, walltime/partition choices, run
+tracking gaps — even when the tool involved is Magnolia's own submit_job or run
+history. The exclusion above covers only the memory system's internal mechanics
+(consolidation, staging, distillation), not the agent's compute workflow.
+
 PRIORITIZE capturing:
 - Scientific findings and RELATIONSHIPS stated or concluded in the conversation
   (e.g. "the contact map shows peptide F2 within 4 Angstrom of Hsc70 R272"),
