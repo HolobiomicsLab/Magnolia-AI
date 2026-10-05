@@ -5,8 +5,11 @@ Sits between extraction and staging-save. Cheap-local stages first:
   Stage 0 (R3, free): idle gate — a session whose transcript shows no error,
   parameter-change, or novel-reference signal never reaches an LLM.
   Stage 1 (R4, free): duplicate kill — a candidate whose title matches a
-  recently-admitted title (token conjunction >= 0.6) is rejected before the
-  pool forms.
+  recently-admitted title, or a sibling kept earlier from the SAME batch
+  (token conjunction >= 0.6), is rejected before the pool forms. The
+  in-batch check exists because `recent` is a pre-batch ledger snapshot:
+  one distiller call emitting two facets of one fact must yield one entry,
+  not a consolidation proposal.
   Stage 2 (R1/R2, one LLM call per slice's survivors): the admission judge.
   R1 admits only checkable operational content (parameter value+replaces+why,
   error symptoms+fix, failure modes, durable target references). R2 rejects
@@ -222,8 +225,13 @@ class AdmissionGate:
                 self._log(now, session, None, "reject", f"idle_no_signal")
                 return res
 
-        # Stage 1 — R4 duplicate kill against recently admitted titles
+        # Stage 1 — R4 duplicate kill against recently admitted titles AND
+        # siblings kept earlier from this batch. `recent` is a snapshot taken
+        # before this call, so without the batch check two same-claim
+        # candidates in one distiller output both pass and become a
+        # consolidation proposal for a merge knowable at write time.
         recent = recent_admitted_titles(self.store)
+        batch_titles: list[str] = []
         pending: list[dict] = []
         for c in candidates or []:
             title = c.get("title", "")
@@ -232,8 +240,16 @@ class AdmissionGate:
                 res.rejected.append(
                     {"candidate": c, "stage": "r4_dup", "reason": f"duplicate of: {dup}"})
                 self._log(now, session, title, "reject", "r4_duplicate")
-            else:
-                pending.append(c)
+                continue
+            twin = next((t for t in batch_titles if is_same_claim(title, t)), None)
+            if twin:
+                res.rejected.append(
+                    {"candidate": c, "stage": "r4_dup_batch",
+                     "reason": f"duplicate of (same batch): {twin}"})
+                self._log(now, session, title, "reject", "r4_duplicate_in_batch")
+                continue
+            pending.append(c)
+            batch_titles.append(title)
         if not pending:
             return res
 
