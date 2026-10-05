@@ -59,6 +59,43 @@ def test_r4_duplicate_kill(tmp_path):
     assert res.rejected[0]["stage"] == "r4_dup"
 
 
+def test_r4_in_batch_twin_kill(tmp_path):
+    # One distiller call emitting two same-claim candidates: the first is
+    # judged, the second must die at Stage 1 against the batch itself — the
+    # ledger snapshot predates the batch and knows nothing of the first twin.
+    keep = "Replay-eval harness approved as acceptance-test substrate"
+    twin = "Replay-eval harness approved as the acceptance-test substrate"
+    g = AdmissionGate(tmp_path, llm_json=_judge(
+        [{"title": keep, "decision": "admit", "reason": "design decision",
+          "class": "reference"}]))
+    res = g.admit([{"title": keep, "content": "x"}, {"title": twin, "content": "y"}],
+                  session="s1")
+    assert [c["title"] for c in res.admitted] == [keep]
+    assert res.rejected[0]["stage"] == "r4_dup_batch"
+    assert "same batch" in res.rejected[0]["reason"]
+    rows = [json.loads(l) for l in (tmp_path / "admission-log.jsonl").read_text().splitlines()]
+    assert any(r["reason"] == "r4_duplicate_in_batch" for r in rows)
+    # the killed twin never enters the admitted-title ledger
+    assert recent_admitted_titles(tmp_path) == [keep]
+
+
+def test_r4_in_batch_twin_never_reaches_judge(tmp_path):
+    calls = []
+
+    def spy(prompt, payload, **kw):
+        calls.append(json.loads(payload))
+        return [{"title": "alpha beta gamma delta", "decision": "admit",
+                 "reason": "ok", "class": "reference"}]
+
+    g = AdmissionGate(tmp_path, llm_json=spy)
+    res = g.admit([{"title": "alpha beta gamma delta", "content": "x"},
+                   {"title": "alpha beta gamma delta epsilon", "content": "y"}],
+                  session="s1")
+    assert len(calls) == 1 and len(calls[0]) == 1  # judge scored only the survivor
+    assert [c["title"] for c in res.admitted] == ["alpha beta gamma delta"]
+    assert res.rejected[0]["stage"] == "r4_dup_batch"
+
+
 def test_judge_admits_and_rejects(tmp_path):
     verdicts = [
         {"title": "keep", "decision": "admit", "reason": "error fix", "class": "error"},
