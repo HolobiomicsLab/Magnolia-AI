@@ -9,6 +9,8 @@ deterministic tool-output keeps the existing lexical dedup.
 """
 
 import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -183,7 +185,9 @@ def consolidate_project_findings(
     """Increment A (proposal-only): cluster a project's natural-language findings,
     compute each cluster's merged preview, and write them to
     `<store>/reflex/consolidation-proposal.json`. Mutates NO staging entries and
-    applies nothing. Returns {"clusters": int, "artifact": str}."""
+    applies nothing — EXCEPT when MAGNOLIA_CONSOLIDATION_AUTO is set, in which
+    case the high-confidence band is applied immediately (see auto_apply_band).
+    Returns {"clusters": int, "artifact": str, "auto_applied": int}."""
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
     entries = _load_findings(store / "staging", types)
@@ -221,7 +225,13 @@ def consolidate_project_findings(
     artifact.write_text(json.dumps(
         {"proposals": proposals, "applied": [], "rejected": rejected,
          "rejected_keys": _serialize_keys(prior_rejected_keys)}, indent=2))
-    return {"clusters": len(proposals), "artifact": str(artifact)}
+    # Auto-band (2026-10-05): with MAGNOLIA_CONSOLIDATION_AUTO set, apply the
+    # high-confidence band right here so the human review only ever sees the
+    # proposals that actually need judgment. Off by default — without the
+    # variable this function stays proposal-only (Increment A contract).
+    auto_applied = auto_apply_band(store_dir).get("applied", 0)
+    return {"clusters": len(proposals), "artifact": str(artifact),
+            "auto_applied": auto_applied}
 
 
 def _cluster_key(sources: list[str]) -> tuple[str, ...]:
@@ -341,6 +351,104 @@ def apply_proposals(
     _persist()
     return {"applied": len(merged_paths), "merged": merged_paths,
             "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
+
+
+# ── Auto-band (2026-10-05) ─────────────────────────────────────────────────
+# With MAGNOLIA_CONSOLIDATION_AUTO on, pending proposals in the high-confidence
+# band are applied without human review. The band starts at 0.8 — the review
+# file's own glossary line: "same claim, near-duplicate (accepting is safe)".
+# Everything below the band (0.5-0.79 "same topic only", weak groupings) and
+# any cluster containing a durably rejected pair keeps waiting for a human.
+# Off by default: without the variable, nothing changes.
+AUTO_BAND_MIN_CONFIDENCE = 0.8
+AUTO_BAND_DEFAULT_CAP = 5
+
+
+def _env_flag(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def auto_apply_band(store_dir: str) -> dict[str, Any]:
+    """Apply pending proposals in the auto band (see AUTO_BAND_MIN_CONFIDENCE).
+
+    No-op unless MAGNOLIA_CONSOLIDATION_AUTO is set (same accepted values as
+    the admission gate: 1/true/yes/on). At most MAGNOLIA_CONSOLIDATION_AUTO_MAX
+    proposals per call (default AUTO_BAND_DEFAULT_CAP), highest confidence
+    first, so one bad sweep cannot rewrite the whole store. Appends one JSONL
+    receipt row per run to <store>/reflex/consolidation-auto-log.jsonl — the
+    seed of the label store: what was auto-applied, at which confidence, from
+    which sources, so later analysis can audit the band. Applies through the
+    same apply_proposals path as human review (identical merges, same versioning
+    commits). Never raises."""
+    try:
+        if not _env_flag("MAGNOLIA_CONSOLIDATION_AUTO"):
+            return {"applied": 0, "merged": [], "skipped_reason": "disabled"}
+        store = Path(store_dir)
+        artifact = store / "reflex" / "consolidation-proposal.json"
+        if not artifact.exists():
+            return {"applied": 0, "merged": [], "skipped_reason": "no_artifact"}
+        data = json.loads(artifact.read_text())
+        proposals = data.get("proposals", [])
+        pending = _pending_indices(data)
+        try:
+            cap = int(os.environ.get(
+                "MAGNOLIA_CONSOLIDATION_AUTO_MAX", AUTO_BAND_DEFAULT_CAP))
+        except ValueError:
+            cap = AUTO_BAND_DEFAULT_CAP
+        cap = max(cap, 0)
+
+        conf_by_index: dict[int, float] = {}
+        for i in pending:
+            try:
+                conf = float(proposals[i].get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                conf = 0.0
+            if conf >= AUTO_BAND_MIN_CONFIDENCE:
+                conf_by_index[i] = conf
+        # Highest confidence first; ties resolved by artifact order (index).
+        chosen = sorted(conf_by_index, key=lambda i: (-conf_by_index[i], i))[:cap]
+        if not chosen:
+            return {"applied": 0, "merged": [], "skipped_reason": "none_in_band"}
+
+        res = apply_proposals(store_dir, accepted=chosen)
+        receipt = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "auto": True,
+            "requested": chosen,
+            "applied": res["applied"],
+            "merged": res["merged"],
+            "dismissed": res["dismissed"],
+            "failed": res["failed"],
+            "candidates": [{"index": i,
+                            "confidence": conf_by_index[i],
+                            "sources": [Path(s).name
+                                        for s in proposals[i].get("sources", [])]}
+                           for i in chosen],
+        }
+        with open(store / "reflex" / "consolidation-auto-log.jsonl", "a") as f:
+            f.write(json.dumps(receipt) + "\n")
+        # Surface the auto-action: a store rewrite the user never saw is the
+        # failure mode this project distrusts. The notice rides the existing
+        # .distill-notices queue (latched — identical repeats don't pile up).
+        try:
+            from compchem_memory import distill_log
+            n = res["applied"]
+            if n:
+                distill_log.push_distill_notice(
+                    str(store.parent),
+                    f"auto-band applied {n} proposal(s): "
+                    + "; ".join(Path(m).name for m in res["merged"]),
+                    f"Auto-merged {n} high-confidence duplicate set(s) "
+                    f"(>= {AUTO_BAND_MIN_CONFIDENCE}); details in "
+                    "reflex/consolidation-auto-log.jsonl — nothing needs your "
+                    "action, this is the heads-up.")
+        except Exception:
+            pass
+        return res
+    except Exception as e:  # noqa: BLE001 - auto-band must never break the sweep
+        print(f"[consolidation] auto-band skipped: {e}")
+        return {"applied": 0, "merged": [], "failed": [], "error": str(e)}
 
 
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
