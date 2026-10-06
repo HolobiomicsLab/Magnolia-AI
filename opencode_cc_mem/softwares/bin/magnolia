@@ -69,12 +69,14 @@ Options:
   --opencode-v2    Launch the opencode v2 binary (pinned at
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
-                   (~/.local/share/opencode/opencode-v2.db). v2 must never
-                   open the shared v1 DB: gate-1 (2026-10-06) showed v2
-                   restructures it (adds session_v2/kv/worktree, drops v1
-                   tables). Config rendering for v2 (mcp.servers shape) is
-                   NOT implemented yet — v2 sessions launch without the
-                   memory MCP servers until that lands.
+                   (~/.local/share/opencode/opencode-v2.db) and its OWN
+                   compchem-tools daemon port (8012). v2 must never open the
+                   shared v1 DB: gate-1 (2026-10-06) showed v2 restructures
+                   it. Config is rendered in v2 shape (mcp.servers,
+                   permissions rules; plugins/instructions dropped — v1
+                   plugin code does not run under v2 until the dual-shape
+                   port lands, and v2 never loads `instructions`, so
+                   boot-context injection waits for the plugin port).
   --print-env      Debug: resolve everything (binary, version, db, project,
                    profile flags), print it, and exit without launching.
   --profile NAME   Apply a named set of experimental switches for this
@@ -350,7 +352,7 @@ render_config() {
     [ "$branch" = "master" ] || default_port=8011
     MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
     MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
-    MAG_PORT="$default_port" \
+    MAG_PORT="${COMPCHEM_TOOLS_PORT:-$default_port}" \
     "$PYTHON_CMD" - <<'PY'
 import json, os, pathlib
 setup = {}
@@ -375,6 +377,48 @@ if mem_on:
     env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
     if setup.get("memory_provider"):
         env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+
+# opencode v2 shape translation (2026-10-06, gate-1 follow-up). Applied ONLY
+# in v2 mode (--opencode-v2): the template stays the single source of truth
+# and v1 renders are byte-identical to before. Mappings per
+# opencode.ai/v2/docs/config + mcp-servers + migrate-v1:
+#   mcp.<name>            -> mcp.servers.<name>; "enabled" inverted to
+#                            "disabled"; scalar timeout -> {startup,catalog,
+#                            execution} object.
+#   "plugin" [...]        -> dropped: v2 auto-discovers .opencode/plugins/,
+#                            and v1 plugin code does not run under v2 (the
+#                            dual-shape port lands separately).
+#   "permission"/"tools"  -> "permissions" ordered rules: external_directory
+#                            allows become edit-allow rules; tools.bash=false
+#                            becomes a shell-deny rule.
+#   "instructions" [...]  -> dropped: v2 accepts the field but never loads it
+#                            (AGENTS.md only). Boot-context/rules injection
+#                            moves to the v2 plugin port (context hook).
+if os.environ.get("MAGNOLIA_OPENCODE_V2") == "1":
+    def _v2_server(s):
+        s = dict(s)
+        if "enabled" in s:
+            s["disabled"] = not s.pop("enabled")
+        if isinstance(s.get("timeout"), int):
+            t = s["timeout"]
+            s["timeout"] = {"startup": t, "catalog": t, "execution": t}
+        return s
+    mcp = cfg.pop("mcp", {})
+    if mcp:
+        cfg["mcp"] = {"servers": {n: _v2_server(s) for n, s in mcp.items()}}
+    cfg.pop("plugin", None)
+    cfg.pop("instructions", None)
+    perms = []
+    ext = (cfg.pop("permission", {}) or {}).get("external_directory", {})
+    for pattern, verdict in ext.items():
+        if verdict == "allow":
+            perms.append({"action": "edit", "resource": pattern, "effect": "allow"})
+    tools = cfg.pop("tools", {}) or {}
+    if tools.get("bash") is False:
+        perms.append({"action": "shell", "resource": "*", "effect": "deny"})
+    if perms:
+        cfg["permissions"] = perms
+
 out = pathlib.Path(os.environ["MAG_CFG"])
 tmp = out.with_name(out.name + ".tmp")
 tmp.write_text(json.dumps(cfg, indent=2) + "\n")
@@ -618,6 +662,10 @@ if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
         mkdir -p "$(dirname "$OPENCODE_DB")"
         export OPENCODE_DB
     fi
+    # v2 worktree gets its OWN daemon port (8012): the branch-based default
+    # gives every non-master tree 8011, which would let a v2 session pin the
+    # exp tree's compchem-tools daemon (the 2026-10-05 MCP-pin race class).
+    export COMPCHEM_TOOLS_PORT="${COMPCHEM_TOOLS_PORT:-8012}"
 fi
 if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
     echo "error: opencode binary not found: $OPENCODE_BIN" >&2
