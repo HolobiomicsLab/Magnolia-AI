@@ -676,11 +676,14 @@ apply_profile() {
     esac
     # Export only the variables that are actually set — plain mode must not
     # inject empty strings into the server environ (the /proc/PID/environ
-    # checks key on these names).
+    # checks key on these names). if-form, not `&&`: under set -e a failing
+    # trailing test would kill the whole launch (observed 2026-10-06).
     local v
     for v in MAGNOLIA_ADMISSION_GATE MAGNOLIA_CONSOLIDATION_AUTO \
              MAGNOLIA_AUTO_CONFIRM MAGNOLIA_RETIREMENT; do
-        [ -n "${!v:-}" ] && export "$v"
+        if [ -n "${!v:-}" ]; then
+            export "$v"
+        fi
     done
 }
 
