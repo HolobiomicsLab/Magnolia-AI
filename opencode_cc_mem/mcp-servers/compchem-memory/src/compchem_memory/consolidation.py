@@ -8,6 +8,7 @@ new knowledge), human-confirm (Increment B). Scoped to natural-language types;
 deterministic tool-output keeps the existing lexical dedup.
 """
 
+import functools
 import json
 import os
 from datetime import datetime, timezone
@@ -199,7 +200,39 @@ def _log_suppressed(store: Path, suppressed: list[dict[str, Any]], floor: float)
         print(f"[consolidation] suppressed-log skipped: {e}")
 
 
-def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _cluster_system() -> str:
+    """The judge's system prompt: the hardened base plus optional flag-gated
+    clauses (each switch exists so its effect can be measured independently)."""
+    s = _CLUSTER_SYSTEM
+    if _env_flag("MAGNOLIA_CONSOLIDATION_SIBLING"):
+        # Stage-2 sibling-dedup (speculative, 2026-10-06): same-session restatements
+        # of one claim must cluster instead of becoming queue twins. Validation
+        # against live same-batch twins is pending the soak's evidence.
+        s += (" Entries recorded in the SAME session that restate the same claim "
+              "are siblings: group them — the same-claim rule applies unchanged.")
+    return s
+
+
+def _seed_hint(entries: list[dict[str, Any]],
+               rejected_keys: set[tuple[str, ...]], cap: int = 20) -> str:
+    """'Never group' context distilled from durably rejected pairs, so the judge
+    does not re-propose a rejected grouping in a different batch order. Only
+    pairs whose members are present in this sweep's entries are listed; capped
+    to keep the prompt bounded. Empty when nothing applies."""
+    id2title = {e["id"]: (e["meta"].get("title") or e["id"]) for e in entries}
+    lines: list[str] = []
+    for k in sorted(rejected_keys):
+        titles = [id2title[i] for i in k if i in id2title]
+        if len(titles) >= 2 and len(lines) < cap:
+            lines.append(f"- Never group '{titles[0]}' with '{titles[1]}'.")
+    if not lines:
+        return ""
+    return ("\n\nA human previously REJECTED grouping these pairs (do not propose "
+            "them again, in any combination):\n" + "\n".join(lines))
+
+
+def _default_clusterer(payload: list[dict[str, Any]],
+                       reject_hint: str = "") -> list[dict[str, Any]]:
     """LLM clusterer: group findings that assert the SAME claim about the SAME
     system. Conservative — never group merely-related items. Processes the
     payload in small title-sorted batches so a reasoning model's budget is not
@@ -211,8 +244,8 @@ def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
     clusters: list[dict[str, Any]] = []
     for i in range(0, len(items), _CLUSTER_BATCH):
         batch = items[i:i + _CLUSTER_BATCH]
-        result = call_llm_json(_CLUSTER_SYSTEM, json.dumps(batch), max_tokens=4000,
-                               temperature=0, disable_thinking=True)
+        result = call_llm_json(_cluster_system() + reject_hint, json.dumps(batch),
+                               max_tokens=4000, temperature=0, disable_thinking=True)
         if isinstance(result, dict):
             # `or []` guards against {"clusters": null} — valid JSON the LLM could emit.
             clusters.extend(c for c in (result.get("clusters") or []) if isinstance(c, dict))
@@ -238,6 +271,14 @@ def consolidate_project_findings(
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
     entries = _load_findings(store / "staging", types)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    # Read prior rejections BEFORE clustering: they both seed the judge (below,
+    # MAGNOLIA_CONSOLIDATION_SEED) and durably auto-reject re-proposals (below).
+    prior_rejected_keys = _prior_rejected_keys(artifact)
+    if clusterer is _default_clusterer and _env_flag("MAGNOLIA_CONSOLIDATION_SEED"):
+        seed = _seed_hint(entries, prior_rejected_keys)
+        if seed:
+            clusterer = functools.partial(_default_clusterer, reject_hint=seed)
     clusters = cluster_findings(entries, clusterer)
 
     proposals = []
@@ -271,8 +312,8 @@ def consolidate_project_findings(
     # scheme carried them just one sweep deep, so a rejected pair re-appeared
     # every other batch). A new proposal is auto-rejected when it CONTAINS a
     # previously rejected pair. (Applied merges removed their sources, so they
-    # cannot recur — applied resets to [].)
-    prior_rejected_keys = _prior_rejected_keys(artifact)
+    # cannot recur — applied resets to [].) prior_rejected_keys was read before
+    # clustering (seed + reject share the same snapshot).
     rejected = [i for i, p in enumerate(proposals)
                 if _contains_rejected_pair(p["sources"], prior_rejected_keys)]
     artifact.write_text(json.dumps(
@@ -351,7 +392,7 @@ def _append_labels(store: Path, rows: list[dict[str, Any]]) -> None:
 
 def apply_proposals(
     store_dir: str, accepted: list[int], reject: list[int] | None = None,
-    via: str = "human",
+    via: str = "human", evidence: str = "",
 ) -> dict[str, Any]:
     """Apply the accepted proposal indices via apply_merge and record `reject`ed
     indices as durably handled (so they stop re-surfacing). A proposal whose
@@ -397,6 +438,7 @@ def apply_proposals(
             "rationale": p.get("rationale", ""),
             "sources": sorted(Path(s).name for s in p.get("sources", [])),
             **({"merged": Path(merged).name} if merged else {}),
+            **({"evidence": evidence} if evidence else {}),
         }
 
     label_rows: list[dict[str, Any]] = []
@@ -566,7 +608,8 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
         if not chosen:
             return {"applied": 0, "merged": [], "skipped_reason": "none_in_band"}
 
-        res = apply_proposals(store_dir, accepted=chosen, via="auto")
+        res = apply_proposals(store_dir, accepted=chosen, via="auto",
+                              evidence=f"auto-band >= {AUTO_BAND_MIN_CONFIDENCE}")
         receipt = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "auto": True,
