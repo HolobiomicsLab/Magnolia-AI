@@ -665,7 +665,10 @@ if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
     # v2 worktree gets its OWN daemon port (8012): the branch-based default
     # gives every non-master tree 8011, which would let a v2 session pin the
     # exp tree's compchem-tools daemon (the 2026-10-05 MCP-pin race class).
-    export COMPCHEM_TOOLS_PORT="${COMPCHEM_TOOLS_PORT:-8012}"
+    # FORCE it (dedicated override var): an inherited COMPCHEM_TOOLS_PORT
+    # (e.g. 8011 exported by another tree's daemon into a shell) must not
+    # bleed a v2 session onto the wrong daemon.
+    export COMPCHEM_TOOLS_PORT="${MAGNOLIA_V2_PORT:-8012}"
 fi
 if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
     echo "error: opencode binary not found: $OPENCODE_BIN" >&2
