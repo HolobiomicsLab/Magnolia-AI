@@ -1,6 +1,7 @@
 """Project tier: durable, human-readable notes scoped to a project directory."""
 
 import difflib
+import os
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -502,6 +503,24 @@ class ProjectManager:
             if w not in self._STOPWORDS and len(w) > 1 and not w.isdigit()
         }
 
+    @staticmethod
+    def _prose_numbers_enabled() -> bool:
+        """Prose-number fix switch (MAGNOLIA_PROSE_NUMBERS, default off —
+        shipped dormant so its effect can be A/B-measured)."""
+        return str(os.environ.get("MAGNOLIA_PROSE_NUMBERS", "")).strip().lower() in (
+            "1", "true", "yes", "on")
+
+    @staticmethod
+    def _numeric_tokens(title_lower: str) -> tuple[str, ...]:
+        """Number-bearing tokens of a title IN ORDER (s10000, 42, v2), with
+        date-like tokens (YYYY-MM-DD, bare years) stripped first so dates never
+        count. Ordered, not a set: 'use s10000 not s20000' vs 'use s20000 not
+        s10000' are opposite claims the order exposes."""
+        text = re.sub(r"\d{4}-\d{2}-\d{2}", " ", title_lower)
+        text = re.sub(r"\b(?:19|20)\d{2}\b", " ", text)
+        return tuple(w for w in re.findall(r"[a-z0-9_]+", text)
+                     if any(ch.isdigit() for ch in w))
+
     def find_similar_staging(
         self,
         project_dir: str,
@@ -537,6 +556,17 @@ class ProjectManager:
                 continue
             existing_title = meta.get("title", "").lower()
             ratio = difflib.SequenceMatcher(None, title_lower, existing_title).ratio()
+            # Prose-number veto (MAGNOLIA_PROSE_NUMBERS): titles that differ in
+            # their numbers (or their order) state different claims — "use
+            # s10000 not s20000" vs the reverse must never bump each other.
+            # Ordered comparison errs toward NOT matching; a false split only
+            # creates a separate entry that consolidation can merge later.
+            # Dates never veto (stripped).
+            if self._prose_numbers_enabled():
+                nums_new = self._numeric_tokens(title_lower)
+                nums_old = self._numeric_tokens(existing_title)
+                if nums_new and nums_old and nums_new != nums_old:
+                    continue
             # Count only meaningful shared words — common stopwords like "to"/
             # "before" carry no topic and must not, on their own, force a match.
             shared_title_words = title_words & self._significant_words(existing_title)
