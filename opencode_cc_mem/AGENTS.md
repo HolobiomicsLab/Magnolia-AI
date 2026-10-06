@@ -194,6 +194,18 @@ explicit confirmation. Each auto-merge leaves a receipt row in
 `reflex/consolidation-auto-log.jsonl` and a notice on the usual queue; surface
 it, don't repeat the review for what the gate already applied.
 
+### Dormant switches (default OFF — activate at a phase gate, one at a time)
+
+Each switch exists so its effect can be measured against a baseline before it
+becomes doctrine. Check the server environ (`/proc/PID/environ`), not shell vars.
+
+- `MAGNOLIA_CONSOLIDATION_AUTO` — auto-merges the >=0.8 proposal band (above).
+- `MAGNOLIA_AUTO_CONFIRM` — auto-promotes staging entries observed in >=3 sessions; title-clash candidates held for review.
+- `MAGNOLIA_RETIREMENT` — moves never-proved staging entries to `.magnolia/retired/` (exposure rule, velocity-capped, receipted).
+- `MAGNOLIA_CONSOLIDATION_SEED` / `MAGNOLIA_CONSOLIDATION_SIBLING` — judge-prompt additions: rejected-pair seeding / same-session sibling grouping.
+- `MAGNOLIA_PROSE_NUMBERS` — detector treats titles differing in their numbers as different claims (stops wrong bumps).
+- `MAGNOLIA_CONSOLIDATION_FLOOR` (default 0.65, live) — generation floor: sub-floor clusters go to `suppressed-proposals.jsonl`, not the human queue.
+
 ### Consolidation review format (mandatory)
 
 Never make the user ask what a proposal means. For each proposal:
