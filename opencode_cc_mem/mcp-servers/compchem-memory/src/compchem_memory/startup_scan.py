@@ -153,6 +153,13 @@ def _maybe_consolidate(store: Path) -> None:
     try:
         if not is_llm_available():
             return
+        # Front-of-sweep pre-clean: with MAGNOLIA_CONSOLIDATION_AUTO set, clear
+        # the safe band from an EXISTING queue before the pending-review guard —
+        # otherwise high-confidence duplicates pile up behind an untouched human
+        # review. Without the variable this call returns "disabled" immediately,
+        # so the guard below still fully controls regeneration and [i] stability.
+        from compchem_memory.consolidation import auto_apply_band
+        auto_apply_band(str(store))
         if _has_pending_review(store / "reflex" / "consolidation-proposal.json"):
             return  # don't regenerate while a review is pending — keeps [i] stable
         from compchem_memory.consolidation import _load_findings, consolidate_project_findings
