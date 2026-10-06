@@ -4,6 +4,7 @@ src/compchem_memory/admission.py
 src/compchem_memory/analyze_injections.py
 src/compchem_memory/atomic_io.py
 src/compchem_memory/audit.py
+src/compchem_memory/backfill.py
 src/compchem_memory/boot_context.py
 src/compchem_memory/canary.py
 src/compchem_memory/capture.py
@@ -28,6 +29,7 @@ src/compchem_memory/recall.py
 src/compchem_memory/receipts.py
 src/compchem_memory/reflections.py
 src/compchem_memory/reflex_common.py
+src/compchem_memory/retirement.py
 src/compchem_memory/retrieval.py
 src/compchem_memory/runid.py
 src/compchem_memory/scanning.py
@@ -57,6 +59,8 @@ tests/test_assess_run_id_resolution.py
 tests/test_atomic_io.py
 tests/test_atomic_record_run.py
 tests/test_audit.py
+tests/test_auto_confirm.py
+tests/test_backfill.py
 tests/test_backups_pruning.py
 tests/test_boot_context.py
 tests/test_boot_once_guard.py
@@ -65,10 +69,15 @@ tests/test_capture_decorator.py
 tests/test_capture_fidelity.py
 tests/test_consolidation.py
 tests/test_consolidation_apply.py
+tests/test_consolidation_auto.py
+tests/test_consolidation_floor.py
+tests/test_consolidation_labels.py
+tests/test_consolidation_seed.py
 tests/test_consolidation_surfacing.py
 tests/test_consolidation_wiring.py
 tests/test_cybernetics_regression.py
 tests/test_dedup_bump.py
+tests/test_detector_prose_numbers.py
 tests/test_distill_admission.py
 tests/test_distill_log.py
 tests/test_distill_session_tool.py
@@ -106,6 +115,7 @@ tests/test_receipts.py
 tests/test_receipts_archive.py
 tests/test_reflections.py
 tests/test_reflex_common.py
+tests/test_retirement.py
 tests/test_retrieval_readonly.py
 tests/test_run_upsert.py
 tests/test_runid.py

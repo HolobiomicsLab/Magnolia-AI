@@ -80,13 +80,45 @@ def _is_memory_plumbing_tool(name: str) -> bool:
     return n.startswith("memory_") or n.startswith("compchem-memory_")
 
 
+def _looks_like_v2_export(export: dict) -> bool:
+    """True when the export came from opencode v2's `session export`.
+
+    v2 serializes flat messages {id, text, time, type(user|assistant)} — no
+    info.role and no parts (gate-1, 2026-10-06: v1 messages[]
+    {info:{role}, parts:[...]}). Detection: at least one message carries a
+    'type' field and none carries 'parts'."""
+    msgs = export.get("messages") or []
+    if not msgs or not all(isinstance(m, dict) for m in msgs):
+        return False
+    return any("type" in m for m in msgs) and not any("parts" in m for m in msgs)
+
+
+def _reconstruct_v2(export: dict) -> str:
+    """v2 flat export: role from `type`, content from `text`.
+
+    v2 exports carry NO parts and NO tool outputs (gate-1: the tool_chars
+    evidence channel has no data under v2 export; tool evidence moves to the
+    in-process API/plugin capture). Empty-text messages (tool-only turns) are
+    skipped rather than rendered as bare role headers."""
+    lines: list[str] = []
+    for m in export.get("messages", []) or []:
+        role = str(m.get("type") or "?").upper()
+        txt = (m.get("text") or "").strip()
+        if txt:
+            lines.append(f"{role}: {txt}")
+    return "\n\n".join(lines)
+
+
 def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) -> str:
     """Build an ordered text transcript from `opencode export` JSON.
 
-    Export shape: {info, messages:[{info:{role}, parts:[{type,text}]}]}; tool
-    parts carry their result at state.output (state.error on failure).
+    v1 export shape: {info, messages:[{info:{role}, parts:[{type,text}]}]};
+    tool parts carry their result at state.output (state.error on failure).
     Keeps user/assistant text and assistant reasoning (the scientific content);
     tool parts are noted briefly.
+
+    v2 export shape (detected automatically): flat messages
+    {id, text, time, type} — see _reconstruct_v2; tool_chars does not apply.
 
     Tool RESULTS are excluded by default. Setting tool_chars > 0 (or env
     MAGNOLIA_TRANSCRIPT_TOOL_CHARS, read at call time) includes up to that many
@@ -98,6 +130,8 @@ def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) ->
     """
     if tool_chars is None:
         tool_chars = _tool_chars_from_env()
+    if _looks_like_v2_export(export):
+        return _reconstruct_v2(export)
     lines: list[str] = []
     for m in export.get("messages", []) or []:
         role = ((m.get("info") or {}).get("role") or "?").upper()
