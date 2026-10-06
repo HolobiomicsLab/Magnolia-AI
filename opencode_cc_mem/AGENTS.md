@@ -198,6 +198,9 @@ it, don't repeat the review for what the gate already applied.
 
 Each switch exists so its effect can be measured against a baseline before it
 becomes doctrine. Check the server environ (`/proc/PID/environ`), not shell vars.
+Launcher shortcut: `magnolia --profile soak <project>` / `--profile full` set
+the canonical combinations (see `magnolia --help`); the effective set prints at
+every launch.
 
 - `MAGNOLIA_CONSOLIDATION_AUTO` — auto-merges the >=0.8 proposal band (above).
 - `MAGNOLIA_AUTO_CONFIRM` — auto-promotes staging entries observed in >=3 sessions; title-clash candidates held for review.
