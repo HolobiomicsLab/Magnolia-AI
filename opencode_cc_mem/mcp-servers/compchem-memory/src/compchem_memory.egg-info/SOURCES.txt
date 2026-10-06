@@ -1,5 +1,6 @@
 pyproject.toml
 src/compchem_memory/__init__.py
+src/compchem_memory/admission.py
 src/compchem_memory/analyze_injections.py
 src/compchem_memory/atomic_io.py
 src/compchem_memory/audit.py
@@ -50,6 +51,7 @@ src/compchem_memory/learning/orchestrator.py
 src/compchem_memory/tiers/__init__.py
 src/compchem_memory/tiers/project.py
 src/compchem_memory/tiers/session.py
+tests/test_admission.py
 tests/test_analyze_injections.py
 tests/test_assess_run_id_resolution.py
 tests/test_atomic_io.py
@@ -67,6 +69,7 @@ tests/test_consolidation_surfacing.py
 tests/test_consolidation_wiring.py
 tests/test_cybernetics_regression.py
 tests/test_dedup_bump.py
+tests/test_distill_admission.py
 tests/test_distill_log.py
 tests/test_distill_session_tool.py
 tests/test_distill_session_tool_dialogue.py
@@ -89,6 +92,7 @@ tests/test_notebook.py
 tests/test_opencode_ingest.py
 tests/test_opencode_ingest_incremental.py
 tests/test_orchestrator.py
+tests/test_park.py
 tests/test_post_run_assess_parity.py
 tests/test_project_extensions.py
 tests/test_project_guard.py
@@ -105,6 +109,7 @@ tests/test_reflex_common.py
 tests/test_retrieval_readonly.py
 tests/test_run_upsert.py
 tests/test_runid.py
+tests/test_second_pass.py
 tests/test_session_manager_v2.py
 tests/test_similar_runs.py
 tests/test_skill_tier_retired.py
