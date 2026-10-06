@@ -6,6 +6,7 @@ path cannot — no `opencode` binary, no LLM, or no captured session mapping.
 """
 
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     _maybe_consolidate(store)
     _surface_pending_consolidation(project_dir, store)
     _maybe_promote(store)
+    _maybe_auto_confirm(project_dir, store)
     _surface_pending_promotion(project_dir, store)
     _commit_after_sweep(store, result)
     return result
@@ -168,6 +170,42 @@ def _maybe_consolidate(store: Path) -> None:
         consolidate_project_findings(str(store))
     except Exception as e:  # noqa: BLE001 - consolidation must never break the sweep
         print(f"[consolidation] skipped: {e}")
+
+
+def _maybe_auto_confirm(project_dir: str, store: Path) -> None:
+    """R7 auto-confirm sweep step. No-op unless MAGNOLIA_AUTO_CONFIRM is set
+    (default off — build ships dormant, activation changes store composition).
+    Promotes staging entries corroborated in >=3 distinct sessions; candidates
+    whose title matches an existing project entry are HELD and flagged instead
+    of promoting a possible contradiction (stop-and-flag conflict queue). The
+    shortlist always rides the .distill-notices queue: an auto-confirm is a
+    store rewrite the user never saw, so it must be visible. Never raises."""
+    try:
+        if str(os.environ.get("MAGNOLIA_AUTO_CONFIRM", "")).strip().lower() not in (
+                "1", "true", "yes", "on"):
+            return
+        from compchem_memory.tiers.project import ProjectManager
+        res = ProjectManager(Path.home() / ".magnolia").auto_confirm_staging(project_dir)
+        n_promoted, n_conflicts = len(res["promoted"]), len(res["conflicts"])
+        if not n_promoted and not n_conflicts:
+            return
+        from compchem_memory import distill_log
+        parts = []
+        if n_promoted:
+            parts.append(f"Auto-confirmed {n_promoted} entry(ies) "
+                         f"(observed in 3+ sessions): "
+                         + "; ".join(res["promoted"][:8]))
+        if n_conflicts:
+            parts.append(f"HELD {n_conflicts} conflicting candidate(s) "
+                         "(title matches an existing project entry — needs "
+                         "your judgment): " + "; ".join(res["conflicts"][:8]))
+        distill_log.push_distill_notice(
+            project_dir,
+            "Auto-confirm moved staging entries to the durable project tier; "
+            "held conflicts need review via memory_confirm.",
+            " | ".join(parts))
+    except Exception as e:  # noqa: BLE001 - auto-confirm must never break the sweep
+        print(f"[auto-confirm] skipped: {e}")
 
 
 def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
