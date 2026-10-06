@@ -66,6 +66,17 @@ Setup (two-step, run once):
                    opencode.json on every launch.
 
 Options:
+  --opencode-v2    Launch the opencode v2 binary (pinned at
+                   ~/.local/share/magnolia-v2/bin/opencode, override with
+                   MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
+                   (~/.local/share/opencode/opencode-v2.db). v2 must never
+                   open the shared v1 DB: gate-1 (2026-10-06) showed v2
+                   restructures it (adds session_v2/kv/worktree, drops v1
+                   tables). Config rendering for v2 (mcp.servers shape) is
+                   NOT implemented yet — v2 sessions launch without the
+                   memory MCP servers until that lands.
+  --print-env      Debug: resolve everything (binary, version, db, project,
+                   profile flags), print it, and exit without launching.
   --profile NAME   Apply a named set of experimental switches for this
                    launch — one word instead of five env variables. Each
                    launch carries only what its profile set; nothing persists.
@@ -538,15 +549,19 @@ if [ "${1:-}" = "memory" ]; then
     esac
 fi
 
-# Parse flags (--profile NAME, --critic, setup) plus the single project positional.
+# Parse flags (--profile NAME, --opencode-v2, --print-env, --critic, setup)
+# plus the single project positional.
 CRITIC=0
 SETUP=0
 PROFILE=""
 PROJECT=""
+PRINT_ENV=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --critic) CRITIC=1 ;;
         setup) SETUP=1 ;;
+        --opencode-v2) export MAGNOLIA_OPENCODE_V2=1 ;;
+        --print-env) PRINT_ENV=1 ;;
         -h|--help) usage; exit 0 ;;
         --profile)
             shift
@@ -585,8 +600,27 @@ if [ ! -f "$TEMPLATE" ]; then
     exit 1
 fi
 
-if ! command -v opencode >/dev/null 2>&1; then
-    echo "error: 'opencode' not found in PATH" >&2
+# opencode binary + database selection (2026-10-06). --opencode-v2 /
+# MAGNOLIA_OPENCODE_V2=1 pins the v2 binary AND its own database: gate-1
+# (2026-10-06) showed that v2 opening the shared default opencode.db
+# restructures it (adds session_v2/kv/worktree, drops v1 tables) — v1 and v2
+# must never share a DB file. Override with OPENCODE_DB=/path at any time.
+OPENCODE_BIN="opencode"
+if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
+    V2_BIN="${MAGNOLIA_OPENCODE_V2_BIN:-$HOME/.local/share/magnolia-v2/bin/opencode}"
+    if [ ! -x "$V2_BIN" ]; then
+        echo "error: v2 binary not found at $V2_BIN (set MAGNOLIA_OPENCODE_V2_BIN)" >&2
+        exit 1
+    fi
+    OPENCODE_BIN="$V2_BIN"
+    if [ -z "${OPENCODE_DB:-}" ]; then
+        OPENCODE_DB="$HOME/.local/share/opencode/opencode-v2.db"
+        mkdir -p "$(dirname "$OPENCODE_DB")"
+        export OPENCODE_DB
+    fi
+fi
+if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
+    echo "error: opencode binary not found: $OPENCODE_BIN" >&2
     exit 1
 fi
 
@@ -676,11 +710,14 @@ apply_profile() {
     esac
     # Export only the variables that are actually set — plain mode must not
     # inject empty strings into the server environ (the /proc/PID/environ
-    # checks key on these names).
+    # checks key on these names). if-form, not `&&`: under set -e a failing
+    # trailing test would kill the whole launch (observed 2026-10-06).
     local v
     for v in MAGNOLIA_ADMISSION_GATE MAGNOLIA_CONSOLIDATION_AUTO \
              MAGNOLIA_AUTO_CONFIRM MAGNOLIA_RETIREMENT; do
-        [ -n "${!v:-}" ] && export "$v"
+        if [ -n "${!v:-}" ]; then
+            export "$v"
+        fi
     done
 }
 
@@ -701,6 +738,15 @@ flags_banner() {
 
 apply_profile "$PROFILE"
 flags_banner
+OPENCODE_VERSION="$("$OPENCODE_BIN" --version 2>/dev/null | head -1)"
+echo "opencode: ${OPENCODE_VERSION:-unknown}  db: ${OPENCODE_DB:-default (v1 shared)}" >&2
+if [ "${PRINT_ENV:-0}" = "1" ]; then
+    echo "binary:  $OPENCODE_BIN"
+    echo "db:      ${OPENCODE_DB:-/home/tjiang/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
+    echo "project: $PROJECT -> $MAGNOLIA_PROJECT_DIR"
+    echo "profile: ${PROFILE:-plain}"
+    exit 0
+fi
 
 # Exempt Kimi from the HTTP proxy when one is set. With a Clash/FlClash proxy
 # (HTTPS_PROXY=127.0.0.1:7890), Kimi's auth/api traffic is forced through it
