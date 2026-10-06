@@ -229,6 +229,13 @@ tracking gaps — even when the tool involved is Magnolia's own submit_job or ru
 history. The exclusion above covers only the memory system's internal mechanics
 (consolidation, staging, distillation), not the agent's compute workflow.
 
+ANTI-OVERCORRECTION (read before returning an empty list): a completed run with
+its key numbers (protocol, score, clusters, output location) is NOT "routine
+status" — it is exactly a scientific_finding or success_pattern. A transcript
+that contains one small but complete learning is a valid input: extract that one
+entry. Return an empty array ONLY when the transcript has no technical content
+at all (pure greetings, chit-chat, or memory-system plumbing).
+
 PRIORITIZE capturing:
 - Scientific findings and RELATIONSHIPS stated or concluded in the conversation
   (e.g. "the contact map shows peptide F2 within 4 Angstrom of Hsc70 R272"),
