@@ -151,9 +151,52 @@ _CLUSTER_SYSTEM = (
     "the SAME claim about the SAME system. Do NOT group entries that merely "
     "share a topic or differ in any material detail (different peptide, metric, "
     "residue, or conclusion). Most entries will be singletons. "
+    "Before grouping a pair, ask: if these entries were merged into one, would "
+    "any information be lost? If yes, do NOT group them. Return FEWER, "
+    "higher-certainty clusters rather than more speculative ones — an EMPTY "
+    "clusters list is a valid and common answer. Set confidence to your honest "
+    "certainty that the entries assert the same claim; never inflate it. "
     'Return JSON: {"clusters": [{"ids": [...], "confidence": 0.0-1.0, '
     '"rationale": "one line"}]}. Only include clusters with 2+ ids.'
 )
+
+# Generation-time floor (2026-10-06, volume tuning): clusters the judge scores
+# below this never become pending proposals — they are appended to
+# reflex/suppressed-proposals.jsonl instead. Measured on live batches, the
+# judge emitted 54.5% weak-band (0.5-0.79 "same topic only") groupings, which
+# the human then rejects one by one; the floor cuts that inflow at the source
+# while the side log keeps the strictness improvement measurable. The human
+# review queue only ever holds clusters at or above the floor.
+PROPOSAL_FLOOR_DEFAULT = 0.65
+
+
+def _proposal_floor() -> float:
+    try:
+        return float(os.environ.get(
+            "MAGNOLIA_CONSOLIDATION_FLOOR", PROPOSAL_FLOOR_DEFAULT))
+    except (TypeError, ValueError):
+        return PROPOSAL_FLOOR_DEFAULT
+
+
+def _log_suppressed(store: Path, suppressed: list[dict[str, Any]], floor: float) -> None:
+    """Append sub-floor clusters to the side log (measurement, not review).
+    Never raises — suppression bookkeeping must not break proposal generation."""
+    if not suppressed:
+        return
+    try:
+        artifact = store / "reflex" / "suppressed-proposals.jsonl"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        with open(artifact, "a") as f:
+            for p in suppressed:
+                f.write(json.dumps({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "confidence": p["confidence"],
+                    "floor": floor,
+                    "rationale": p["rationale"],
+                    "sources": [Path(s).name for s in p["sources"]],
+                }) + "\n")
+    except Exception as e:  # noqa: BLE001 - side log must never break the sweep
+        print(f"[consolidation] suppressed-log skipped: {e}")
 
 
 def _default_clusterer(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -187,7 +230,11 @@ def consolidate_project_findings(
     `<store>/reflex/consolidation-proposal.json`. Mutates NO staging entries and
     applies nothing — EXCEPT when MAGNOLIA_CONSOLIDATION_AUTO is set, in which
     case the high-confidence band is applied immediately (see auto_apply_band).
-    Returns {"clusters": int, "artifact": str, "auto_applied": int}."""
+    Clusters below the generation-time floor (PROPOSAL_FLOOR_DEFAULT,
+    MAGNOLIA_CONSOLIDATION_FLOOR override) never reach the queue; they are
+    appended to reflex/suppressed-proposals.jsonl so strictness stays measurable.
+    Returns {"clusters": int, "suppressed": int, "artifact": str,
+    "auto_applied": int}."""
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
     entries = _load_findings(store / "staging", types)
@@ -208,6 +255,12 @@ def consolidate_project_findings(
                 "body": preview["body"],
             },
         })
+
+    # Volume-tuning floor: sub-floor clusters go to the side log, not the queue.
+    floor = _proposal_floor()
+    suppressed = [p for p in proposals if p["confidence"] < floor]
+    _log_suppressed(store, suppressed, floor)
+    proposals = [p for p in proposals if p["confidence"] >= floor]
 
     artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
@@ -230,8 +283,8 @@ def consolidate_project_findings(
     # proposals that actually need judgment. Off by default — without the
     # variable this function stays proposal-only (Increment A contract).
     auto_applied = auto_apply_band(store_dir).get("applied", 0)
-    return {"clusters": len(proposals), "artifact": str(artifact),
-            "auto_applied": auto_applied}
+    return {"clusters": len(proposals), "suppressed": len(suppressed),
+            "artifact": str(artifact), "auto_applied": auto_applied}
 
 
 def _cluster_key(sources: list[str]) -> tuple[str, ...]:
@@ -275,8 +328,30 @@ def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
     return keys
 
 
+def _current_session(store: Path) -> str:
+    try:
+        return (store / ".current-session-id").read_text().strip()
+    except OSError:
+        return ""
+
+
+def _append_labels(store: Path, rows: list[dict[str, Any]]) -> None:
+    """Append human/auto verdict rows to reflex/labels.jsonl (the label store:
+    ground truth for bake-off arms and future retirement tuning). Never raises —
+    labels are bookkeeping and must not break the review→apply path."""
+    if not rows:
+        return
+    try:
+        with open(store / "reflex" / "labels.jsonl", "a") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+    except Exception as e:  # noqa: BLE001 - labels must never break apply
+        print(f"[consolidation] label-log skipped: {e}")
+
+
 def apply_proposals(
-    store_dir: str, accepted: list[int], reject: list[int] | None = None
+    store_dir: str, accepted: list[int], reject: list[int] | None = None,
+    via: str = "human",
 ) -> dict[str, Any]:
     """Apply the accepted proposal indices via apply_merge and record `reject`ed
     indices as durably handled (so they stop re-surfacing). A proposal whose
@@ -286,8 +361,9 @@ def apply_proposals(
     artifact and persists it AFTER EACH handled proposal, so a later failure
     can't lose earlier marks. A merge that raises is recorded in `failed` and
     never aborts the batch. Unknown / out-of-range / already-handled indices are
-    ignored. Returns {"applied": int, "merged": [...], "dismissed": [...],
-    "rejected": int, "failed": [...]}."""
+    ignored. `via` marks who decided ("human" review or "auto" band) and lands
+    in the label store row. Returns {"applied": int, "merged": [...],
+    "dismissed": [...], "rejected": int, "failed": [...]}."""
     store = Path(store_dir)
     artifact = store / "reflex" / "consolidation-proposal.json"
     if not artifact.exists():
@@ -309,6 +385,21 @@ def apply_proposals(
         data["rejected_keys"] = _serialize_keys(rejected_keys)
         artifact.write_text(json.dumps(data, indent=2))
 
+    def _label(verdict: str, p: dict[str, Any], key: tuple[str, ...],
+               merged: str | None = None) -> dict[str, Any]:
+        return {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": verdict,
+            "via": via,
+            "session": _current_session(store),
+            "cluster_key": list(key),
+            "confidence": p.get("confidence"),
+            "rationale": p.get("rationale", ""),
+            "sources": sorted(Path(s).name for s in p.get("sources", [])),
+            **({"merged": Path(merged).name} if merged else {}),
+        }
+
+    label_rows: list[dict[str, Any]] = []
     rejected_count = 0
     for i in reject or []:
         if (isinstance(i, int) and 0 <= i < len(proposals)
@@ -317,6 +408,7 @@ def apply_proposals(
             key = _cluster_key(proposals[i].get("sources", []))
             if len(key) >= 2:
                 rejected_keys.add(key)
+            label_rows.append(_label("reject", proposals[i], key))
             rejected_count += 1
 
     merged_paths: list[str] = []
@@ -331,6 +423,9 @@ def apply_proposals(
         except Exception as e:  # noqa: BLE001 - one bad merge must not abort the batch
             print(f"[consolidation] apply failed for proposal {i}: {e}")
             failed.append(i)
+            label_rows.append(_label(
+                "error", proposals[i],
+                _cluster_key(proposals[i].get("sources", []))))
             continue
         if res["skipped"]:
             # Stale cluster: fewer than two sources survive on disk (the entries
@@ -342,15 +437,75 @@ def apply_proposals(
             if len(key) >= 2:
                 rejected_keys.add(key)
             dismissed.append(i)
+            label_rows.append(_label("dismiss_stale", proposals[i], key))
             _persist()
         else:
             merged_paths.append(res["merged"])
             already.add(i)
+            label_rows.append(_label(
+                "accept", proposals[i],
+                _cluster_key(proposals[i].get("sources", [])),
+                merged=res["merged"]))
             _persist()  # incremental: earlier marks survive a later failure
 
     _persist()
+    _append_labels(store, label_rows)
     return {"applied": len(merged_paths), "merged": merged_paths,
             "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
+
+
+def backfill_labels(store_dir: str) -> dict[str, Any]:
+    """One-time import of proposals handled BEFORE the label store existed into
+    reflex/labels.jsonl. Reads the artifact's applied/rejected/dismissed marks;
+    applied indices that appear in an auto-band receipt are labelled via="auto",
+    all others via="human". Content-key idempotent: cluster keys already present
+    in the label store are skipped, so re-running is safe. Backfilled rows carry
+    "backfilled": true and ts = import time (the original decision time is not
+    recorded in the artifact). Returns {"written": int, "skipped": int}."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return {"written": 0, "skipped": 0}
+    data = json.loads(artifact.read_text())
+    proposals = data.get("proposals", [])
+    try:
+        existing = {tuple(sorted(r["cluster_key"])) for r in
+                    (json.loads(l) for l in
+                     (store / "reflex" / "labels.jsonl").read_text().splitlines())
+                    if r.get("cluster_key")}
+    except (OSError, json.JSONDecodeError):
+        existing = set()
+    auto_idx: set[int] = set()
+    try:
+        for line in (store / "reflex" / "consolidation-auto-log.jsonl").read_text().splitlines():
+            auto_idx.update(json.loads(line).get("requested", []))
+    except (OSError, json.JSONDecodeError):
+        pass
+    verdicts = ([(i, "accept") for i in data.get("applied", [])]
+                + [(i, "reject") for i in data.get("rejected", [])]
+                + [(i, "dismiss_stale") for i in data.get("dismissed", [])])
+    rows: list[dict[str, Any]] = []
+    for i, verdict in verdicts:
+        if not (isinstance(i, int) and 0 <= i < len(proposals)):
+            continue
+        p = proposals[i]
+        key = _cluster_key(p.get("sources", []))
+        if key in existing:
+            continue
+        existing.add(key)
+        rows.append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": verdict,
+            "via": "auto" if i in auto_idx else "human",
+            "session": _current_session(store),
+            "cluster_key": list(key),
+            "confidence": p.get("confidence"),
+            "rationale": p.get("rationale", ""),
+            "sources": sorted(Path(s).name for s in p.get("sources", [])),
+            "backfilled": True,
+        })
+    _append_labels(store, rows)
+    return {"written": len(rows), "skipped": len(verdicts) - len(rows)}
 
 
 # ── Auto-band (2026-10-05) ─────────────────────────────────────────────────
@@ -411,7 +566,7 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
         if not chosen:
             return {"applied": 0, "merged": [], "skipped_reason": "none_in_band"}
 
-        res = apply_proposals(store_dir, accepted=chosen)
+        res = apply_proposals(store_dir, accepted=chosen, via="auto")
         receipt = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "auto": True,
