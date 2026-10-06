@@ -309,6 +309,11 @@ def memory_get_context(
 
     Call this when: starting a new task. First action in every session."""
     pd = _resolve_project_store(project_dir)
+    # Exposure ledger (retirement v2, 2026-10-06): one memory_get_context call
+    # is one retrieval opportunity for every staging entry — the "fair chance"
+    # counter retirement eligibility is measured against. Pure write-side log.
+    from compchem_memory.retirement import record_opportunity
+    record_opportunity(pd)
     result = assemble_context(
         task_description=task_description,
         project_dir=pd,
@@ -903,21 +908,24 @@ def memory_review_consolidation(project_dir: str | None = None) -> str:
 
 @mcp.tool()
 def memory_apply_consolidation(
-    accept: list[int], reject: list[int] | None = None, project_dir: str | None = None
+    accept: list[int], reject: list[int] | None = None, project_dir: str | None = None,
+    evidence: str = "",
 ) -> str:
     """Apply the accepted consolidation proposals (by index): merge each cluster's
     duplicate findings into one entry, then commit to the versioning repo
     (reversible via git). `reject` durably dismisses proposals so they stop
     re-surfacing. A proposal whose sources no longer exist (stale) is durably
     dismissed automatically. The magnolia-review/ dir is removed once every
-    proposal has been handled (accepted, rejected, or dismissed).
+    proposal has been handled (accepted, rejected, or dismissed). `evidence`
+    (optional) records WHY the user decided this, into the label store.
 
     Call this after the user confirms which proposals to accept/reject. Pass the
     accepted indices in `accept` and the explicitly-rejected ones in `reject`."""
     from compchem_memory import consolidation
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
-    result = consolidation.apply_proposals(str(store), accept, reject=reject)
+    result = consolidation.apply_proposals(str(store), accept, reject=reject,
+                                           evidence=evidence)
     if result["applied"]:
         _safe_version_commit(store, f"consolidate: {result['applied']} merge(s)")
     artifact = store / "reflex" / "consolidation-proposal.json"
