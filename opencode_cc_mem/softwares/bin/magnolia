@@ -48,7 +48,7 @@ MAGNOLIA_SUBDIRS=(entries staging runs sessions queue archive backups session-no
 
 usage() {
     cat <<EOF
-Usage: magnolia [setup] [--critic] <project>
+Usage: magnolia [--profile NAME] [setup] [--critic] <project>
        magnolia memory set <model> [--provider P]
        magnolia memory status
 
@@ -66,14 +66,51 @@ Setup (two-step, run once):
                    opencode.json on every launch.
 
 Options:
-  --critic  Enable the flag-only claim-vs-action critic for this session.
-            An independent judge LLM flags report claims not backed by the
-            tools actually run; verdicts are logged to
-            <project>/.magnolia/claim-critic/ and shown as toasts. Changes nothing.
+  --profile NAME   Apply a named set of experimental switches for this
+                   launch — one word instead of five env variables. Each
+                   launch carries only what its profile set; nothing persists.
+                     plain (default)  Baseline: every dormant switch off.
+                     soak             Measurement week: ADMISSION_GATE=1
+                                      (distill admission gate, writes
+                                      admission-log.jsonl) +
+                                      CONSOLIDATION_AUTO=1 (auto-band merges
+                                      >=0.8-confidence duplicate proposals,
+                                      max 5/sweep, receipted in
+                                      reflex/consolidation-auto-log.jsonl).
+                     full             soak + AUTO_CONFIRM=1 (staging entries
+                                      observed in >=3 sessions promote to the
+                                      project tier automatically; title-clash
+                                      candidates are held for review) +
+                                      RETIREMENT=1 (never-proved staging
+                                      entries move to .magnolia/retired/,
+                                      velocity-capped, receipted).
+                   A profile never overrides a variable you set yourself:
+                   MAGNOLIA_RETIREMENT=0 magnolia --profile full xiulian
+                   still launches with retirement off. ALLOW_NONMASTER is
+                   NOT part of any profile — pass it yourself when the tree
+                   is not master.
+  --critic         Enable the flag-only claim-vs-action critic for this
+                   session. An independent judge LLM flags report claims not
+                   backed by the tools actually run; verdicts are logged to
+                   <project>/.magnolia/claim-critic/ and shown as toasts.
+                   Changes nothing.
+
+Experimental switches reference (per-launch env vars; canonical list lives in
+AGENTS.md "Dormant switches" — the effective set is printed at every launch):
+  MAGNOLIA_ADMISSION_GATE=1         admission gate on            [soak]
+  MAGNOLIA_CONSOLIDATION_AUTO=1     auto-band >=0.8 merges      [soak]
+  MAGNOLIA_AUTO_CONFIRM=1           obs>=3 auto-promote         [full]
+  MAGNOLIA_RETIREMENT=1             exposure-rule retirement    [full]
+  MAGNOLIA_CONSOLIDATION_FLOOR=0.65 proposal floor (default 0.65, always live)
+  MAGNOLIA_PROSE_NUMBERS=1          numbers-differ titles never match each other
+  MAGNOLIA_CONSOLIDATION_SEED=1     judge prompt seeded with rejected pairs
+  MAGNOLIA_CONSOLIDATION_SIBLING=1  judge prompt: same-session siblings group
 
 Examples:
   magnolia setup hsc70_peptides
   magnolia hsc70_peptides
+  magnolia --profile soak xiulian
+  magnolia --profile full xiulian
   magnolia memory set deepseek-flash
   magnolia --critic hsc70_peptides
 
@@ -501,24 +538,35 @@ if [ "${1:-}" = "memory" ]; then
     esac
 fi
 
-# Parse flags (--critic, setup) plus the single project positional.
+# Parse flags (--profile NAME, --critic, setup) plus the single project positional.
 CRITIC=0
 SETUP=0
+PROFILE=""
 PROJECT=""
-for arg in "$@"; do
-    case "$arg" in
+while [ "$#" -gt 0 ]; do
+    case "$1" in
         --critic) CRITIC=1 ;;
         setup) SETUP=1 ;;
         -h|--help) usage; exit 0 ;;
-        --*) echo "error: unknown option '$arg'" >&2; echo >&2; usage >&2; exit 1 ;;
+        --profile)
+            shift
+            if [ -z "${1:-}" ]; then
+                echo "error: --profile requires a name (plain|soak|full)" >&2
+                exit 1
+            fi
+            PROFILE="$1"
+            ;;
+        --profile=*) PROFILE="${1#--profile=}" ;;
+        --*) echo "error: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
             if [ -n "$PROJECT" ]; then
                 echo "error: expected exactly one project argument" >&2
                 echo >&2; usage >&2; exit 1
             fi
-            PROJECT="$arg"
+            PROJECT="$1"
             ;;
     esac
+    shift
 done
 
 if [ -z "$PROJECT" ]; then
@@ -602,6 +650,57 @@ if [ "$CRITIC" = "1" ]; then
     export MAGNOLIA_CRITIC=1
     echo "claim-critic enabled (flag-only): verdicts → projects/$PROJECT/.magnolia/claim-critic/" >&2
 fi
+
+# Experimental-switch profiles (2026-10-06): one word instead of five env
+# variables. A profile only FILLS unset variables — a value the caller set
+# always wins, so `MAGNOLIA_RETIREMENT=0 magnolia --profile full x` keeps
+# retirement off. ALLOW_NONMASTER is deliberately not a profile member (it is
+# a per-tree safety bypass, not a feature switch).
+apply_profile() {
+    case "$1" in
+        ""|plain) ;;
+        soak)
+            : "${MAGNOLIA_ADMISSION_GATE:=1}"
+            : "${MAGNOLIA_CONSOLIDATION_AUTO:=1}"
+            ;;
+        full)
+            : "${MAGNOLIA_ADMISSION_GATE:=1}"
+            : "${MAGNOLIA_CONSOLIDATION_AUTO:=1}"
+            : "${MAGNOLIA_AUTO_CONFIRM:=1}"
+            : "${MAGNOLIA_RETIREMENT:=1}"
+            ;;
+        *)
+            echo "error: unknown profile '$1' (plain|soak|full)" >&2
+            exit 1
+            ;;
+    esac
+    # Export only the variables that are actually set — plain mode must not
+    # inject empty strings into the server environ (the /proc/PID/environ
+    # checks key on these names).
+    local v
+    for v in MAGNOLIA_ADMISSION_GATE MAGNOLIA_CONSOLIDATION_AUTO \
+             MAGNOLIA_AUTO_CONFIRM MAGNOLIA_RETIREMENT; do
+        [ -n "${!v:-}" ] && export "$v"
+    done
+}
+
+_onoff() {
+    case "${!1:-}" in
+        1|true|yes|on) echo "on" ;;
+        *) echo "off" ;;
+    esac
+}
+
+flags_banner() {
+    echo "flags: admission=$(_onoff MAGNOLIA_ADMISSION_GATE) " \
+         "auto-band=$(_onoff MAGNOLIA_CONSOLIDATION_AUTO) " \
+         "auto-confirm=$(_onoff MAGNOLIA_AUTO_CONFIRM) " \
+         "retirement=$(_onoff MAGNOLIA_RETIREMENT) " \
+         "floor=${MAGNOLIA_CONSOLIDATION_FLOOR:-0.65}" >&2
+}
+
+apply_profile "$PROFILE"
+flags_banner
 
 # Exempt Kimi from the HTTP proxy when one is set. With a Clash/FlClash proxy
 # (HTTPS_PROXY=127.0.0.1:7890), Kimi's auth/api traffic is forced through it
