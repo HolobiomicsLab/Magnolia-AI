@@ -186,6 +186,14 @@ If `.magnolia/reflex/consolidation-proposal.json` exists with unapplied proposal
 
 Never apply a proposal the user did not confirm.
 
+Exception (2026-10-05): when `MAGNOLIA_CONSOLIDATION_AUTO` is set (same values
+as the admission gate), the server itself auto-applies the high-confidence band
+(confidence ≥ 0.8, capped per sweep) before review — the user has pre-approved
+that band by enabling the variable. Everything below the band still waits for
+explicit confirmation. Each auto-merge leaves a receipt row in
+`reflex/consolidation-auto-log.jsonl` and a notice on the usual queue; surface
+it, don't repeat the review for what the gate already applied.
+
 ### Consolidation review format (mandatory)
 
 Never make the user ask what a proposal means. For each proposal:

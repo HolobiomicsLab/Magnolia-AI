@@ -33,9 +33,24 @@ def append_distill_log(project_dir: str, quote: str, summary: str) -> None:
 
 def push_distill_notice(project_dir: str, quote: str, summary: str) -> None:
     """Append a notice to the .distill-notices queue (JSONL). Drained by the
-    @captured decorator on the next tool call. Never raises."""
+    @captured decorator on the next tool call. Never raises.
+
+    Latch (2026-10-05): an identical (quote, summary) notice already pending
+    in the queue is not appended again. Idle sweeps between tool calls would
+    otherwise pile up duplicate copies that all surface in one drained tool
+    result (observed: 6 identical "cleanup ready" notices in one result).
+    Draining clears the latch — a later identical push surfaces once more."""
     try:
         queue = _magnolia_dir(project_dir) / ".distill-notices"
+        if queue.exists():
+            for line in queue.read_text().splitlines():
+                try:
+                    pending = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (pending.get("quote") == quote
+                        and pending.get("summary") == summary):
+                    return
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "quote": quote,
