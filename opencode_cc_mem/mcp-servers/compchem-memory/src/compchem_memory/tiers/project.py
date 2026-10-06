@@ -380,6 +380,64 @@ class ProjectManager:
                     pass
         return promoted
 
+    def auto_confirm_staging(self, project_dir: str) -> dict[str, list[str]]:
+        """R7 auto-confirm (2026-10-06): promote staging entries corroborated in
+        >=3 distinct sessions (observation_count >= 3). Cross-session
+        corroboration IS the confirm bar; the self-stated confidence field does
+        not block it (the existing auto_promote_staging covers the high-confidence
+        low-obs route). Gated by MAGNOLIA_AUTO_CONFIRM (1/true/yes/on) — default
+        off, nothing changes. Stop-and-flag conflict queue: a candidate whose
+        normalized title matches an existing PROJECT-tier entry is HELD back
+        (returned under "conflicts") instead of promoting a possible contradiction
+        blindly. Parked entries are immune; halts while the distiller canary is
+        frozen (D3). Returns {"promoted": [filenames], "conflicts": [filenames]}."""
+        from compchem_memory import canary
+
+        if canary.is_frozen(project_dir):
+            return {"promoted": [], "conflicts": []}
+        staging = self._staging_dir(project_dir)
+        project_titles = self._normalized_project_titles(project_dir)
+        promoted: list[str] = []
+        conflicts: list[str] = []
+        for f in list(staging.glob("*.md")):
+            meta = self._parse_frontmatter(f.read_text())
+            if meta.get("parked"):
+                continue
+            obs = meta.get("observation_count", 0)
+            sessions = meta.get("observed_in_sessions", []) or []
+            if obs < 3 or len(set(sessions)) < 3:
+                continue
+            if self._title_conflicts(meta.get("title", ""), project_titles):
+                conflicts.append(f.name)
+                continue
+            try:
+                self.confirm_staging(project_dir, f.stem)
+                promoted.append(f.name)
+            except FileNotFoundError:
+                pass
+        return {"promoted": promoted, "conflicts": conflicts}
+
+    @staticmethod
+    def _normalized_title(title: str) -> str:
+        return "".join(ch for ch in (title or "").lower() if ch.isalnum())
+
+    def _normalized_project_titles(self, project_dir: str) -> set[str]:
+        titles: set[str] = set()
+        entries = self._entries_dir(project_dir)
+        if entries.exists():
+            for f in entries.glob("*.md"):
+                if f.name == "INDEX.md":
+                    continue
+                meta = self._parse_frontmatter(f.read_text())
+                norm = self._normalized_title(meta.get("title", ""))
+                if norm:
+                    titles.add(norm)
+        return titles
+
+    def _title_conflicts(self, title: str, project_titles: set[str]) -> bool:
+        norm = self._normalized_title(title)
+        return bool(norm) and norm in project_titles
+
     def bump_observation_count(
         self,
         project_dir: str,
