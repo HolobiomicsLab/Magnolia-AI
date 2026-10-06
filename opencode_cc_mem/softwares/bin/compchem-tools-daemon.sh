@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Supervisor for the compchem-tools MCP server running as an HTTP daemon
-# (fastmcp streamable-http on 127.0.0.1:8001).
+# (fastmcp streamable-http on 127.0.0.1, per-tree port: master 8001,
+# non-master trees 8011 — see PORT below).
 #
 # Why a daemon instead of opencode-spawned stdio:
 #   opencode aborts tool calls by closing the stdio pipe; the serve-loop
@@ -9,7 +10,8 @@
 #   every compchem-tools tool vanishes for the session. As a remote HTTP
 #   server the process outlives client aborts, and this supervisor restarts
 #   it if it ever does die. opencode.json declares it as
-#   {"type": "remote", "url": "http://127.0.0.1:8001/mcp"}.
+#   {"type": "remote", "url": "http://127.0.0.1:<port>/mcp"} with the port
+#   rendered by the `magnolia` wrapper to match this script's choice.
 #
 # Usage:
 #   compchem-tools-daemon.sh start | stop | status | restart
@@ -28,7 +30,16 @@ set -u
 # subdir paths below would then double up (bug fixed 2026-08-19).
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PY="$ROOT/.venv/bin/python3"
-PORT="${COMPCHEM_TOOLS_PORT:-8001}"
+# Per-tree port (2026-10-05): a single shared 8001 let an exp-worktree launch
+# silently reuse a daemon started by a live-tree session — inheriting that
+# session's baked-in project env (shell telemetry then misrouted across
+# trees). Non-master trees get 8011; master keeps 8001. Must match the
+# render_config() port in the `magnolia` wrapper. COMPCHEM_TOOLS_PORT still
+# overrides for special cases.
+DAEMON_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
+DEFAULT_PORT=8001
+[ "$DAEMON_BRANCH" = "master" ] || DEFAULT_PORT=8011
+PORT="${COMPCHEM_TOOLS_PORT:-$DEFAULT_PORT}"
 HOST="127.0.0.1"
 PROJECT_DIR="${MAGNOLIA_PROJECT_DIR:-projects/communication}"
 LOG_DIR="$ROOT/opencode_cc_mem/logs"

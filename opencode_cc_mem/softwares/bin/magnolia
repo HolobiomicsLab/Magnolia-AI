@@ -292,8 +292,17 @@ PY
 # Echoes "on"/"off" so callers can report the resulting memory state.
 render_config() {
     local project="$1"
+    # Per-tree daemon port — must match compchem-tools-daemon.sh (2026-10-05):
+    # a single shared default port let an exp-worktree session pin the daemon
+    # started by a live-tree session, inheriting that session's project env.
+    # Non-master trees get 8011; master keeps the historical 8001.
+    local branch default_port
+    branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
+    default_port=8001
+    [ "$branch" = "master" ] || default_port=8011
     MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
     MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
+    MAG_PORT="$default_port" \
     "$PYTHON_CMD" - <<'PY'
 import json, os, pathlib
 setup = {}
@@ -308,7 +317,8 @@ cfg = pathlib.Path(os.environ["MAG_TPL"]).read_text()
 cfg = (cfg.replace("@@PROJECT@@", os.environ["MAG_PROJ"])
           .replace("@@MAGNOLIA_ROOT@@", os.environ["MAG_ROOT"])
           .replace("@@PYTHON@@", os.environ["MAG_PY"])
-          .replace("@@MEMORY_ENABLED@@", "true" if mem_on else "false"))
+          .replace("@@MEMORY_ENABLED@@", "true" if mem_on else "false")
+          .replace("@@COMPCHEM_TOOLS_PORT@@", os.environ["MAG_PORT"]))
 cfg = json.loads(cfg)
 if setup.get("main_model"):
     cfg["model"] = setup["main_model"]
@@ -565,8 +575,11 @@ if [ "$MEMORY_STATE" = "off" ]; then
     echo "note: memory is NOT configured — the agent will offer setup when opencode starts." >&2
 fi
 
-# Wrapper argument wins over any pre-set env var.
-export MAGNOLIA_PROJECT_DIR="projects/$PROJECT"
+# Wrapper argument wins over any pre-set env var. Absolute (2026-10-05,
+# consumer audit: magnolia-run, debate.sh, plugins, compchem-memory all
+# accept absolute; the relative form only worked while cwd == opencode_cc_mem
+# and let foreign-tree daemons bake ambiguous paths into their env).
+export MAGNOLIA_PROJECT_DIR="$REPO_ROOT/opencode_cc_mem/projects/$PROJECT"
 
 # Let the capture plugin (and any other opencode plugin) know which project
 # is active. opencode does not pass shell env vars to plugin code; this file

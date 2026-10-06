@@ -17,7 +17,7 @@
   "mcp": {
     "compchem-tools": {
       "type": "remote",
-      "url": "http://127.0.0.1:8001/mcp",
+      "url": "http://127.0.0.1:@@COMPCHEM_TOOLS_PORT@@/mcp",
       "timeout": 660000,
       "enabled": true
     },
