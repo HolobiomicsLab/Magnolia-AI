@@ -45,6 +45,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     _surface_pending_consolidation(project_dir, store)
     _maybe_promote(store)
     _maybe_auto_confirm(project_dir, store)
+    _maybe_retire(project_dir, store)
     _surface_pending_promotion(project_dir, store)
     _commit_after_sweep(store, result)
     return result
@@ -206,6 +207,32 @@ def _maybe_auto_confirm(project_dir: str, store: Path) -> None:
             " | ".join(parts))
     except Exception as e:  # noqa: BLE001 - auto-confirm must never break the sweep
         print(f"[auto-confirm] skipped: {e}")
+
+
+def _maybe_retire(project_dir: str, store: Path) -> None:
+    """Retirement v2 sweep step. No-op unless MAGNOLIA_RETIREMENT is set
+    (default off — ships dormant, activation changes store composition, so it
+    waits for the phase gate). Moves never-proved-useful staging entries to
+    <store>/retired/ under a velocity cap; every action rides the
+    .distill-notices queue. Never raises."""
+    try:
+        if str(os.environ.get("MAGNOLIA_RETIREMENT", "")).strip().lower() not in (
+                "1", "true", "yes", "on"):
+            return
+        from compchem_memory.retirement import retire_eligible
+        res = retire_eligible(project_dir)
+        if not res["retired"]:
+            return
+        from compchem_memory import distill_log
+        distill_log.push_distill_notice(
+            project_dir,
+            "Retirement moved staging entries to .magnolia/retired/ "
+            "(git-reversible); details in reflex/retirement-log.jsonl.",
+            f"Retired {len(res['retired'])} staging entry(ies) "
+            f"({res['candidates']} eligible, cap {res['cap']}): "
+            + "; ".join(res["retired"][:8]))
+    except Exception as e:  # noqa: BLE001 - retirement must never break the sweep
+        print(f"[retirement] skipped: {e}")
 
 
 def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
