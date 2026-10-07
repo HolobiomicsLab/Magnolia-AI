@@ -29,6 +29,16 @@
  * Safe by design: retrieval is READ-ONLY and every failure is swallowed —
  * this plugin must never break a tool call.
  *
+ * DUAL-SHAPE (2026-10-07, probe-verified on 1.18.34 + 2.0.6): plain-object
+ * default export; shared core in makeCore(), v1 server() returns the original
+ * hooks, v2 setup(ctx) registers ctx.tool.hook("execute.before"/"execute.after")
+ * + event-stream session.idle probe (probeApplication reads messages via
+ * ctx.session.context). v1.18.34 also calls setup() with a limited ctx —
+ * guarded. OPEN v2 QUESTION (panel M2): under Code Mode the hook may fire
+ * once for the outer `execute` tool with generated code as input — the
+ * ACTION_TOOLS match may never fire; the v2 smoke decides (fallback:
+ * codemode:false on the compchem servers, or parse the code text).
+ *
  * Toggle: MAGNOLIA_ACTION_RETRIEVE=0|off|false|no disables it.
  * Log: <project>/.magnolia/action-retrieval.jsonl (one line per injection).
  */
@@ -36,8 +46,6 @@ import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { promisify } from "node:util"
-
-import type { Plugin } from "@opencode-ai/plugin"
 
 const execFileP = promisify(execFile)
 
@@ -98,11 +106,38 @@ function argsToQuery(args: any): string {
   return parts.join(" ").slice(0, 400)
 }
 
-export const MagnoliaActionRetrieval: Plugin = async ({ client, directory }) => {
-  if (DISABLED) return {}
+// --- P3 memory-quality telemetry: application probe -------------------------
+// At session.idle, test whether the turn's reply lexically engages the
+// entries injected during that turn. LEXICAL PROXY, not semantic proof:
+// >=2 distinctive tokens (len>=5, from entry titles/paths) present in the
+// reply counts as "applied". Rows are appended to the same ledger with
+// event="application", joined later by (sessionID, callID).
 
-  // Resolve the active project the same way magnolia-auto-retrieval does
-  // (.magnolia/.active-project at the plugin directory root).
+const STOP = new Set(["about", "there", "these", "those", "which", "while",
+  "their", "would", "could", "should", "where", "after", "before", "under",
+  " learning", "memory", "project", "entry", "staging", "magnolia"])
+
+function distinctiveTokens(titles: string[], paths: string[]): string[] {
+  const raw = (titles.join(" ") + " " + paths.join(" "))
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+  const out = new Set<string>()
+  for (const w of raw.split(/\s+/)) {
+    if (w.length >= 5 && !STOP.has(w)) out.add(w)
+  }
+  return [...out]
+}
+
+// Shape-tolerant message accessors (v1 client.session.messages and v2
+// ctx.session.context return the {info:{role}, parts:[...]} family).
+const roleOf = (m: any): string => String(m?.info?.role ?? m?.role ?? "").toLowerCase()
+const partsOf = (m: any): any[] => m?.parts ?? []
+
+/**
+ * Shared core: retrieval pipeline + C1 noise control + logging + P3 probe.
+ * readMessages(sessionID) abstracts the version-specific message API.
+ */
+function makeCore(directory: string, readMessages: (sessionID: string) => Promise<any[]>) {
   let projectDir = ""
   try {
     const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
@@ -184,42 +219,19 @@ export const MagnoliaActionRetrieval: Plugin = async ({ client, directory }) => 
     }
   }
 
-  // --- P3 memory-quality telemetry: application probe -----------------------
-  // At session.idle, test whether the turn's reply lexically engages the
-  // entries injected during that turn. LEXICAL PROXY, not semantic proof:
-  // >=2 distinctive tokens (len>=5, from entry titles/paths) present in the
-  // reply counts as "applied". Rows are appended to the same ledger with
-  // event="application", joined later by (sessionID, callID).
-
-  const STOP = new Set(["about", "there", "these", "those", "which", "while",
-    "their", "would", "could", "should", "where", "after", "before", "under",
-    " learning", "memory", "project", "entry", "staging", "magnolia"])
-
-  function distinctiveTokens(titles: string[], paths: string[]): string[] {
-    const raw = (titles.join(" ") + " " + paths.join(" "))
-      .toLowerCase()
-      .replace(/[^a-z]+/g, " ")
-    const out = new Set<string>()
-    for (const w of raw.split(/\s+/)) {
-      if (w.length >= 5 && !STOP.has(w)) out.add(w)
-    }
-    return [...out]
-  }
-
   async function probeApplication(sessionID: string): Promise<void> {
     const items = injectedTurns.get(sessionID)
     if (!items || items.length === 0) return
     injectedTurns.delete(sessionID)
     try {
-      const resp: any = await client.session.messages({ path: { id: sessionID } })
-      const msgs: any[] = resp?.data ?? resp ?? []
+      const msgs = await readMessages(sessionID)
       if (!Array.isArray(msgs) || msgs.length === 0) return
       let lastUser = -1
-      msgs.forEach((m, i) => { if (m?.info?.role === "user") lastUser = i })
+      msgs.forEach((m, i) => { if (roleOf(m) === "user") lastUser = i })
       const replyParts: string[] = []
       for (const m of msgs.slice(lastUser + 1)) {
-        if (m?.info?.role !== "assistant") continue
-        for (const p of m?.parts ?? []) {
+        if (roleOf(m) !== "assistant") continue
+        for (const p of partsOf(m)) {
           if (p?.type === "text" && !p?.synthetic && p?.text) replyParts.push(p.text)
         }
       }
@@ -241,123 +253,203 @@ export const MagnoliaActionRetrieval: Plugin = async ({ client, directory }) => 
     } catch { /* never throw into opencode */ }
   }
 
-  return {
-    event: async (input: any) => {
-      try {
-        if (input?.event?.type === "session.idle") {
-          const sid = input?.event?.properties?.sessionID
-          if (sid) await probeApplication(String(sid))
-        }
-      } catch { /* never throw into opencode */ }
-    },
-    "tool.execute.before": async (input: any, output: any) => {
-      try {
-        const tool = String(input?.tool ?? "")
-        if (!ACTION_TOOLS.has(tool) || !input?.callID) return
-        if (pending.size > 100) {
-          const oldest = pending.keys().next().value
-          if (oldest) pending.delete(oldest)
-        }
-        pending.set(
-          input.callID,
-          retrieve(shortTool(tool) + " " + argsToQuery(output?.args)),
-        )
-      } catch { /* never throw into opencode */ }
-    },
-
-    "tool.execute.after": async (input: any, output: any) => {
-      try {
-        const callID = input?.callID
-        const sessionID = String(input?.sessionID ?? "")
-        const tool = String(input?.tool ?? "")
-        touchSession(sessionID)
-        const prom = pending.get(callID)
-        pending.delete(callID)
-        if (!prom || typeof output?.output !== "string") return
-        const res = await prom
-
-        // D1 coarse outcome marker (heuristic: keyword scan of the result head;
-        // a precise application link needs the callID join against the session log).
-        const outText = output.output
-        const outcome = /\b(error|failed|traceback|exception)\b/i.test(outText.slice(0, 400))
-          ? "error?"
-          : "ok"
-        const logCall = (injected: number) =>
-          log({ sessionID, tool, callID, outcome, injected })
-
-        if (!res || res.lines.length === 0) { logCall(0); return }
-
-        // C1: relevance floor — query-match score only; confidence must never
-        // substitute for relevance.
-        const all = res.lines
-          .map((l) => { try { return JSON.parse(l) } catch { return null } })
-          .filter((h): h is any => !!h && typeof h.path === "string")
-          .filter((h) => (h.score ?? 0) >= MIN_SCORE)
-
-        // C1: per-entry latch — the same entry at most twice per session.
-        const latch = entryLatch.get(sessionID) ?? new Map<string, number>()
-        entryLatch.set(sessionID, latch)
-        const fresh = all.filter((h) => (latch.get(h.path) ?? 0) < MAX_PER_ENTRY_PER_SESSION)
-
-        // C1: per-session budget.
-        const used = sessionInjections.get(sessionID) ?? 0
-        if (fresh.length === 0) { logSkip(sessionID, tool, callID, "latch"); logCall(0); return }
-        if (used >= MAX_INJECTIONS_PER_SESSION) {
-          logSkip(sessionID, tool, callID, "budget")
-          logCall(0)
-          return
-        }
-
-        const hits = fresh.slice(0, MAX_HITS)
-        const bullet = (h: any) => {
-          const badge = [h.tier, h.type].filter(Boolean).join("/")
-          const prov = h.provisional ? " [unconfirmed]" : ""
-          const gist = String(h.gist ?? "").slice(0, 200)
-          return `- [${badge}${prov}] ${h.title} — ${gist}\n  ${h.path}`
-        }
-        const block =
-          `\n[Magnolia · action-memory] ${hits.length} past learning(s) matched this ` +
-          `action (tool: ${shortTool(tool)}). Scan these BEFORE trusting defaults — ` +
-          `one may hold the exact pitfall or parameter for this step:\n` +
-          hits.map(bullet).join("\n") +
-          `\n(read-only auto-injection; opt out MAGNOLIA_ACTION_RETRIEVE=0)\n\n`
-
-        output.output = block + output.output
-        sessionInjections.set(sessionID, used + 1)
-        for (const h of hits) latch.set(h.path, (latch.get(h.path) ?? 0) + 1)
-        logCall(hits.length)
-        log({
-          sessionID,
-          tool,
-          callID,
-          ms: res.ms,
-          hits: hits.length,
-          titles: hits.map((h) => h.title).slice(0, 4),
-          entries: hits.map((h) => ({
-            path: h.path,
-            tier: h.tier,
-            score: h.score,
-            confidence: h.confidence,
-            provisional: !!h.provisional,
-          })),
-        })
-        // P3 telemetry: remember this injection so the session.idle probe can
-        // test whether the turn's reply actually used it.
-        if (injectedTurns.size > 40) {
-          const oldest = injectedTurns.keys().next().value
-          if (oldest) injectedTurns.delete(oldest)
-        }
-        const turnItems = injectedTurns.get(sessionID) ?? []
-        turnItems.push({
-          callID: String(callID),
-          tool,
-          titles: hits.map((h) => String(h.title ?? "")),
-          paths: hits.map((h) => String(h.path ?? "")),
-        })
-        injectedTurns.set(sessionID, turnItems)
-      } catch { /* never throw into opencode */ }
-    },
+  /** Kick off retrieval for an instrumented call (tool.execute.before). */
+  function onBefore(tool: string, callID: unknown, args: any): void {
+    if (!ACTION_TOOLS.has(tool) || !callID) return
+    if (pending.size > 100) {
+      const oldest = pending.keys().next().value
+      if (oldest) pending.delete(oldest)
+    }
+    pending.set(
+      String(callID),
+      retrieve(shortTool(tool) + " " + argsToQuery(args)),
+    )
   }
+
+  /**
+   * Inject the ranked block ahead of the tool result (tool.execute.after).
+   * getOutput/setOutput abstract the version-specific result surface.
+   */
+  async function onAfter(
+    tool: string, callID: unknown, sessionID: string, outputText: string | undefined,
+    setOutput: (text: string) => void,
+  ): Promise<void> {
+    touchSession(sessionID)
+    const prom = pending.get(String(callID))
+    pending.delete(String(callID))
+    if (!prom || typeof outputText !== "string") return
+    const res = await prom
+
+    // D1 coarse outcome marker (heuristic: keyword scan of the result head).
+    const outcome = /\b(error|failed|traceback|exception)\b/i.test(outputText.slice(0, 400))
+      ? "error?"
+      : "ok"
+    const logCall = (injected: number) =>
+      log({ sessionID, tool, callID, outcome, injected })
+
+    if (!res || res.lines.length === 0) { logCall(0); return }
+
+    // C1: relevance floor — query-match score only.
+    const all = res.lines
+      .map((l) => { try { return JSON.parse(l) } catch { return null } })
+      .filter((h): h is any => !!h && typeof h.path === "string")
+      .filter((h) => (h.score ?? 0) >= MIN_SCORE)
+
+    // C1: per-entry latch — the same entry at most twice per session.
+    const latch = entryLatch.get(sessionID) ?? new Map<string, number>()
+    entryLatch.set(sessionID, latch)
+    const fresh = all.filter((h) => (latch.get(h.path) ?? 0) < MAX_PER_ENTRY_PER_SESSION)
+
+    // C1: per-session budget.
+    const used = sessionInjections.get(sessionID) ?? 0
+    if (fresh.length === 0) { logSkip(sessionID, tool, callID, "latch"); logCall(0); return }
+    if (used >= MAX_INJECTIONS_PER_SESSION) {
+      logSkip(sessionID, tool, callID, "budget")
+      logCall(0)
+      return
+    }
+
+    const hits = fresh.slice(0, MAX_HITS)
+    const bullet = (h: any) => {
+      const badge = [h.tier, h.type].filter(Boolean).join("/")
+      const prov = h.provisional ? " [unconfirmed]" : ""
+      const gist = String(h.gist ?? "").slice(0, 200)
+      return `- [${badge}${prov}] ${h.title} — ${gist}\n  ${h.path}`
+    }
+    const block =
+      `\n[Magnolia · action-memory] ${hits.length} past learning(s) matched this ` +
+      `action (tool: ${shortTool(tool)}). Scan these BEFORE trusting defaults — ` +
+      `one may hold the exact pitfall or parameter for this step:\n` +
+      hits.map(bullet).join("\n") +
+      `\n(read-only auto-injection; opt out MAGNOLIA_ACTION_RETRIEVE=0)\n\n`
+
+    setOutput(block + outputText)
+    sessionInjections.set(sessionID, used + 1)
+    for (const h of hits) latch.set(h.path, (latch.get(h.path) ?? 0) + 1)
+    logCall(hits.length)
+    log({
+      sessionID,
+      tool,
+      callID,
+      ms: res.ms,
+      hits: hits.length,
+      titles: hits.map((h) => h.title).slice(0, 4),
+      entries: hits.map((h) => ({
+        path: h.path,
+        tier: h.tier,
+        score: h.score,
+        confidence: h.confidence,
+        provisional: !!h.provisional,
+      })),
+    })
+    // P3 telemetry: remember this injection so the session.idle probe can
+    // test whether the turn's reply actually used it.
+    if (injectedTurns.size > 40) {
+      const oldest = injectedTurns.keys().next().value
+      if (oldest) injectedTurns.delete(oldest)
+    }
+    const turnItems = injectedTurns.get(sessionID) ?? []
+    turnItems.push({
+      callID: String(callID),
+      tool,
+      titles: hits.map((h) => String(h.title ?? "")),
+      paths: hits.map((h) => String(h.path ?? "")),
+    })
+    injectedTurns.set(sessionID, turnItems)
+  }
+
+  return { onBefore, onAfter, probeApplication }
 }
 
-export default MagnoliaActionRetrieval
+export default {
+  id: "magnolia-action-retrieval",
+
+  /** opencode v2: ctx.tool.hook + event stream. */
+  async setup(ctx: any) {
+    if (DISABLED) return
+    if (!ctx?.tool?.hook) return // v1.18.34 also calls setup() with a limited ctx — v1 runs server()
+    const directory = ctx.location?.directory ?? process.cwd()
+    const readMessages = async (sessionID: string): Promise<any[]> => {
+      try {
+        const msgs = await ctx.session.context({ sessionID })
+        return (msgs as any[]) ?? []
+      } catch { return [] }
+    }
+    const core = makeCore(directory, readMessages)
+
+    await ctx.tool.hook("execute.before", async (event: any) => {
+      try {
+        core.onBefore(
+          String(event?.tool ?? ""),
+          event?.callID ?? (event as any)?.input?.callID,
+          event?.input ?? (event as any)?.args,
+        )
+      } catch { /* never throw */ }
+    })
+
+    await ctx.tool.hook("execute.after", async (event: any) => {
+      try {
+        // v2 result surface is version-dependent; try the documented shapes.
+        const holder = event?.output ?? event?.result ?? event
+        const text = typeof holder?.output === "string" ? holder.output : holder?.text
+        if (typeof text !== "string") return
+        await core.onAfter(
+          String(event?.tool ?? ""),
+          event?.callID ?? (event as any)?.input?.callID,
+          String(event?.sessionID ?? ""),
+          text,
+          (t) => { if (typeof holder.output === "string") holder.output = t; else holder.text = t },
+        )
+      } catch { /* never throw */ }
+    })
+
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          if (event?.type !== "session.idle") continue
+          const sid = (event as any)?.properties?.sessionID ?? (event as any)?.sessionID
+          if (sid) await core.probeApplication(String(sid))
+        }
+      } catch { /* aborted or stream error */ }
+    })()
+    return () => controller.abort()
+  },
+
+  /** opencode v1: original hooks. */
+  async server({ client, directory }: any) {
+    if (DISABLED) return {}
+    const readMessages = async (sessionID: string): Promise<any[]> => {
+      const resp: any = await client.session.messages({ path: { id: sessionID } })
+      return resp?.data ?? resp ?? []
+    }
+    const core = makeCore(directory, readMessages)
+
+    return {
+      event: async (input: any) => {
+        try {
+          if (input?.event?.type === "session.idle") {
+            const sid = input?.event?.properties?.sessionID
+            if (sid) await core.probeApplication(String(sid))
+          }
+        } catch { /* never throw into opencode */ }
+      },
+      "tool.execute.before": async (input: any, output: any) => {
+        try {
+          core.onBefore(String(input?.tool ?? ""), input?.callID, output?.args)
+        } catch { /* never throw into opencode */ }
+      },
+      "tool.execute.after": async (input: any, output: any) => {
+        try {
+          await core.onAfter(
+            String(input?.tool ?? ""),
+            input?.callID,
+            String(input?.sessionID ?? ""),
+            output?.output,
+            (t) => { output.output = t },
+          )
+        } catch { /* never throw into opencode */ }
+      },
+    }
+  },
+}
