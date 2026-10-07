@@ -1,0 +1,16 @@
+frozen: true
+corpus_version: 4
+capture_version: export-1.18.33-prodslice20k
+changes:
+  - version: 1
+    date: 2026-10-01
+    reason: 'initial freeze of hsc70_new session transcripts for the distiller admission bake-off (plan 2026-09-30); one slice per session, whole-transcript shape matching production ingest'
+  - version: 2
+    date: 2026-10-01
+    reason: 'add 7 pre-mapping sessions recovered from distill markers (mapping starts 2026-06-10; workhorse-label sessions were missing, causing bake-off run 1 fidelity/recall FAIL)'
+  - version: 3
+    date: 2026-10-01
+    reason: 'time-tag recovery — sessions that PRODUCED pre-mapping store entries, matched by entry-timestamp to DB session windows (run-2 recall 3/36 root cause — 17/36 workhorse-producers absent)'
+  - version: 4
+    date: 2026-10-01
+    reason: 'slice transcripts to production cursor-slice sizes (~20k chars): production distills slices, not whole sessions; whole-session shape caused truncation and fidelity/recall FAIL in runs 1-3 (matches promoted hijack rule)'

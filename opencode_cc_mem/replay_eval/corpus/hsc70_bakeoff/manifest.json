@@ -1,0 +1,461 @@
+{
+ "frozen_at": "2026-10-01T12:23:04.808995+00:00",
+ "sessions": [
+  {
+   "sid": "ses_16e961374ffeKj4c1Vd3tU5yCD",
+   "ts": "0000",
+   "title": "Project update discussion",
+   "chars": 26352,
+   "clean": true,
+   "sha256_transcript": "aab9c0ddfc3a55015fcb4e1a04270c5f6b44da2e09e97617b3e3e39a9d7837c1"
+  },
+  {
+   "sid": "ses_16d72029fffebGAR3sU5A0uNLO",
+   "ts": "0000",
+   "title": "Title Update",
+   "chars": 15351,
+   "clean": true,
+   "sha256_transcript": "282243ffdce2b301b4a47cbd1be6c2c6880705265eb2a2e64059ee31faa98ded"
+  },
+  {
+   "sid": "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+   "ts": "0000",
+   "title": "Continuing from last time",
+   "chars": 7210,
+   "clean": true,
+   "sha256_transcript": "9cc37623d609ddc8ec46f6844340bb3a0e7dfcb0006ca31f79ab7c4e505f422a"
+  },
+  {
+   "sid": "ses_17e02319dffeoeEmV0Pd79WEQ4",
+   "ts": "2026-06-01T07:02:34.850000+00:00",
+   "title": "Project understanding inquiry",
+   "chars": 158640,
+   "clean": true,
+   "sha256_transcript": "62d28f0fc397b3b804c04e028112dee735b2417339c59a99cb66ccd7531c551d"
+  },
+  {
+   "sid": "ses_17d81f45cffePcT3F40toVxR71",
+   "ts": "2026-06-01T09:22:39.139000+00:00",
+   "title": "Resuming project",
+   "chars": 248175,
+   "clean": true,
+   "sha256_transcript": "db68fb3f89eec2f98dc1ab523b546c23dc32c7e3b1362ac1997d7109d068d6a0"
+  },
+  {
+   "sid": "ses_17cf99c43ffeQIsCG8QfCs51NU",
+   "ts": "2026-06-01T11:51:34.588000+00:00",
+   "title": "Current status check",
+   "chars": 153555,
+   "clean": true,
+   "sha256_transcript": "95e429de26e907e69de363a9276b411d5a8f43c6cae7f81a2cb5fcab336df230"
+  },
+  {
+   "sid": "ses_17c954078ffeVBu2fM3ktxH6f4",
+   "ts": "2026-06-01T13:41:11.687000+00:00",
+   "title": "Update request",
+   "chars": 163858,
+   "clean": true,
+   "sha256_transcript": "4a4a0e3c2256447c158a42e8388e8edb0a96802c9d15122cc52d9afba36be84c"
+  },
+  {
+   "sid": "ses_17b506038ffeo9mWNJmXSEIwqR",
+   "ts": "2026-06-01T19:36:02.759000+00:00",
+   "title": "Update request",
+   "chars": 145651,
+   "clean": true,
+   "sha256_transcript": "e32bac5ac13df975ad0f2995bfa9a01f9a80e16cb04f4b1309c03686bf68cb38"
+  },
+  {
+   "sid": "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+   "ts": "2026-06-02T06:43:21.222000+00:00",
+   "title": "Follow-up discussion",
+   "chars": 177197,
+   "clean": true,
+   "sha256_transcript": "5b4958613f3c3d248f8ac3f124a0b9ee9690148c3299cb3eacfb5ce4fb1cb1f3"
+  },
+  {
+   "sid": "ses_173592375ffelotrqhfYN7EYuC",
+   "ts": "2026-06-03T08:43:26.218000+00:00",
+   "title": "Progress check",
+   "chars": 251520,
+   "clean": true,
+   "sha256_transcript": "20938e941333a01c817610744372918fce19ae868d074ddec6a0ed5c64821be2"
+  },
+  {
+   "sid": "ses_1719c31f0ffetWkDwbc3PO4iPx",
+   "ts": "2026-06-03T16:49:26.031000+00:00",
+   "title": "Greeting",
+   "chars": 221,
+   "clean": true,
+   "sha256_transcript": "e5647ec699c2664d2dab54f3810a84584c6ea5204938d42e5fc7ceb5e9024be4"
+  },
+  {
+   "sid": "ses_16e1a9b76ffetBUfAdsrLFFu67",
+   "ts": "2026-06-04T09:09:50.345000+00:00",
+   "title": "Follow-up on previous discussion",
+   "chars": 39865,
+   "clean": true,
+   "sha256_transcript": "0f3916e00b6a3d5cb9e1ae2eaa081a269743a37e0f5e114000aa6c12fb579ec4"
+  },
+  {
+   "sid": "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+   "ts": "2026-06-04T19:48:42.778000+00:00",
+   "title": "Update request",
+   "chars": 111945,
+   "clean": true,
+   "sha256_transcript": "bd44e7e7a0e00be5e178398e3e2ff27303746988add9e4d7930eace7a35895e1"
+  },
+  {
+   "sid": "ses_169263890ffeOGZXCuaCkXQ9Mt",
+   "ts": "2026-06-05T08:15:15.311000+00:00",
+   "title": "Project update",
+   "chars": 252076,
+   "clean": true,
+   "sha256_transcript": "2deae96b8e0ee45db3fb71be090b5bba8f882c81ca7011cf3dacece6412bb07f"
+  },
+  {
+   "sid": "ses_158c0e27effeHzvsSWus743bMa",
+   "ts": "2026-06-08T12:39:51.938000+00:00",
+   "title": "Project update",
+   "chars": 10455,
+   "clean": true,
+   "sha256_transcript": "44ee771a3f1312a3d14121f7a9f58970bd45330836839653713d930b301def43"
+  },
+  {
+   "sid": "ses_14d178160ffeFCUNF8muY7i3DL",
+   "ts": "2026-06-10T19:00:41.781Z",
+   "title": "Installing bindcraft on azzurra",
+   "chars": 62417,
+   "clean": true,
+   "sha256_transcript": "978624b772a67ad2384c15b155da6393381303339df04d2c427167402be81845"
+  },
+  {
+   "sid": "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+   "ts": "2026-06-11T06:51:05.651Z",
+   "title": "Project update",
+   "chars": 2747,
+   "clean": true,
+   "sha256_transcript": "45722eab01a87257a185ae891548a6ef5ea96cf12477dbc89351c7b50197b8a5"
+  },
+  {
+   "sid": "ses_14a4301fcffe2zIr27rODUZ3PS",
+   "ts": "2026-06-11T08:12:02.446Z",
+   "title": "Project update",
+   "chars": 432295,
+   "clean": true,
+   "sha256_transcript": "6bd74c99ad90912b3c0792ca6e6c3d921080f6adab9b8e5f66dd32f46aa804e9"
+  },
+  {
+   "sid": "ses_1456d0e73ffe6ULEPwvHYx84J4",
+   "ts": "2026-06-12T06:44:12.835Z",
+   "title": "Azzurra job listings",
+   "chars": 253789,
+   "clean": true,
+   "sha256_transcript": "8e6d2a79c5a16409d5f4554915894b3f8aecda77450645477390ed35d7fa152b"
+  },
+  {
+   "sid": "ses_13fc23de2ffelf2ddyTWl2olKC",
+   "ts": "2026-06-13T09:08:53.428Z",
+   "title": "Jobs review",
+   "chars": 180848,
+   "clean": true,
+   "sha256_transcript": "10ceeed3729ececa84581e39fa943f48cd74975aa40e620e97dfb365bcd79bff"
+  },
+  {
+   "sid": "ses_134c7b1a2ffeMFkXQrSHFP8Cs1",
+   "ts": "2026-06-15T12:18:45.478Z",
+   "title": "Experimentalists discussion recall",
+   "chars": 204021,
+   "clean": true,
+   "sha256_transcript": "e8901ea6b3bfc058ba55aa008ec428d003ab1a72566d7905ce6141c8ae50ce65"
+  },
+  {
+   "sid": "ses_1349d35caffeQYdQoegiPzSDIl",
+   "ts": "2026-06-15T13:05:09.688Z",
+   "title": "Search BindCraft history (@explore subagent)",
+   "chars": 67997,
+   "clean": true,
+   "sha256_transcript": "5a81c1b6e385ad10976e624dbc0736db686cf1c00e626f860b5b79f875bfa4aa"
+  },
+  {
+   "sid": "ses_130e4d4e4ffeJu5Q6ZBCByktmm",
+   "ts": "2026-06-16T06:25:24.784Z",
+   "title": "Latest jobs check",
+   "chars": 855424,
+   "clean": true,
+   "sha256_transcript": "7ddcfa00d5aa6f1d18d69c54a358a9d30283eb76dea81bd12cb951455220047e"
+  },
+  {
+   "sid": "ses_12b819265ffeRiCjSRTOF2mCwU",
+   "ts": "2026-06-17T07:31:55.951Z",
+   "title": "Jobs list check",
+   "chars": 537246,
+   "clean": true,
+   "sha256_transcript": "9f7d3df395a9316767e88e0fe4a7ce06b44375e812f2ebf51f5e9e66ea4c820c"
+  },
+  {
+   "sid": "ses_12b8117ebffeVUQKhrJh87qWNB",
+   "ts": "2026-06-17T07:32:27.288Z",
+   "title": "Find recent HADDOCK3 runs (@general subagent)",
+   "chars": 36341,
+   "clean": true,
+   "sha256_transcript": "a53c71021d96b5626df60044f3aecd8186c05cb3a06b526fd1f69024b1c30557"
+  },
+  {
+   "sid": "ses_12b670a8effezB5zYoxyPnSA46",
+   "ts": "2026-06-17T08:00:54.644Z",
+   "title": "Search HADDOCK3 convergence (@general subagent)",
+   "chars": 24957,
+   "clean": true,
+   "sha256_transcript": "33d7093d3f3885c861b4cca4cd8d4f8c1add6f187b5ea69ecfab7b5856394b77"
+  },
+  {
+   "sid": "ses_12a46493fffehueb24QomyJNE8",
+   "ts": "2026-06-17T13:16:18.507Z",
+   "title": "Query Perspicacité KB on Torielli (@general subagent)",
+   "chars": 6597,
+   "clean": true,
+   "sha256_transcript": "53ff548d2baad23df12ff41f79e497d3db3e834c8e1cfa2860380be600771e8a"
+  },
+  {
+   "sid": "ses_12a373231ffeLcYS57pJqIwi68",
+   "ts": "2026-06-17T13:32:47.449Z",
+   "title": "Read handover document",
+   "chars": 9374,
+   "clean": true,
+   "sha256_transcript": "bacbdebf80b1af451cb4087c8378bfb999d86b05c95deebed62c0dc765d67449"
+  },
+  {
+   "sid": "ses_12a31596dffeU2R6yIw5W4l4yk",
+   "ts": "2026-06-17T13:39:10.620Z",
+   "title": "Handover in memory dir",
+   "chars": 444985,
+   "clean": true,
+   "sha256_transcript": "e511b4a5994d11d2cd7b58a9b30e6585ca2f91da89e52de83ec044018bbe2be9"
+  },
+  {
+   "sid": "ses_125e030f7ffeXnTIPy3gi7ezbx",
+   "ts": "2026-06-18T09:46:18.265Z",
+   "title": "Check azzurra jobs",
+   "chars": 548726,
+   "clean": true,
+   "sha256_transcript": "0e58f2f9b4380766894b6b3983d8be72143fc62d0f88c87a9fb9727734ce4361"
+  },
+  {
+   "sid": "ses_120fa984affeN2zTmXpUOp3es8",
+   "ts": "2026-06-19T08:35:33.969Z",
+   "title": "Greeting",
+   "chars": 130799,
+   "clean": true,
+   "sha256_transcript": "7e512845e8b40fe1675b618435e8c69d112755807e633aa2295c4ff6dbd17039"
+  },
+  {
+   "sid": "ses_11186eec2ffe47heamLxUwWbfN",
+   "ts": "2026-06-22T08:36:12.241Z",
+   "title": "Leftover tasks from last session",
+   "chars": 426408,
+   "clean": true,
+   "sha256_transcript": "a124650b7ac13a21e7a525617b0dca04e317331ccbf710ef47e74da5106c95f8"
+  },
+  {
+   "sid": "ses_1112f1045ffeaXFZuHiIouAkDM",
+   "ts": "2026-06-22T10:12:10.816Z",
+   "title": "Find status of 4 HADDOCK3 jobs (@explore subagent)",
+   "chars": 32794,
+   "clean": true,
+   "sha256_transcript": "49109af0f6f79cd27a4af5333cb8625a4be11233fe5c0ef4d07fd9fafa40a725"
+  },
+  {
+   "sid": "ses_111257958ffe11RGJcUGSOER9m",
+   "ts": "2026-06-22T10:22:39.277Z",
+   "title": "Verify staging exclusion and check project tier (@explore subagent)",
+   "chars": 23406,
+   "clean": true,
+   "sha256_transcript": "531fd58b3d5441ed3cbb9615a3f2d99f20575eec4862e816030ad59b92601391"
+  },
+  {
+   "sid": "ses_10bc31326ffeTnbvzCh53fUJnF",
+   "ts": "2026-06-23T11:28:14.065Z",
+   "title": "Latest update summary",
+   "chars": 95324,
+   "clean": true,
+   "sha256_transcript": "88acc3e1144ca57b406271d145ed7f4118180ec5ba7a4359db25982a8e379453"
+  },
+  {
+   "sid": "ses_10bbac41affe71w1NKzuwR3QGR",
+   "ts": "2026-06-23T11:37:18.568Z",
+   "title": "Categorize staging entries (@explore subagent)",
+   "chars": 44282,
+   "clean": true,
+   "sha256_transcript": "d9ff354c83e0828509f9890d1160d5a18dd3e3818006870b88578810afd5bff2"
+  },
+  {
+   "sid": "ses_109af132effeAmEQoAbprZ7xwh",
+   "ts": "2026-06-23T21:09:19.212Z",
+   "title": "New session - 2026-06-23T21:09:19.185Z",
+   "chars": 46,
+   "clean": true,
+   "sha256_transcript": "2ea6db2a0638761a12a4bc22e3958b92465340e2e4434849ad3f63be74281716"
+  },
+  {
+   "sid": "ses_106e1e902ffe1mPPLkhZ5Vsa2R",
+   "ts": "2026-06-24T10:12:39.309Z",
+   "title": "Latest results summary",
+   "chars": 70881,
+   "clean": true,
+   "sha256_transcript": "8ceecd96ffdd46f96b44718f6ab32b16dcd4aba474852671b1a66ec4dcbf7331"
+  },
+  {
+   "sid": "ses_106d2b51bffeSYI9LLibqeeXlo",
+   "ts": "2026-06-24T10:29:15.633Z",
+   "title": "Latest 4 mutation runs summary",
+   "chars": 934564,
+   "clean": true,
+   "sha256_transcript": "82b6d0b603e8d0d1de9a7091f024ea86c78b80cfe1f90563120823c164f8f7ca"
+  },
+  {
+   "sid": "ses_105ff06c0ffeWLOXtSr54fH4X5",
+   "ts": "2026-06-24T14:20:28.363Z",
+   "title": "Analyze TGGFQMALT 9-mer binding (@general subagent)",
+   "chars": 78826,
+   "clean": true,
+   "sha256_transcript": "de14b8c7ace03d562575233f3cff5622b9e50d2ed75bc5d4de17a410f607ec1b"
+  },
+  {
+   "sid": "ses_104ec7a8cffeH7B97axlJTft7s",
+   "ts": "2026-06-24T19:20:21.115Z",
+   "title": "Update request",
+   "chars": 10025,
+   "clean": true,
+   "sha256_transcript": "4c5f2088afbe4dd126641225fcc36b12c4f6e9ee6eb78ca96568d023f17929d8"
+  },
+  {
+   "sid": "ses_104e942a8ffeSFhSreuOgpCx5o",
+   "ts": "2026-06-24T19:23:52.026Z",
+   "title": "Summarize in-flight jobs from run history (@explore subagent)",
+   "chars": 10365,
+   "clean": true,
+   "sha256_transcript": "eaa58c4e15c2bc594c657837a0aef0c8d9a3c407cd504419aa0259c19a2d12e9"
+  },
+  {
+   "sid": "ses_10252492affeC8CuGfq2Gxi25H",
+   "ts": "2026-06-25T07:28:00.739Z",
+   "title": "Jobs check",
+   "chars": 949231,
+   "clean": true,
+   "sha256_transcript": "b01e57da605dbe7e618dc18812df26a94a3098f8d53cf897c7c1625c39e1a227"
+  },
+  {
+   "sid": "ses_0e7028bd2ffek4BSjShgl65YgP",
+   "ts": "2026-06-30T14:44:51.399Z",
+   "title": "Project status check",
+   "chars": 49619,
+   "clean": true,
+   "sha256_transcript": "83e8f878aee76ccb6e182e86cfad888b4035cede094227d87906f94c77cab0dd"
+  },
+  {
+   "sid": "ses_0e7021638ffeH9HOq4TKCYoOu8",
+   "ts": "2026-06-30T14:45:21.494Z",
+   "title": "Parse run history for status (@general subagent)",
+   "chars": 22494,
+   "clean": true,
+   "sha256_transcript": "ce589dc3fa3263997d9dd350ddeb91d3bd97615e2e4a54d51f0457a973a7ba97"
+  },
+  {
+   "sid": "ses_0e37fecd8ffen9fpkjK39wRRL0",
+   "ts": "2026-07-01T07:06:23.417Z",
+   "title": "Last session summary",
+   "chars": 509737,
+   "clean": true,
+   "sha256_transcript": "f3d3da64e1fea2c3759373aa6385de74f2e168e54668c24201972c5b44d14b1e"
+  },
+  {
+   "sid": "ses_0d93057c5ffejLlEWHkl51h6E5",
+   "ts": "2026-07-03T07:09:31.097Z",
+   "title": "New calculations check",
+   "chars": 744935,
+   "clean": true,
+   "sha256_transcript": "788efe2af3924ea6c02f3182ff779044bc5789d65c23d2ea8eccae991a7d1f09"
+  },
+  {
+   "sid": "ses_0c7425453ffeDvyNU5dHhXPEh9",
+   "ts": "2026-07-06T18:43:02.245Z",
+   "title": "Docking results",
+   "chars": 287066,
+   "clean": true,
+   "sha256_transcript": "aa96bbd7504e688550d33d88bbdd54211620021cde555c9e7f41c9fb4089110a"
+  },
+  {
+   "sid": "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+   "ts": "2026-07-08T14:41:35.671Z",
+   "title": "Review webpage URL",
+   "chars": 318035,
+   "clean": true,
+   "sha256_transcript": "c4608b27c4ee9a721fad2ac4f44cebf9d1d213e19ec198e9dacf17a23bbb3cdb"
+  },
+  {
+   "sid": "ses_0a6c42101ffevfoKY1bV6mQicV",
+   "ts": "2026-07-13T02:08:43.799Z",
+   "title": "Latest project status",
+   "chars": 951215,
+   "clean": true,
+   "sha256_transcript": "ddb37907150077a7c46664f44f9e71b629515f1cea8ef932751d61d4104f2b96"
+  },
+  {
+   "sid": "ses_06e66ae41ffeGSXzgZwJh90VPK",
+   "ts": "2026-07-24T00:49:32.117Z",
+   "title": "Jobs update",
+   "chars": 79264,
+   "clean": true,
+   "sha256_transcript": "cf5219f98bb5a7c1cfc60a7acdbfc0da0c4a871cc4e2538d49265ef6d2c88e8a"
+  },
+  {
+   "sid": "ses_06e35b9beffe0Rk9xn8eqWusvd",
+   "ts": "2026-07-24T01:43:00.428Z",
+   "title": "Package report PDBs for sharing (@general subagent)",
+   "chars": 21551,
+   "clean": true,
+   "sha256_transcript": "a49c5cd057fefba95fcaa9463fa84a86e00557a7415e08207e5c3f46848cc386"
+  },
+  {
+   "sid": "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+   "ts": "2026-07-27T02:17:43.591Z",
+   "title": "Binding pocket residue numbers",
+   "chars": 1573,
+   "clean": true,
+   "sha256_transcript": "9b420bb6caeb6afd657a31a4d233d9a9e205499763c7f6308f63f5a263fe9a45"
+  },
+  {
+   "sid": "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+   "ts": "2026-07-27T08:58:13.688Z",
+   "title": "Caps calculation results",
+   "chars": 78854,
+   "clean": true,
+   "sha256_transcript": "ed786d4efd5aaf23237695b32e5f0d69f2eae9bda3251dff6d672243b160c5cc"
+  },
+  {
+   "sid": "ses_02ac40225ffeB5LMdtnBmwdKOz",
+   "ts": "2026-08-06T04:01:46.492Z",
+   "title": "Memory consolidation check",
+   "chars": 399155,
+   "clean": true,
+   "sha256_transcript": "97bc20e9d58afb268624467b31bf22e11569e3470db772b65097e1b306288fd7"
+  },
+  {
+   "sid": "ses_fecf33ecaffeSYDQC0Tcri2MDX",
+   "ts": "2026-08-18T04:06:38.157Z",
+   "title": "Connecting to azzurra from another machine",
+   "chars": 140963,
+   "clean": true,
+   "sha256_transcript": "c8c147bb56a6e752021835b0edf39fa5ebaeb3e69e273f02557183bfca3444fc"
+  },
+  {
+   "sid": "ses_f5b9c424effebYiBJUbYERtSTh",
+   "ts": "2026-09-15T09:26:35.204Z",
+   "title": "Conversation recap",
+   "chars": 114934,
+   "clean": true,
+   "sha256_transcript": "595ca924de6781ff5e926e3f2ed09997c932c80d60e8969f5f740760b42af71c"
+  }
+ ]
+}

@@ -19,13 +19,41 @@
  * hook's event.prompt.text is the mutable admitted draft, and edits become
  * the canonical persisted input (migrate-v1 maps chat.message -> prompt).
  * v1.18.34 also calls setup() with a limited ctx — guarded.
+ *
+ * REGISTRY (2026-10-07): the mention set is the default pair UNION every
+ * project that declares projects/<name>/agent.json (enabled != false). New
+ * agents need no code edit — registering the project is enough.
  */
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs"
 import { join, dirname } from "node:path"
 
 const DISABLED = String(process.env.MAGNOLIA_DOORBELL ?? "").toLowerCase() === "0"
-const AGENTS = ["literature", "xiulian"]
-const MENTION_RE = /@(literature|xiulian)\b[,:]?\s*([^\n]*)/gi
+const DEFAULT_AGENTS = ["literature", "xiulian"]
+
+function registryAgents(directory: string): string[] {
+  const names = new Set(DEFAULT_AGENTS)
+  try {
+    for (const d of readdirSync(join(directory, "projects"), { withFileTypes: true })) {
+      if (!d.isDirectory()) continue
+      const cfgPath = join(directory, "projects", d.name, "agent.json")
+      if (!existsSync(cfgPath)) continue
+      try {
+        const cfg = JSON.parse(readFileSync(cfgPath, "utf8"))
+        if (cfg && cfg.enabled === false) continue
+      } catch { continue }
+      names.add(d.name)
+    }
+  } catch { /* fall through */ }
+  return [...names]
+}
+
+function buildMentionRes(agents: string[]): { mention: RegExp; check: RegExp } {
+  const esc = agents.map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  return {
+    mention: new RegExp(`@(${esc.join("|")})\\b[,:]?\\s*([^\\n]*)`, "gi"),
+    check: new RegExp(`@(${esc.join("|")})\\b`, "i"),
+  }
+}
 
 type Toast = (message: string) => void
 
@@ -67,11 +95,14 @@ function deliver(directory: string, sourceProject: string, agent: string, reques
 }
 
 /** Shared mention-processing: returns rewritten text + delivered agents. */
-function processText(directory: string, sourceProject: string, text: string): { text: string; sent: string[] } {
+function processText(
+  directory: string, sourceProject: string, text: string,
+  mentionRe: RegExp, checkRe: RegExp,
+): { text: string; sent: string[] } {
   const sent: string[] = []
-  if (!/@(literature|xiulian)\b/i.test(text)) return { text, sent }
+  if (!checkRe.test(text)) return { text, sent }
   const newText = text.replace(
-    MENTION_RE,
+    mentionRe,
     (match: string, agent: string, request: string, _offset: number) => {
       const req = (request || "").trim()
       if (!req) return match // a bare @mention with no ask: leave it
@@ -100,6 +131,7 @@ export default {
     if (!ctx?.session?.hook) return // v1.18.34 also calls setup() with a limited ctx — v1 runs server()
     const directory = ctx.location?.directory ?? process.cwd()
     const sourceProject = sourceProjectOf(directory)
+    const { mention, check } = buildMentionRes(registryAgents(directory))
     const toast: Toast = (message) => {
       const t = (ctx as any)?.tui?.showToast
       if (typeof t === "function") {
@@ -112,7 +144,7 @@ export default {
       try {
         const prompt = event?.prompt
         if (typeof prompt?.text !== "string" || !prompt.text) return
-        const { text, sent } = processText(directory, sourceProject, prompt.text)
+        const { text, sent } = processText(directory, sourceProject, prompt.text, mention, check)
         if (sent.length > 0) {
           prompt.text = text
           for (const agent of sent) toastFor(toast, agent)
@@ -125,13 +157,14 @@ export default {
   async server({ client, directory }: any) {
     if (DISABLED) return {}
     const sourceProject = sourceProjectOf(directory)
+    const { mention, check } = buildMentionRes(registryAgents(directory))
     return {
       "chat.message": async (_input: any, output: any) => {
         try {
           if (!output?.parts || !Array.isArray(output.parts)) return
           for (const part of output.parts) {
             if (part?.type !== "text" || typeof part?.text !== "string") continue
-            const { text, sent } = processText(directory, sourceProject, part.text)
+            const { text, sent } = processText(directory, sourceProject, part.text, mention, check)
             if (sent.length > 0) {
               part.text = text
               for (const agent of sent) {

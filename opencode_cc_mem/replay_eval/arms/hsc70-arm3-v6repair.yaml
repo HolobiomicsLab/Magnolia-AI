@@ -1,0 +1,17 @@
+# Arm 3 — v6-prompt repair (2026-10-07): same as hsc70-arm2-admission (R1-R4
+# admission gate, chronological replay, deepseek-flash) but on the repaired
+# extraction prompt (anti-overcorrection clause, commit c94e2d2, canary-fixed).
+# Hypothesis under test: the repair lifts workhorse recall (v6 arm was 72% FAIL
+# vs the >=95% gate) without re-opening the volume gates (<=40% of arm 1,
+# dead-weight >=70%, dup ~0).
+name: hsc70-arm3-v6repair
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v6-repair
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null
+  admission_gate: true
+  chronological: true
