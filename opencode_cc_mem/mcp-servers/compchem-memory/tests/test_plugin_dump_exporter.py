@@ -108,3 +108,54 @@ def test_ingest_end_to_end_from_dump(tmp_path, monkeypatch):
     # cursor advanced to the last dumped message id
     rec = json.loads((store / "opencode-distilled" / "ses_v2.json").read_text())
     assert rec["cursor"] == "m2"
+
+
+def test_v2_db_exporter_full_content(tmp_path, monkeypatch):
+    """The v2 content source: session_message rows carry assistant content[]
+    (reasoning/text/tool parts) — unlike exports and ctx.session.context()."""
+    import sqlite3
+
+    db = tmp_path / "v2.db"
+    con = sqlite3.connect(str(db))
+    con.execute("CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, seq INT, time_created INT, time_updated INT, data TEXT)")
+    con.executemany("INSERT INTO session_message VALUES (?,?,?,?,?,?,?)", [
+        ("m1", "ses_x", "user", 1, 1, 1,
+         json.dumps({"text": "dock KFERQ to 4PO2", "time": {}})),
+        ("m2", "ses_x", "assistant", 2, 2, 2, json.dumps({
+            "content": [
+                {"type": "reasoning", "text": "I will run the docking."},
+                {"type": "tool", "tool": "compchem-tools_gnina_dock",
+                 "output": "score -7.2", "input": {"ligand": "x"}},
+            ], "model": {}, "cost": 1})),
+        ("m3", "ses_x", "assistant", 3, 3, 3, json.dumps({
+            "content": [{"type": "text", "text": "Docking done, score -7.2"}]})),
+    ])
+    con.commit(); con.close()
+
+    from compchem_memory.opencode_ingest import reconstruct_transcript, v2_db_exporter
+    out = v2_db_exporter(str(db))("ses_x")
+    assert out and len(out["messages"]) == 3
+    t = reconstruct_transcript(out, tool_chars=4000)
+    assert "USER: dock KFERQ" in t
+    assert "ASSISTANT (reasoning): I will run the docking." in t
+    assert "(tool:compchem-tools_gnina_dock): score -7.2" in t
+    assert "Docking done, score -7.2" in t
+    # flat tool parts normalized to the state family reconstruct reads
+    tool_part = out["messages"][1]["parts"][1]
+    assert tool_part["state"]["output"] == "score -7.2"
+
+
+def test_chain_prefers_v2_db_over_dump_and_cli(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "v2.db"))
+    import sqlite3
+    db = tmp_path / "v2.db"
+    con = sqlite3.connect(str(db))
+    con.execute("CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, seq INT, time_created INT, time_updated INT, data TEXT)")
+    con.execute("INSERT INTO session_message VALUES ('m1','ses_y','user',1,1,1,?)",
+                (json.dumps({"text": "from db"}),))
+    con.commit(); con.close()
+    store = tmp_path / ".magnolia"; store.mkdir()
+    d = store / "opencode-transcripts"; d.mkdir()
+    (d / "ses_y.json").write_text(json.dumps({"messages": [{"type": "user", "text": "from dump"}]}))
+    out = plugin_dump_exporter(str(store))("ses_y")
+    assert out["messages"][0]["parts"][0]["text"] == "from db"   # db wins

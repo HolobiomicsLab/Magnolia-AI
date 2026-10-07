@@ -201,20 +201,87 @@ def export_session(ses_id: str) -> Optional[dict]:
     return _try(["opencode", "session", "export", ses_id])
 
 
-def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
-    """Exporter preferring the v2 capture plugin's in-process transcript dump.
+def _normalize_v2_part(p: dict) -> dict:
+    """session_message content items -> the v1 part family reconstruct reads:
+    tool parts carry their result at state.output (v2 items may use flat
+    output/input keys instead)."""
+    if not isinstance(p, dict):
+        return p
+    if p.get("type") == "tool" and "state" not in p:
+        state: dict = {}
+        if "output" in p:
+            state["output"] = p.get("output")
+        if "input" in p:
+            state["input"] = p.get("input")
+        if "error" in p:
+            state["error"] = p.get("error")
+        q = dict(p)
+        if state:
+            q["state"] = state
+        if "tool" not in q and "name" in q:
+            q["tool"] = q["name"]
+        return q
+    return p
 
-    Under opencode v2 the export CLI is user-text-only (gate-1, 2026-10-06:
-    assistant text and tool parts are absent), so the session-capture plugin
-    dumps the FULL message list via ctx.session.context() at session.idle to
-    ``<store>/opencode-transcripts/<sid>.json``. This exporter reads that dump
-    first and falls back to the CLI for v1 sessions (no dump files exist
-    there). Dump shape: {ts, sessionID, source, messages: [...]} — the v1
-    {info,parts} message family, so reconstruct_transcript's v1 branch (with
-    tool_chars evidence) applies unchanged."""
+
+def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
+    """Exporter reading opencode v2's event-sourced `session_message` table.
+
+    THE v2 content source (2026-10-07 smoke findings): the export CLI AND
+    ctx.session.context() both return flat user-text-only messages (assistant
+    turns empty), and the event table stays empty for --standalone runs — but
+    session_message.data holds the full payload: user {text}, assistant
+    {content: [reasoning/text/tool parts], model, cost, tokens}. Mapped to the
+    v1 {info:{role,id}, parts:[...]} family so reconstruct_transcript (with
+    tool_chars evidence) applies unchanged. Read-only URI connection."""
+    def exporter(ses_id: str) -> Optional[dict]:
+        import sqlite3
+
+        try:
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            try:
+                rows = con.execute(
+                    "SELECT id, type, data FROM session_message "
+                    "WHERE session_id=? ORDER BY seq", (ses_id,)).fetchall()
+            finally:
+                con.close()
+        except Exception:
+            return None
+        if not rows:
+            return None
+        msgs = []
+        for mid, typ, data in rows:
+            try:
+                d = json.loads(data) if isinstance(data, str) else (data or {})
+            except json.JSONDecodeError:
+                continue
+            if typ == "assistant":
+                parts = [_normalize_v2_part(p) for p in (d.get("content") or [])
+                         if isinstance(p, dict)]
+            else:
+                text = d.get("text")
+                parts = [{"type": "text", "text": text}] if text else []
+            msgs.append({"info": {"role": typ, "id": mid}, "parts": parts})
+        return {"messages": msgs} if msgs else None
+    return exporter
+
+
+def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
+    """Exporter preferring v2 in-process sources over the export CLI.
+
+    Order (2026-10-07): (1) opencode v2's session_message table via OPENCODE_DB
+    (full content: assistant reasoning + tool parts); (2) the capture plugin's
+    ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat,
+    user text + system — a fallback, NOT a content source); (3) the export CLI
+    (v1 form first, then v2 `session export`) for v1 sessions."""
     store = Path(store_dir)
 
     def exporter(ses_id: str) -> Optional[dict]:
+        db = os.environ.get("OPENCODE_DB")
+        if db and Path(db).exists():
+            out = v2_db_exporter(db)(ses_id)
+            if out is not None:
+                return out
         dump = store / "opencode-transcripts" / f"{ses_id}.json"
         if dump.exists():
             try:
