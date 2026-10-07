@@ -64,6 +64,41 @@ saying what the reply answers and what the reader should do with it.
 Either side may make status-only edits to files in its own thread. Content
 edits belong to the project whose mailbox the file sits in.
 
+## Idea tickets (the auto-executable task type)
+
+An **idea ticket** is a `.task.md` letter with a `ticket: idea` header line —
+the daemon's auto-executable task type for prototype work. Schema:
+
+    ---
+    status: open            # open | prototyped | evaluated | accepted | rejected
+    from: literature
+    to: xiulian
+    date: YYYY-MM-DD
+    ticket: idea
+    importance: T2          # digest tier (T1-T4 per the literature-digest skill)
+    paper: "arXiv:2609.27334"
+    gate: replay-eval       # which acceptance gate applies (or "unit")
+    wait_for: job:<run_id>  # optional: park until the run record exists
+    ---
+
+    ## Idea
+    One paragraph: what to try, why it matters, which Magnolia subsystem.
+
+    ## Evidence
+    Pointers into the digest (with offsets) or the paper.
+
+    ## Prototype sketch
+    The minimal change that tests the idea; the corpus/arm to replay against.
+
+    ## Acceptance
+    What the gate report must show for a merge discussion.
+
+Lifecycle: only `status: open` tickets auto-run. A `wait_for: job:<run_id>`
+line parks the ticket until `<project>/.magnolia/runs/<run_id>.yaml` exists
+with a status (the daemon re-delivers it with the result appended). The
+builder lane's reply reports the gate outcome; `accepted`/`rejected` are
+human decisions.
+
 ## Relation to older conventions
 
 Threads that started under a box-local convention (replies filed inside the
