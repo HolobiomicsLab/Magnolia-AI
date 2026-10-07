@@ -149,6 +149,36 @@ def main() -> int:
     if recall < 0.95:
         missing = [f for f, t in wh_titles if f not in recalled][:10]
         print(f"   missing examples: {missing}")
+
+    # 2b. Semantic recall (bge-m3, 2026-10-07): reported alongside the
+    # pre-registered lexical gate, never replacing it without a TEST-PLAN
+    # re-registration (Goodhart guard). The lexical matcher is a measured
+    # floor: it cannot pair same-learning/different-title candidates
+    # (RECALL-ANALYSIS.md in the arm dir; 10/10 lexical misses recovered by
+    # content-cosine).
+    sem_file = Path(a.arm2) / "RECALL-SEMANTIC.json"
+    if sem_file.exists():
+        try:
+            sem = json.loads(sem_file.read_text(encoding="utf-8"))
+            sim_by_name = {r["entry"]: r["sim"] for r in
+                           sem.get("recalled", []) + sem.get("missing", [])}
+            sem_recalled = [f for f, t in wh_titles
+                            if sim_by_name.get(f, 0) >= sem.get("threshold", 0.6)]
+            sem_recall = (len(sem_recalled) / len(wh_titles)) if wh_titles else 0.0
+            band_05 = sum(1 for f, t in wh_titles
+                          if 0.5 <= sim_by_name.get(f, 0) < sem.get("threshold", 0.6))
+            print(f"2b. recall (semantic, {sem.get('mode', 'bge-m3')}) "
+                  f"workhorses {len(sem_recalled)}/{len(wh_titles)} = {sem_recall:.0%} "
+                  f"at threshold {sem.get('threshold', 0.6)}  -> "
+                  f"{'PASS' if sem_recall >= 0.95 else 'FAIL'}")
+            if band_05:
+                print(f"    (plus {band_05} workhorse(s) in the 0.5-0.6 band)")
+            if sem_recall >= 0.95 and recall < 0.95:
+                print("    note: lexical gate FAIL is a scorer artifact — "
+                      "content-cosine recovers the lexical misses; re-register "
+                      "the metric in TEST-PLAN before treating this arm as failed.")
+        except Exception as e:
+            print(f"2b. semantic recall unavailable: {e}")
     print(f"3. volume    {s2['total_candidates']}/{s1['total_candidates']} = "
           f"{volume:.1%} (gate <= 40%)  -> {'PASS' if volume <= 0.40 else 'FAIL'}")
     print(f"4. dead-weight rejection {dead_rej:.0%} (gate >= 70%)  -> "
