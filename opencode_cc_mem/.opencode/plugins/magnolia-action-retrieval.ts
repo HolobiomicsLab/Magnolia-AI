@@ -379,26 +379,29 @@ export default {
 
     await ctx.tool.hook("execute.before", async (event: any) => {
       try {
-        core.onBefore(
-          String(event?.tool ?? ""),
-          event?.callID ?? (event as any)?.input?.callID,
-          event?.input ?? (event as any)?.args,
-        )
+        // Code Mode (probe-verified 2026-10-07): nested MCP calls fire their
+        // own hooks with full names (event.tool = "compchem-tools_run_shell")
+        // and args at event.input; the outer execute calls appear separately
+        // (tool = "execute", input = generated code) and are ignored by the
+        // ACTION_TOOLS match. Event identity field is `id` (not callID).
+        core.onBefore(String(event?.tool ?? ""), event?.id, event?.input)
       } catch { /* never throw */ }
     })
 
     await ctx.tool.hook("execute.after", async (event: any) => {
       try {
-        // v2 result surface is version-dependent; try the documented shapes.
-        const holder = event?.output ?? event?.result ?? event
-        const text = typeof holder?.output === "string" ? holder.output : holder?.text
+        const holder = event?.result ?? event?.output ?? event
+        let text = holder?.output
+        if (text != null && typeof text !== "string") {
+          text = JSON.stringify(text) // nested MCP results are objects ({exit_code, stdout, ...})
+        }
         if (typeof text !== "string") return
         await core.onAfter(
           String(event?.tool ?? ""),
-          event?.callID ?? (event as any)?.input?.callID,
+          event?.id,
           String(event?.sessionID ?? ""),
           text,
-          (t) => { if (typeof holder.output === "string") holder.output = t; else holder.text = t },
+          (t) => { holder.output = t },
         )
       } catch { /* never throw */ }
     })
