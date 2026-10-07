@@ -12,94 +12,142 @@
  * swallowed so the doorbell can never break a session.
  *
  * Design: docs/agents-daemon-design.md
+ *
+ * DUAL-SHAPE (2026-10-07, probe-verified on 1.18.34 + 2.0.6): plain-object
+ * default export. v1 server() edits the chat.message output parts (original
+ * behavior); v2 setup(ctx) uses ctx.session.hook("prompt") — the prompt
+ * hook's event.prompt.text is the mutable admitted draft, and edits become
+ * the canonical persisted input (migrate-v1 maps chat.message -> prompt).
+ * v1.18.34 also calls setup() with a limited ctx — guarded.
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { join, dirname } from "node:path"
-
-import type { Plugin } from "@opencode-ai/plugin"
 
 const DISABLED = String(process.env.MAGNOLIA_DOORBELL ?? "").toLowerCase() === "0"
 const AGENTS = ["literature", "xiulian"]
 const MENTION_RE = /@(literature|xiulian)\b[,:]?\s*([^\n]*)/gi
 
-export const AgentDoorbell: Plugin = async ({ client, directory }) => {
-  if (DISABLED) return {}
+type Toast = (message: string) => void
 
-  // Current project, same resolution as magnolia-action-retrieval.
-  let sourceProject = "unknown"
+function sourceProjectOf(directory: string): string {
   try {
     const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
-    if (proj) sourceProject = proj
+    if (proj) return proj
   } catch { /* fall through */ }
+  return "unknown"
+}
 
-  function slug(text: string): string {
-    const now = new Date()
-    const hhmmss = now.toISOString().slice(11, 19).replace(/:/g, "")
-    const words = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-      .split(/\s+/).slice(0, 4).join("-").slice(0, 40)
-    return `${now.toISOString().slice(0, 10)}_${words || "request"}_${hhmmss}`
-  }
+function slug(text: string): string {
+  const now = new Date()
+  const hhmmss = now.toISOString().slice(11, 19).replace(/:/g, "")
+  const words = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+    .split(/\s+/).slice(0, 4).join("-").slice(0, 40)
+  return `${now.toISOString().slice(0, 10)}_${words || "request"}_${hhmmss}`
+}
 
-  function deliver(agent: string, request: string): string {
-    const taskDir = join(directory, "projects", agent, "inbox",
-      `from-${sourceProject}`)
-    mkdirSync(taskDir, { recursive: true })
-    const file = join(taskDir, `${slug(request)}.task.md`)
-    const letter = [
-      `# Task: ${request.slice(0, 80)}`,
-      ``,
-      `- from: ${sourceProject}`,
-      `- date: ${new Date().toISOString()}`,
-      `- status: open`,
-      ``,
-      `## Request`,
-      ``,
-      request.trim() || "(see attached session context; ask the sender if unclear)",
-      ``,
-    ].join("\n")
-    mkdirSync(dirname(file), { recursive: true })
-    appendFileSync(file, letter + "\n")
-    return file
-  }
+function deliver(directory: string, sourceProject: string, agent: string, request: string): string {
+  const taskDir = join(directory, "projects", agent, "inbox", `from-${sourceProject}`)
+  mkdirSync(taskDir, { recursive: true })
+  const file = join(taskDir, `${slug(request)}.task.md`)
+  const letter = [
+    `# Task: ${request.slice(0, 80)}`,
+    ``,
+    `- from: ${sourceProject}`,
+    `- date: ${new Date().toISOString()}`,
+    `- status: open`,
+    ``,
+    `## Request`,
+    ``,
+    request.trim() || "(see attached session context; ask the sender if unclear)",
+    ``,
+  ].join("\n")
+  mkdirSync(dirname(file), { recursive: true })
+  appendFileSync(file, letter + "\n")
+  return file
+}
 
-  return {
-    "chat.message": async (input: any, output: any) => {
+/** Shared mention-processing: returns rewritten text + delivered agents. */
+function processText(directory: string, sourceProject: string, text: string): { text: string; sent: string[] } {
+  const sent: string[] = []
+  if (!/@(literature|xiulian)\b/i.test(text)) return { text, sent }
+  const newText = text.replace(
+    MENTION_RE,
+    (match: string, agent: string, request: string, _offset: number) => {
+      const req = (request || "").trim()
+      if (!req) return match // a bare @mention with no ask: leave it
       try {
-        if (!output?.parts || !Array.isArray(output.parts)) return
-        for (const part of output.parts) {
-          if (part?.type !== "text" || typeof part?.text !== "string") continue
-          if (!/@(literature|xiulian)\b/i.test(part.text)) continue
+        deliver(directory, sourceProject, agent.toLowerCase(), req)
+        sent.push(`@${agent}`)
+        return `[→ sent to @${agent}; the agents daemon will run it]`
+      } catch {
+        return match // delivery failed: leave the text untouched
+      }
+    },
+  )
+  return { text: sent.length > 0 ? newText : text, sent }
+}
 
-          const sent: string[] = []
-          const newText = part.text.replace(
-            MENTION_RE,
-            (match: string, agent: string, request: string, offset: number) => {
-              const req = (request || "").trim()
-              if (!req) return match // a bare @mention with no ask: leave it
-              try {
-                const file = deliver(agent.toLowerCase(), req)
-                sent.push(`@${agent}`)
-                return `[→ sent to @${agent} (letter ${file.split("/").pop()}; the agents daemon will run it)]`
-              } catch {
-                return match // delivery failed: leave the text untouched
-              }
-            },
-          )
-          if (sent.length > 0) {
-            part.text = newText
-            for (const agent of sent) {
-              client.tui
-                .showToast({
-                  body: {
-                    title: "agents-doorbell",
-                    message: `${agent} triggered — request letter written; the daemon will run it.`,
-                  },
-                })
-                .catch(() => {})
-            }
-          }
+function toastFor(toast: Toast, agent: string) {
+  toast(`${agent} triggered — request letter written; the daemon will run it.`)
+}
+
+export default {
+  id: "magnolia-agent-doorbell",
+
+  /** opencode v2: prompt-admission hook (chat.message equivalent). */
+  async setup(ctx: any) {
+    if (DISABLED) return
+    if (!ctx?.session?.hook) return // v1.18.34 also calls setup() with a limited ctx — v1 runs server()
+    const directory = ctx.location?.directory ?? process.cwd()
+    const sourceProject = sourceProjectOf(directory)
+    const toast: Toast = (message) => {
+      const t = (ctx as any)?.tui?.showToast
+      if (typeof t === "function") {
+        t.call((ctx as any).tui, { body: { title: "agents-doorbell", message } }).catch(() => {})
+      } else {
+        console.error(`[agents-doorbell] ${message}`)
+      }
+    }
+    await ctx.session.hook("prompt", async (event: any) => {
+      try {
+        const prompt = event?.prompt
+        if (typeof prompt?.text !== "string" || !prompt.text) return
+        const { text, sent } = processText(directory, sourceProject, prompt.text)
+        if (sent.length > 0) {
+          prompt.text = text
+          for (const agent of sent) toastFor(toast, agent)
         }
       } catch { /* never throw into opencode */ }
-    },
-  }
+    })
+  },
+
+  /** opencode v1: original chat.message part-editing behavior. */
+  async server({ client, directory }: any) {
+    if (DISABLED) return {}
+    const sourceProject = sourceProjectOf(directory)
+    return {
+      "chat.message": async (_input: any, output: any) => {
+        try {
+          if (!output?.parts || !Array.isArray(output.parts)) return
+          for (const part of output.parts) {
+            if (part?.type !== "text" || typeof part?.text !== "string") continue
+            const { text, sent } = processText(directory, sourceProject, part.text)
+            if (sent.length > 0) {
+              part.text = text
+              for (const agent of sent) {
+                client.tui
+                  .showToast({
+                    body: {
+                      title: "agents-doorbell",
+                      message: `${agent} triggered — request letter written; the daemon will run it.`,
+                    },
+                  })
+                  .catch(() => {})
+              }
+            }
+          }
+        } catch { /* never throw into opencode */ }
+      },
+    }
+  },
 }
