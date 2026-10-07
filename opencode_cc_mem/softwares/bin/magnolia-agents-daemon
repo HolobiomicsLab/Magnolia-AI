@@ -207,13 +207,13 @@ def is_final_answer(text: str) -> bool:
 
 
 def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
-              extra_args: list, run_log: Path | None) -> dict:
+              extra_args: list, run_log: Path | None, binary: str = "opencode") -> dict:
     """One headless `opencode run --model M --format json [extra_args]`.
     Returns parse_run_events output plus "rc" and "stderr_tail"; appends
     the raw events to run_log so failures stay diagnosable (the daemon
     previously discarded stderr — 2026-09-29 0-byte run was undiagnosable)."""
     proc = subprocess.run(
-        ["opencode", "run", "--model", model, "--format", "json", *extra_args],
+        [binary, "run", "--model", model, "--format", "json", *extra_args],
         cwd=project_dir, env=env, timeout=timeout_s,
         capture_output=True, text=True,
     )
@@ -230,6 +230,17 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         except OSError:
             pass
     return parsed
+
+
+def _opencode_bin() -> str:
+    """v2 mode (MAGNOLIA_OPENCODE_V2=1): the pinned v2 binary + its own DB.
+    This switch lives on the v2 branch only (exp/opencode-v2);
+    exp/distill-admission is the pure-v1 lane."""
+    if os.environ.get("MAGNOLIA_OPENCODE_V2", "").lower() in ("1", "true", "yes", "on"):
+        return os.environ.get(
+            "MAGNOLIA_OPENCODE_V2_BIN",
+            str(Path.home() / ".local/share/magnolia-v2/bin/opencode"))
+    return "opencode"
 
 
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
@@ -259,6 +270,10 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
     env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
+    if _opencode_bin() != "opencode":
+        env.setdefault(
+            "OPENCODE_DB",
+            str(Path.home() / ".local/share/opencode/opencode-v2.db"))
     # Lane session: the lane keeps ONE session across letters — each letter
     # resumes it (`opencode run --session`), so the lane retains its ticket
     # history. First letter starts a fresh session; the resulting session id
@@ -276,7 +291,8 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     attempt = 0
     while True:
         attempt += 1
-        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log)
+        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log,
+                           binary=_opencode_bin())
         if parsed.get("session_id"):
             # Lane session persistence: resume next letter in the same session.
             st = load_state(root)
