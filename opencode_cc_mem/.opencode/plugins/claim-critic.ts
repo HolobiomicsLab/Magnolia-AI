@@ -191,13 +191,17 @@ export default {
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
-          if (event?.type !== "session.idle") continue
-          const sid = (event as any)?.properties?.sessionID ?? (event as any)?.sessionID
-          if (!sid) continue
+          const ev: any = event
+          // v2 vocabulary has no session.idle; the turn-terminal signal is
+          // session.execution.succeeded with the id at durable.aggregateID.
+          const turnEnd =
+            ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
+          const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID
+          if (!turnEnd || !sid) continue
           // In-process capture (v2 exports lack assistant text + tool parts —
           // gate-1 finding): read messages through the session domain.
-          const messages = await ctx.session.context({ sessionID: sid }).catch(() => [])
-          await auditSession(messages ?? [], sid, outDir, apiKey, toast)
+          const messages = await ctx.session.context({ sessionID: String(sid) }).catch(() => [])
+          await auditSession(messages ?? [], String(sid), outDir, apiKey, toast)
         }
       } catch {
         /* aborted or stream error — never break the session */

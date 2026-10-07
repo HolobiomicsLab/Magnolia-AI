@@ -25,7 +25,7 @@
  * plus an event-stream subscription as belt-and-suspenders — both feeding the
  * same recorder, so the JSONL contract the Python side reads is unchanged.
  */
-import { appendFileSync, mkdirSync, existsSync, readFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join, dirname } from "node:path"
 
 function projectMapPath(directory: string): string | null {
@@ -84,6 +84,44 @@ function makeRecorder(directory: string, worktree: string | undefined) {
   }
 }
 
+/** Directory for the v2 in-process transcript dumps (next to the mapping). */
+function transcriptsDir(directory: string): string {
+  try {
+    const marker = join(directory, ".magnolia", ".active-project")
+    const proj = readFileSync(marker, "utf8").trim()
+    if (proj) return join(directory, "projects", proj, ".magnolia", "opencode-transcripts")
+  } catch { /* fall through to root */ }
+  return join(directory, ".magnolia", "opencode-transcripts")
+}
+
+const MAX_DUMP_CHARS = 4_000_000 // ~4 MB cap; larger sessions truncate the tail
+
+/** Dump the full in-process message list (v2 exports are user-text-only). */
+function dumpTranscript(dir: string, sessionID: string, messages: unknown): void {
+  try {
+    mkdirSync(dir, { recursive: true })
+    let body = JSON.stringify({
+      ts: new Date().toISOString(),
+      sessionID,
+      source: "plugin-v2-ctx.session.context",
+      messages,
+    })
+    if (body.length > MAX_DUMP_CHARS) {
+      // A truncated JSON string is useless to the reader — write a valid,
+      // marked object instead.
+      body = JSON.stringify({
+        ts: new Date().toISOString(),
+        sessionID,
+        source: "plugin-v2-ctx.session.context",
+        truncated: true,
+        note: "session exceeded 4 MB; dump clipped — use the CLI export fallback",
+        messages: (Array.isArray(messages) ? messages : []).slice(0, 200),
+      })
+    }
+    writeFileSync(join(dir, `${sessionID}.json`), body)
+  } catch { /* never throw into opencode */ }
+}
+
 export default {
   id: "magnolia-session-capture",
 
@@ -97,16 +135,35 @@ export default {
       try { record(event?.sessionID) } catch { /* never throw */ }
     })
 
-    // Belt-and-suspenders: session lifecycle events also carry the id.
+    // Belt-and-suspenders: session lifecycle events also carry the id, AND
+    // (v2) each turn-end dumps the full in-process message list — the distill
+    // feed that replaces the export CLI (v2 exports are user-text-only).
+    // v2 event vocabulary (logged 2026-10-07): there is NO session.idle in the
+    // stream; the turn-terminal signal is session.execution.succeeded with the
+    // session id at durable.aggregateID (data.sessionID on usage events).
+    // Accept both vocabularies.
     const controller = new AbortController()
+    const dumpDir = transcriptsDir(directory)
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          const ev: any = event
           const sid =
-            (event as any)?.properties?.sessionID ??
-            (event as any)?.properties?.info?.id ??
-            (event as any)?.sessionID
-          if (sid) record(sid)
+            ev?.durable?.aggregateID ??
+            ev?.properties?.sessionID ??
+            ev?.properties?.info?.id ??
+            ev?.data?.sessionID ??
+            ev?.sessionID
+          if (!sid) continue
+          record(String(sid))
+          const turnEnd =
+            ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
+          if (turnEnd && ctx?.session?.context) {
+            const messages = await ctx.session
+              .context({ sessionID: String(sid) })
+              .catch(() => null)
+            if (messages) dumpTranscript(dumpDir, String(sid), messages)
+          }
         }
       } catch { /* aborted or stream error — never break the session */ }
     })()

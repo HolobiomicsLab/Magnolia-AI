@@ -407,9 +407,13 @@ export default {
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
-          if (event?.type !== "session.idle") continue
-          const sid = (event as any)?.properties?.sessionID ?? (event as any)?.sessionID
-          if (sid) await core.probeApplication(String(sid))
+          const ev: any = event
+          // v2 vocabulary has no session.idle; the turn-terminal signal is
+          // session.execution.succeeded with the id at durable.aggregateID.
+          const turnEnd =
+            ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
+          const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID
+          if (turnEnd && sid) await core.probeApplication(String(sid))
         }
       } catch { /* aborted or stream error */ }
     })()
