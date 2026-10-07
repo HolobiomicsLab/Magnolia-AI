@@ -159,9 +159,11 @@ def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) ->
 
 
 def export_session(ses_id: str) -> Optional[dict]:
-    """`opencode export <id>` raw (NOT --sanitize). Returns parsed JSON or None
-    on any failure, so the caller can retry on a later sweep rather than marking
-    a failed export as done.
+    """`opencode export <id>` raw (NOT --sanitize); on failure falls back to the
+    v2 form `opencode session export <id>` (moved under `session` in v2; v1
+    sessions answer the first form, so order matters). Returns parsed JSON or
+    None on any failure, so the caller can retry on a later sweep rather than
+    marking a failed export as done.
 
     IMPORTANT: `opencode export` truncates its stdout at one 64 KB pipe buffer
     when stdout is a pipe — so `capture_output=True` silently yields invalid
@@ -171,28 +173,59 @@ def export_session(ses_id: str) -> Optional[dict]:
     import os
     import tempfile
 
-    try:
-        fd, tmp = tempfile.mkstemp(prefix="oc_export_", suffix=".json")
-        os.close(fd)
+    def _try(cmd: list[str]) -> Optional[dict]:
         try:
-            with open(tmp, "w") as out:
-                proc = subprocess.run(
-                    ["opencode", "export", ses_id],
-                    stdout=out, stderr=subprocess.DEVNULL, timeout=120,
-                )
-            if proc.returncode != 0:
-                return None
-            data = Path(tmp).read_text()
-            if not data.strip():
-                return None
-            return json.loads(data)
-        finally:
+            fd, tmp = tempfile.mkstemp(prefix="oc_export_", suffix=".json")
+            os.close(fd)
             try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-    except Exception:
-        return None
+                with open(tmp, "w") as out:
+                    proc = subprocess.run(cmd, stdout=out,
+                                          stderr=subprocess.DEVNULL, timeout=120)
+                if proc.returncode != 0:
+                    return None
+                data = Path(tmp).read_text()
+                if not data.strip():
+                    return None
+                return json.loads(data)
+            finally:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        except Exception:
+            return None
+
+    out = _try(["opencode", "export", ses_id])
+    if out is not None:
+        return out
+    return _try(["opencode", "session", "export", ses_id])
+
+
+def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
+    """Exporter preferring the v2 capture plugin's in-process transcript dump.
+
+    Under opencode v2 the export CLI is user-text-only (gate-1, 2026-10-06:
+    assistant text and tool parts are absent), so the session-capture plugin
+    dumps the FULL message list via ctx.session.context() at session.idle to
+    ``<store>/opencode-transcripts/<sid>.json``. This exporter reads that dump
+    first and falls back to the CLI for v1 sessions (no dump files exist
+    there). Dump shape: {ts, sessionID, source, messages: [...]} — the v1
+    {info,parts} message family, so reconstruct_transcript's v1 branch (with
+    tool_chars evidence) applies unchanged."""
+    store = Path(store_dir)
+
+    def exporter(ses_id: str) -> Optional[dict]:
+        dump = store / "opencode-transcripts" / f"{ses_id}.json"
+        if dump.exists():
+            try:
+                d = json.loads(dump.read_text())
+                if isinstance(d, dict) and d.get("messages") is not None:
+                    return d
+            except (OSError, json.JSONDecodeError):
+                pass  # corrupt dump — fall through to the CLI
+        return export_session(ses_id)
+
+    return exporter
 
 
 def _read_mapping_ids(mapping: Path) -> list[str]:
@@ -303,7 +336,7 @@ def distill_session_transcript(
     ``distiller`` resolve to the live functions when not injected, so the module
     attributes stay monkeypatchable.
     """
-    exporter = exporter or export_session
+    exporter = exporter or plugin_dump_exporter(store_dir)
     distiller = distiller or _default_distiller
 
     store = Path(store_dir)
@@ -337,7 +370,7 @@ def ingest_opencode_sessions(
     store_dir: str,
     mapping_path: str | None = None,
     *,
-    exporter: Callable[[str], Optional[dict]] = export_session,
+    exporter: Callable[[str], Optional[dict]] | None = None,
     distiller: Callable[[str], list[dict[str, Any]]] = _default_distiller,
 ) -> list[str]:
     """Incrementally distil opencode conversations into staging.
@@ -348,12 +381,14 @@ def ingest_opencode_sessions(
     keeps producing learnings as it grows. A superseded session is sealed
     (``done: true``) once drained and skipped thereafter — that is the only state
     that stops re-export. Returns saved staging-entry paths. ``exporter`` /
-    ``distiller`` are injectable for tests.
+    ``distiller`` are injectable for tests; the default exporter prefers the
+    v2 plugin's in-process transcript dump (see plugin_dump_exporter).
 
     The per-session record at ``opencode-distilled/<sid>.json`` is a progress
     record: ``{cursor, candidates, done, updated}``.
     """
     store = Path(store_dir)
+    exporter = exporter or plugin_dump_exporter(store_dir)
     mapping = Path(mapping_path) if mapping_path else store / "opencode-sessions.jsonl"
     markers = store / "opencode-distilled"
     markers.mkdir(parents=True, exist_ok=True)
