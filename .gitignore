@@ -92,4 +92,10 @@ opencode_cc_mem/softwares/boltzgen/.venv
 opencode_cc_mem/replay_eval/runs/
 
 # agents-daemon machine-local state
-opencode_cc_mem/.magnolia-agents/
+.magnolia-agents/
+
+# replay-eval corpus bulk (regenerable via replay_eval/hsc70_freeze.py; the
+# manifests and labels are tracked for Goodhart versioning)
+opencode_cc_mem/replay_eval/corpus/hsc70_bakeoff/transcripts/
+opencode_cc_mem/replay_eval/corpus/hsc70_bakeoff/exports/
+opencode_cc_mem/replay_eval/corpus/hsc70_bakeoff/extraction_gold/slices/

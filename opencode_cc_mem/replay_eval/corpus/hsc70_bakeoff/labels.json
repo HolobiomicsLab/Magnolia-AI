@@ -1,0 +1,3481 @@
+{
+ "frozen_at": "2026-09-30T21:11:01.225410+00:00",
+ "store": "/home/tjiang/repos/project_magnolia/opencode_cc_mem/projects/hsc70_new/.magnolia",
+ "valid_ids": 483,
+ "canonical": "curated_clean",
+ "get_context": {
+  "raw": {
+   "ever": 79,
+   "workhorses": 25
+  },
+  "clean": {
+   "entries": {
+    "20260601_082858_573779_Hsc70_binding_site_context_experimental_vs_P2Rank.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+      "ses_1456d0e73ffe6ULEPwvHYx84J4",
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU",
+      "ses_17e02319dffeoeEmV0Pd79WEQ4"
+     ],
+     "distinct": 14
+    },
+    "20260601_085154_357923_HADDOCK2_4_reference_run_parameters_job_614716.md": {
+     "sessions": [
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 10
+    },
+    "20260601_085206_045909_Peptide_construction_method_and_force_field.md": {
+     "sessions": [
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 4
+    },
+    "20260601_092242_211883_P2rank_process_cleanup_required_before_re_run_to_avoid_resou.md": {
+     "sessions": [
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD"
+     ],
+     "distinct": 2
+    },
+    "20260601_123533_507404_submit_job_output_collision_always_clean_output_before_resub.md": {
+     "sessions": [
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD"
+     ],
+     "distinct": 2
+    },
+    "20260601_123533_529832_submit_job_does_verbatim_rsync_of_working_dir_reuse_carefull.md": {
+     "sessions": [
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP"
+     ],
+     "distinct": 1
+    },
+    "20260601_123636_270414_HADDOCK3_failure_on_Azzurra_output_exists_not_OOM.md": {
+     "sessions": [
+      "ses_14d178160ffeFCUNF8muY7i3DL"
+     ],
+     "distinct": 1
+    },
+    "20260601_125029_258670_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_16d72029fffebGAR3sU5A0uNLO"
+     ],
+     "distinct": 3
+    },
+    "20260601_125029_262067_HADDOCK3_memory_baseline_on_Azzurra_2GB_core_minimum_for_ref.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 2
+    },
+    "20260601_125029_263244_HADDOCK3_jobs_failing_with_output_exists_not_OOM_not_input_e.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 4
+    },
+    "20260601_125506_918424_HADDOCK3_s2000_KILDQ_on_full_length_Hsc70_cluster_2_best_Doc.md": {
+     "sessions": [
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4"
+     ],
+     "distinct": 12
+    },
+    "20260601_141116_882304_First_successful_HADDOCK3_KILDQ_peptide_docking_on_full_leng.md": {
+     "sessions": [
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 4
+    },
+    "20260601_141122_786346_First_working_HADDOCK3_peptide_docking_on_full_length_Hsc70.md": {
+     "sessions": [
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3"
+     ],
+     "distinct": 3
+    },
+    "20260601_193146_610247_Initial_2026_06_01_KILDQ_s5000_run_produced_output_from_11_s.md": {
+     "sessions": [
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP"
+     ],
+     "distinct": 2
+    },
+    "20260601_193146_611685_Template_for_setting_up_4_peptide_docking_runs_for_hsc70_KFE.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_13fc23de2ffelf2ddyTWl2olKC"
+     ],
+     "distinct": 2
+    },
+    "20260602_124049_333361_Contact_analysis_residue_type_labels_are_not_interaction_mec.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_00aaeb7caffezzRJN6Rvc3q8vx",
+      "ses_00b6e153fffe0Go7rYlKwmVTuW",
+      "ses_01626cb7effeRZpRX73tGDR6r3",
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_13fb7b1bfffeq2sP2uCvfcb2Z1",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_1456d0e73ffe6ULEPwvHYx84J4",
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_14cf831a6ffeTNYoSmgNq1SkVs",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_14ea955f6ffewXyKOAvu8DcO51",
+      "ses_157305d17ffehanltq1UkHKLgn",
+      "ses_1573cac52ffeM0LR8Y3lMIOL9N",
+      "ses_1574372c7ffePZ7a6wkaB8bd2s",
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_17205e7c6ffefOar6hVIknEGB8",
+      "ses_f995d8ef5ffeZ93pWT2dNihgDq",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fa3c22fa4ffelwXX4LgUoNyBiy",
+      "ses_fa4010ea1ffe4UrXUZrn4O7ub7",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a4cc3bffeRTbs2WcxLQleug",
+      "ses_fbdd91efdffeITwh2t4Jwwbnc8",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez"
+     ],
+     "distinct": 45
+    },
+    "20260603_111129_205024_Peptide_construction_method_and_force_field_CORRECTED.md": {
+     "sessions": [
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ"
+     ],
+     "distinct": 1
+    },
+    "20260604_115305_176941_HADDOCK3_runs_completed_for_4_peptide_targets_via_p2rank_100.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 10
+    },
+    "20260605_082851_898337_Peptide_construction_method_and_force_field_for_HADDOCK3_doc.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_0399febfaffeSpm6o3FgACptCp",
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_06e35b9beffe0Rk9xn8eqWusvd",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_0de49a3bdffexSPC17PoZJFZ95",
+      "ses_0de5f46e9ffeaqXxcy9V1QVDe5",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f99ca2482ffefxpV8kSA8nk6z7",
+      "ses_f9eefa93effe0DoRxv4iHTKBZ8",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68",
+      "ses_fecf33ecaffeSYDQC0Tcri2MDX",
+      "ses_fed50fe14ffeSIUaCA7DCVo5Ap"
+     ],
+     "distinct": 33
+    },
+    "20260605_085429_555413_Always_use_max_walltime_for_cpucourt_partition_72h.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_158957077ffeOqwxdLe26CyDPy"
+     ],
+     "distinct": 3
+    },
+    "20260605_122155_979185_Stage_1_6_mer_extension_of_KFERQ_N_terminal_ALA_outperforms.md": {
+     "sessions": [
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3"
+     ],
+     "distinct": 4
+    },
+    "20260605_135712_476743_HADDOCK3_contact_labels_are_residue_categories_not_interacti.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260605_135712_478615_Isolated_SBD_domain_docking_rejected.md": {
+     "sessions": [
+      "ses_1456d0e73ffe6ULEPwvHYx84J4"
+     ],
+     "distinct": 1
+    },
+    "20260605_135737_530472_submit_job_tool_rsyncs_working_dir_requiring_fetch_clean_for.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260605_135802_423701_KFERQ_KILDQ_fusion_HADDOCK3_run_terminated_early_due_to_trun.md": {
+     "sessions": [
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3"
+     ],
+     "distinct": 4
+    },
+    "20260608_123958_023055_HADDOCK3_run_status_pass_does_not_guarantee_successful_capri.md": {
+     "sessions": [
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz"
+     ],
+     "distinct": 1
+    },
+    "20260611_093503_721290_Do_not_trust_directory_filename_labels_for_peptide_length_ve.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260612_070346_254894_P2Rank_restraints_protocol_yields_superior_scoring_over_expe.md": {
+     "sessions": [
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 4
+    },
+    "20260612_074517_254464_AIR_free_score_correct_formula_and_recurring_calculation_err.md": {
+     "sessions": [
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 2
+    },
+    "20260612_104325_477887_N_terminal_ALA_extension_AKFERQ_rewires_salt_bridge_network.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260612_104325_491544_C_terminal_LYS_in_7_mer_AKFERQK_contributes_no_contacts_and.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 2
+    },
+    "20260612_104325_498343_Cross_run_comparison_requires_PDB_level_atom_measurements_no.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260613_090845_447561_Open_state_docking_may_miss_biologically_relevant_closed_sta.md": {
+     "sessions": [
+      "ses_13fc23de2ffelf2ddyTWl2olKC"
+     ],
+     "distinct": 1
+    },
+    "20260613_092837_138900_BindCraft_jobs_on_external_cluster_not_tracked_by_Magnolia_r.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm",
+      "ses_fecf33ecaffeSYDQC0Tcri2MDX"
+     ],
+     "distinct": 6
+    },
+    "20260616_064327_131908_HADDOCK3_job_lifecycle_stuck_at_submitting_despite_successfu.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260616_071134_132311_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_00aaeb7caffezzRJN6Rvc3q8vx",
+      "ses_00b6e153fffe0Go7rYlKwmVTuW",
+      "ses_01626cb7effeRZpRX73tGDR6r3",
+      "ses_0399febfaffeSpm6o3FgACptCp",
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+      "ses_06e35b9beffe0Rk9xn8eqWusvd",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0dcdbe062ffeFia01VH0OA21gg",
+      "ses_0de5f46e9ffeaqXxcy9V1QVDe5",
+      "ses_f995d8ef5ffeZ93pWT2dNihgDq",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f9eefa93effe0DoRxv4iHTKBZ8",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fa3c22fa4ffelwXX4LgUoNyBiy",
+      "ses_fa438805affet1qcnpdR22FqNs",
+      "ses_fa989e272ffe2ctd8OxxbFTJBk",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fb8a4cc3bffeRTbs2WcxLQleug",
+      "ses_fbdd91efdffeITwh2t4Jwwbnc8",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4300ffetLEEMnWq6DTA8y",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68"
+     ],
+     "distinct": 32
+    },
+    "20260616_072542_246988_PDB_4PO2_provides_19_tight_contact_residues_for_SBD_canonica.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 1
+    },
+    "20260616_092818_415911_P2Rank_fails_to_detect_SBD_lid_pocket.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 1
+    },
+    "20260616_094925_031867_Closed_Hsc70_conformation_primary_SBD_groove_binding_pocket.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 1
+    },
+    "20260616_101004_106005_4PO2_crystal_structure_and_Sahu_Malhotra_AF3_prediction_SBD.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260616_104338_878510_HADDOCK3_fails_with_Could_not_identify_chainID_or_segID_in_p.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x"
+     ],
+     "distinct": 2
+    },
+    "20260616_110359_872958_4PO2_SBD_docking_results_for_five_residue_peptides_QRKEL_and.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f1168647cffe1cEDpVB94cRd1D",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ"
+     ],
+     "distinct": 5
+    },
+    "20260616_122518_723343_Full_HADDOCK3_protocol_for_peptide_Hsc70_docking_requires_md.md": {
+     "sessions": [
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f0d1a4674ffeFtyP3a4PdHlg5y",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f113e1413ffe3Np6s7207RinH4",
+      "ses_f113e1543ffeXxMvSABAaWv8vY",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 9
+    },
+    "20260616_132621_326274_tleap_topology_building_fails_on_HADDOCK3_PDB_with_hydrogens.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 2
+    },
+    "20260616_170758_695261_SBD_groove_backbone_preserved_between_4PO2_Hsp70_and_AF3_Hsc.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260616_202842_917618_Selecting_best_score_cluster_without_convergence_check_gives.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 2
+    },
+    "20260617_073053_150518_Torielli_peptide_TGGFQMALT_is_a_tight_Hsc70_ligand_with_crit.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl"
+     ],
+     "distinct": 3
+    },
+    "20260617_073053_152499_seletopclusts_top_models_4_caps_reported_cluster_sizes_to_n.md": {
+     "sessions": [
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 1
+    },
+    "20260617_075058_495957_Run_history_may_be_stale_direct_cluster_verification_require.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5"
+     ],
+     "distinct": 1
+    },
+    "20260617_081153_054745_AlphaFold3_2_models_score_poorly_due_to_van_der_Waals_clashe.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260617_123907_366603_MM_GBSA_per_residue_gas_phase_energy_cannot_rank_Hsc70_bindi.md": {
+     "sessions": [
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl"
+     ],
+     "distinct": 1
+    },
+    "20260617_144016_520215_RKDLQ_D3_per_residue_MM_GBSA_unfavorable_sidechain_gas_phase.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260617_194130_677023_Plan_for_N_terminal_extension_test_6_candidates_on_RKALQ_bac.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260617_203635_531804_rsync_timeout_when_fetching_large_haddock3_results_via_fetch.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260617_203638_922667_Rsync_timeout_for_large_haddock3_result_transfers.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260617_203638_924361_MCP_connection_closed_when_accessing_perspicacite_v2_directo.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260618_120650_465416_User_expects_AIR_free_scores_from_a_specific_report_html_AF3.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260618_122720_435093_Report_AIR_free_values_wrong_used_w_air_0_01_instead_of_0_1.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260618_122720_436705_Corrected_AIR_free_ranking_of_5_mer_peptides_against_Hsc70_A.md": {
+     "sessions": [
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ"
+     ],
+     "distinct": 1
+    },
+    "20260618_124742_550431_AIR_free_scores_rank_peptide_Hsc70_binding_affinity_RKDLQ_be.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f1168647cffe1cEDpVB94cRd1D",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 5
+    },
+    "20260619_105428_581551_Azzurra_cpucourt_fragmentation_blocks_32_core_HADDOCK3_jobs.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn"
+     ],
+     "distinct": 2
+    },
+    "20260619_111556_408605_Staging_consolidation_tool_does_not_flag_cross_proposal_cont.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260619_113415_401436_memory_search_tool_fails_to_search_staging_or_project_tiers.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260619_115046_865233_4PO2_sandwich_pocket_residues_19_residues.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 2
+    },
+    "20260624_111500_000001_Terminal_direction_geometry_does_not_transfer_from_RKDLQ_cl1_to_R.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260624_124000_000001_Perspicacite_KB_check_skipped_before_literature_query_always_v.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260624_124100_000001_SBD_to_NBD_spanning_peptide_is_non_canonical_likely_docking_ar.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5"
+     ],
+     "distinct": 1
+    },
+    "20260624_124708_654938_Memory_session_handover_listed_pending_jobs_that_had_already.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 2
+    },
+    "20260624_165207_781872_TGGFQMALT_alascan_independently_validates_the_F4_M6_L8_criti.md": {
+     "sessions": [
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl"
+     ],
+     "distinct": 1
+    },
+    "20260624_214047_334236_memory_get_run_history_output_is_truncated_single_line_JSON.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_0d93057c5ffejLlEWHkl51h6E5"
+     ],
+     "distinct": 2
+    },
+    "20260625_100550_729733_AIR_free_score_computation_with_w_air_0_1_verified_for_3_run.md": {
+     "sessions": [
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 3
+    },
+    "20260625_124606_091513_Raise_HADDOCK3_rigidbody_sampling_to_s20000_for_under_seeded.md": {
+     "sessions": [
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f1158af6dffekbLPqwN5H8EUsl",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 5
+    },
+    "20260625_131500_000001_TGGFQMALT_9mer_mutation_cross_mode_artifact.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 3
+    },
+    "20260625_132000_000001_memory_record_learning_similarity_matcher_over_aggressive.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260625_140000_000001_T1E_stabilizes_groove_only_via_E1_K451_anchor_mutation_candidates.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260625_151008_286795_HADDOCK3_rigidbody_finalization_deadlock_at_s20000_with_16_w.md": {
+     "sessions": [
+      "ses_f1158af6dffekbLPqwN5H8EUsl"
+     ],
+     "distinct": 1
+    },
+    "20260706_195028_192532_fle_end_2_increases_by_2_not_1_when_extending_a_peptide_by_1.md": {
+     "sessions": [
+      "ses_f113e1413ffe3Np6s7207RinH4",
+      "ses_f113e1543ffeXxMvSABAaWv8vY"
+     ],
+     "distinct": 2
+    },
+    "20260714_063201_356525_Pilot_switch_to_ACE_NME_capping_both_termini_rationale_compa.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "air-free-score-calculation-error-fixed-by-documented-formula-and-verification-rule.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fe2c46fe5ffef6HuF39SjKstg6",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68"
+     ],
+     "distinct": 11
+    }
+   },
+   "workhorses": [
+    "20260601_082858_573779_Hsc70_binding_site_context_experimental_vs_P2Rank.md",
+    "20260601_085154_357923_HADDOCK2_4_reference_run_parameters_job_614716.md",
+    "20260601_085206_045909_Peptide_construction_method_and_force_field.md",
+    "20260601_125029_258670_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md",
+    "20260601_125029_263244_HADDOCK3_jobs_failing_with_output_exists_not_OOM_not_input_e.md",
+    "20260601_125506_918424_HADDOCK3_s2000_KILDQ_on_full_length_Hsc70_cluster_2_best_Doc.md",
+    "20260601_141116_882304_First_successful_HADDOCK3_KILDQ_peptide_docking_on_full_leng.md",
+    "20260601_141122_786346_First_working_HADDOCK3_peptide_docking_on_full_length_Hsc70.md",
+    "20260602_124049_333361_Contact_analysis_residue_type_labels_are_not_interaction_mec.md",
+    "20260604_115305_176941_HADDOCK3_runs_completed_for_4_peptide_targets_via_p2rank_100.md",
+    "20260605_082851_898337_Peptide_construction_method_and_force_field_for_HADDOCK3_doc.md",
+    "20260605_085429_555413_Always_use_max_walltime_for_cpucourt_partition_72h.md",
+    "20260605_122155_979185_Stage_1_6_mer_extension_of_KFERQ_N_terminal_ALA_outperforms.md",
+    "20260605_135802_423701_KFERQ_KILDQ_fusion_HADDOCK3_run_terminated_early_due_to_trun.md",
+    "20260612_070346_254894_P2Rank_restraints_protocol_yields_superior_scoring_over_expe.md",
+    "20260613_092837_138900_BindCraft_jobs_on_external_cluster_not_tracked_by_Magnolia_r.md",
+    "20260616_071134_132311_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md",
+    "20260616_110359_872958_4PO2_SBD_docking_results_for_five_residue_peptides_QRKEL_and.md",
+    "20260616_122518_723343_Full_HADDOCK3_protocol_for_peptide_Hsc70_docking_requires_md.md",
+    "20260617_073053_150518_Torielli_peptide_TGGFQMALT_is_a_tight_Hsc70_ligand_with_crit.md",
+    "20260618_124742_550431_AIR_free_scores_rank_peptide_Hsc70_binding_affinity_RKDLQ_be.md",
+    "20260625_100550_729733_AIR_free_score_computation_with_w_air_0_1_verified_for_3_run.md",
+    "20260625_124606_091513_Raise_HADDOCK3_rigidbody_sampling_to_s20000_for_under_seeded.md",
+    "20260625_131500_000001_TGGFQMALT_9mer_mutation_cross_mode_artifact.md",
+    "air-free-score-calculation-error-fixed-by-documented-formula-and-verification-rule.md"
+   ],
+   "never_surfaced": [
+    "20260601_072242_731541_Project_hsc70_new_initialized_greenfield_peptide_docking_pro.md",
+    "20260601_092056_003720_p2rank_fails_on_Multi_Model_PDB_exit_code_1.md",
+    "20260601_092242_213399_P2rank_prediction_on_full_length_Hsc70_receptor.md",
+    "20260601_120451_289865_Shell_tool_name_is_compchem_tools_run_shell_not_run_shell.md",
+    "20260601_123533_478659_Peptide_starting_conformation_critical_for_rigidbody_docking.md",
+    "20260601_125029_260688_HADDOCK3_failure_on_Azzurra_output_directory_collision.md",
+    "20260601_140102_087751_Best_model_extraction_from_haddock3_clustering_output_uses_1.md",
+    "20260601_140102_089297_Input_peptide_PDB_files_in_hsc70_new_project_use_standard_PD.md",
+    "20260601_141116_881223_submit_job_verbatim_rsync_of_working_dir_causes_output_colli.md",
+    "20260601_141116_883283_P2Rank_process_cleanup_required_before_re_run_to_avoid_resou.md",
+    "20260601_141118_718265_Resolved_AttributeError_NoneType_object_has_no_attribute_low.md",
+    "20260601_141118_719935_Successful_haddock3_run_score.md",
+    "20260601_141122_785057_HADDOCK3_output_exists_failure_output_directory_collision_fr.md",
+    "20260601_141122_788667_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md",
+    "20260601_141122_789625_submit_job_rsync_semantics_entire_working_dir_copied_verbati.md",
+    "20260601_141124_073644_Resolved_AttributeError_NoneType_object_has_no_attribute_low.md",
+    "20260601_193146_612800_Cross_check_peptide_PDB_residue_numbering_before_generating.md",
+    "20260601_193606_766133_HPC_job_result_retrieval_failure_due_to_rsync_timeout_signal.md",
+    "20260601_193606_767109_Haddock3_run_directory_setup_and_restraint_validation_for_5m.md",
+    "20260601_193606_767802_Peptide_PDB_residue_numbering_inspection_across_5mer_library.md",
+    "20260602_070321_297016_Sequential_HADDOCK3_docking_submission_for_peptide_mutants_w.md",
+    "20260602_070321_299378_Two_KILDQ_runs_with_different_sampling_depths_exist_for_comp.md",
+    "20260603_090309_281249_Session_start_with_pre_existing_HADDOCK3_run_history_loaded.md",
+    "20260603_170344_460599_Conversation_initiation.md",
+    "20260604_092930_752622_Magnolia_run_directory_structure_for_HADDOCK3_p2rank_workflo.md",
+    "20260604_092940_059747_HADDOCK3_restart_submission_for_individual_SBD_peptides_and.md",
+    "20260604_092940_061386_Pending_job_assessment_from_prior_session_QRKELx2_KFERQx2_RK.md",
+    "20260604_094956_512113_Four_active_run_variants_from_2026_06_03_QRKELx2_RKDLQ_varia.md",
+    "20260604_094956_514934_KFERQ_KILDQ_fusion_run_stopped_after_caprieval_only_5_output.md",
+    "20260604_101008_263359_haddock3_run_output_directory_structure_inspection.md",
+    "20260604_103022_799847_haddock3_config_s10000_and_p2rank1_parameters_for_Hsc70_pept.md",
+    "20260604_105035_747921_KFERQ_KILDQ_fusion_is_the_only_one_among_4_designs_that_proc.md",
+    "20260604_115305_166497_HADDOCK3_output_directory_structure_per_workflow_stage.md",
+    "20260604_115305_175765_HADDOCK3_run_config_yaml_stored_in_magnolia_runs.md",
+    "20260604_120820_952174_HADDOCK3_run_output_directory_structure_shifts_per_missing_m.md",
+    "20260604_120820_953893_KFERQ_KILDQ_fusion_run_terminated_early_missing_flexref_outp.md",
+    "20260604_120820_954974_Magnolia_HADDOCK3_runs_produce_asymmetric_output_per_peptide.md",
+    "20260605_080825_030848_s10000_HADDOCK3_runs_time_out_at_flexref_stage_due_to_4h_wal.md",
+    "20260605_080825_042212_Restarted_4_timed_out_s10000_HADDOCK3_jobs_using_restart_N_w.md",
+    "20260605_080825_043479_Pre_job_validation_for_restart_remote_dir_check_structure_va.md",
+    "20260605_080825_044534_KFERQ_KILDQ_fusion_s10000_timed_out_mid_caprieval_unlike_oth.md",
+    "20260605_082851_894678_HADDOCK3_peptide_docking_on_SBD_domain_of_full_length_Hsc70.md",
+    "20260605_082851_896776_HADDOCK3_runs_completed_for_4_peptide_targets_with_p2rank_po.md",
+    "20260605_135712_477831_Best_docking_protocol_s5000_sampling_full_length_Hsc70_p2ran.md",
+    "20260605_135712_488996_Peptide_force_field_is_unconfirmed.md",
+    "20260605_135737_516017_KILDQ_full_length_Hsc70_baseline_validation_s5000_outperform.md",
+    "20260605_135737_526653_s10000_sampling_on_cpucourt_4h_walltime_causes_timeout_at_fl.md",
+    "20260605_135737_528766_Restart_HADDOCK3_from_incomplete_step_after_timeout_by_remov.md",
+    "20260605_135802_424582_Cross_variant_HADDOCK3_comparisons_require_consistent_pipeli.md",
+    "20260605_135919_989252_KFERQx2_11_mer_binding_mode_shifts_by_9_1_CA_RMSD_vs_KFERQ_5.md",
+    "20260605_135919_991464_All_P2Rank_based_p2rank1_runs_dock_to_the_NBD_nucleotide_bin.md",
+    "20260605_135919_994167_N_terminal_ALA_extension_dramatically_outperforms_C_terminal.md",
+    "20260605_135919_995261_Structural_prediction_of_preferred_extension_direction_was_w.md",
+    "20260605_135919_996381_Always_use_max_walltime_72h_for_cpucourt_HADDOCK3_jobs.md",
+    "20260608_123958_024130_Poll_jobs_correctly_confirms_zero_pending_jobs_in_a_stable_s.md",
+    "20260608_124005_175119_Project_state_tracking_via_memory_and_run_history_retrieval.md",
+    "20260610_194050_117822_BindCraft_install_fails_on_Azzurra_due_to_read_only_system_m.md",
+    "20260610_194050_119240_CUDA_module_not_required_for_BindCraft_on_Azzurra.md",
+    "20260610_194050_120561_Manual_BindCraft_installation_steps_on_Azzurra_prefix_env.md",
+    "20260610_194050_121513_BindCraft_tool_description_and_resource_requirements.md",
+    "20260611_071142_810775_P2Rank_pocket_1_restraints_with_HADDOCK3_full_pipeline_effec.md",
+    "20260611_071142_812050_KILDQ_s1000_runs_failed_early_in_HADDOCK3_pipeline.md",
+    "20260611_083236_929270_GPU_queue_accessibility_for_spectrometry_account_on_Azzurra.md",
+    "20260611_093345_593052_Long_peptide_lengths_fusion_x2_peptides_are_not_all_10_mers.md",
+    "20260611_135412_800174_Always_superimpose_docked_poses_before_comparing_scores_acro.md",
+    "20260612_064325_014644_BindCraft_default_install_script_fails_on_Azzurra_due_to_rea.md",
+    "20260612_064325_016781_BindCraft_installation_steps_on_Azzurra_verified_working.md",
+    "20260612_064325_018024_GPU_resource_requirements_and_job_submission_for_BindCraft_o.md",
+    "20260612_064325_019327_sbatch_wrap_quoting_conflict_with_Python_print_statement.md",
+    "20260612_064449_112785_Long_peptides_10_14mers_do_not_extend_the_N_ALA_binding_mode.md",
+    "20260612_064449_113558_KFERQx2_middle_section_intermittently_contacts_A_342_ARG_but.md",
+    "20260612_064449_114289_Pre_job_PDB_verification_and_docked_pose_superposition_preve.md",
+    "20260612_064449_115000_HADDOCK3_scoring_function_disfavors_charged_N_terminal_exten.md",
+    "20260612_064449_116920_Fusion_14_mer_and_KFERQx2_have_poor_per_residue_efficiency_c.md",
+    "20260612_064449_118508_BindCraft_validation_plan_and_GPU_resource_summary.md",
+    "20260612_070346_248857_Top_5_mer_peptide_rankings_for_Hsc70_docking_P2Rank_protocol.md",
+    "20260612_070346_253815_Peptide_chain_length_correlates_with_AIR_free_score_improvem.md",
+    "20260612_070346_257194_Mutation_evolution_strategy_for_peptide_optimization_is_not.md",
+    "20260612_070418_552509_AKFERQK_7_mer_HADDOCK_docking_to_Hsc70_only_1_of_5_models_ha.md",
+    "20260612_070418_554043_bc_hsc70_r_BoltzGen_still_RUNNING_on_Azzurra_after_10h46m_ge.md",
+    "20260612_070418_555235_Wait_for_bc_hsc70_r_completion_before_fetching_intermediate.md",
+    "20260612_070418_556457_N_terminal_extension_runs_N_LYS_N_GLY_N_VAL_N_SER_all_COMPLE.md",
+    "20260612_072451_698236_AIR_free_HADDOCK_scores_for_ApKFERQpK_clusters.md",
+    "20260612_072451_699486_bc_hsc70_r_BindCraft_job_Stage_3_hard_refinement_metrics_pla.md",
+    "20260612_072451_700544_BindCraft_on_cpucourt_times_out_requires_GPU_and_generous_wa.md",
+    "20260612_072451_701561_HADDOCK3_5000_model_run_with_p2rank_32_cpucourt_cores_2h.md",
+    "20260612_072451_702503_Naming_inconsistency_between_run_label_and_command_line_pept.md",
+    "20260612_104325_495640_Lid_subdomain_alone_residues_531_615_as_active_site_fails_to.md",
+    "20260612_104325_499998_KFQKQ_E3_Q_retains_near_wild_type_binding_KFQRQ_E3_R_shows_p.md",
+    "20260612_104325_503549_Report_generation_and_structure_sharing_for_colleague_handov.md",
+    "20260612_122350_927382_The_KFERQ_KILDQ_fusion_14_mer_has_an_unexpected_C_terminal_t.md",
+    "20260612_130441_139337_KFERQ_5_mer_binding_interface_to_Hsc70_R4_and_Q5_dominate_co.md",
+    "20260612_132512_011316_BindCraft_run_for_Hsc70_peptide_binders_yields_only_rejected.md",
+    "20260612_132512_024127_BindCraft_Accepted_directory_contains_subdirectories_not_des.md",
+    "20260612_132512_025883_ASP_rich_N_terminal_sequences_insufficient_to_pass_confidenc.md",
+    "20260613_090845_444930_Current_Hsc70_receptor_and_AlphaFold_model_are_in_open_confo.md",
+    "20260613_090845_446091_KFERQ_contacts_are_exclusively_NBD_residues_in_open_state_no.md",
+    "20260613_090845_448225_P2Rank_pocket_predicted_pocket_1_on_SBD_not_the_interdomain.md",
+    "20260613_090845_449143_To_model_closed_state_for_human_Hsc70_superpose_1DKZ_SBD_ont.md",
+    "20260613_092837_137909_BindCraft_on_full_length_Hsc70_all_trajectories_rejected_at.md",
+    "20260613_100853_432745_BindCraft_peptide_binder_success_rate_is_5_10x_lower_than_tr.md",
+    "20260613_100853_434002_BindCraft_recommended_settings_for_large_and_difficult_targe.md",
+    "20260613_100853_434798_Zero_designs_from_Hsc70_full_length_cause_and_fix.md",
+    "20260613_100853_435571_Using_full_length_protein_as_BindCraft_target_leads_to_zero.md",
+    "20260613_102909_163755_Two_longer_input_peptides_have_broken_backbones_invalidating.md",
+    "20260613_102909_166788_Fixed_broken_peptide_PDBs_by_rebuilding_with_tleap_ff14SB_an.md",
+    "20260613_102909_175447_Verify_input_peptide_backbone_geometry_before_running_HADDOC.md",
+    "20260613_142940_323347_Previous_HADDOCK_docking_results_invalid_due_to_broken_pepti.md",
+    "20260613_142940_332654_Procedure_for_re_docking_after_fixing_input_PDBs.md",
+    "20260613_143001_752644_SSH_timeout_when_submitting_haddock3_job_via_sbatch_retry_re.md",
+    "20260615_121858_528130_Fixed_backbone_correction_reduces_Fusion_14mer_docking_quali.md",
+    "20260615_123859_912914_Experimental_binding_site_on_Hsc70_SBD_lid_subdomain_experim.md",
+    "20260615_123859_914058_KFERQ_containing_peptides_have_low_micromolar_affinity_for_H.md",
+    "20260615_123859_915323_BiPPred_pipeline_for_computational_Hsp70_peptide_docking_and.md",
+    "20260615_123859_916749_Closed_state_Hsp70_SBD_1DKZ_as_structural_reference_for_pept.md",
+    "20260615_130838_614346_BindCraft_jobs_submitted_directly_via_sbatch_bypassed_Magnol.md",
+    "20260615_132115_658238_BindCraft_default_install_script_fails_on_Azzurra_due_to_rea.md",
+    "20260615_132115_659082_sbatch_wrap_quoting_conflict_with_Python_print_statement.md",
+    "20260615_132115_659797_BindCraft_peptide_binder_design_requires_i_pTM_0_5_and_adequ.md",
+    "20260615_132115_661418_BindCraft_on_cpucourt_times_out_requires_GPU_and_generous_wa.md",
+    "20260616_062343_526901_Hsc70_peptide_binding_site_is_the_sandwich_subdomain_not_the.md",
+    "20260616_062343_528167_4PO2_is_the_recommended_closed_state_receptor_for_Hsc70_pept.md",
+    "20260616_062343_529152_BindCraft_job_failed_due_to_absolute_path_issues_in_config_a.md",
+    "20260616_062343_529915_Full_length_Hsc70_600_aa_as_BindCraft_target_produced_zero_a.md",
+    "20260616_062343_530658_P2Rank_on_SBD_only_peptide_binding_site_expected_score_range.md",
+    "20260616_062343_531383_Run_output_directory_convention_and_submit_job_rule_for_clus.md",
+    "20260616_064327_133579_BindCraft_submission_stuck_at_submitting_with_no_job_id_sile.md",
+    "20260616_070447_754123_Presentation_references_extracted_from_Hsc70_CMA_substrate_t.md",
+    "20260616_070447_756007_Pip_install_failing_due_to_venv_path_mismatch.md",
+    "20260616_070447_757400_Extracting_references_from_pptx_files_using_python_pptx.md",
+    "20260616_071341_021108_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md",
+    "20260616_072542_234356_KFERQ_type_motifs_bind_Hsc70_SBD_lid_domain_not_SBD_canonica.md",
+    "20260616_072542_247753_P2Rank_on_full_length_Hsc70_fails_to_detect_lid_domain_bindi.md",
+    "20260616_072542_248586_Perspicacit_KB_expanded_added_8_CMA_degrader_engineering_pap.md",
+    "20260616_072542_249286_User_is_a_chemist_requires_plain_language_explanations_of_bi.md",
+    "20260616_074523_073675_Sahu_Malhotra_2025_KFERQ_binds_to_SBD_lid_not_SBD_palm.md",
+    "20260616_074523_074870_Early_docking_against_SBD_lid_was_deprecated_prematurely_may.md",
+    "20260616_074523_076223_Need_to_reconsider_receptor_choice_for_KFERQ_docking.md",
+    "20260616_084658_766566_Primary_KFERQ_binding_site_in_full_length_Hsc70_is_SBD_canon.md",
+    "20260616_084658_770489_Lid_only_docking_captures_promiscuous_secondary_site_not_pri.md",
+    "20260616_084658_771791_Full_length_Hsc70_closed_state_with_ADP_is_the_physiological.md",
+    "20260616_084658_773099_v2_does_not_recommend_any_specific_PDB_for_docking_all_predi.md",
+    "20260616_092818_410751_Two_site_model_for_KFERQ_binding_in_Hsc70_Sahu_Malhotra_v2.md",
+    "20260616_092818_412923_Water_mediated_bridging_in_Hsc70_closed_conformation.md",
+    "20260616_092818_418048_AF3_full_length_PDB_causes_VMD_cartoon_rendering_issue_restr.md",
+    "20260616_092818_419887_Lid_only_SBD_docking_insufficient_for_selective_KFERQ_bindin.md",
+    "20260616_092818_420823_Available_PDB_resources_from_Sahu_Malhotra_GitHub.md",
+    "20260616_092827_835702_Lid_SBD_pocket_is_a_real_but_promiscuous_secondary_binding_s.md",
+    "20260616_092827_840045_VMD_New_Cartoon_hides_SBD_groove_in_AF3_full_length_PDB_due.md",
+    "20260616_092827_841425_SBD_architecture_lid_arches_27_above_groove_peptide_bridges.md",
+    "20260616_094912_124097_Underestimated_sampling_for_4PO2_docking_corrected_via_prior.md",
+    "20260616_094912_125781_Parameter_recommendations_must_be_grounded_in_prior_run_data.md",
+    "20260616_094912_126453_tleap_peptide_building_method_not_recorded_in_memory_despite.md",
+    "20260616_094925_033403_Peptide_building_protocol_tleap_with_ff14SB_is_standard_for.md",
+    "20260616_094925_034458_Manually_generated_extended_chain_PDB_may_cause_HADDOCK3_top.md",
+    "20260616_094925_035415_HAMNG_sequence_lacks_KFERQ_motif_signature_can_serve_as_nega.md",
+    "20260616_094925_037260_Project_objectives_from_colleague_email_screen_reverse_docki.md",
+    "20260616_101004_096231_Hsc70_closed_conformation_SBD_groove_requires_lid_domain_for.md",
+    "20260616_101004_107368_Manual_peptide_PDB_construction_used_instead_of_existing_tle.md",
+    "20260616_101004_108320_Memory_system_tier_hierarchy_rules_always_loaded_skills_cros.md",
+    "20260616_101004_109221_BindCraft_de_novo_peptide_design_serves_as_reverse_docking_f.md",
+    "20260616_101928_851127_Fetch_job_results_fails_with_run_record_missing_for_stale_jo.md",
+    "20260616_101928_852753_Parallel_SSH_Slurm_submission_of_multiple_haddock3_designs.md",
+    "20260616_101929_808977_Fetching_HADDOCK3_results_fails_when_using_human_readable_ru.md",
+    "20260616_101929_809963_Low_cluster_count_2_for_fusion_peptide_docking_with_p2rank1.md",
+    "20260616_101929_810698_Duplicate_HADDOCK3_submissions_with_identical_job_names_wast.md",
+    "20260616_102904_550728_KFERQx2_11_mer_had_12_CA_atoms_extra_atom_in_original_PDB.md",
+    "20260616_102904_551478_Previous_KFERQ_KILDQ_fusion_top_scoring_run_used_a_broken_pe.md",
+    "20260616_102904_552287_Using_s5000_sampling_for_long_peptides_when_s10000_was_known.md",
+    "20260616_102904_552976_Clean_output_directory_before_resubmitting_HADDOCK3_jobs.md",
+    "20260616_102904_553682_Directory_name_not_updated_after_changing_sampling_parameter.md",
+    "20260616_102904_554371_Check_cluster_job_status_with_sacct_before_resubmitting_canc.md",
+    "20260616_102904_555077_Assistant_did_not_explain_the_original_broken_structure_issu.md",
+    "20260616_104338_879607_Memory_requirement_for_HADDOCK3_on_Azzurra_2_GB_core_minimum.md",
+    "20260616_104338_880404_Resubmitting_HADDOCK3_into_a_remote_directory_with_stale_out.md",
+    "20260616_104338_881147_Chaotic_job_submission_without_status_checks_leads_to_wasted.md",
+    "20260616_104338_881824_Completed_RKDLQ_5_mer_run_job_11431943_is_invalid_due_to_inc.md",
+    "20260616_110359_875903_Recurring_root_cause_constructing_from_scratch_instead_of_re.md",
+    "20260616_110359_877077_Recommended_HADDOCK3_protocol_for_SBD_docking_must_include_f.md",
+    "20260616_110359_887532_Stale_output_directory_causes_HADDOCK3_to_fail_at_startup.md",
+    "20260616_110359_889442_Peptide_PDB_quality_verification_must_go_beyond_chain_count.md",
+    "20260616_112419_760987_Writing_behavioral_rules_after_mistakes_does_not_prevent_rec.md",
+    "20260616_112419_763481_Structural_fix_template_config_peptide_manifest_instead_of_m.md",
+    "20260616_112419_765131_Evolving_HADDOCK3_protocol_requires_a_living_reference_confi.md",
+    "20260616_112419_766501_Selective_rule_loading_via_opencode_json_or_AGENTS_md_reduce.md",
+    "20260616_112419_767864_Phase_in_approach_to_rule_loading_core_always_task_specific.md",
+    "20260616_112419_769092_Pre_job_diff_check_against_reference_config_catches_forgotte.md",
+    "20260616_121337_918259_rsync_push_failed_with_exit_code_255_broken_pipe_during_hadd.md",
+    "20260616_121337_919221_fetch_job_results_requires_local_run_record.md",
+    "20260616_121337_920086_haddock3_runs_for_hsc70_peptide_consistently_yield_exactly_2.md",
+    "20260616_121341_763240_rsync_push_failed_due_to_network_broken_pipe_during_job_subm.md",
+    "20260616_121341_764230_run_record_missing_when_fetching_results_with_incorrect_job.md",
+    "20260616_121341_764922_Fusion_peptide_KFERQ_KILDQ_does_not_increase_cluster_count_i.md",
+    "20260616_121347_154166_rsync_push_failure_Broken_pipe_during_haddock3_job_submissio.md",
+    "20260616_121347_156085_Naming_convention_for_haddock3_runs_in_hsc70_new_project.md",
+    "20260616_122518_721030_HAMNG_pentapeptide_outcompetes_all_KFERQ_variants_in_4PO2_SB.md",
+    "20260616_122518_724869_Literature_indicates_core_KFERQ_motif_alone_is_insufficient.md",
+    "20260616_122518_726249_RKELQ_5_mer_consistently_yields_worst_docking_scores_and_con.md",
+    "20260616_122518_727607_No_prior_physics_based_docking_study_of_KFERQ_type_peptides.md",
+    "20260616_125715_332442_Structure_guided_1_residue_extension_from_docked_KFERQ_N_ALA.md",
+    "20260616_130554_183682_Torielli_design_starts_from_client_protein_unstable_regions.md",
+    "20260616_130554_185263_Stage_1_2_extensions_docked_against_wrong_pocket_NBD_ATP_sit.md",
+    "20260616_130554_186727_Contact_maps_and_alanine_scanning_measure_complementary_quan.md",
+    "20260616_130554_187963_Per_residue_energy_decomposition_from_force_field_MM_PBSA_ca.md",
+    "20260616_130554_189221_User_rational_design_workflow_dock_all_5_mers_contact_map_mu.md",
+    "20260616_130554_190678_Full_HADDOCK3_protocol_vs_bare_protocol_key_differences.md",
+    "20260616_132621_307503_GLU_consistently_contributes_best_per_residue_binding_in_thr.md",
+    "20260616_132621_320665_HAMNG_has_three_favorable_residues_explaining_top_HADDOCK3_s.md",
+    "20260616_132621_322917_Single_structure_MM_GBSA_gives_unreliable_absolute_G_but_inf.md",
+    "20260616_132621_329245_MMPBSA_py_heredoc_input_fails_use_explicit_input_file.md",
+    "20260616_134641_991134_Anchor_residue_count_predicts_HADDOCK3_score_across_5_mer_se.md",
+    "20260616_134641_993720_KFERQ_and_RKELQ_have_zero_anchor_residues_and_barely_docked.md",
+    "20260616_134641_994515_Single_structure_MM_GBSA_per_residue_decomposition_unreliabl.md",
+    "20260616_134641_995464_Distance_threshold_for_residue_contact_classification_4_0_fr.md",
+    "20260616_140033_061539_Combined_contact_map_MM_GBSA_per_residue_analysis_identifies.md",
+    "20260616_140709_676901_Full_protocol_with_explicit_water_changes_peptide_ranking_vs.md",
+    "20260616_140709_677937_Receptor_structure_remains_unchanged_after_full_protocol_doc.md",
+    "20260616_140709_678675_Bare_protocol_gives_misleading_DockQ_for_KFERQ_due_to_missin.md",
+    "20260616_140709_679408_Sbatch_memory_and_sampling_settings_for_extended_peptide_doc.md",
+    "20260616_140709_680205_Combined_contact_map_MM_GBSA_per_residue_analysis_for_ration.md",
+    "20260616_165252_323757_rsync_push_failed_due_to_broken_pipe_during_job_submission.md",
+    "20260616_165252_324967_SSH_timeout_when_submitting_sbatch_job_to_Azzurra_cluster.md",
+    "20260616_165252_325868_Stable_2_cluster_caprieval_output_across_peptide_variants_an.md",
+    "20260616_165252_326901_Run_record_missing_when_using_incorrect_job_id_format_for_fe.md",
+    "20260616_170758_691591_Hallucinated_binding_pocket_residue_identities_in_email_11_o.md",
+    "20260616_170758_693703_Two_genuine_binding_pocket_differences_between_Hsp70_4PO2_HS.md",
+    "20260616_170758_697213_Always_verify_extracted_residue_identities_against_a_structu.md",
+    "20260616_170758_707562_Full_protocol_HADDOCK3_ranking_5_mers_led_by_RKDLQ_score_69.md",
+    "20260616_170758_709300_KFERQ_5_mer_fails_to_converge_in_full_protocol_DockQ_0_242_v.md",
+    "20260616_202842_907176_Corrected_docking_ranking_hidden_clusters_rescue_convergence.md",
+    "20260616_202842_918789_For_poorly_converged_HADDOCK_runs_systematically_check_alter.md",
+    "20260616_202842_919957_Ranking_of_Hsc70_binding_peptides_long_peptides_dominate_bes.md",
+    "20260616_213745_510835_SSH_rsync_push_failure_and_SSH_timeout_on_Slurm_submission.md",
+    "20260616_213745_511748_Consistent_cluster_count_2_for_haddock3_runs_on_4po2_with_di.md",
+    "20260616_213745_512770_fetch_job_results_fails_with_run_record_missing_when_using_n.md",
+    "20260617_073053_155015_Binding_site_residues_for_AF3_Hsc70_differ_from_4PO2_HSPA1A.md",
+    "20260617_073053_155710_Reducing_core_count_from_32_to_16_did_not_bypass_queue_prior.md",
+    "20260617_075058_491029_KFERQ_KILDQ_fusion_peptide_ranks_best_across_both_AF3_and_4P.md",
+    "20260617_075058_492339_RKDLQ_variant_shows_poor_convergence_in_both_parameter_sets.md",
+    "20260617_075058_493646_SSH_direct_parsing_bypasses_stuck_poll_jobs_and_slow_rsync_f.md",
+    "20260617_075058_494839_check_job_tool_requires_local_sacct_squeue_not_available_on.md",
+    "20260617_075127_842726_Structure_of_HADDOCK3_run_history_entries.md",
+    "20260617_075127_844524_Slurm_job_ID_extraction_from_YAML_files_requires_cross_refer.md",
+    "20260617_075127_846088_Run_status_breakdown_for_2026_06_16_no_runs_for_2026_06_17.md",
+    "20260617_081153_045107_HADDOCK3_capri_clt_tsv_cluster_statistics_format.md",
+    "20260617_081153_047159_Cluster_ID_is_based_on_cluster_size_not_rank.md",
+    "20260617_081153_048749_CAPRI_quality_thresholds_for_protein_protein_complexes.md",
+    "20260617_081153_050208_HADDOCK3_tutorial_does_not_provide_explicit_convergence_thre.md",
+    "20260617_081153_051539_seletopclusts_top_models_parameter_usage.md",
+    "20260617_081153_053124_caprieval_without_reference_is_only_convergence_oriented_not.md",
+    "20260617_081153_056532_Scoring_function_limitation_acknowledged_but_considered_reas.md",
+    "20260617_082118_803833_Real_clustfcc_cluster_sizes_show_strong_convergence_for_many.md",
+    "20260617_133450_890742_Conversation_distillation_pipeline_silently_dropped_sessions.md",
+    "20260617_133450_892756_Default_model_changed_to_deepseek_v4_flash.md",
+    "20260617_133450_894194_Handover_file_stored_at_project_root_not_inside_subdirectori.md",
+    "20260617_134819_934391_Torielli_2025_truncation_strategy_and_alanine_scan_CDK4_pept.md",
+    "20260617_144016_523042_MM_GBSA_gas_phase_energy_misclassifies_aromatic_Phe_as_unfav.md",
+    "20260617_144016_525099_Perspicacit_server_startup_and_query_procedure.md",
+    "20260617_144016_527579_AF3_full_length_Hsc70_docking_protocol_refinement.md",
+    "20260617_144016_529707_Peptide_design_panel_consensus_D3_mutation_and_phased_extens.md",
+    "20260617_144016_533473_Peptide_building_for_mutants_with_tleap.md",
+    "20260617_144016_534734_Prejob_checks_passed_for_all_4_docking_jobs.md",
+    "20260617_144016_535850_Convergence_pattern_5_mers_13_18_vs_longer_peptides_2_5_7_5.md",
+    "20260617_150032_186708_Residue_540_ASN_in_lid_is_a_genuine_contact_contact_map_inte.md",
+    "20260617_151152_154780_N_terminal_extension_candidates_for_best_5_mer_geometry_just.md",
+    "20260617_151242_403970_Panel_s_original_extension_candidates_pre_geometry_appended.md",
+    "20260617_152051_605416_N_terminal_extension_of_RKDLQ_can_reach_TYR431_ARG469_and_GL.md",
+    "20260617_152051_607550_C_terminal_extension_of_RKDLQ_points_away_from_TYR431_ARG469.md",
+    "20260617_152051_608843_N_terminal_extension_of_RKDLQ_must_be_tested_after_D3_mutant.md",
+    "20260617_152051_610226_Proposed_N_terminal_extension_candidates_for_RKDLQ_with_geom.md",
+    "20260617_194130_665773_RKNLQ_fails_despite_96_convergence_ASN_too_bulky_polar_for_p.md",
+    "20260617_194130_672908_Replacing_ASP_with_ASN_at_position_3_is_counterproductive_AS.md",
+    "20260617_194130_675660_ALA_methyl_at_position_3_contributes_4_kcal_mol_over_GLY_sug.md",
+    "20260617_203638_926849_Fetching_haddock3_results_immediately_after_submission_may_r.md",
+    "20260617_204519_954497_Per_Residue_MM_GBSA_Decomposition_Complete_Procedure.md",
+    "20260618_114647_982627_RKALQ_register_shift_D3_ALA_rotates_N_terminus_180_invalidat.md",
+    "20260618_114647_985510_RKALQ_binding_mode_similarity_87_Jaccard_with_RKGLQ_81_with.md",
+    "20260618_114647_988088_Contact_map_TSV_parsing_bug_7_columns_not_8_causing_all_cont.md",
+    "20260618_114647_988842_N_terminal_extension_is_not_viable_for_RKALQ_s_binding_mode.md",
+    "20260618_114647_989637_C_terminal_extension_viable_ILE474_67_and_VAL476_63_from_RKA.md",
+    "20260618_114647_990635_Per_residue_MM_GBSA_decomposition_procedure_for_single_struc.md",
+    "20260618_114647_991402_BindCraft_peptide_design_on_4PO2_3_attempts_0_accepted_desig.md",
+    "20260618_120650_455842_HADDOCK3_full_protocol_flexref_emref_mdref_produces_AIR_free.md",
+    "20260618_120650_457682_Azzurra_June_17_jobs_completed_fully_despite_earlier_report.md",
+    "20260618_120650_462128_Post_run_assessment_of_June_17_batch_reveals_full_protocol_c.md",
+    "20260618_120650_462954_Capri_clt_tsv_column_indexing_is_prone_to_off_by_one_errors.md",
+    "20260618_120650_463799_RKALQR_R_R_substitution_at_Q_terminal_loses_binding_quality.md",
+    "20260618_120650_464655_KFERQ_has_bimodal_binding_a_diffuse_cluster_DockQ_0_240_and.md",
+    "20260618_122720_434166_w_air_default_differs_by_HADDOCK3_stage_rigidbody_0_01_refin.md",
+    "20260618_122720_435930_HADDOCK3_scoring_weights_read_from_weights_params_json_per_c.md",
+    "20260618_122720_437660_Hardcoding_w_air_from_generic_rules_instead_of_reading_per_r.md",
+    "20260618_124742_553577_Best_DockQ_cluster_often_not_the_top_ranked_cluster_by_raw_s.md",
+    "20260618_124742_555469_Correct_w_air_extraction_must_read_weights_params_json_from.md",
+    "20260618_124742_558500_Extension_scan_TGFMALQ_s10000_best_binder_91_00_RKALQR_poor.md",
+    "20260619_105428_583624_Deprecated_NBD_site_runs_produce_inapplicable_claims_for_SBD.md",
+    "20260619_105428_585937_Batch_consolidation_acceptance_in_single_session.md",
+    "20260619_111556_410145_Memory_consolidate_tool_only_works_on_project_and_skill_tier.md",
+    "20260619_111556_411512_Consolidation_proposals_effectively_reduce_staging_noise_and.md",
+    "20260619_111556_412991_Most_staging_entries_become_redundant_once_captured_in_proje.md",
+    "20260619_113415_403156_Keyword_overlap_cross_reference_insufficient_for_staging_to.md",
+    "20260619_113415_404440_5_consolidation_proposals_pending_after_memory_search_run.md",
+    "20260619_115046_861205_RKALQ_alascan_per_residue_contributions.md",
+    "20260619_115046_862124_RKALQ_position_3_hydrophobic_pocket_is_narrow_VAL_fits_ILE_L.md",
+    "20260619_115046_863762_TGFMALQ_GLY2_environment_supports_G2_A_improvement.md",
+    "20260619_115046_864538_Four_new_dockings_submitted_RKVLQ_RKILQ_RKLLQ_s5000_TAFMALQ.md",
+    "20260619_115058_957450_memory_search_now_supports_keyword_splitting_for_multi_word.md",
+    "20260619_115058_958754_TGFMALQ_is_the_best_5_6_mer_binder_against_4PO2_SBD_AIR_free.md",
+    "20260619_121041_345211_Multi_tier_keyword_split_search_for_D3_ALA_anchor_ripple_ret.md",
+    "20260619_121041_347108_Knowledge_base_entries_link_D3_ALA_mutation_to_ripple_effect.md",
+    "20260623_134821_816433_Contact_map_TSV_parsing_bug_7_columns_not_8.md",
+    "20260624_105200_000001_RKALQ_position3_and_TGFMALQ_position2_hydrophobic_filling_mutations_fail.md",
+    "20260624_124709_402250_HADDOCK3_alascan_delta_score_interpretation_confirmed_for_ho.md",
+    "20260624_124752_403796_TGFMALQ_G2_A_TAFMALQ_is_neutral_not_an_improvement.md",
+    "20260624_124752_746690_Void_analysis_and_alascan_rationale_were_post_hoc_reconstruc.md",
+    "20260624_154902_845193_Perspicacit_KB_workflow_must_check_live_api_kb_and_memory_se.md",
+    "20260624_165208_885570_Combining_burial_counts_literature_and_alascan_cross_validat.md",
+    "20260624_165209_636342_KFERQx2_n_4_in_capri_clt_is_not_the_top_models_4_artifact_it.md",
+    "20260625_100535_754122_Workflow_after_mutant_scoring_always_examine_best_DockQ_clus.md",
+    "20260625_102612_562325_TGGFQMALT_T1_E_and_G2_A_mutations_improve_binding_with_mild.md",
+    "20260625_104700_358586_Discrepancy_between_alascan_prediction_and_re_docking_for_L9.md",
+    "20260625_104701_155687_Corrected_premature_claim_that_L9_is_a_critical_anchor.md",
+    "20260625_104701_545832_Deep_structural_analysis_required_before_writing_learnings_f.md",
+    "20260625_114717_268889_L9A_mutation_does_not_degrade_native_pose_local_energy_but_s.md",
+    "20260625_114718_004486_Fetch_only_seletopclusts_for_atom_level_structural_analysis.md",
+    "20260625_130251_184169_HADDOCK3_busy_spin_deadlock_at_rigidbody_finalization_for_la.md",
+    "20260625_142818_876601_Doubling_rigid_body_sampling_s20000_to_overcome_native_pose.md",
+    "20260625_142857_247052_HADDOCK3_refinement_is_local_annealing_around_rigid_body_see.md",
+    "20260625_142857_611246_Seletop_200_combined_with_s20000_rigid_body_allows_3_h_refin.md",
+    "20260625_144929_884509_Parameter_rationale_not_captured_s10000_s20000_decision_for.md",
+    "20260625_144930_234163_Use_s20000_rigidbody_sampling_for_under_seeded_tandem_peptid.md",
+    "20260701_094604_509991_KFERQx2_s20000_native_cluster_remains_small_n_7_under_seedin.md",
+    "20260701_094606_079341_Alascan_runs_fast_locally_2_min_per_job_on_16_cores_no_need.md",
+    "20260701_100638_729483_Self_referential_DockQ_is_unreliable_for_cross_mode_cluster.md",
+    "20260701_100639_544135_Grounded_mutation_candidates_redock_panel_submitted_5_peptid.md",
+    "20260701_104801_704745_EAGFQMRLT_population_shift_A7_R_turns_minority_groove_only_m.md",
+    "20260701_115016_220174_EGGFQMAKT_L8_K_mutation_missed_designed_target_GLU460_hit_PH.md",
+    "20260701_115016_991367_EGKFQMAKT_double_mutant_G2_K_on_EGGFQMAKT_proposed_as_strong.md",
+    "20260701_115018_112790_LYS_vs_ARG_mutation_LYS_preserves_binding_mode_better_than_A.md",
+    "20260701_115018_474333_Alascan_void_analysis_systematically_overpredicts_hydrophobi.md",
+    "20260701_121015_318448_Alascan_1_00_at_G3_in_EAGFQMRLT_is_borderline_neutral_not_de.md",
+    "20260701_121059_375246_Insertion_of_convergence_score_discussion_section_after_conv.md",
+    "20260701_123059_180509_Adding_anchor_residues_to_widen_funnels_Batch_4_5_progressio.md",
+    "20260701_142118_236322_HADDOCK3_busy_spin_deadlock_pitfall_is_non_deterministic_res.md",
+    "20260701_145403_271025_Pre_submission_checklist_prejob_check_md_catches_structural.md",
+    "20260701_171628_352414_EKGFQMAKT_G2_K_L8_K_double_mutant_still_running.md",
+    "20260701_191904_515470_Deep_groove_theory_overgeneralized_from_limited_7_mer_9_mer.md",
+    "20260701_191913_304170_Score_discrepancy_in_RKALQ_between_report_and_analysis.md",
+    "20260703_094438_669167_Stacking_G2_K_on_the_L8_K_background_EKGFQMAKT_weakens_bindi.md",
+    "20260703_100606_097597_All_score_values_verified_correct_against_alascan_source_fil.md",
+    "20260703_100606_871780_Alascan_residue_numbering_offset_PDB_resseq_equals_sequence.md",
+    "20260703_100607_280817_EAKFQMALT_G3_K_creates_a_strong_local_hotspot_but_worsens_ov.md",
+    "20260703_100607_676085_ARG_consistently_outperforms_LYS_at_both_mutated_positions_A.md",
+    "20260703_142427_734715_Protocol_for_3D_structure_embedding_in_offline_HTML_report_v.md",
+    "20260703_142428_124966_HADDOCK3_clustfcc_vs_caprieval_cluster_numbering_mismatch_mu.md",
+    "20260706_190551_262294_EGGFQMAKT_clt3_is_the_best_E_GFQMALT_9_mer_AIR_free_116_52_s.md",
+    "20260706_204016_959269_N_terminal_anchoring_does_not_discriminate_convergence_in_T1.md",
+    "20260706_204018_151348_Report_binding_mode_conservation_table_had_systematic_errors.md",
+    "20260706_204018_530664_Ground_binding_mode_claims_by_measuring_footprint_and_RMSD_d.md",
+    "20260706_204018_896066_Torielli_2025_paper_is_primarily_experimental_with_supportin.md",
+    "20260708_164202_164866_fle_end_2_contiguity_extending_peptide_by_1_residue_increase.md",
+    "20260708_172345_294565_ControlMaster_multiplexing_defeats_2FA_on_Azzurra_SSH.md",
+    "20260708_172345_680185_Master_alive_preflight_ensure_master_prevents_wasted_attempt.md",
+    "20260708_174447_716047_Use_explicit_dates_not_now_1day_for_sacct_queries_to_ensure.md",
+    "20260713_040822_532666_Assuming_rank_1_cluster_is_the_canonical_parent_score_led_to.md",
+    "20260713_050846_812295_10_mer_runs_incomplete_local_fetch_from_cluster.md",
+    "20260713_050847_592275_AIR_free_score_computation_with_w_air_0_1.md",
+    "20260713_050847_987447_EGGFQMART_L8_R_clustering_failed_at_10_clustfcc.md",
+    "20260713_094416_316296_HADDOCK3_clean_steps_deletes_caprieval_seletopclusts_analysi.md",
+    "20260713_094418_375594_Mis_diagnosis_of_empty_caprieval_clean_steps_vs_fetch_gap.md",
+    "20260714_024157_991087_ACE_cap_N_acetyl_free_OH_C_term_on_EGGFQMA_9_10_mers_rationa.md",
+    "20260714_032505_898328_ACE_cap_forms_strong_H_bonds_in_reversed_10_mers_A_and_F.md",
+    "20260714_032507_129883_Trusting_contactmap_per_residue_footprints_alone_misses_cap.md",
+    "20260714_052751_294364_webfetch_on_PMC_OA_article_curl_HTML_grep_reliably_extracts.md",
+    "20260714_060812_559532_C_terminal_capping_NME_recommended_for_MD_simulation_of_inte.md",
+    "20260714_080857_115331_Shell_responsiveness_can_be_restored_by_killing_resource_hea.md",
+    "20260714_083911_015428_Building_ACE_NME_capped_peptides_with_tleap_and_post_process.md",
+    "20260714_083911_812808_Copying_receptor_from_one_source_ensures_comparability_acros.md",
+    "20260714_083912_183391_fle_end_2_values_for_capped_pilot_peptides_keep_NME_rigid.md",
+    "20260714_094019_401727_HADDOCK3_CNS_topology_fully_supports_NME_C_terminal_cap.md",
+    "20260714_094020_213300_Local_HADDOCK3_installation_enables_offline_verification_of.md",
+    "20260714_154546_342536_Handover_mechanism_continuation_preserves_session_ID_avoids.md",
+    "20260714_154546_727204_Boot_context_goal_outdated_regarding_lid_contacts_and_scaffo.md",
+    "20260724_041026_840432_HTML_3D_viewer_failure_Java_JRE_not_required_missing_lib_fol.md",
+    "20260727_111734_987357_Identification_of_four_Met_containing_top_candidates_for_exp.md",
+    "20260727_113802_295815_Degrader_construct_analysis_linker_attachment_validates_ACE.md",
+    "20260806_082136_413309_Consolidation_rejections_were_forgotten_after_one_regenerati.md",
+    "20260818_062659_605634_Full_Azzurra_HPC_access_stack_on_a_new_machine_files_to_copy.md",
+    "20260818_062700_696106_Magnolia_Azzurra_connectivity_does_NOT_need_new_config_ssh_s.md",
+    "20260818_075203_487462_Copying_files_to_a_Windows_USB_stick_from_WSL_via_powershell.md",
+    "20260818_075203_834487_Reliable_WSL2_USB_copy_without_mnt_mount_UNC_ps1_file_SHA256.md",
+    "20260818_075204_187722_WSL2_does_not_auto_mount_USB_drives_plugged_in_after_boot_pr.md",
+    "20260915_112652_883810_Running_consolidation_generation_manually_must_use_the_absol.md",
+    "20260915_112654_068665_Project_tier_entry_cap_raised_50_200_both_code_definitions_p.md",
+    "20260915_134906_822097_fetch_job_results_requires_explicit_project_dir_when_pinned.md",
+    "20260915_134908_812382_Resumable_fetch_job_results_only_transfers_missing_files_onc.md",
+    "20260915_134908_946793_fetch_job_results_requires_an_explicit_project_dir_default_d.md",
+    "20260915_134909_572338_Fetch_ordering_tunnel_2FA_master_serial_first_fetch_parallel.md",
+    "20260915_134909_813889_Resumable_fetch_after_timeout_rsync_skips_already_local_65M.md",
+    "20260915_140928_742441_Parallel_rsync_fetches_through_SOCKS_proxy_time_out_serial_f.md",
+    "20260915_142956_353922_Parallel_fetch_job_results_through_shared_VPN_SOCKS_proxy_ti.md",
+    "20260915_163235_650058_Azzurra_cluster_confirmed_healthy_from_operator_side_while_s.md",
+    "20260915_163236_065541_SSH_Connection_refused_vs_timeout_points_to_dead_local_SOCKS.md",
+    "20260915_163236_471605_Agent_attempting_the_SSH_2FA_one_time_password_itself_kills.md",
+    "INDEX.md"
+   ],
+   "excluded_sessions": {},
+   "sessions": {
+    "ses_1c57ae63bffe6ZJP1WSA29e4cV": "HPC integration testing",
+    "ses_24533e1f4ffeRW3d92DE3QhFDu": "Reading PROGRESS.md",
+    "ses_1c35ae439ffeel8VcXA2xw8EZr": "hsc70 development",
+    "ses_1c3439ffeffebh1mFjlSa34S8o": "Hsc70 mutation position effects",
+    "ses_1c0ec8e8affemQS1204MMT80o8": "Pick up HSC70 project",
+    "ses_1c0e302b1ffeXTgmQilbhEdGKq": "Gather HADDOCK3 results (@general subagent)",
+    "ses_1c0c7308efferHdBXILzsTDOCH": "Extract AIR-free scores all runs (@general subagent)",
+    "ses_1c0632908ffe2B5JVU4DZ59mq4": "HSC70 project pickup",
+    "ses_1920014c0ffesYn1AtqcX0iOKF": "HSC70 Azzurra HPC connection test",
+    "ses_17e02319dffeoeEmV0Pd79WEQ4": "Project understanding inquiry",
+    "ses_17d81f45cffePcT3F40toVxR71": "Resuming project",
+    "ses_17d4696a3ffe4Bd78Dtmo8iuy3": "Resuming project",
+    "ses_17cf99c43ffeQIsCG8QfCs51NU": "Current status check",
+    "ses_17c954078ffeVBu2fM3ktxH6f4": "Update request",
+    "ses_17b541fadffe2dIIdzbpipjeCH": "Next steps",
+    "ses_17b506038ffeo9mWNJmXSEIwqR": "Update request",
+    "ses_178ed6ff9ffetzJN3tTwNm1O2u": "Follow-up discussion",
+    "ses_17361f01dffeyh8OXTNsHqlwif": "Research paper search",
+    "ses_173592375ffelotrqhfYN7EYuC": "Progress check",
+    "ses_17205e7c6ffefOar6hVIknEGB8": "What's next?",
+    "ses_1718e5b3bffeMXYjaWwOYZD7KP": "Continuing from last time",
+    "ses_16e961374ffeKj4c1Vd3tU5yCD": "Project update discussion",
+    "ses_16e1a9b76ffetBUfAdsrLFFu67": "Follow-up on previous discussion",
+    "ses_16d72029fffebGAR3sU5A0uNLO": "Title Update",
+    "ses_16bd1b365ffeaZgnZs0L5pDiTZ": "Update request",
+    "ses_169263890ffeOGZXCuaCkXQ9Mt": "Project update",
+    "ses_167e88697ffeOSsrQZ2BhPjBB3": "Next steps",
+    "ses_158ccdd8dffeMGgJOUgkCB420E": "Project update",
+    "ses_158c0e27effeHzvsSWus743bMa": "Project update",
+    "ses_1574372c7ffePZ7a6wkaB8bd2s": "Project update",
+    "ses_1573cac52ffeM0LR8Y3lMIOL9N": "Download Zhu 2017 PNAS paper (@general subagent)",
+    "ses_1573c9001ffeIVgT5M1yZYONcp": "Search for additional ligand papers (@general subagent)",
+    "ses_157305d17ffehanltq1UkHKLgn": "Extract full ligand list from paper (@general subagent)",
+    "ses_158957077ffeOqwxdLe26CyDPy": "Move 5NGH.pdb to raw_input dir",
+    "ses_14ea955f6ffewXyKOAvu8DcO51": "Project update",
+    "ses_14d178160ffeFCUNF8muY7i3DL": "Installing bindcraft on azzurra",
+    "ses_14cf831a6ffeTNYoSmgNq1SkVs": "合法赚钱方法",
+    "ses_14a8d1dd6ffesLHxScnqDJwwUz": "Project update",
+    "ses_1456d0e73ffe6ULEPwvHYx84J4": "Azzurra job listings",
+    "ses_13fc23de2ffelf2ddyTWl2olKC": "Jobs review",
+    "ses_13fb7b1bfffeq2sP2uCvfcb2Z1": "Nature skills for communication materials",
+    "ses_135f257a4ffeX5idf63oZPHX5g": "Project status check",
+    "ses_134c7b1a2ffeMFkXQrSHFP8Cs1": "Experimentalists discussion recall",
+    "ses_130e4d4e4ffeJu5Q6ZBCByktmm": "Latest jobs check",
+    "ses_12b819265ffeRiCjSRTOF2mCwU": "Jobs list check",
+    "ses_12a46493fffehueb24QomyJNE8": "Query Perspicacité KB on Torielli (@general subagent)",
+    "ses_12a31596dffeU2R6yIw5W4l4yk": "Handover in memory dir",
+    "ses_125e030f7ffeXnTIPy3gi7ezbx": "Check azzurra jobs",
+    "ses_120fa984affeN2zTmXpUOp3es8": "Greeting",
+    "ses_1209bfb0cffe1BzQ15ZH8jyTEf": "Activate perspicacite ai in background",
+    "ses_11c0731beffedDKx5HBd1ApTrn": "Project goal clarification",
+    "ses_11bdd46d5ffe7AzXolnbPsHTF5": "Run xtb single-point on all optimized structures (@general subagent)",
+    "ses_117013c35ffeLqHxQm6XC2v8rk": "Studium repository review",
+    "ses_11186eec2ffe47heamLxUwWbfN": "Leftover tasks from last session",
+    "ses_10f596110ffe4s5NyQZBjmckVA": "Draft work collaboration",
+    "ses_10f41c068ffedRbRaH6JdJTEjB": "Search KBs for evaluation/benchmark issues (@general subagent)",
+    "ses_10f3222a2ffes25Uz187SHS73Y": "Compare scientific agents' interaction models (@general subagent)",
+    "ses_10f2fc73effeOx8yfp4mB8A8D6": "Web search for scientific agent papers (@general subagent)",
+    "ses_10f196b71ffeN3SWdS4i20t8qj": "Verify Magnolia codebase capabilities (@general subagent)",
+    "ses_10c834ad6ffeJrAP1RTGvKVP7V": "Force field for 3D geometries",
+    "ses_10bc31326ffeTnbvzCh53fUJnF": "Latest update summary",
+    "ses_10b1cf3aaffewuWcaL0jWW5bxb": "Trace docking parameter decisions (@general subagent)",
+    "ses_109eafc5affeF6SSPFmcRiUDyh": "Magnolia as ReAct agent",
+    "ses_10761f9f0ffeCFiovZYpEwboT9": "I'll help you with both tasks. First, let me fetch the relevant context from memory, then generat...",
+    "ses_1079c77a1ffeF1Le9YeNXqkQ0f": "Opencode agent loop support",
+    "ses_106e1e902ffe1mPPLkhZ5Vsa2R": "Latest results summary",
+    "ses_106d2b51bffeSYI9LLibqeeXlo": "Latest 4 mutation runs summary",
+    "ses_105ff06c0ffeWLOXtSr54fH4X5": "Analyze TGGFQMALT 9-mer binding (@general subagent)",
+    "ses_105f8afaaffez4I26Lt5ORaJ8X": "Main agent waits for subagent",
+    "ses_104ec7a8cffeH7B97axlJTft7s": "Update request",
+    "ses_10252492affeC8CuGfq2Gxi25H": "Jobs check",
+    "ses_102488f6bffelAJdrOeoAZXs5S": "Magnolia opportunities in opencode-agent-hub",
+    "ses_101617671ffeysSvLN1HFXIL2u": "Magnolia framework comparison",
+    "ses_0ffb0506bffe11xhK3cMikYE63": "Mimosa AI clone deep dive",
+    "ses_0fd53c03fffe25X2Lq8jEsq0Iy": "What was left behind",
+    "ses_0fc3c6323ffeaW71c47NyfPnE5": "Review GitHub repo studium-manuscript",
+    "ses_0e8aabc53ffeHnp31cMR1SH91O": "Comparing Magnolia and Mimosa",
+    "ses_0e7028bd2ffek4BSjShgl65YgP": "Project status check",
+    "ses_0e7021638ffeH9HOq4TKCYoOu8": "Parse run history for status (@general subagent)",
+    "ses_0e38067aeffe0BVDyQDuIsXGK3": "Researching Claude Science release",
+    "ses_0e37fecd8ffen9fpkjK39wRRL0": "Last session summary",
+    "ses_0de5f46e9ffeaqXxcy9V1QVDe5": "adverum:default",
+    "ses_0de49a3bdffexSPC17PoZJFZ95": "Cloning VIS-Program codebase",
+    "ses_0dcdbe062ffeFia01VH0OA21gg": "OpenRouter fusion model for Magnolia",
+    "ses_0d93057c5ffejLlEWHkl51h6E5": "New calculations check",
+    "ses_0c7425453ffeDvyNU5dHhXPEh9": "Docking results",
+    "ses_0bdd2a85bffe95JK2yiS0X2eQn": "Review webpage URL",
+    "ses_0b911bca3ffeeXJJ9fmGpk3sBc": "Read PDFs in project root",
+    "ses_0a6c42101ffevfoKY1bV6mQicV": "Latest project status",
+    "ses_0a6a8187bffesxoXZhZ79UZyER": "Session handover timing investigation",
+    "ses_06e66ae41ffeGSXzgZwJh90VPK": "Jobs update",
+    "ses_06e35b9beffe0Rk9xn8eqWusvd": "Package report PDBs for sharing (@general subagent)",
+    "ses_05ea2dc72ffe3KVeH5BFS5EPnJ": "Binding pocket residue numbers",
+    "ses_05d3430d8ffeZf0x0l4FB5iqHh": "Caps calculation results",
+    "ses_0399febfaffeSpm6o3FgACptCp": "Learning distillation data for presentation",
+    "ses_0349dbcf6ffefC91ijqCcaE8RH": "arXiv 2604.12231v1 paper lookup",
+    "ses_02ac40225ffeB5LMdtnBmwdKOz": "Memory consolidation check",
+    "ses_01626cb7effeRZpRX73tGDR6r3": "Continuing paper writing",
+    "ses_00b6e153fffe0Go7rYlKwmVTuW": "Exploring raw_input files",
+    "ses_00aaeb7caffezzRJN6Rvc3q8vx": "Reviewing pending items from last session",
+    "ses_006393014ffeQLsHBM94wP63oX": "Remaining tasks from last session",
+    "ses_fed50fe14ffeSIUaCA7DCVo5Ap": "Which files to upload to Overleaf",
+    "ses_fecf33ecaffeSYDQC0Tcri2MDX": "Connecting to azzurra from another machine",
+    "ses_fec4a2d92ffezOJNS1ed61gO68": "Check /mnt/d/projects/mineure/2025",
+    "ses_fe80e524bffeihCAYDMqyHGhC8": "Missing authors in Overleaf paper PDF",
+    "ses_fe770f2beffeDSQR56OEZM22ez": "New session - 2026-08-19T05:47:03.361Z",
+    "ses_fe6ff5b92ffeekfohIRCHXQQtw": "Extract intros batch 1 (@general subagent)",
+    "ses_fe6ff4f67ffebs6OOkHKDurynD": "Extract intros batch 2 (@general subagent)",
+    "ses_fe6ff4300ffetLEEMnWq6DTA8y": "Extract intros batch 3 (@general subagent)",
+    "ses_fe6ff3651ffeBp3JvNKItNtV8H": "Extract intros batch 4 (@general subagent)",
+    "ses_fe2c46fe5ffef6HuF39SjKstg6": "Magnolia introduction logic fix",
+    "ses_fddc3aa38ffe101Inx0fwTRSct": "分析天马G文件",
+    "ses_fc339807cffeGrXpY60AiP9kHI": "Comparing main1.tex and main.tex versions",
+    "ses_fbddcfffcffeQmeqrhv5zrKTKC": "Fig 2 resize to 0.75 page width, compile",
+    "ses_fbdd91efdffeITwh2t4Jwwbnc8": "Slow first response in new chat sessions",
+    "ses_fb8a4cc3bffeRTbs2WcxLQleug": "Continuing yesterday's work",
+    "ses_fb8a43cfdffeUFb5dxi4hd1i3q": "Recap of yesterday's progress",
+    "ses_fb799c1d5ffeeImk2RzMdbvMzU": "Recalling previous project work",
+    "ses_fa991351dffesLW5GiBkjgvOgT": "Project status check",
+    "ses_fa989e272ffe2ctd8OxxbFTJBk": "Humanizer skill for scientific writing with AI",
+    "ses_fa960fd9affeAYPhFk0gOdLIvs": "Review cs5 text, apply humanizing skill",
+    "ses_fa438805affet1qcnpdR22FqNs": "Peer review: sections 3 & 4 expectations",
+    "ses_fa4010ea1ffe4UrXUZrn4O7ub7": "GLM-5.3-Flash 多模态接入 Magnolia 分析",
+    "ses_fa3e2ef39ffeMUqKS1ctyQXyJG": "Adversarial reviewer of manuscript (@general subagent)",
+    "ses_fa3c22fa4ffelwXX4LgUoNyBiy": "Independent analysis of Dral 2026 Perspective vs Magnolia paper (@general subagent)",
+    "ses_fa33e6cd4ffeCHvAql8yMC0nag": "Audit 49 systems for memory claims (@general subagent)",
+    "ses_f9ef434dcffeZASp5Evze3z1F4": "Fixing overfull text in cs1",
+    "ses_f9eefa93effe0DoRxv4iHTKBZ8": "Checking unpushed git commits",
+    "ses_f9dac0a0bffejgJi8Gl1gh0D1y": "Debate weak-model feasibility (@general subagent)",
+    "ses_f9daa50f5ffemIMRjuk2Ixssm3": "Debate flash-tier feasibility (@general subagent)",
+    "ses_f99ca2482ffefxpV8kSA8nk6z7": "Preparing this year's teaching plan",
+    "ses_f99bb0086ffewbngYVB49ROBU0": "Continuing ongoing task",
+    "ses_f99acd5c6ffe92ckeRQCAxe76r": "Exploring fable 5.1 prompt for Magnolia",
+    "ses_f995d8ef5ffeZ93pWT2dNihgDq": "Reviewing pending work from last session",
+    "ses_f97c8e7c1ffeDm7Zj8KOo0ffKB": "Pending tasks check",
+    "ses_f97b6c568ffelIpGK0Rx2XPwHu": "Session recap request",
+    "ses_f93a993f8ffeCmJKTUAxzvMClL": "Mimosa usage question",
+    "ses_f93a87a19ffe14z3l5gy9oOKez": "Using mimosa tool guidance",
+    "ses_f932fcfc5ffe3N97EKUgHSVKis": "Session recap request",
+    "ses_f932fbd0effeMolZm0OwEDiAsj": "Session recap request",
+    "ses_f853c4570ffeF84MbZsTun1Z8i": "Session recap request",
+    "ses_f848fbeb8ffeor0LEWSrx4kvYB": "Adverum PR insights for Magnolia memory architecture",
+    "ses_f7b003cf9ffeCuM1HcOts9W3xq": "CNRS-NSFC proposal v6 review",
+    "ses_f7ad9d5e6ffeFiXLzhytdgfu5f": "Review of docs PR #14 on Magnolia-AI",
+    "ses_f79a13c0effeaXIKc8iLW1XhRE": "Security check before making Magnolia public",
+    "ses_f78ef8ccfffeP18oREdDgzDGTW": "Session recap request",
+    "ses_f75f76e00ffe6aZZ3cqpg18RAf": "Research GPT Astra model (@general subagent)",
+    "ses_f75f73322ffe26JQqs0b8AMEsw": "Research Claude Fable 5.1 (@general subagent)",
+    "ses_f75f70d3dffeSaN1xesZwWChet": "Research DeepSeek v4.1 + peers (@general subagent)",
+    "ses_f75e5b7e2ffeFYYVSlsgHYH1NM": "Session recap",
+    "ses_f74d6072fffeDFwmAhzeJRFN3F": "Magnolia main branch install instructions",
+    "ses_f7494c99effeJ4aVLYwXgSCv2G": "Verify name.bib for Magnolia citation",
+    "ses_f743e676effeeZgpkogGkV4b5S": "Recap request",
+    "ses_f709a9310ffejREd7WT1da6ha1": "Conversation recap",
+    "ses_f70889d2bffeKh9XWV7ZjdqUhV": "Magnolia relaunch",
+    "ses_f70832e6fffeurarLvkH0Ab8ro": "Bug fix confirmation",
+    "ses_f706d6cb6ffeLD2yzalPa7F69w": "Magnolia manuscript review by lfnothias",
+    "ses_f6ff7a23bffedC8vAZZbTOUohM": "Release candidate readiness",
+    "ses_f612d4af5ffe4SAGCtNur7bt0e": "arXiv 2609.02702 relevance check",
+    "ses_f60121ca5ffe8tKZTCAqwDLXW9": "MD methods for amorphous diffusion tensor",
+    "ses_f5fe92955ffe6qDxsoDcgWdLYL": "Reviewing lfnothias comment on Magnolia paper",
+    "ses_f5c2831f9ffe1gpuu3ecmTMbN3": "Check Mimosa-AI local vs GitHub branch",
+    "ses_f5b9c424effebYiBJUbYERtSTh": "Conversation recap",
+    "ses_f57007ae9ffeZeWkTP1ndbRubN": "Conversation recap",
+    "ses_f56fdf0e7ffeii92b61wKrMLM9": "Magnolia startup slow diagnostic results",
+    "ses_f556ccd48ffew2HrfofZKXak8E": "Conversation restart",
+    "ses_f51e210baffezNxHa1cPKjWUNM": "Session restarted",
+    "ses_f519131bcffeiCT6rN2Fq7S71c": "Session restart recap",
+    "ses_f50ccfd03ffe4orXb1IO2I5xDN": "Cleanup duplicate SPARQL project",
+    "ses_f4c9e3ba4ffe5PwOimK8lk1iRX": "Paper search: grounding agent memory",
+    "ses_f4c877491ffezhgfhvgQtRMAyb": "Checking arxiv 2609.11873v2",
+    "ses_f4c732152ffehk2pj1LHz2SPi1": "Deep-read RSI paper file (@general subagent)",
+    "ses_f3d2eb508ffekycz7MDI0xi9aI": "arXiv paper 2609.19134v1 review",
+    "ses_f3cf0696cffe45tlwWRuZf7i7d": "Checking for pull after manuscript review",
+    "ses_f3c257738ffecnPeSIzxfj6ueX": "Socket connection closed error with DeepSeek v4.1 flash",
+    "ses_f38105c66ffeKxkSOIfLyVL7SL": "Recap request",
+    "ses_f380e0224ffeWb4WYbRqIAruf8": "Email Fabien Gandon: coauthor & agent memory",
+    "ses_f36a7be22ffehG1VDp61hkrRYL": "Magnolia boot bottleneck and startup sequence",
+    "ses_f32d2de9affePZfEewCtFqpMPg": "New session - 2026-09-23T07:31:22.085Z",
+    "ses_f32aa7df9ffeKYF45IocA0dqD3": "URI judgment: class/category vs RAG",
+    "ses_f32790403ffeJL7DjjSz8itoWY": "Digest SoL-Pi paper (@general subagent)",
+    "ses_f3278e382ffeWHy2537JaIp7CP": "Digest Sparse Reward paper (@general subagent)",
+    "ses_f3278b8afffe42sxoumLeA3n2B": "Digest GOLLuM paper (@general subagent)",
+    "ses_f3278950dffegMEbwJuo96XMni": "Digest confidence paper (@general subagent)",
+    "ses_f3278709fffe6haevvYmstzfNi": "Digest Evo-Memory paper (@general subagent)",
+    "ses_f31e8a6a3ffefw437P1UeTH5mK": "Session recap request",
+    "ses_f31caffe3ffeFbc0gz29li4D9G": "Conversation recap",
+    "ses_f311e9b54ffeQOWrPc0fqiLcqc": "Digest WikiSkill paper (@general subagent)",
+    "ses_f311e7123ffevqr7uNjNVv4ivT": "Digest SkillWiki paper (@general subagent)",
+    "ses_f2dcb7724ffeogvFlxMn9wMg4U": "Session recap",
+    "ses_f2d9825daffece2yV0aTmW5o1r": "Anthropic AI4S achievements: protein design news",
+    "ses_f2d8f3f7effef2G17Cnn0hjy4I": "Deep-read protein binder PDF (@general subagent)",
+    "ses_f2d8f081affeowTxQ8HH8ycnVu": "Deep-read ART enzyme PDF (@general subagent)",
+    "ses_f2d6fb294ffeYcQTs93AqoKU09": "Conversation recap",
+    "ses_f2d95bfc6ffeEAXiBbA5ZggaaN": "Conversation restart",
+    "ses_f2c8dd094ffeF3L1KhGqjDMo6o": "Deep-read Dream-RSI paper (@general subagent)",
+    "ses_f2c8b125cffekFuTegt7RQy2D1": "Deep-read RRSI paper (@general subagent)",
+    "ses_f2c6196ddffexiHDZeSuJSd6vk": "Smoke echo 4 request handling",
+    "ses_f2c56315bffeBTfj6hj7vVRLnu": "Deep-read Dream-RSI paper (@general subagent)",
+    "ses_f2c5092d6ffe14IUgxJ2HChfKB": "Smoke echo final reply test",
+    "ses_f28a28f08ffeYAAInOiAtjIJ96": "Session recap and status",
+    "ses_f28a2a559ffe1EcmGhwAnNQkgt": "Session recap request",
+    "ses_f283cec09ffefGBsp7yOC5fVQw": "Digest Env-Rethink paper (@general subagent)",
+    "ses_f283ca3edffek7j56F4f6BHxCI": "Digest trace-tampering paper (@general subagent)",
+    "ses_f2801dbffffewdUY3IZ81XZ4lJ": "Digest Bad Genius paper (@general subagent)",
+    "ses_f2801a944ffe5EDkuhgThI20Ng": "Digest ModularRSI paper (@general subagent)",
+    "ses_f28016d47ffezEm8Sr3zV57uTQ": "Digest RobustSGPO paper (@general subagent)",
+    "ses_f28014127ffeItumliolxLza03": "Digest Harness-or-Model paper (@general subagent)",
+    "ses_f27f0bea6ffel6TMCac4vD42Rk": "New session restart",
+    "ses_f27bdffd6ffeZeSj3lpliRf0pL": "Digest process-eval paper (@general subagent)",
+    "ses_f27bdb29fffedXwIRhDZblZJV7": "Digest HackProbe paper (@general subagent)",
+    "ses_f27bd618fffe6piBTkP0vuwtuj": "Digest LLM-judge paper (@general subagent)",
+    "ses_f27bd192bffe5c79FHFdFyTIQ3": "Digest scope-persist paper (@general subagent)",
+    "ses_f27ae9741ffejGtF0QxnmLPVcc": "Digest eviction-audit paper (@general subagent)",
+    "ses_f27ae4babffeytDQ4a2pNdvFjB": "Digest exec-provenance paper (@general subagent)",
+    "ses_f27ade690fferoL87ZWtdOKLfV": "Digest memory-poisoning paper (@general subagent)",
+    "ses_f27ada2dcffeva5wEf4568ej1v": "Digest DolphinBench paper (@general subagent)",
+    "ses_f19220a8affeZMYX06qPudNcij": "Reviewer feedback on Magnolia memory paper",
+    "ses_f191499e7ffeyLv6C6jaPlqbiO": "Magnolia preprint paper clarification",
+    "ses_f18e933f9ffeb9rJHJQZjhozjg": "Updating goal from Madina's message",
+    "ses_f13ec4120ffeqRVeuMgabOeswJ": "Xiulian session restart errors",
+    "ses_f13dfeff8ffepX6L2VR14H9uVE": "Literature search for new related papers",
+    "ses_f13c8711effe89SX4Q3bopUvBW": "Smoke test reply check",
+    "ses_f13b1ccceffejQKkmcJX6yB4Jb": "JSON smoke test reply",
+    "ses_f13b114ccffeS57qNQKf4t53xZ": "JSON smoke test instruction",
+    "ses_f12546810ffex66eVA7sMG0MLe": "Covalent warhead SMARTS gate preparation",
+    "ses_f12546807ffeP6b6OboEu9DIYB": "Covalent warhead SMARTS pattern gate",
+    "ses_f123d9e0cffeWdt9jKXVFUDS7V": "Switch active branch to master",
+    "ses_f120accfdffexFcj85TLBmuCkt": "BOOT_OK test message",
+    "ses_f120accdbffegSaDc8BMaq4GOP": "BOOT_OK",
+    "ses_f12079af8ffehDayoJasq4rpAh": "Boot check with sleep and memory context",
+    "ses_f12079b38ffeCkbHQ2J6weOEEF": "Suspicious tool-calling boot check request",
+    "ses_f120168f4ffecEzPn7bNTL2TK1": "Shell command execution probe test",
+    "ses_f11fad304ffefJG1MGIX7fFdpt": "Exact reply MEMONLY_OK test",
+    "ses_f11f94ce2ffe7MGWzjq68WPbQm": "Echo TOOLSONLY command test",
+    "ses_f11f8ed08ffeTJMwbBe0fj2QCZ": "AIR-free cluster scores from caprieval TSVs",
+    "ses_f11f8ee0fffexvuVRZlBKro4Hw": "AIR-free scores from caprieval TSVs",
+    "ses_f116afca1ffeR9qSpRHzPkW1Jl": "Alanine-scan hotspot in scan_complex_haddock.tsv",
+    "ses_f116c28f8ffe89uRuiSM0CBitl": "Urgent memory conflict resolution in todo.md",
+    "ses_f1168647cffe1cEDpVB94cRd1D": "Flexref values for extended ACE/NME peptide",
+    "ses_f115c4785ffeny8T7b1jehHfpp": "Completing HADDOCK3 docking config protocol",
+    "ses_f1158af6dffekbLPqwN5H8EUsl": "Diagnosing stuck KFERQx2 docking job",
+    "ses_f113e1543ffeXxMvSABAaWv8vY": "HADDOCK3 flexref range for extended peptide",
+    "ses_f113e1413ffe3Np6s7207RinH4": "HADDOCK3 flexref values for extended peptide",
+    "ses_f113e115cffeMN1hQigyjmK15q": "Completing HADDOCK3 KFERQx2/SBD-beta config",
+    "ses_f113e12c8ffeBluc0yPL0vuzy1": "Complete HADDOCK3 KFERQx2 docking config",
+    "ses_f1122e02dffeiluzU9jElI19Vh": "GPX4 covalent docking protocol with gnina",
+    "ses_f1122e0d6ffeHEa56e2ttWqEmN": "GPX4 covalent docking protocol documentation",
+    "ses_f0f032da8ffe2J062rXBEW37GS": "Session recap and status check",
+    "ses_f0ee1e1f3ffeth0V22AVzNoOhb": "Candidature ateliers familles professionnelles",
+    "ses_f0e924097ffe656US7Rdjpr1C0": "GPX4 alkyne ligand vinyl docking definitions",
+    "ses_f0e923860ffe6oNgQd5py0W6j0": "GPX4 covalent docking vinyl product SMILES",
+    "ses_f0e922f68ffeSRieCxUhZtx84H": "GPX4 alkyne vinyl product docking definitions",
+    "ses_f0e9227a5ffe1yIczE2lUo4BBU": "GPX4 alkyne ligand docking definitions",
+    "ses_f0e574862ffevuvfNJ05kk34N2": "GPX4 covalent docking protocol write-up",
+    "ses_f0e573de1ffeN3BJ6DtOOl2jgT": "GPX4 covalent docking protocol recap",
+    "ses_f0e57355affeOr3py2l4hcroV5": "GPX4 covalent docking protocol from SMILES",
+    "ses_f0e572e38ffe19UUWAtK5dvPL0": "GPX4 covalent docking protocol for quino_smiles.csv",
+    "ses_f0da11e1dffe8eB8EidafZO29f": "Agent failed to relay memory cleanup proposals",
+    "ses_f0d76dea1ffeVRFE4YMv5gzgtM": "Completing HADDOCK3 KFERQx2 docking config",
+    "ses_f0d711ea0ffecxK1wkXlq6AM9x": "Completing HADDOCK3 config for KFERQx2 docking",
+    "ses_f0d72bae4ffe61BH61AgBlNp6b": "Completing HADDOCK3 docking config",
+    "ses_f0d43f892ffeogKBa3r5Hd0kcq": "Continuing previous work session",
+    "ses_f0d1a4674ffeFtyP3a4PdHlg5y": "HADDOCK3 flexref values for extended peptide",
+    "ses_f0d1994ceffe01LOF00u2gxzfQ": "HADDOCK3 flexref bounds for extended peptide",
+    "ses_f0c2ca09bffe8AcUKzHEBw0J3N": "Restarting after interruption",
+    "ses_f0c124c2bffenfzu0P96khD5Eh": "Restarted session check-in"
+   }
+  }
+ },
+ "mentions": {
+  "raw": {
+   "ever": 449,
+   "workhorses": 291
+  },
+  "clean": {
+   "ever": 449,
+   "workhorses": 291
+  }
+ },
+ "curated": {
+  "raw": {
+   "ever": 158,
+   "workhorses": 36
+  },
+  "clean": {
+   "entries": {
+    "20260601_072242_731541_Project_hsc70_new_initialized_greenfield_peptide_docking_pro.md": {
+     "sessions": [
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 1
+    },
+    "20260601_082858_573779_Hsc70_binding_site_context_experimental_vs_P2Rank.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+      "ses_134c7b1a2ffeMFkXQrSHFP8Cs1",
+      "ses_1456d0e73ffe6ULEPwvHYx84J4",
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU",
+      "ses_17e02319dffeoeEmV0Pd79WEQ4"
+     ],
+     "distinct": 15
+    },
+    "20260601_085154_357923_HADDOCK2_4_reference_run_parameters_job_614716.md": {
+     "sessions": [
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 10
+    },
+    "20260601_085206_045909_Peptide_construction_method_and_force_field.md": {
+     "sessions": [
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17c954078ffeVBu2fM3ktxH6f4",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 5
+    },
+    "20260601_092242_211883_P2rank_process_cleanup_required_before_re_run_to_avoid_resou.md": {
+     "sessions": [
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD"
+     ],
+     "distinct": 2
+    },
+    "20260601_120451_289865_Shell_tool_name_is_compchem_tools_run_shell_not_run_shell.md": {
+     "sessions": [
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 1
+    },
+    "20260601_123533_507404_submit_job_output_collision_always_clean_output_before_resub.md": {
+     "sessions": [
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 3
+    },
+    "20260601_123533_529832_submit_job_does_verbatim_rsync_of_working_dir_reuse_carefull.md": {
+     "sessions": [
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 2
+    },
+    "20260601_123636_270414_HADDOCK3_failure_on_Azzurra_output_exists_not_OOM.md": {
+     "sessions": [
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_17cf99c43ffeQIsCG8QfCs51NU"
+     ],
+     "distinct": 2
+    },
+    "20260601_125029_258670_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_0e37fecd8ffen9fpkjK39wRRL0",
+      "ses_11186eec2ffe47heamLxUwWbfN",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_16d72029fffebGAR3sU5A0uNLO"
+     ],
+     "distinct": 5
+    },
+    "20260601_125029_262067_HADDOCK3_memory_baseline_on_Azzurra_2GB_core_minimum_for_ref.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_11186eec2ffe47heamLxUwWbfN",
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 3
+    },
+    "20260601_125029_263244_HADDOCK3_jobs_failing_with_output_exists_not_OOM_not_input_e.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 4
+    },
+    "20260601_125506_918424_HADDOCK3_s2000_KILDQ_on_full_length_Hsc70_cluster_2_best_Doc.md": {
+     "sessions": [
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_16e961374ffeKj4c1Vd3tU5yCD",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_178ed6ff9ffetzJN3tTwNm1O2u",
+      "ses_17b506038ffeo9mWNJmXSEIwqR",
+      "ses_17b541fadffe2dIIdzbpipjeCH",
+      "ses_17c954078ffeVBu2fM3ktxH6f4"
+     ],
+     "distinct": 12
+    },
+    "20260601_141116_881223_submit_job_verbatim_rsync_of_working_dir_causes_output_colli.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260601_141116_882304_First_successful_HADDOCK3_KILDQ_peptide_docking_on_full_leng.md": {
+     "sessions": [
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 4
+    },
+    "20260601_141122_786346_First_working_HADDOCK3_peptide_docking_on_full_length_Hsc70.md": {
+     "sessions": [
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3"
+     ],
+     "distinct": 3
+    },
+    "20260601_193146_610247_Initial_2026_06_01_KILDQ_s5000_run_produced_output_from_11_s.md": {
+     "sessions": [
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP"
+     ],
+     "distinct": 2
+    },
+    "20260601_193146_611685_Template_for_setting_up_4_peptide_docking_runs_for_hsc70_KFE.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_14a4301fcffe2zIr27rODUZ3PS"
+     ],
+     "distinct": 3
+    },
+    "20260601_193606_767802_Peptide_PDB_residue_numbering_inspection_across_5mer_library.md": {
+     "sessions": [
+      "ses_f113e1413ffe3Np6s7207RinH4"
+     ],
+     "distinct": 1
+    },
+    "20260602_124049_333361_Contact_analysis_residue_type_labels_are_not_interaction_mec.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_00aaeb7caffezzRJN6Rvc3q8vx",
+      "ses_00b6e153fffe0Go7rYlKwmVTuW",
+      "ses_01626cb7effeRZpRX73tGDR6r3",
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_13fb7b1bfffeq2sP2uCvfcb2Z1",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_1456d0e73ffe6ULEPwvHYx84J4",
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_14cf831a6ffeTNYoSmgNq1SkVs",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_14ea955f6ffewXyKOAvu8DcO51",
+      "ses_157305d17ffehanltq1UkHKLgn",
+      "ses_1573cac52ffeM0LR8Y3lMIOL9N",
+      "ses_1574372c7ffePZ7a6wkaB8bd2s",
+      "ses_158957077ffeOqwxdLe26CyDPy",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3",
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ",
+      "ses_16d72029fffebGAR3sU5A0uNLO",
+      "ses_16e1a9b76ffetBUfAdsrLFFu67",
+      "ses_1718e5b3bffeMXYjaWwOYZD7KP",
+      "ses_17205e7c6ffefOar6hVIknEGB8",
+      "ses_173592375ffelotrqhfYN7EYuC",
+      "ses_f19220a8affeZMYX06qPudNcij",
+      "ses_f995d8ef5ffeZ93pWT2dNihgDq",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fa3c22fa4ffelwXX4LgUoNyBiy",
+      "ses_fa4010ea1ffe4UrXUZrn4O7ub7",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a4cc3bffeRTbs2WcxLQleug",
+      "ses_fbdd91efdffeITwh2t4Jwwbnc8",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez"
+     ],
+     "distinct": 48
+    },
+    "20260603_111129_205024_Peptide_construction_method_and_force_field_CORRECTED.md": {
+     "sessions": [
+      "ses_16bd1b365ffeaZgnZs0L5pDiTZ"
+     ],
+     "distinct": 1
+    },
+    "20260604_103022_799847_haddock3_config_s10000_and_p2rank1_parameters_for_Hsc70_pept.md": {
+     "sessions": [
+      "ses_14a4301fcffe2zIr27rODUZ3PS",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1"
+     ],
+     "distinct": 3
+    },
+    "20260604_115305_176941_HADDOCK3_runs_completed_for_4_peptide_targets_via_p2rank_100.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_14a4301fcffe2zIr27rODUZ3PS",
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 11
+    },
+    "20260604_120820_953893_KFERQ_KILDQ_fusion_run_terminated_early_missing_flexref_outp.md": {
+     "sessions": [
+      "ses_16d72029fffebGAR3sU5A0uNLO"
+     ],
+     "distinct": 1
+    },
+    "20260604_120820_954974_Magnolia_HADDOCK3_runs_produce_asymmetric_output_per_peptide.md": {
+     "sessions": [
+      "ses_16d72029fffebGAR3sU5A0uNLO"
+     ],
+     "distinct": 1
+    },
+    "20260605_082851_898337_Peptide_construction_method_and_force_field_for_HADDOCK3_doc.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_0399febfaffeSpm6o3FgACptCp",
+      "ses_05d3430d8ffeZf0x0l4FB5iqHh",
+      "ses_06e35b9beffe0Rk9xn8eqWusvd",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0c7425453ffeDvyNU5dHhXPEh9",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_0de49a3bdffexSPC17PoZJFZ95",
+      "ses_0de5f46e9ffeaqXxcy9V1QVDe5",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f995d8ef5ffeZ93pWT2dNihgDq",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f99ca2482ffefxpV8kSA8nk6z7",
+      "ses_f9eefa93effe0DoRxv4iHTKBZ8",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68",
+      "ses_fecf33ecaffeSYDQC0Tcri2MDX",
+      "ses_fed50fe14ffeSIUaCA7DCVo5Ap"
+     ],
+     "distinct": 35
+    },
+    "20260605_085429_555413_Always_use_max_walltime_for_cpucourt_partition_72h.md": {
+     "sessions": [
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_14d178160ffeFCUNF8muY7i3DL",
+      "ses_158957077ffeOqwxdLe26CyDPy"
+     ],
+     "distinct": 3
+    },
+    "20260605_122155_979185_Stage_1_6_mer_extension_of_KFERQ_N_terminal_ALA_outperforms.md": {
+     "sessions": [
+      "ses_14a4301fcffe2zIr27rODUZ3PS",
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3",
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 6
+    },
+    "20260605_135712_476743_HADDOCK3_contact_labels_are_residue_categories_not_interacti.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260605_135712_478615_Isolated_SBD_domain_docking_rejected.md": {
+     "sessions": [
+      "ses_1456d0e73ffe6ULEPwvHYx84J4"
+     ],
+     "distinct": 1
+    },
+    "20260605_135737_530472_submit_job_tool_rsyncs_working_dir_requiring_fetch_clean_for.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260605_135802_423701_KFERQ_KILDQ_fusion_HADDOCK3_run_terminated_early_due_to_trun.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_13fc23de2ffelf2ddyTWl2olKC",
+      "ses_158c0e27effeHzvsSWus743bMa",
+      "ses_158ccdd8dffeMGgJOUgkCB420E",
+      "ses_167e88697ffeOSsrQZ2BhPjBB3"
+     ],
+     "distinct": 5
+    },
+    "20260608_123958_023055_HADDOCK3_run_status_pass_does_not_guarantee_successful_capri.md": {
+     "sessions": [
+      "ses_14a8d1dd6ffesLHxScnqDJwwUz"
+     ],
+     "distinct": 1
+    },
+    "20260610_194050_117822_BindCraft_install_fails_on_Azzurra_due_to_read_only_system_m.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl",
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 2
+    },
+    "20260610_194050_119240_CUDA_module_not_required_for_BindCraft_on_Azzurra.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260610_194050_120561_Manual_BindCraft_installation_steps_on_Azzurra_prefix_env.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260610_194050_121513_BindCraft_tool_description_and_resource_requirements.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260611_093345_593052_Long_peptide_lengths_fusion_x2_peptides_are_not_all_10_mers.md": {
+     "sessions": [
+      "ses_f19220a8affeZMYX06qPudNcij"
+     ],
+     "distinct": 1
+    },
+    "20260611_093503_721290_Do_not_trust_directory_filename_labels_for_peptide_length_ve.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f19220a8affeZMYX06qPudNcij"
+     ],
+     "distinct": 2
+    },
+    "20260612_064325_014644_BindCraft_default_install_script_fails_on_Azzurra_due_to_rea.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_064325_016781_BindCraft_installation_steps_on_Azzurra_verified_working.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_064325_018024_GPU_resource_requirements_and_job_submission_for_BindCraft_o.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_064325_019327_sbatch_wrap_quoting_conflict_with_Python_print_statement.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_064449_116920_Fusion_14_mer_and_KFERQx2_have_poor_per_residue_efficiency_c.md": {
+     "sessions": [
+      "ses_11186eec2ffe47heamLxUwWbfN"
+     ],
+     "distinct": 1
+    },
+    "20260612_064449_118508_BindCraft_validation_plan_and_GPU_resource_summary.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_070346_254894_P2Rank_restraints_protocol_yields_superior_scoring_over_expe.md": {
+     "sessions": [
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs"
+     ],
+     "distinct": 5
+    },
+    "20260612_072451_699486_bc_hsc70_r_BindCraft_job_Stage_3_hard_refinement_metrics_pla.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_072451_700544_BindCraft_on_cpucourt_times_out_requires_GPU_and_generous_wa.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_074517_254464_AIR_free_score_correct_formula_and_recurring_calculation_err.md": {
+     "sessions": [
+      "ses_125e030f7ffeXnTIPy3gi7ezbx",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 3
+    },
+    "20260612_104325_477887_N_terminal_ALA_extension_AKFERQ_rewires_salt_bridge_network.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260612_104325_491544_C_terminal_LYS_in_7_mer_AKFERQK_contributes_no_contacts_and.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 2
+    },
+    "20260612_104325_498343_Cross_run_comparison_requires_PDB_level_atom_measurements_no.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260612_122350_927382_The_KFERQ_KILDQ_fusion_14_mer_has_an_unexpected_C_terminal_t.md": {
+     "sessions": [
+      "ses_11186eec2ffe47heamLxUwWbfN"
+     ],
+     "distinct": 1
+    },
+    "20260612_132512_011316_BindCraft_run_for_Hsc70_peptide_binders_yields_only_rejected.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_132512_024127_BindCraft_Accepted_directory_contains_subdirectories_not_des.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260612_132512_025883_ASP_rich_N_terminal_sequences_insufficient_to_pass_confidenc.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260613_090845_447561_Open_state_docking_may_miss_biologically_relevant_closed_sta.md": {
+     "sessions": [
+      "ses_13fc23de2ffelf2ddyTWl2olKC"
+     ],
+     "distinct": 1
+    },
+    "20260613_092837_137909_BindCraft_on_full_length_Hsc70_all_trajectories_rejected_at.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260613_092837_138900_BindCraft_jobs_on_external_cluster_not_tracked_by_Magnolia_r.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_1349d35caffeQYdQoegiPzSDIl",
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm",
+      "ses_f19220a8affeZMYX06qPudNcij",
+      "ses_fecf33ecaffeSYDQC0Tcri2MDX"
+     ],
+     "distinct": 8
+    },
+    "20260613_100853_432745_BindCraft_peptide_binder_success_rate_is_5_10x_lower_than_tr.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260613_100853_434002_BindCraft_recommended_settings_for_large_and_difficult_targe.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260613_100853_434798_Zero_designs_from_Hsc70_full_length_cause_and_fix.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260613_100853_435571_Using_full_length_protein_as_BindCraft_target_leads_to_zero.md": {
+     "sessions": [
+      "ses_1349d35caffeQYdQoegiPzSDIl"
+     ],
+     "distinct": 1
+    },
+    "20260616_064327_131908_HADDOCK3_job_lifecycle_stuck_at_submitting_despite_successfu.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260616_071134_132311_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md": {
+     "sessions": [
+      "ses_006393014ffeQLsHBM94wP63oX",
+      "ses_00aaeb7caffezzRJN6Rvc3q8vx",
+      "ses_00b6e153fffe0Go7rYlKwmVTuW",
+      "ses_01626cb7effeRZpRX73tGDR6r3",
+      "ses_0399febfaffeSpm6o3FgACptCp",
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+      "ses_06e35b9beffe0Rk9xn8eqWusvd",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0a6a8187bffesxoXZhZ79UZyER",
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_0b911bca3ffeeXJJ9fmGpk3sBc",
+      "ses_0dcdbe062ffeFia01VH0OA21gg",
+      "ses_0de5f46e9ffeaqXxcy9V1QVDe5",
+      "ses_f995d8ef5ffeZ93pWT2dNihgDq",
+      "ses_f99bb0086ffewbngYVB49ROBU0",
+      "ses_f9eefa93effe0DoRxv4iHTKBZ8",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fa3c22fa4ffelwXX4LgUoNyBiy",
+      "ses_fa438805affet1qcnpdR22FqNs",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs",
+      "ses_fa989e272ffe2ctd8OxxbFTJBk",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fb8a4cc3bffeRTbs2WcxLQleug",
+      "ses_fbdd91efdffeITwh2t4Jwwbnc8",
+      "ses_fbddcfffcffeQmeqrhv5zrKTKC",
+      "ses_fddc3aa38ffe101Inx0fwTRSct",
+      "ses_fe6ff3651ffeBp3JvNKItNtV8H",
+      "ses_fe6ff4300ffetLEEMnWq6DTA8y",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68"
+     ],
+     "distinct": 33
+    },
+    "20260616_071341_021108_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo",
+      "ses_130e4d4e4ffeJu5Q6ZBCByktmm"
+     ],
+     "distinct": 2
+    },
+    "20260616_072542_246988_PDB_4PO2_provides_19_tight_contact_residues_for_SBD_canonica.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 1
+    },
+    "20260616_072542_248586_Perspicacit_KB_expanded_added_8_CMA_degrader_engineering_pap.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260616_084658_766566_Primary_KFERQ_binding_site_in_full_length_Hsc70_is_SBD_canon.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260616_092818_415911_P2Rank_fails_to_detect_SBD_lid_pocket.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ",
+      "ses_f19220a8affeZMYX06qPudNcij"
+     ],
+     "distinct": 2
+    },
+    "20260616_092818_419887_Lid_only_SBD_docking_insufficient_for_selective_KFERQ_bindin.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1"
+     ],
+     "distinct": 2
+    },
+    "20260616_092827_841425_SBD_architecture_lid_arches_27_above_groove_peptide_bridges.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260616_094925_031867_Closed_Hsc70_conformation_primary_SBD_groove_binding_pocket.md": {
+     "sessions": [
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 1
+    },
+    "20260616_101004_106005_4PO2_crystal_structure_and_Sahu_Malhotra_AF3_prediction_SBD.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260616_104338_878510_HADDOCK3_fails_with_Could_not_identify_chainID_or_segID_in_p.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x"
+     ],
+     "distinct": 2
+    },
+    "20260616_110359_872958_4PO2_SBD_docking_results_for_five_residue_peptides_QRKEL_and.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f1168647cffe1cEDpVB94cRd1D",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs"
+     ],
+     "distinct": 6
+    },
+    "20260616_110359_877077_Recommended_HADDOCK3_protocol_for_SBD_docking_must_include_f.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 2
+    },
+    "20260616_112419_763481_Structural_fix_template_config_peptide_manifest_instead_of_m.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 1
+    },
+    "20260616_112419_769092_Pre_job_diff_check_against_reference_config_catches_forgotte.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1"
+     ],
+     "distinct": 2
+    },
+    "20260616_121337_920086_haddock3_runs_for_hsc70_peptide_consistently_yield_exactly_2.md": {
+     "sessions": [
+      "ses_12b819265ffeRiCjSRTOF2mCwU",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f0d72bae4ffe61BH61AgBlNp6b",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 4
+    },
+    "20260616_122518_723343_Full_HADDOCK3_protocol_for_peptide_Hsc70_docking_requires_md.md": {
+     "sessions": [
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f0d1a4674ffeFtyP3a4PdHlg5y",
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f0d72bae4ffe61BH61AgBlNp6b",
+      "ses_f0d76dea1ffeVRFE4YMv5gzgtM",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f113e1413ffe3Np6s7207RinH4",
+      "ses_f113e1543ffeXxMvSABAaWv8vY",
+      "ses_f115c4785ffeny8T7b1jehHfpp",
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 11
+    },
+    "20260616_130554_185263_Stage_1_2_extensions_docked_against_wrong_pocket_NBD_ATP_sit.md": {
+     "sessions": [
+      "ses_f19220a8affeZMYX06qPudNcij"
+     ],
+     "distinct": 1
+    },
+    "20260616_130554_187963_Per_residue_energy_decomposition_from_force_field_MM_PBSA_ca.md": {
+     "sessions": [
+      "ses_12b819265ffeRiCjSRTOF2mCwU"
+     ],
+     "distinct": 1
+    },
+    "20260616_130554_190678_Full_HADDOCK3_protocol_vs_bare_protocol_key_differences.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 1
+    },
+    "20260616_132621_326274_tleap_topology_building_fails_on_HADDOCK3_PDB_with_hydrogens.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 2
+    },
+    "20260616_140033_061539_Combined_contact_map_MM_GBSA_per_residue_analysis_identifies.md": {
+     "sessions": [
+      "ses_12b819265ffeRiCjSRTOF2mCwU",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs"
+     ],
+     "distinct": 2
+    },
+    "20260616_140709_676901_Full_protocol_with_explicit_water_changes_peptide_ranking_vs.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 1
+    },
+    "20260616_140709_678675_Bare_protocol_gives_misleading_DockQ_for_KFERQ_due_to_missin.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 1
+    },
+    "20260616_140709_680205_Combined_contact_map_MM_GBSA_per_residue_analysis_for_ration.md": {
+     "sessions": [
+      "ses_12b819265ffeRiCjSRTOF2mCwU"
+     ],
+     "distinct": 1
+    },
+    "20260616_165252_324967_SSH_timeout_when_submitting_sbatch_job_to_Azzurra_cluster.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260616_170758_695261_SBD_groove_backbone_preserved_between_4PO2_Hsp70_and_AF3_Hsc.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260616_170758_707562_Full_protocol_HADDOCK3_ranking_5_mers_led_by_RKDLQ_score_69.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 2
+    },
+    "20260616_202842_917618_Selecting_best_score_cluster_without_convergence_check_gives.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 2
+    },
+    "20260616_213745_511748_Consistent_cluster_count_2_for_haddock3_runs_on_4po2_with_di.md": {
+     "sessions": [
+      "ses_12b819265ffeRiCjSRTOF2mCwU"
+     ],
+     "distinct": 1
+    },
+    "20260617_073053_150518_Torielli_peptide_TGGFQMALT_is_a_tight_Hsc70_ligand_with_crit.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_12b819265ffeRiCjSRTOF2mCwU",
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs"
+     ],
+     "distinct": 6
+    },
+    "20260617_073053_152499_seletopclusts_top_models_4_caps_reported_cluster_sizes_to_n.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo",
+      "ses_12b819265ffeRiCjSRTOF2mCwU",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 3
+    },
+    "20260617_075058_495957_Run_history_may_be_stale_direct_cluster_verification_require.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5"
+     ],
+     "distinct": 1
+    },
+    "20260617_081153_054745_AlphaFold3_2_models_score_poorly_due_to_van_der_Waals_clashe.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260617_082118_803833_Real_clustfcc_cluster_sizes_show_strong_convergence_for_many.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260617_123907_366603_MM_GBSA_per_residue_gas_phase_energy_cannot_rank_Hsc70_bindi.md": {
+     "sessions": [
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl",
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 2
+    },
+    "20260617_134819_934391_Torielli_2025_truncation_strategy_and_alanine_scan_CDK4_pept.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 2
+    },
+    "20260617_144016_520215_RKDLQ_D3_per_residue_MM_GBSA_unfavorable_sidechain_gas_phase.md": {
+     "sessions": [
+      "ses_f11f94ce2ffe7MGWzjq68WPbQm"
+     ],
+     "distinct": 1
+    },
+    "20260617_144016_527579_AF3_full_length_Hsc70_docking_protocol_refinement.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 3
+    },
+    "20260617_144016_529707_Peptide_design_panel_consensus_D3_mutation_and_phased_extens.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260617_152051_608843_N_terminal_extension_of_RKDLQ_must_be_tested_after_D3_mutant.md": {
+     "sessions": [
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 1
+    },
+    "20260617_194130_677023_Plan_for_N_terminal_extension_test_6_candidates_on_RKALQ_bac.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 2
+    },
+    "20260617_203635_531804_rsync_timeout_when_fetching_large_haddock3_results_via_fetch.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260617_203638_922667_Rsync_timeout_for_large_haddock3_result_transfers.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260617_203638_924361_MCP_connection_closed_when_accessing_perspicacite_v2_directo.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260618_114647_982627_RKALQ_register_shift_D3_ALA_rotates_N_terminus_180_invalidat.md": {
+     "sessions": [
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 1
+    },
+    "20260618_114647_985510_RKALQ_binding_mode_similarity_87_Jaccard_with_RKGLQ_81_with.md": {
+     "sessions": [
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 1
+    },
+    "20260618_114647_988088_Contact_map_TSV_parsing_bug_7_columns_not_8_causing_all_cont.md": {
+     "sessions": [
+      "ses_f19220a8affeZMYX06qPudNcij"
+     ],
+     "distinct": 1
+    },
+    "20260618_114647_988842_N_terminal_extension_is_not_viable_for_RKALQ_s_binding_mode.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo",
+      "ses_125e030f7ffeXnTIPy3gi7ezbx"
+     ],
+     "distinct": 2
+    },
+    "20260618_120650_455842_HADDOCK3_full_protocol_flexref_emref_mdref_produces_AIR_free.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 3
+    },
+    "20260618_120650_462128_Post_run_assessment_of_June_17_batch_reveals_full_protocol_c.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q"
+     ],
+     "distinct": 1
+    },
+    "20260618_120650_465416_User_expects_AIR_free_scores_from_a_specific_report_html_AF3.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260618_122720_435093_Report_AIR_free_values_wrong_used_w_air_0_01_instead_of_0_1.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 1
+    },
+    "20260618_122720_435930_HADDOCK3_scoring_weights_read_from_weights_params_json_per_c.md": {
+     "sessions": [
+      "ses_f116c28f8ffe89uRuiSM0CBitl"
+     ],
+     "distinct": 1
+    },
+    "20260618_122720_436705_Corrected_AIR_free_ranking_of_5_mer_peptides_against_Hsc70_A.md": {
+     "sessions": [
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_fa960fd9affeAYPhFk0gOdLIvs"
+     ],
+     "distinct": 2
+    },
+    "20260618_124742_550431_AIR_free_scores_rank_peptide_Hsc70_binding_affinity_RKDLQ_be.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_f0d1994ceffe01LOF00u2gxzfQ",
+      "ses_f1168647cffe1cEDpVB94cRd1D",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw"
+     ],
+     "distinct": 5
+    },
+    "20260618_124742_555469_Correct_w_air_extraction_must_read_weights_params_json_from.md": {
+     "sessions": [
+      "ses_f116c28f8ffe89uRuiSM0CBitl"
+     ],
+     "distinct": 1
+    },
+    "20260619_105428_581551_Azzurra_cpucourt_fragmentation_blocks_32_core_HADDOCK3_jobs.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_0bdd2a85bffe95JK2yiS0X2eQn"
+     ],
+     "distinct": 2
+    },
+    "20260619_111556_408605_Staging_consolidation_tool_does_not_flag_cross_proposal_cont.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260619_113415_401436_memory_search_tool_fails_to_search_staging_or_project_tiers.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260619_115046_861205_RKALQ_alascan_per_residue_contributions.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260619_115046_862124_RKALQ_position_3_hydrophobic_pocket_is_narrow_VAL_fits_ILE_L.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260619_115046_863762_TGFMALQ_GLY2_environment_supports_G2_A_improvement.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 2
+    },
+    "20260619_115046_865233_4PO2_sandwich_pocket_residues_19_residues.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_05ea2dc72ffe3KVeH5BFS5EPnJ"
+     ],
+     "distinct": 2
+    },
+    "20260619_115058_958754_TGFMALQ_is_the_best_5_6_mer_binder_against_4PO2_SBD_AIR_free.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260619_121041_347108_Knowledge_base_entries_link_D3_ALA_mutation_to_ripple_effect.md": {
+     "sessions": [
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 1
+    },
+    "20260624_105200_000001_RKALQ_position3_and_TGFMALQ_position2_hydrophobic_filling_mutations_fail.md": {
+     "sessions": [
+      "ses_10252492affeC8CuGfq2Gxi25H"
+     ],
+     "distinct": 1
+    },
+    "20260624_111500_000001_Terminal_direction_geometry_does_not_transfer_from_RKDLQ_cl1_to_R.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260624_124000_000001_Perspicacite_KB_check_skipped_before_literature_query_always_v.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260624_124100_000001_SBD_to_NBD_spanning_peptide_is_non_canonical_likely_docking_ar.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_106d2b51bffeSYI9LLibqeeXlo"
+     ],
+     "distinct": 2
+    },
+    "20260624_124708_654938_Memory_session_handover_listed_pending_jobs_that_had_already.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_06e66ae41ffeGSXzgZwJh90VPK"
+     ],
+     "distinct": 2
+    },
+    "20260624_165207_781872_TGGFQMALT_alascan_independently_validates_the_F4_M6_L8_criti.md": {
+     "sessions": [
+      "ses_f116afca1ffeR9qSpRHzPkW1Jl"
+     ],
+     "distinct": 1
+    },
+    "20260624_214047_334236_memory_get_run_history_output_is_truncated_single_line_JSON.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_0d93057c5ffejLlEWHkl51h6E5"
+     ],
+     "distinct": 2
+    },
+    "20260625_100550_729733_AIR_free_score_computation_with_w_air_0_1_verified_for_3_run.md": {
+     "sessions": [
+      "ses_f116c28f8ffe89uRuiSM0CBitl",
+      "ses_f11f8ed08ffeTJMwbBe0fj2QCZ",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 4
+    },
+    "20260625_124606_091513_Raise_HADDOCK3_rigidbody_sampling_to_s20000_for_under_seeded.md": {
+     "sessions": [
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f1158af6dffekbLPqwN5H8EUsl",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 5
+    },
+    "20260625_130251_184169_HADDOCK3_busy_spin_deadlock_at_rigidbody_finalization_for_la.md": {
+     "sessions": [
+      "ses_f0d711ea0ffecxK1wkXlq6AM9x",
+      "ses_f0d72bae4ffe61BH61AgBlNp6b",
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1",
+      "ses_f115c4785ffeny8T7b1jehHfpp"
+     ],
+     "distinct": 5
+    },
+    "20260625_131500_000001_TGGFQMALT_9mer_mutation_cross_mode_artifact.md": {
+     "sessions": [
+      "ses_0d93057c5ffejLlEWHkl51h6E5",
+      "ses_10252492affeC8CuGfq2Gxi25H",
+      "ses_f11f8ee0fffexvuVRZlBKro4Hw",
+      "ses_f11fad304ffefJG1MGIX7fFdpt"
+     ],
+     "distinct": 4
+    },
+    "20260625_132000_000001_memory_record_learning_similarity_matcher_over_aggressive.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260625_140000_000001_T1E_stabilizes_groove_only_via_E1_K451_anchor_mutation_candidates.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz"
+     ],
+     "distinct": 1
+    },
+    "20260625_144930_234163_Use_s20000_rigidbody_sampling_for_under_seeded_tandem_peptid.md": {
+     "sessions": [
+      "ses_f113e115cffeMN1hQigyjmK15q",
+      "ses_f113e12c8ffeBluc0yPL0vuzy1"
+     ],
+     "distinct": 2
+    },
+    "20260625_151008_286795_HADDOCK3_rigidbody_finalization_deadlock_at_s20000_with_16_w.md": {
+     "sessions": [
+      "ses_f1158af6dffekbLPqwN5H8EUsl"
+     ],
+     "distinct": 1
+    },
+    "20260703_100606_871780_Alascan_residue_numbering_offset_PDB_resseq_equals_sequence.md": {
+     "sessions": [
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 1
+    },
+    "20260706_190551_262294_EGGFQMAKT_clt3_is_the_best_E_GFQMALT_9_mer_AIR_free_116_52_s.md": {
+     "sessions": [
+      "ses_0c7425453ffeDvyNU5dHhXPEh9"
+     ],
+     "distinct": 1
+    },
+    "20260706_195028_192532_fle_end_2_increases_by_2_not_1_when_extending_a_peptide_by_1.md": {
+     "sessions": [
+      "ses_f113e1413ffe3Np6s7207RinH4",
+      "ses_f113e1543ffeXxMvSABAaWv8vY",
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 3
+    },
+    "20260706_204018_896066_Torielli_2025_paper_is_primarily_experimental_with_supportin.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV"
+     ],
+     "distinct": 1
+    },
+    "20260708_164202_164866_fle_end_2_contiguity_extending_peptide_by_1_residue_increase.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV",
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 2
+    },
+    "20260708_172345_294565_ControlMaster_multiplexing_defeats_2FA_on_Azzurra_SSH.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV"
+     ],
+     "distinct": 1
+    },
+    "20260708_174447_716047_Use_explicit_dates_not_now_1day_for_sacct_queries_to_ensure.md": {
+     "sessions": [
+      "ses_0a6c42101ffevfoKY1bV6mQicV"
+     ],
+     "distinct": 1
+    },
+    "20260714_063201_356525_Pilot_switch_to_ACE_NME_capping_both_termini_rationale_compa.md": {
+     "sessions": [
+      "ses_06e66ae41ffeGSXzgZwJh90VPK",
+      "ses_f113e1413ffe3Np6s7207RinH4"
+     ],
+     "distinct": 2
+    },
+    "20260714_083912_183391_fle_end_2_values_for_capped_pilot_peptides_keep_NME_rigid.md": {
+     "sessions": [
+      "ses_f1168647cffe1cEDpVB94cRd1D"
+     ],
+     "distinct": 1
+    },
+    "20260806_082136_413309_Consolidation_rejections_were_forgotten_after_one_regenerati.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260818_062659_605634_Full_Azzurra_HPC_access_stack_on_a_new_machine_files_to_copy.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "20260915_134906_822097_fetch_job_results_requires_explicit_project_dir_when_pinned.md": {
+     "sessions": [
+      "ses_f5b9c424effebYiBJUbYERtSTh"
+     ],
+     "distinct": 1
+    },
+    "air-free-score-calculation-error-fixed-by-documented-formula-and-verification-rule.md": {
+     "sessions": [
+      "ses_02ac40225ffeB5LMdtnBmwdKOz",
+      "ses_f99acd5c6ffe92ckeRQCAxe76r",
+      "ses_f9ef434dcffeZASp5Evze3z1F4",
+      "ses_fb799c1d5ffeeImk2RzMdbvMzU",
+      "ses_fb8a43cfdffeUFb5dxi4hd1i3q",
+      "ses_fc339807cffeGrXpY60AiP9kHI",
+      "ses_fe2c46fe5ffef6HuF39SjKstg6",
+      "ses_fe6ff4f67ffebs6OOkHKDurynD",
+      "ses_fe6ff5b92ffeekfohIRCHXQQtw",
+      "ses_fe770f2beffeDSQR56OEZM22ez",
+      "ses_fec4a2d92ffezOJNS1ed61gO68"
+     ],
+     "distinct": 11
+    }
+   },
+   "workhorses": [
+    "20260601_082858_573779_Hsc70_binding_site_context_experimental_vs_P2Rank.md",
+    "20260601_085154_357923_HADDOCK2_4_reference_run_parameters_job_614716.md",
+    "20260601_085206_045909_Peptide_construction_method_and_force_field.md",
+    "20260601_123533_507404_submit_job_output_collision_always_clean_output_before_resub.md",
+    "20260601_125029_258670_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md",
+    "20260601_125029_262067_HADDOCK3_memory_baseline_on_Azzurra_2GB_core_minimum_for_ref.md",
+    "20260601_125029_263244_HADDOCK3_jobs_failing_with_output_exists_not_OOM_not_input_e.md",
+    "20260601_125506_918424_HADDOCK3_s2000_KILDQ_on_full_length_Hsc70_cluster_2_best_Doc.md",
+    "20260601_141116_882304_First_successful_HADDOCK3_KILDQ_peptide_docking_on_full_leng.md",
+    "20260601_141122_786346_First_working_HADDOCK3_peptide_docking_on_full_length_Hsc70.md",
+    "20260601_193146_611685_Template_for_setting_up_4_peptide_docking_runs_for_hsc70_KFE.md",
+    "20260602_124049_333361_Contact_analysis_residue_type_labels_are_not_interaction_mec.md",
+    "20260604_103022_799847_haddock3_config_s10000_and_p2rank1_parameters_for_Hsc70_pept.md",
+    "20260604_115305_176941_HADDOCK3_runs_completed_for_4_peptide_targets_via_p2rank_100.md",
+    "20260605_082851_898337_Peptide_construction_method_and_force_field_for_HADDOCK3_doc.md",
+    "20260605_085429_555413_Always_use_max_walltime_for_cpucourt_partition_72h.md",
+    "20260605_122155_979185_Stage_1_6_mer_extension_of_KFERQ_N_terminal_ALA_outperforms.md",
+    "20260605_135802_423701_KFERQ_KILDQ_fusion_HADDOCK3_run_terminated_early_due_to_trun.md",
+    "20260612_070346_254894_P2Rank_restraints_protocol_yields_superior_scoring_over_expe.md",
+    "20260612_074517_254464_AIR_free_score_correct_formula_and_recurring_calculation_err.md",
+    "20260613_092837_138900_BindCraft_jobs_on_external_cluster_not_tracked_by_Magnolia_r.md",
+    "20260616_071134_132311_Perspicacit_KB_Hsc70_peptide_binding_16_papers_covering_both.md",
+    "20260616_110359_872958_4PO2_SBD_docking_results_for_five_residue_peptides_QRKEL_and.md",
+    "20260616_121337_920086_haddock3_runs_for_hsc70_peptide_consistently_yield_exactly_2.md",
+    "20260616_122518_723343_Full_HADDOCK3_protocol_for_peptide_Hsc70_docking_requires_md.md",
+    "20260617_073053_150518_Torielli_peptide_TGGFQMALT_is_a_tight_Hsc70_ligand_with_crit.md",
+    "20260617_073053_152499_seletopclusts_top_models_4_caps_reported_cluster_sizes_to_n.md",
+    "20260617_144016_527579_AF3_full_length_Hsc70_docking_protocol_refinement.md",
+    "20260618_120650_455842_HADDOCK3_full_protocol_flexref_emref_mdref_produces_AIR_free.md",
+    "20260618_124742_550431_AIR_free_scores_rank_peptide_Hsc70_binding_affinity_RKDLQ_be.md",
+    "20260625_100550_729733_AIR_free_score_computation_with_w_air_0_1_verified_for_3_run.md",
+    "20260625_124606_091513_Raise_HADDOCK3_rigidbody_sampling_to_s20000_for_under_seeded.md",
+    "20260625_130251_184169_HADDOCK3_busy_spin_deadlock_at_rigidbody_finalization_for_la.md",
+    "20260625_131500_000001_TGGFQMALT_9mer_mutation_cross_mode_artifact.md",
+    "20260706_195028_192532_fle_end_2_increases_by_2_not_1_when_extending_a_peptide_by_1.md",
+    "air-free-score-calculation-error-fixed-by-documented-formula-and-verification-rule.md"
+   ],
+   "never_surfaced": [
+    "20260601_092056_003720_p2rank_fails_on_Multi_Model_PDB_exit_code_1.md",
+    "20260601_092242_213399_P2rank_prediction_on_full_length_Hsc70_receptor.md",
+    "20260601_123533_478659_Peptide_starting_conformation_critical_for_rigidbody_docking.md",
+    "20260601_125029_260688_HADDOCK3_failure_on_Azzurra_output_directory_collision.md",
+    "20260601_140102_087751_Best_model_extraction_from_haddock3_clustering_output_uses_1.md",
+    "20260601_140102_089297_Input_peptide_PDB_files_in_hsc70_new_project_use_standard_PD.md",
+    "20260601_141116_883283_P2Rank_process_cleanup_required_before_re_run_to_avoid_resou.md",
+    "20260601_141118_718265_Resolved_AttributeError_NoneType_object_has_no_attribute_low.md",
+    "20260601_141118_719935_Successful_haddock3_run_score.md",
+    "20260601_141122_785057_HADDOCK3_output_exists_failure_output_directory_collision_fr.md",
+    "20260601_141122_788667_HADDOCK3_OOM_kill_on_Azzurra_32_concurrent_CNS_jobs_exceed_3.md",
+    "20260601_141122_789625_submit_job_rsync_semantics_entire_working_dir_copied_verbati.md",
+    "20260601_141124_073644_Resolved_AttributeError_NoneType_object_has_no_attribute_low.md",
+    "20260601_193146_612800_Cross_check_peptide_PDB_residue_numbering_before_generating.md",
+    "20260601_193606_766133_HPC_job_result_retrieval_failure_due_to_rsync_timeout_signal.md",
+    "20260601_193606_767109_Haddock3_run_directory_setup_and_restraint_validation_for_5m.md",
+    "20260602_070321_297016_Sequential_HADDOCK3_docking_submission_for_peptide_mutants_w.md",
+    "20260602_070321_299378_Two_KILDQ_runs_with_different_sampling_depths_exist_for_comp.md",
+    "20260603_090309_281249_Session_start_with_pre_existing_HADDOCK3_run_history_loaded.md",
+    "20260603_170344_460599_Conversation_initiation.md",
+    "20260604_092930_752622_Magnolia_run_directory_structure_for_HADDOCK3_p2rank_workflo.md",
+    "20260604_092940_059747_HADDOCK3_restart_submission_for_individual_SBD_peptides_and.md",
+    "20260604_092940_061386_Pending_job_assessment_from_prior_session_QRKELx2_KFERQx2_RK.md",
+    "20260604_094956_512113_Four_active_run_variants_from_2026_06_03_QRKELx2_RKDLQ_varia.md",
+    "20260604_094956_514934_KFERQ_KILDQ_fusion_run_stopped_after_caprieval_only_5_output.md",
+    "20260604_101008_263359_haddock3_run_output_directory_structure_inspection.md",
+    "20260604_105035_747921_KFERQ_KILDQ_fusion_is_the_only_one_among_4_designs_that_proc.md",
+    "20260604_115305_166497_HADDOCK3_output_directory_structure_per_workflow_stage.md",
+    "20260604_115305_175765_HADDOCK3_run_config_yaml_stored_in_magnolia_runs.md",
+    "20260604_120820_952174_HADDOCK3_run_output_directory_structure_shifts_per_missing_m.md",
+    "20260605_080825_030848_s10000_HADDOCK3_runs_time_out_at_flexref_stage_due_to_4h_wal.md",
+    "20260605_080825_042212_Restarted_4_timed_out_s10000_HADDOCK3_jobs_using_restart_N_w.md",
+    "20260605_080825_043479_Pre_job_validation_for_restart_remote_dir_check_structure_va.md",
+    "20260605_080825_044534_KFERQ_KILDQ_fusion_s10000_timed_out_mid_caprieval_unlike_oth.md",
+    "20260605_082851_894678_HADDOCK3_peptide_docking_on_SBD_domain_of_full_length_Hsc70.md",
+    "20260605_082851_896776_HADDOCK3_runs_completed_for_4_peptide_targets_with_p2rank_po.md",
+    "20260605_135712_477831_Best_docking_protocol_s5000_sampling_full_length_Hsc70_p2ran.md",
+    "20260605_135712_488996_Peptide_force_field_is_unconfirmed.md",
+    "20260605_135737_516017_KILDQ_full_length_Hsc70_baseline_validation_s5000_outperform.md",
+    "20260605_135737_526653_s10000_sampling_on_cpucourt_4h_walltime_causes_timeout_at_fl.md",
+    "20260605_135737_528766_Restart_HADDOCK3_from_incomplete_step_after_timeout_by_remov.md",
+    "20260605_135802_424582_Cross_variant_HADDOCK3_comparisons_require_consistent_pipeli.md",
+    "20260605_135919_989252_KFERQx2_11_mer_binding_mode_shifts_by_9_1_CA_RMSD_vs_KFERQ_5.md",
+    "20260605_135919_991464_All_P2Rank_based_p2rank1_runs_dock_to_the_NBD_nucleotide_bin.md",
+    "20260605_135919_994167_N_terminal_ALA_extension_dramatically_outperforms_C_terminal.md",
+    "20260605_135919_995261_Structural_prediction_of_preferred_extension_direction_was_w.md",
+    "20260605_135919_996381_Always_use_max_walltime_72h_for_cpucourt_HADDOCK3_jobs.md",
+    "20260608_123958_024130_Poll_jobs_correctly_confirms_zero_pending_jobs_in_a_stable_s.md",
+    "20260608_124005_175119_Project_state_tracking_via_memory_and_run_history_retrieval.md",
+    "20260611_071142_810775_P2Rank_pocket_1_restraints_with_HADDOCK3_full_pipeline_effec.md",
+    "20260611_071142_812050_KILDQ_s1000_runs_failed_early_in_HADDOCK3_pipeline.md",
+    "20260611_083236_929270_GPU_queue_accessibility_for_spectrometry_account_on_Azzurra.md",
+    "20260611_135412_800174_Always_superimpose_docked_poses_before_comparing_scores_acro.md",
+    "20260612_064449_112785_Long_peptides_10_14mers_do_not_extend_the_N_ALA_binding_mode.md",
+    "20260612_064449_113558_KFERQx2_middle_section_intermittently_contacts_A_342_ARG_but.md",
+    "20260612_064449_114289_Pre_job_PDB_verification_and_docked_pose_superposition_preve.md",
+    "20260612_064449_115000_HADDOCK3_scoring_function_disfavors_charged_N_terminal_exten.md",
+    "20260612_070346_248857_Top_5_mer_peptide_rankings_for_Hsc70_docking_P2Rank_protocol.md",
+    "20260612_070346_253815_Peptide_chain_length_correlates_with_AIR_free_score_improvem.md",
+    "20260612_070346_257194_Mutation_evolution_strategy_for_peptide_optimization_is_not.md",
+    "20260612_070418_552509_AKFERQK_7_mer_HADDOCK_docking_to_Hsc70_only_1_of_5_models_ha.md",
+    "20260612_070418_554043_bc_hsc70_r_BoltzGen_still_RUNNING_on_Azzurra_after_10h46m_ge.md",
+    "20260612_070418_555235_Wait_for_bc_hsc70_r_completion_before_fetching_intermediate.md",
+    "20260612_070418_556457_N_terminal_extension_runs_N_LYS_N_GLY_N_VAL_N_SER_all_COMPLE.md",
+    "20260612_072451_698236_AIR_free_HADDOCK_scores_for_ApKFERQpK_clusters.md",
+    "20260612_072451_701561_HADDOCK3_5000_model_run_with_p2rank_32_cpucourt_cores_2h.md",
+    "20260612_072451_702503_Naming_inconsistency_between_run_label_and_command_line_pept.md",
+    "20260612_104325_495640_Lid_subdomain_alone_residues_531_615_as_active_site_fails_to.md",
+    "20260612_104325_499998_KFQKQ_E3_Q_retains_near_wild_type_binding_KFQRQ_E3_R_shows_p.md",
+    "20260612_104325_503549_Report_generation_and_structure_sharing_for_colleague_handov.md",
+    "20260612_130441_139337_KFERQ_5_mer_binding_interface_to_Hsc70_R4_and_Q5_dominate_co.md",
+    "20260613_090845_444930_Current_Hsc70_receptor_and_AlphaFold_model_are_in_open_confo.md",
+    "20260613_090845_446091_KFERQ_contacts_are_exclusively_NBD_residues_in_open_state_no.md",
+    "20260613_090845_448225_P2Rank_pocket_predicted_pocket_1_on_SBD_not_the_interdomain.md",
+    "20260613_090845_449143_To_model_closed_state_for_human_Hsc70_superpose_1DKZ_SBD_ont.md",
+    "20260613_102909_163755_Two_longer_input_peptides_have_broken_backbones_invalidating.md",
+    "20260613_102909_166788_Fixed_broken_peptide_PDBs_by_rebuilding_with_tleap_ff14SB_an.md",
+    "20260613_102909_175447_Verify_input_peptide_backbone_geometry_before_running_HADDOC.md",
+    "20260613_142940_323347_Previous_HADDOCK_docking_results_invalid_due_to_broken_pepti.md",
+    "20260613_142940_332654_Procedure_for_re_docking_after_fixing_input_PDBs.md",
+    "20260613_143001_752644_SSH_timeout_when_submitting_haddock3_job_via_sbatch_retry_re.md",
+    "20260615_121858_528130_Fixed_backbone_correction_reduces_Fusion_14mer_docking_quali.md",
+    "20260615_123859_912914_Experimental_binding_site_on_Hsc70_SBD_lid_subdomain_experim.md",
+    "20260615_123859_914058_KFERQ_containing_peptides_have_low_micromolar_affinity_for_H.md",
+    "20260615_123859_915323_BiPPred_pipeline_for_computational_Hsp70_peptide_docking_and.md",
+    "20260615_123859_916749_Closed_state_Hsp70_SBD_1DKZ_as_structural_reference_for_pept.md",
+    "20260615_130838_614346_BindCraft_jobs_submitted_directly_via_sbatch_bypassed_Magnol.md",
+    "20260615_132115_658238_BindCraft_default_install_script_fails_on_Azzurra_due_to_rea.md",
+    "20260615_132115_659082_sbatch_wrap_quoting_conflict_with_Python_print_statement.md",
+    "20260615_132115_659797_BindCraft_peptide_binder_design_requires_i_pTM_0_5_and_adequ.md",
+    "20260615_132115_661418_BindCraft_on_cpucourt_times_out_requires_GPU_and_generous_wa.md",
+    "20260616_062343_526901_Hsc70_peptide_binding_site_is_the_sandwich_subdomain_not_the.md",
+    "20260616_062343_528167_4PO2_is_the_recommended_closed_state_receptor_for_Hsc70_pept.md",
+    "20260616_062343_529152_BindCraft_job_failed_due_to_absolute_path_issues_in_config_a.md",
+    "20260616_062343_529915_Full_length_Hsc70_600_aa_as_BindCraft_target_produced_zero_a.md",
+    "20260616_062343_530658_P2Rank_on_SBD_only_peptide_binding_site_expected_score_range.md",
+    "20260616_062343_531383_Run_output_directory_convention_and_submit_job_rule_for_clus.md",
+    "20260616_064327_133579_BindCraft_submission_stuck_at_submitting_with_no_job_id_sile.md",
+    "20260616_070447_754123_Presentation_references_extracted_from_Hsc70_CMA_substrate_t.md",
+    "20260616_070447_756007_Pip_install_failing_due_to_venv_path_mismatch.md",
+    "20260616_070447_757400_Extracting_references_from_pptx_files_using_python_pptx.md",
+    "20260616_072542_234356_KFERQ_type_motifs_bind_Hsc70_SBD_lid_domain_not_SBD_canonica.md",
+    "20260616_072542_247753_P2Rank_on_full_length_Hsc70_fails_to_detect_lid_domain_bindi.md",
+    "20260616_072542_249286_User_is_a_chemist_requires_plain_language_explanations_of_bi.md",
+    "20260616_074523_073675_Sahu_Malhotra_2025_KFERQ_binds_to_SBD_lid_not_SBD_palm.md",
+    "20260616_074523_074870_Early_docking_against_SBD_lid_was_deprecated_prematurely_may.md",
+    "20260616_074523_076223_Need_to_reconsider_receptor_choice_for_KFERQ_docking.md",
+    "20260616_084658_770489_Lid_only_docking_captures_promiscuous_secondary_site_not_pri.md",
+    "20260616_084658_771791_Full_length_Hsc70_closed_state_with_ADP_is_the_physiological.md",
+    "20260616_084658_773099_v2_does_not_recommend_any_specific_PDB_for_docking_all_predi.md",
+    "20260616_092818_410751_Two_site_model_for_KFERQ_binding_in_Hsc70_Sahu_Malhotra_v2.md",
+    "20260616_092818_412923_Water_mediated_bridging_in_Hsc70_closed_conformation.md",
+    "20260616_092818_418048_AF3_full_length_PDB_causes_VMD_cartoon_rendering_issue_restr.md",
+    "20260616_092818_420823_Available_PDB_resources_from_Sahu_Malhotra_GitHub.md",
+    "20260616_092827_835702_Lid_SBD_pocket_is_a_real_but_promiscuous_secondary_binding_s.md",
+    "20260616_092827_840045_VMD_New_Cartoon_hides_SBD_groove_in_AF3_full_length_PDB_due.md",
+    "20260616_094912_124097_Underestimated_sampling_for_4PO2_docking_corrected_via_prior.md",
+    "20260616_094912_125781_Parameter_recommendations_must_be_grounded_in_prior_run_data.md",
+    "20260616_094912_126453_tleap_peptide_building_method_not_recorded_in_memory_despite.md",
+    "20260616_094925_033403_Peptide_building_protocol_tleap_with_ff14SB_is_standard_for.md",
+    "20260616_094925_034458_Manually_generated_extended_chain_PDB_may_cause_HADDOCK3_top.md",
+    "20260616_094925_035415_HAMNG_sequence_lacks_KFERQ_motif_signature_can_serve_as_nega.md",
+    "20260616_094925_037260_Project_objectives_from_colleague_email_screen_reverse_docki.md",
+    "20260616_101004_096231_Hsc70_closed_conformation_SBD_groove_requires_lid_domain_for.md",
+    "20260616_101004_107368_Manual_peptide_PDB_construction_used_instead_of_existing_tle.md",
+    "20260616_101004_108320_Memory_system_tier_hierarchy_rules_always_loaded_skills_cros.md",
+    "20260616_101004_109221_BindCraft_de_novo_peptide_design_serves_as_reverse_docking_f.md",
+    "20260616_101928_851127_Fetch_job_results_fails_with_run_record_missing_for_stale_jo.md",
+    "20260616_101928_852753_Parallel_SSH_Slurm_submission_of_multiple_haddock3_designs.md",
+    "20260616_101929_808977_Fetching_HADDOCK3_results_fails_when_using_human_readable_ru.md",
+    "20260616_101929_809963_Low_cluster_count_2_for_fusion_peptide_docking_with_p2rank1.md",
+    "20260616_101929_810698_Duplicate_HADDOCK3_submissions_with_identical_job_names_wast.md",
+    "20260616_102904_550728_KFERQx2_11_mer_had_12_CA_atoms_extra_atom_in_original_PDB.md",
+    "20260616_102904_551478_Previous_KFERQ_KILDQ_fusion_top_scoring_run_used_a_broken_pe.md",
+    "20260616_102904_552287_Using_s5000_sampling_for_long_peptides_when_s10000_was_known.md",
+    "20260616_102904_552976_Clean_output_directory_before_resubmitting_HADDOCK3_jobs.md",
+    "20260616_102904_553682_Directory_name_not_updated_after_changing_sampling_parameter.md",
+    "20260616_102904_554371_Check_cluster_job_status_with_sacct_before_resubmitting_canc.md",
+    "20260616_102904_555077_Assistant_did_not_explain_the_original_broken_structure_issu.md",
+    "20260616_104338_879607_Memory_requirement_for_HADDOCK3_on_Azzurra_2_GB_core_minimum.md",
+    "20260616_104338_880404_Resubmitting_HADDOCK3_into_a_remote_directory_with_stale_out.md",
+    "20260616_104338_881147_Chaotic_job_submission_without_status_checks_leads_to_wasted.md",
+    "20260616_104338_881824_Completed_RKDLQ_5_mer_run_job_11431943_is_invalid_due_to_inc.md",
+    "20260616_110359_875903_Recurring_root_cause_constructing_from_scratch_instead_of_re.md",
+    "20260616_110359_887532_Stale_output_directory_causes_HADDOCK3_to_fail_at_startup.md",
+    "20260616_110359_889442_Peptide_PDB_quality_verification_must_go_beyond_chain_count.md",
+    "20260616_112419_760987_Writing_behavioral_rules_after_mistakes_does_not_prevent_rec.md",
+    "20260616_112419_765131_Evolving_HADDOCK3_protocol_requires_a_living_reference_confi.md",
+    "20260616_112419_766501_Selective_rule_loading_via_opencode_json_or_AGENTS_md_reduce.md",
+    "20260616_112419_767864_Phase_in_approach_to_rule_loading_core_always_task_specific.md",
+    "20260616_121337_918259_rsync_push_failed_with_exit_code_255_broken_pipe_during_hadd.md",
+    "20260616_121337_919221_fetch_job_results_requires_local_run_record.md",
+    "20260616_121341_763240_rsync_push_failed_due_to_network_broken_pipe_during_job_subm.md",
+    "20260616_121341_764230_run_record_missing_when_fetching_results_with_incorrect_job.md",
+    "20260616_121341_764922_Fusion_peptide_KFERQ_KILDQ_does_not_increase_cluster_count_i.md",
+    "20260616_121347_154166_rsync_push_failure_Broken_pipe_during_haddock3_job_submissio.md",
+    "20260616_121347_156085_Naming_convention_for_haddock3_runs_in_hsc70_new_project.md",
+    "20260616_122518_721030_HAMNG_pentapeptide_outcompetes_all_KFERQ_variants_in_4PO2_SB.md",
+    "20260616_122518_724869_Literature_indicates_core_KFERQ_motif_alone_is_insufficient.md",
+    "20260616_122518_726249_RKELQ_5_mer_consistently_yields_worst_docking_scores_and_con.md",
+    "20260616_122518_727607_No_prior_physics_based_docking_study_of_KFERQ_type_peptides.md",
+    "20260616_125715_332442_Structure_guided_1_residue_extension_from_docked_KFERQ_N_ALA.md",
+    "20260616_130554_183682_Torielli_design_starts_from_client_protein_unstable_regions.md",
+    "20260616_130554_186727_Contact_maps_and_alanine_scanning_measure_complementary_quan.md",
+    "20260616_130554_189221_User_rational_design_workflow_dock_all_5_mers_contact_map_mu.md",
+    "20260616_132621_307503_GLU_consistently_contributes_best_per_residue_binding_in_thr.md",
+    "20260616_132621_320665_HAMNG_has_three_favorable_residues_explaining_top_HADDOCK3_s.md",
+    "20260616_132621_322917_Single_structure_MM_GBSA_gives_unreliable_absolute_G_but_inf.md",
+    "20260616_132621_329245_MMPBSA_py_heredoc_input_fails_use_explicit_input_file.md",
+    "20260616_134641_991134_Anchor_residue_count_predicts_HADDOCK3_score_across_5_mer_se.md",
+    "20260616_134641_993720_KFERQ_and_RKELQ_have_zero_anchor_residues_and_barely_docked.md",
+    "20260616_134641_994515_Single_structure_MM_GBSA_per_residue_decomposition_unreliabl.md",
+    "20260616_134641_995464_Distance_threshold_for_residue_contact_classification_4_0_fr.md",
+    "20260616_140709_677937_Receptor_structure_remains_unchanged_after_full_protocol_doc.md",
+    "20260616_140709_679408_Sbatch_memory_and_sampling_settings_for_extended_peptide_doc.md",
+    "20260616_165252_323757_rsync_push_failed_due_to_broken_pipe_during_job_submission.md",
+    "20260616_165252_325868_Stable_2_cluster_caprieval_output_across_peptide_variants_an.md",
+    "20260616_165252_326901_Run_record_missing_when_using_incorrect_job_id_format_for_fe.md",
+    "20260616_170758_691591_Hallucinated_binding_pocket_residue_identities_in_email_11_o.md",
+    "20260616_170758_693703_Two_genuine_binding_pocket_differences_between_Hsp70_4PO2_HS.md",
+    "20260616_170758_697213_Always_verify_extracted_residue_identities_against_a_structu.md",
+    "20260616_170758_709300_KFERQ_5_mer_fails_to_converge_in_full_protocol_DockQ_0_242_v.md",
+    "20260616_202842_907176_Corrected_docking_ranking_hidden_clusters_rescue_convergence.md",
+    "20260616_202842_918789_For_poorly_converged_HADDOCK_runs_systematically_check_alter.md",
+    "20260616_202842_919957_Ranking_of_Hsc70_binding_peptides_long_peptides_dominate_bes.md",
+    "20260616_213745_510835_SSH_rsync_push_failure_and_SSH_timeout_on_Slurm_submission.md",
+    "20260616_213745_512770_fetch_job_results_fails_with_run_record_missing_when_using_n.md",
+    "20260617_073053_155015_Binding_site_residues_for_AF3_Hsc70_differ_from_4PO2_HSPA1A.md",
+    "20260617_073053_155710_Reducing_core_count_from_32_to_16_did_not_bypass_queue_prior.md",
+    "20260617_075058_491029_KFERQ_KILDQ_fusion_peptide_ranks_best_across_both_AF3_and_4P.md",
+    "20260617_075058_492339_RKDLQ_variant_shows_poor_convergence_in_both_parameter_sets.md",
+    "20260617_075058_493646_SSH_direct_parsing_bypasses_stuck_poll_jobs_and_slow_rsync_f.md",
+    "20260617_075058_494839_check_job_tool_requires_local_sacct_squeue_not_available_on.md",
+    "20260617_075127_842726_Structure_of_HADDOCK3_run_history_entries.md",
+    "20260617_075127_844524_Slurm_job_ID_extraction_from_YAML_files_requires_cross_refer.md",
+    "20260617_075127_846088_Run_status_breakdown_for_2026_06_16_no_runs_for_2026_06_17.md",
+    "20260617_081153_045107_HADDOCK3_capri_clt_tsv_cluster_statistics_format.md",
+    "20260617_081153_047159_Cluster_ID_is_based_on_cluster_size_not_rank.md",
+    "20260617_081153_048749_CAPRI_quality_thresholds_for_protein_protein_complexes.md",
+    "20260617_081153_050208_HADDOCK3_tutorial_does_not_provide_explicit_convergence_thre.md",
+    "20260617_081153_051539_seletopclusts_top_models_parameter_usage.md",
+    "20260617_081153_053124_caprieval_without_reference_is_only_convergence_oriented_not.md",
+    "20260617_081153_056532_Scoring_function_limitation_acknowledged_but_considered_reas.md",
+    "20260617_133450_890742_Conversation_distillation_pipeline_silently_dropped_sessions.md",
+    "20260617_133450_892756_Default_model_changed_to_deepseek_v4_flash.md",
+    "20260617_133450_894194_Handover_file_stored_at_project_root_not_inside_subdirectori.md",
+    "20260617_144016_523042_MM_GBSA_gas_phase_energy_misclassifies_aromatic_Phe_as_unfav.md",
+    "20260617_144016_525099_Perspicacit_server_startup_and_query_procedure.md",
+    "20260617_144016_533473_Peptide_building_for_mutants_with_tleap.md",
+    "20260617_144016_534734_Prejob_checks_passed_for_all_4_docking_jobs.md",
+    "20260617_144016_535850_Convergence_pattern_5_mers_13_18_vs_longer_peptides_2_5_7_5.md",
+    "20260617_150032_186708_Residue_540_ASN_in_lid_is_a_genuine_contact_contact_map_inte.md",
+    "20260617_151152_154780_N_terminal_extension_candidates_for_best_5_mer_geometry_just.md",
+    "20260617_151242_403970_Panel_s_original_extension_candidates_pre_geometry_appended.md",
+    "20260617_152051_605416_N_terminal_extension_of_RKDLQ_can_reach_TYR431_ARG469_and_GL.md",
+    "20260617_152051_607550_C_terminal_extension_of_RKDLQ_points_away_from_TYR431_ARG469.md",
+    "20260617_152051_610226_Proposed_N_terminal_extension_candidates_for_RKDLQ_with_geom.md",
+    "20260617_194130_665773_RKNLQ_fails_despite_96_convergence_ASN_too_bulky_polar_for_p.md",
+    "20260617_194130_672908_Replacing_ASP_with_ASN_at_position_3_is_counterproductive_AS.md",
+    "20260617_194130_675660_ALA_methyl_at_position_3_contributes_4_kcal_mol_over_GLY_sug.md",
+    "20260617_203638_926849_Fetching_haddock3_results_immediately_after_submission_may_r.md",
+    "20260617_204519_954497_Per_Residue_MM_GBSA_Decomposition_Complete_Procedure.md",
+    "20260618_114647_989637_C_terminal_extension_viable_ILE474_67_and_VAL476_63_from_RKA.md",
+    "20260618_114647_990635_Per_residue_MM_GBSA_decomposition_procedure_for_single_struc.md",
+    "20260618_114647_991402_BindCraft_peptide_design_on_4PO2_3_attempts_0_accepted_desig.md",
+    "20260618_120650_457682_Azzurra_June_17_jobs_completed_fully_despite_earlier_report.md",
+    "20260618_120650_462954_Capri_clt_tsv_column_indexing_is_prone_to_off_by_one_errors.md",
+    "20260618_120650_463799_RKALQR_R_R_substitution_at_Q_terminal_loses_binding_quality.md",
+    "20260618_120650_464655_KFERQ_has_bimodal_binding_a_diffuse_cluster_DockQ_0_240_and.md",
+    "20260618_122720_434166_w_air_default_differs_by_HADDOCK3_stage_rigidbody_0_01_refin.md",
+    "20260618_122720_437660_Hardcoding_w_air_from_generic_rules_instead_of_reading_per_r.md",
+    "20260618_124742_553577_Best_DockQ_cluster_often_not_the_top_ranked_cluster_by_raw_s.md",
+    "20260618_124742_558500_Extension_scan_TGFMALQ_s10000_best_binder_91_00_RKALQR_poor.md",
+    "20260619_105428_583624_Deprecated_NBD_site_runs_produce_inapplicable_claims_for_SBD.md",
+    "20260619_105428_585937_Batch_consolidation_acceptance_in_single_session.md",
+    "20260619_111556_410145_Memory_consolidate_tool_only_works_on_project_and_skill_tier.md",
+    "20260619_111556_411512_Consolidation_proposals_effectively_reduce_staging_noise_and.md",
+    "20260619_111556_412991_Most_staging_entries_become_redundant_once_captured_in_proje.md",
+    "20260619_113415_403156_Keyword_overlap_cross_reference_insufficient_for_staging_to.md",
+    "20260619_113415_404440_5_consolidation_proposals_pending_after_memory_search_run.md",
+    "20260619_115046_864538_Four_new_dockings_submitted_RKVLQ_RKILQ_RKLLQ_s5000_TAFMALQ.md",
+    "20260619_115058_957450_memory_search_now_supports_keyword_splitting_for_multi_word.md",
+    "20260619_121041_345211_Multi_tier_keyword_split_search_for_D3_ALA_anchor_ripple_ret.md",
+    "20260623_134821_816433_Contact_map_TSV_parsing_bug_7_columns_not_8.md",
+    "20260624_124709_402250_HADDOCK3_alascan_delta_score_interpretation_confirmed_for_ho.md",
+    "20260624_124752_403796_TGFMALQ_G2_A_TAFMALQ_is_neutral_not_an_improvement.md",
+    "20260624_124752_746690_Void_analysis_and_alascan_rationale_were_post_hoc_reconstruc.md",
+    "20260624_154902_845193_Perspicacit_KB_workflow_must_check_live_api_kb_and_memory_se.md",
+    "20260624_165208_885570_Combining_burial_counts_literature_and_alascan_cross_validat.md",
+    "20260624_165209_636342_KFERQx2_n_4_in_capri_clt_is_not_the_top_models_4_artifact_it.md",
+    "20260625_100535_754122_Workflow_after_mutant_scoring_always_examine_best_DockQ_clus.md",
+    "20260625_102612_562325_TGGFQMALT_T1_E_and_G2_A_mutations_improve_binding_with_mild.md",
+    "20260625_104700_358586_Discrepancy_between_alascan_prediction_and_re_docking_for_L9.md",
+    "20260625_104701_155687_Corrected_premature_claim_that_L9_is_a_critical_anchor.md",
+    "20260625_104701_545832_Deep_structural_analysis_required_before_writing_learnings_f.md",
+    "20260625_114717_268889_L9A_mutation_does_not_degrade_native_pose_local_energy_but_s.md",
+    "20260625_114718_004486_Fetch_only_seletopclusts_for_atom_level_structural_analysis.md",
+    "20260625_142818_876601_Doubling_rigid_body_sampling_s20000_to_overcome_native_pose.md",
+    "20260625_142857_247052_HADDOCK3_refinement_is_local_annealing_around_rigid_body_see.md",
+    "20260625_142857_611246_Seletop_200_combined_with_s20000_rigid_body_allows_3_h_refin.md",
+    "20260625_144929_884509_Parameter_rationale_not_captured_s10000_s20000_decision_for.md",
+    "20260701_094604_509991_KFERQx2_s20000_native_cluster_remains_small_n_7_under_seedin.md",
+    "20260701_094606_079341_Alascan_runs_fast_locally_2_min_per_job_on_16_cores_no_need.md",
+    "20260701_100638_729483_Self_referential_DockQ_is_unreliable_for_cross_mode_cluster.md",
+    "20260701_100639_544135_Grounded_mutation_candidates_redock_panel_submitted_5_peptid.md",
+    "20260701_104801_704745_EAGFQMRLT_population_shift_A7_R_turns_minority_groove_only_m.md",
+    "20260701_115016_220174_EGGFQMAKT_L8_K_mutation_missed_designed_target_GLU460_hit_PH.md",
+    "20260701_115016_991367_EGKFQMAKT_double_mutant_G2_K_on_EGGFQMAKT_proposed_as_strong.md",
+    "20260701_115018_112790_LYS_vs_ARG_mutation_LYS_preserves_binding_mode_better_than_A.md",
+    "20260701_115018_474333_Alascan_void_analysis_systematically_overpredicts_hydrophobi.md",
+    "20260701_121015_318448_Alascan_1_00_at_G3_in_EAGFQMRLT_is_borderline_neutral_not_de.md",
+    "20260701_121059_375246_Insertion_of_convergence_score_discussion_section_after_conv.md",
+    "20260701_123059_180509_Adding_anchor_residues_to_widen_funnels_Batch_4_5_progressio.md",
+    "20260701_142118_236322_HADDOCK3_busy_spin_deadlock_pitfall_is_non_deterministic_res.md",
+    "20260701_145403_271025_Pre_submission_checklist_prejob_check_md_catches_structural.md",
+    "20260701_171628_352414_EKGFQMAKT_G2_K_L8_K_double_mutant_still_running.md",
+    "20260701_191904_515470_Deep_groove_theory_overgeneralized_from_limited_7_mer_9_mer.md",
+    "20260701_191913_304170_Score_discrepancy_in_RKALQ_between_report_and_analysis.md",
+    "20260703_094438_669167_Stacking_G2_K_on_the_L8_K_background_EKGFQMAKT_weakens_bindi.md",
+    "20260703_100606_097597_All_score_values_verified_correct_against_alascan_source_fil.md",
+    "20260703_100607_280817_EAKFQMALT_G3_K_creates_a_strong_local_hotspot_but_worsens_ov.md",
+    "20260703_100607_676085_ARG_consistently_outperforms_LYS_at_both_mutated_positions_A.md",
+    "20260703_142427_734715_Protocol_for_3D_structure_embedding_in_offline_HTML_report_v.md",
+    "20260703_142428_124966_HADDOCK3_clustfcc_vs_caprieval_cluster_numbering_mismatch_mu.md",
+    "20260706_204016_959269_N_terminal_anchoring_does_not_discriminate_convergence_in_T1.md",
+    "20260706_204018_151348_Report_binding_mode_conservation_table_had_systematic_errors.md",
+    "20260706_204018_530664_Ground_binding_mode_claims_by_measuring_footprint_and_RMSD_d.md",
+    "20260708_172345_680185_Master_alive_preflight_ensure_master_prevents_wasted_attempt.md",
+    "20260713_040822_532666_Assuming_rank_1_cluster_is_the_canonical_parent_score_led_to.md",
+    "20260713_050846_812295_10_mer_runs_incomplete_local_fetch_from_cluster.md",
+    "20260713_050847_592275_AIR_free_score_computation_with_w_air_0_1.md",
+    "20260713_050847_987447_EGGFQMART_L8_R_clustering_failed_at_10_clustfcc.md",
+    "20260713_094416_316296_HADDOCK3_clean_steps_deletes_caprieval_seletopclusts_analysi.md",
+    "20260713_094418_375594_Mis_diagnosis_of_empty_caprieval_clean_steps_vs_fetch_gap.md",
+    "20260714_024157_991087_ACE_cap_N_acetyl_free_OH_C_term_on_EGGFQMA_9_10_mers_rationa.md",
+    "20260714_032505_898328_ACE_cap_forms_strong_H_bonds_in_reversed_10_mers_A_and_F.md",
+    "20260714_032507_129883_Trusting_contactmap_per_residue_footprints_alone_misses_cap.md",
+    "20260714_052751_294364_webfetch_on_PMC_OA_article_curl_HTML_grep_reliably_extracts.md",
+    "20260714_060812_559532_C_terminal_capping_NME_recommended_for_MD_simulation_of_inte.md",
+    "20260714_080857_115331_Shell_responsiveness_can_be_restored_by_killing_resource_hea.md",
+    "20260714_083911_015428_Building_ACE_NME_capped_peptides_with_tleap_and_post_process.md",
+    "20260714_083911_812808_Copying_receptor_from_one_source_ensures_comparability_acros.md",
+    "20260714_094019_401727_HADDOCK3_CNS_topology_fully_supports_NME_C_terminal_cap.md",
+    "20260714_094020_213300_Local_HADDOCK3_installation_enables_offline_verification_of.md",
+    "20260714_154546_342536_Handover_mechanism_continuation_preserves_session_ID_avoids.md",
+    "20260714_154546_727204_Boot_context_goal_outdated_regarding_lid_contacts_and_scaffo.md",
+    "20260724_041026_840432_HTML_3D_viewer_failure_Java_JRE_not_required_missing_lib_fol.md",
+    "20260727_111734_987357_Identification_of_four_Met_containing_top_candidates_for_exp.md",
+    "20260727_113802_295815_Degrader_construct_analysis_linker_attachment_validates_ACE.md",
+    "20260818_062700_696106_Magnolia_Azzurra_connectivity_does_NOT_need_new_config_ssh_s.md",
+    "20260818_075203_487462_Copying_files_to_a_Windows_USB_stick_from_WSL_via_powershell.md",
+    "20260818_075203_834487_Reliable_WSL2_USB_copy_without_mnt_mount_UNC_ps1_file_SHA256.md",
+    "20260818_075204_187722_WSL2_does_not_auto_mount_USB_drives_plugged_in_after_boot_pr.md",
+    "20260915_112652_883810_Running_consolidation_generation_manually_must_use_the_absol.md",
+    "20260915_112654_068665_Project_tier_entry_cap_raised_50_200_both_code_definitions_p.md",
+    "20260915_134908_812382_Resumable_fetch_job_results_only_transfers_missing_files_onc.md",
+    "20260915_134908_946793_fetch_job_results_requires_an_explicit_project_dir_default_d.md",
+    "20260915_134909_572338_Fetch_ordering_tunnel_2FA_master_serial_first_fetch_parallel.md",
+    "20260915_134909_813889_Resumable_fetch_after_timeout_rsync_skips_already_local_65M.md",
+    "20260915_140928_742441_Parallel_rsync_fetches_through_SOCKS_proxy_time_out_serial_f.md",
+    "20260915_142956_353922_Parallel_fetch_job_results_through_shared_VPN_SOCKS_proxy_ti.md",
+    "20260915_163235_650058_Azzurra_cluster_confirmed_healthy_from_operator_side_while_s.md",
+    "20260915_163236_065541_SSH_Connection_refused_vs_timeout_points_to_dead_local_SOCKS.md",
+    "20260915_163236_471605_Agent_attempting_the_SSH_2FA_one_time_password_itself_kills.md",
+    "INDEX.md"
+   ],
+   "excluded_sessions": {
+    "ses_f12eb0bedffelHEpMLTSyzpmze": "debate-replay-contactmap-off-1-r1",
+    "ses_f12d49bb4ffe5tu5oLuLumNXKq": "debate-replay-warhead-off-2-r1",
+    "ses_f12d49c23ffeQi52vIu3sJkmcI": "debate-replay-warhead-on-1-r1",
+    "ses_f12d49ae8ffezvn3jnDu9bpBkm": "debate-replay-warhead-on-2-r1",
+    "ses_f12d49cd3ffeAF1CNoHXgzG4Pa": "debate-replay-warhead-off-1-r1",
+    "ses_f12ccbcf0ffejBu7iF0zg4vdeB": "debate-replay-gatefix-on-1-r1",
+    "ses_f12ccbd90ffeircI24MHx07pa4": "debate-replay-gatefix-off-1-r1",
+    "ses_f12ccbc20ffeS9M2hWDLj2O6kK": "debate-replay-gatefix-on-2-r1",
+    "ses_f12ccbcb4ffe94ELaTOzmlFT6r": "debate-replay-gatefix-off-2-r1",
+    "ses_f12ccbc83ffeHrZUUudXGuEOy8": "debate-replay-series-off-1-r1",
+    "ses_f12ccbc57ffehC9TByQslf34BP": "debate-replay-series-on-2-r1",
+    "ses_f12ccbd28ffeNsv9F0cO2p7pjx": "debate-replay-series-on-1-r1",
+    "ses_f12ccbd65ffeqo2PIDG9T9eU9o": "debate-replay-series-off-2-r1",
+    "ses_f12c9550cffep65zeea7x17YY2": "debate-replay-series2-off-1-r1",
+    "ses_f12c9556fffe2LVsskZLfuPzfI": "debate-replay-series2-off-2-r1",
+    "ses_f12c95593ffezpXO4prSVXAI85": "debate-replay-series2-on-1-r1",
+    "ses_f12c9551effe3nwDy4oVgk2wnZ": "debate-replay-series2-on-2-r1",
+    "ses_f12b5c9d7ffeMznQX7UV4JIk28": "debate-replay-seriesreal-on-1-r1",
+    "ses_f12b5c9c7ffev6XShiO2zG5lEG": "debate-replay-seriesreal-off-2-r1",
+    "ses_f12b5c9a2ffeYOvzHAFW0SzB88": "debate-replay-seriesreal-on-2-r1",
+    "ses_f12b5c9e3ffejB5InuiRDGprDR": "debate-replay-seriesreal-off-1-r1"
+   },
+   "sessions": {
+    "ses_45db72c33ffeA54PxFfFhXSalr": "Configuring opencode with minimax keying",
+    "ses_2cfeb0c49ffel4gXKXnNG0GXWI": "Checking code visibility",
+    "ses_2cfe90432ffePaYmJqtMeXP7p9": "Code base review",
+    "ses_2c56df73bffe4Tct7gPSo6NSzS": "Read web_app_full.py structure (@explore subagent)",
+    "ses_2c5337e95ffepe8xyMaIs0Fudz": "Codebase assessment verification",
+    "ses_2c1e74facffeCYKYuD3tRK67Dj": "Codebase review",
+    "ses_2c1c25926ffeb5Zgv6j0wrVDKm": "New session - 2026-03-30T10:15:21.049Z",
+    "ses_2bb860a10ffevn2FuGoJju0sE6": "Op/code startup errors after power outage",
+    "ses_274eb3e75ffemeh4VWRR0eNDN4": "Computational chemistry software setup",
+    "ses_26e15835dffeEQtjLoKTmUu6hD": "Greeting",
+    "ses_26e15835bffeUZIB6we3oiTWb5": "Hello",
+    "ses_26e158358ffe1YQcomkZ6SyxMz": "Quick chat intro",
+    "ses_26e158356ffeXvrLaELSpGjEJM": "New session - 2026-04-15T16:12:36.905Z",
+    "ses_26e158353ffe5f2ep3a85p42QE": "Quick conversation check-in",
+    "ses_26e158351ffeRQNvrj1LSwLRs6": "Quick check-in",
+    "ses_26e15835fffe5YQH8A4EaM6uPG": "Quick chat",
+    "ses_269c78089ffeMQeXTU7yNWcwqi": "Find magnolia-memory CLI code (@explore subagent)",
+    "ses_268bb3845ffesh4YR8lUPxaiqC": "Chat title",
+    "ses_24533e1f4ffeRW3d92DE3QhFDu": "Reading PROGRESS.md",
+    "ses_1ea0865a1ffeF9Qm7FdS93iKJq": "Proposal project directory setup",
+    "ses_1c57ae63bffe6ZJP1WSA29e4cV": "HPC integration testing",
+    "ses_1c4f45637ffeBxgpE8WFi2yAWo": "HSC70 docking project remaining tasks",
+    "ses_1c4cbfcd5ffen7DsBJ17vtbr9T": "Check HADDOCK3 installation details (@explore subagent)",
+    "ses_1c4b960afffe40dMTPz6AaelnH": "Test shell access via run_shell (@general subagent)",
+    "ses_1c4b4e108ffeuRJN4f33IJf4xE": "Test run_shell MCP tool (@general subagent)",
+    "ses_1c4a8eca6ffeDGXULC6THtZm4N": "Check for run_shell MCP tool (@general subagent)",
+    "ses_1c49fdb35ffel19BoJ1Bzkb6ip": "Test run_shell MCP tool (@general subagent)",
+    "ses_1c49d70f7ffezESZpJJHxYrSel": "Test run_shell tool (@general subagent)",
+    "ses_1c436dfa8ffe6bFRYl4vf4v7tV": "Test run_shell after fix (@general subagent)",
+    "ses_1c41b8683ffelU7J255wP9xnF4": "Test all MCP tools (@general subagent)",
+    "ses_1c41ae068ffe4MKl1uSsElR374": "Verify MCP server Python path (@general subagent)",
+    "ses_1c403785dffe5iSGZK1hQTdRMW": "Debug MCP server startup (@explore subagent)",
+    "ses_1c3f5d342ffeMiK4BB0jG8AunZ": "Find opencode MCP client code (@explore subagent)",
+    "ses_1c35ae439ffeel8VcXA2xw8EZr": "hsc70 development",
+    "ses_1c3439ffeffebh1mFjlSa34S8o": "Hsc70 mutation position effects",
+    "ses_1c33ac172ffeDMI1iIA2WMIsuf": "Find mutation scan runs (@explore subagent)",
+    "ses_1c0ec8e8affemQS1204MMT80o8": "Pick up HSC70 project",
+    "ses_1c0e302b1ffeXTgmQilbhEdGKq": "Gather HADDOCK3 results (@general subagent)",
+    "ses_1c0c7308efferHdBXILzsTDOCH": "Extract AIR-free scores all runs (@general subagent)",
+    "ses_1c0632908ffe2B5JVU4DZ59mq4": "HSC70 project pickup",
+    "ses_1920014c0ffesYn1AtqcX0iOKF": "HSC70 Azzurra HPC connection test",
+    "ses_17e02319dffeoeEmV0Pd79WEQ4": "Project understanding inquiry",
+    "ses_17d81f45cffePcT3F40toVxR71": "Resuming project",
+    "ses_17d4696a3ffe4Bd78Dtmo8iuy3": "Resuming project",
+    "ses_17cf99c43ffeQIsCG8QfCs51NU": "Current status check",
+    "ses_17c954078ffeVBu2fM3ktxH6f4": "Update request",
+    "ses_17b541fadffe2dIIdzbpipjeCH": "Next steps",
+    "ses_17b506038ffeo9mWNJmXSEIwqR": "Update request",
+    "ses_178ed6ff9ffetzJN3tTwNm1O2u": "Follow-up discussion",
+    "ses_17361f01dffeyh8OXTNsHqlwif": "Research paper search",
+    "ses_173592375ffelotrqhfYN7EYuC": "Progress check",
+    "ses_17205e7c6ffefOar6hVIknEGB8": "What's next?",
+    "ses_1718e5b3bffeMXYjaWwOYZD7KP": "Continuing from last time",
+    "ses_16e961374ffeKj4c1Vd3tU5yCD": "Project update discussion",
+    "ses_16e1a9b76ffetBUfAdsrLFFu67": "Follow-up on previous discussion",
+    "ses_16d72029fffebGAR3sU5A0uNLO": "Title Update",
+    "ses_16bd1b365ffeaZgnZs0L5pDiTZ": "Update request",
+    "ses_169263890ffeOGZXCuaCkXQ9Mt": "Project update",
+    "ses_167e88697ffeOSsrQZ2BhPjBB3": "Next steps",
+    "ses_158ccdd8dffeMGgJOUgkCB420E": "Project update",
+    "ses_158c0e27effeHzvsSWus743bMa": "Project update",
+    "ses_1574372c7ffePZ7a6wkaB8bd2s": "Project update",
+    "ses_1573cac52ffeM0LR8Y3lMIOL9N": "Download Zhu 2017 PNAS paper (@general subagent)",
+    "ses_1573c9001ffeIVgT5M1yZYONcp": "Search for additional ligand papers (@general subagent)",
+    "ses_157305d17ffehanltq1UkHKLgn": "Extract full ligand list from paper (@general subagent)",
+    "ses_1572db74dffekoai81QpX2LVYF": "Deepseek max effort configuration",
+    "ses_158957077ffeOqwxdLe26CyDPy": "Move 5NGH.pdb to raw_input dir",
+    "ses_157271187ffeJfZ6hPDm4XrSH8": "Explore perspicacite_v2 search capabilities (@explore subagent)",
+    "ses_15435250fffe6BpNaeV6hzqbnT": "Project update",
+    "ses_14ea955f6ffewXyKOAvu8DcO51": "Project update",
+    "ses_14d178160ffeFCUNF8muY7i3DL": "Installing bindcraft on azzurra",
+    "ses_14cf831a6ffeTNYoSmgNq1SkVs": "合法赚钱方法",
+    "ses_14a8d1dd6ffesLHxScnqDJwwUz": "Project update",
+    "ses_14a693371ffeVjHSuYwzxDLSBn": "Project update",
+    "ses_14a4301fcffe2zIr27rODUZ3PS": "Project update",
+    "ses_1456d0e73ffe6ULEPwvHYx84J4": "Azzurra job listings",
+    "ses_13fc23de2ffelf2ddyTWl2olKC": "Jobs review",
+    "ses_13fb7b1bfffeq2sP2uCvfcb2Z1": "Nature skills for communication materials",
+    "ses_13fb0ed97ffejsBPPmu6ktPrNI": "Survey Magnolia projects (@explore subagent)",
+    "ses_135f257a4ffeX5idf63oZPHX5g": "Project status check",
+    "ses_134c7b1a2ffeMFkXQrSHFP8Cs1": "Experimentalists discussion recall",
+    "ses_1349d35caffeQYdQoegiPzSDIl": "Search BindCraft history (@explore subagent)",
+    "ses_130e4d4e4ffeJu5Q6ZBCByktmm": "Latest jobs check",
+    "ses_12b819265ffeRiCjSRTOF2mCwU": "Jobs list check",
+    "ses_12b670a8effezB5zYoxyPnSA46": "Search HADDOCK3 convergence (@general subagent)",
+    "ses_12a46493fffehueb24QomyJNE8": "Query Perspicacité KB on Torielli (@general subagent)",
+    "ses_12a373231ffeLcYS57pJqIwi68": "Read handover document",
+    "ses_12a31596dffeU2R6yIw5W4l4yk": "Handover in memory dir",
+    "ses_125e030f7ffeXnTIPy3gi7ezbx": "Check azzurra jobs",
+    "ses_120fa984affeN2zTmXpUOp3es8": "Greeting",
+    "ses_1209bfb0cffe1BzQ15ZH8jyTEf": "Activate perspicacite ai in background",
+    "ses_11fde2a8bffeVhluJlWWB8l6bD": "Find paper draft files (@explore subagent)",
+    "ses_11c0731beffedDKx5HBd1ApTrn": "Project goal clarification",
+    "ses_11bdd46d5ffe7AzXolnbPsHTF5": "Run xtb single-point on all optimized structures (@general subagent)",
+    "ses_117013c35ffeLqHxQm6XC2v8rk": "Studium repository review",
+    "ses_11186eec2ffe47heamLxUwWbfN": "Leftover tasks from last session",
+    "ses_1112f1045ffeaXFZuHiIouAkDM": "Find status of 4 HADDOCK3 jobs (@explore subagent)",
+    "ses_111257958ffe11RGJcUGSOER9m": "Verify staging exclusion and check project tier (@explore subagent)",
+    "ses_10f596110ffe4s5NyQZBjmckVA": "Draft work collaboration",
+    "ses_10f41c068ffedRbRaH6JdJTEjB": "Search KBs for evaluation/benchmark issues (@general subagent)",
+    "ses_10f3222a2ffes25Uz187SHS73Y": "Compare scientific agents' interaction models (@general subagent)",
+    "ses_10f2fc73effeOx8yfp4mB8A8D6": "Web search for scientific agent papers (@general subagent)",
+    "ses_10f196b71ffeN3SWdS4i20t8qj": "Verify Magnolia codebase capabilities (@general subagent)",
+    "ses_10c834ad6ffeJrAP1RTGvKVP7V": "Force field for 3D geometries",
+    "ses_10bc31326ffeTnbvzCh53fUJnF": "Latest update summary",
+    "ses_10bbac41affe71w1NKzuwR3QGR": "Categorize staging entries (@explore subagent)",
+    "ses_10b369dd4ffeEMt1F94KwOLftR": "Mine hsc70 opencode sessions for retrieval-and-act traces (@general subagent)",
+    "ses_10b1cf3aaffewuWcaL0jWW5bxb": "Trace docking parameter decisions (@general subagent)",
+    "ses_109eafc5affeF6SSPFmcRiUDyh": "Magnolia as ReAct agent",
+    "ses_1079c77a1ffeF1Le9YeNXqkQ0f": "Opencode agent loop support",
+    "ses_10761f9f0ffeCFiovZYpEwboT9": "I'll help you with both tasks. First, let me fetch the relevant context from memory, then generat...",
+    "ses_106e1e902ffe1mPPLkhZ5Vsa2R": "Latest results summary",
+    "ses_106d2b51bffeSYI9LLibqeeXlo": "Latest 4 mutation runs summary",
+    "ses_105ff06c0ffeWLOXtSr54fH4X5": "Analyze TGGFQMALT 9-mer binding (@general subagent)",
+    "ses_105f8afaaffez4I26Lt5ORaJ8X": "Main agent waits for subagent",
+    "ses_104ec7a8cffeH7B97axlJTft7s": "Update request",
+    "ses_104e942a8ffeSFhSreuOgpCx5o": "Summarize in-flight jobs from run history (@explore subagent)",
+    "ses_10252492affeC8CuGfq2Gxi25H": "Jobs check",
+    "ses_102488f6bffelAJdrOeoAZXs5S": "Magnolia opportunities in opencode-agent-hub",
+    "ses_101617671ffeysSvLN1HFXIL2u": "Magnolia framework comparison",
+    "ses_0ffb0506bffe11xhK3cMikYE63": "Mimosa AI clone deep dive",
+    "ses_0fd53c03fffe25X2Lq8jEsq0Iy": "What was left behind",
+    "ses_0fc3c6323ffeaW71c47NyfPnE5": "Review GitHub repo studium-manuscript",
+    "ses_0e8aabc53ffeHnp31cMR1SH91O": "Comparing Magnolia and Mimosa",
+    "ses_0e7028bd2ffek4BSjShgl65YgP": "Project status check",
+    "ses_0e7021638ffeH9HOq4TKCYoOu8": "Parse run history for status (@general subagent)",
+    "ses_0e38067aeffe0BVDyQDuIsXGK3": "Researching Claude Science release",
+    "ses_0e37fecd8ffen9fpkjK39wRRL0": "Last session summary",
+    "ses_0de5f46e9ffeaqXxcy9V1QVDe5": "adverum:default",
+    "ses_0de49a3bdffexSPC17PoZJFZ95": "Cloning VIS-Program codebase",
+    "ses_0dcdbe062ffeFia01VH0OA21gg": "OpenRouter fusion model for Magnolia",
+    "ses_0d93057c5ffejLlEWHkl51h6E5": "New calculations check",
+    "ses_0c7425453ffeDvyNU5dHhXPEh9": "Docking results",
+    "ses_0bdd2a85bffe95JK2yiS0X2eQn": "Review webpage URL",
+    "ses_0b911bca3ffeeXJJ9fmGpk3sBc": "Read PDFs in project root",
+    "ses_0a6c42101ffevfoKY1bV6mQicV": "Latest project status",
+    "ses_0a6a8187bffesxoXZhZ79UZyER": "Session handover timing investigation",
+    "ses_06e66ae41ffeGSXzgZwJh90VPK": "Jobs update",
+    "ses_06e35b9beffe0Rk9xn8eqWusvd": "Package report PDBs for sharing (@general subagent)",
+    "ses_05ea2dc72ffe3KVeH5BFS5EPnJ": "Binding pocket residue numbers",
+    "ses_05d3430d8ffeZf0x0l4FB5iqHh": "Caps calculation results",
+    "ses_0399febfaffeSpm6o3FgACptCp": "Learning distillation data for presentation",
+    "ses_0349dbcf6ffefC91ijqCcaE8RH": "arXiv 2604.12231v1 paper lookup",
+    "ses_02ac40225ffeB5LMdtnBmwdKOz": "Memory consolidation check",
+    "ses_01626cb7effeRZpRX73tGDR6r3": "Continuing paper writing",
+    "ses_00b6e153fffe0Go7rYlKwmVTuW": "Exploring raw_input files",
+    "ses_00aaeb7caffezzRJN6Rvc3q8vx": "Reviewing pending items from last session",
+    "ses_006393014ffeQLsHBM94wP63oX": "Remaining tasks from last session",
+    "ses_fed50fe14ffeSIUaCA7DCVo5Ap": "Which files to upload to Overleaf",
+    "ses_fecf33ecaffeSYDQC0Tcri2MDX": "Connecting to azzurra from another machine",
+    "ses_fec4a2d92ffezOJNS1ed61gO68": "Check /mnt/d/projects/mineure/2025",
+    "ses_fe80e524bffeihCAYDMqyHGhC8": "Missing authors in Overleaf paper PDF",
+    "ses_fe770f2beffeDSQR56OEZM22ez": "New session - 2026-08-19T05:47:03.361Z",
+    "ses_fe6ff5b92ffeekfohIRCHXQQtw": "Extract intros batch 1 (@general subagent)",
+    "ses_fe6ff4f67ffebs6OOkHKDurynD": "Extract intros batch 2 (@general subagent)",
+    "ses_fe6ff4300ffetLEEMnWq6DTA8y": "Extract intros batch 3 (@general subagent)",
+    "ses_fe6ff3651ffeBp3JvNKItNtV8H": "Extract intros batch 4 (@general subagent)",
+    "ses_fe2c46fe5ffef6HuF39SjKstg6": "Magnolia introduction logic fix",
+    "ses_fddc3aa38ffe101Inx0fwTRSct": "分析天马G文件",
+    "ses_fc339807cffeGrXpY60AiP9kHI": "Comparing main1.tex and main.tex versions",
+    "ses_fbddcfffcffeQmeqrhv5zrKTKC": "Fig 2 resize to 0.75 page width, compile",
+    "ses_fbdd91efdffeITwh2t4Jwwbnc8": "Slow first response in new chat sessions",
+    "ses_fb8a4cc3bffeRTbs2WcxLQleug": "Continuing yesterday's work",
+    "ses_fb8a43cfdffeUFb5dxi4hd1i3q": "Recap of yesterday's progress",
+    "ses_fb799c1d5ffeeImk2RzMdbvMzU": "Recalling previous project work",
+    "ses_fa991351dffesLW5GiBkjgvOgT": "Project status check",
+    "ses_fa989e272ffe2ctd8OxxbFTJBk": "Humanizer skill for scientific writing with AI",
+    "ses_fa960fd9affeAYPhFk0gOdLIvs": "Review cs5 text, apply humanizing skill",
+    "ses_fa438805affet1qcnpdR22FqNs": "Peer review: sections 3 & 4 expectations",
+    "ses_fa4010ea1ffe4UrXUZrn4O7ub7": "GLM-5.3-Flash 多模态接入 Magnolia 分析",
+    "ses_fa3e2ef39ffeMUqKS1ctyQXyJG": "Adversarial reviewer of manuscript (@general subagent)",
+    "ses_fa3c22fa4ffelwXX4LgUoNyBiy": "Independent analysis of Dral 2026 Perspective vs Magnolia paper (@general subagent)",
+    "ses_fa33e6cd4ffeCHvAql8yMC0nag": "Audit 49 systems for memory claims (@general subagent)",
+    "ses_f9ef434dcffeZASp5Evze3z1F4": "Fixing overfull text in cs1",
+    "ses_f9eefa93effe0DoRxv4iHTKBZ8": "Checking unpushed git commits",
+    "ses_f9e5e2adbffe7rq3ZuB7SMwOd0": "Independent memory-design analysis (@general subagent)",
+    "ses_f9dac0a0bffejgJi8Gl1gh0D1y": "Debate weak-model feasibility (@general subagent)",
+    "ses_f9daa50f5ffemIMRjuk2Ixssm3": "Debate flash-tier feasibility (@general subagent)",
+    "ses_f99ca2482ffefxpV8kSA8nk6z7": "Preparing this year's teaching plan",
+    "ses_f99bb0086ffewbngYVB49ROBU0": "Continuing ongoing task",
+    "ses_f99acd5c6ffe92ckeRQCAxe76r": "Exploring fable 5.1 prompt for Magnolia",
+    "ses_f99920fe1ffexVVNZZtJiOAHqI": "fable-k3-blind-assessment",
+    "ses_f9990cbb1ffeFmwnBFxWHlZF9d": "fable-k3-blind-assessment",
+    "ses_f995d8ef5ffeZ93pWT2dNihgDq": "Reviewing pending work from last session",
+    "ses_f97c8e7c1ffeDm7Zj8KOo0ffKB": "Pending tasks check",
+    "ses_f97b6c568ffelIpGK0Rx2XPwHu": "Session recap request",
+    "ses_f93a993f8ffeCmJKTUAxzvMClL": "Mimosa usage question",
+    "ses_f93a87a19ffe14z3l5gy9oOKez": "Using mimosa tool guidance",
+    "ses_f932fcfc5ffe3N97EKUgHSVKis": "Session recap request",
+    "ses_f932fbd0effeMolZm0OwEDiAsj": "Session recap request",
+    "ses_f930852cbffeED4s392WEZk4Ef": "debate-binderhints-r1",
+    "ses_f892a89b9ffeeNMZI9IS8Ct6oI": "Session recap",
+    "ses_f853c4570ffeF84MbZsTun1Z8i": "Session recap request",
+    "ses_f848fbeb8ffeor0LEWSrx4kvYB": "Adverum PR insights for Magnolia memory architecture",
+    "ses_f841b92c1ffe9OVQopputIJhon": "debate-astra-ds-r1",
+    "ses_f841b930cffezsmRdIbrYBkwWw": "debate-astra-k3-r1",
+    "ses_f801e9d4cffe35LZ6L4lxRuZx5": "What does Astra do? ELI5",
+    "ses_f7fa3a090ffev4M7uBJrV0JPY9": "debate-astra-receipts-glm-r1",
+    "ses_f7fa3a08effeEg34KKv22xsjZv": "debate-astra-receipts-ds-r1",
+    "ses_f7fa11a84ffeE72FmLaOwCGwjm": "debate-astra-receipts-glm-r1",
+    "ses_f7b003cf9ffeCuM1HcOts9W3xq": "CNRS-NSFC proposal v6 review",
+    "ses_f7ad9d5e6ffeFiXLzhytdgfu5f": "Review of docs PR #14 on Magnolia-AI",
+    "ses_f79ff9decffePs5fNS4fOvyf3X": "debate-panel-claude-r1",
+    "ses_f79ff98d7ffe2hAj2JcNMkbQPw": "debate-panel-ds-r1",
+    "ses_f79fc410dffePcceXxm0I9c7Vz": "debate-panel-glm-r1",
+    "ses_f79fc40c5ffeJMyYq1kDcKvp1E": "debate-panel-deepseek-r1",
+    "ses_f79a13c0effeaXIKc8iLW1XhRE": "Security check before making Magnolia public",
+    "ses_f78ef8ccfffeP18oREdDgzDGTW": "Session recap request",
+    "ses_f75f76e00ffe6aZZ3cqpg18RAf": "Research GPT Astra model (@general subagent)",
+    "ses_f75f73322ffe26JQqs0b8AMEsw": "Research Claude Fable 5.1 (@general subagent)",
+    "ses_f75f70d3dffeSaN1xesZwWChet": "Research DeepSeek v4.1 + peers (@general subagent)",
+    "ses_f75e5b7e2ffeFYYVSlsgHYH1NM": "Session recap",
+    "ses_f75bf489bfferdiC5TRGoKrIEh": "debate-qwenmax-ds-r1",
+    "ses_f75bf49a4ffe4kKEPgLr58woo2": "debate-qwenmax-glm-r1",
+    "ses_f759a626bffexvtdO0uvzp20C8": "debate-position-ds-r1",
+    "ses_f759a61f6ffer69PSMvDJXyTeL": "debate-position-glm-r1",
+    "ses_f759a621affeDVmJNZxvjSFIk5": "debate-position-kimi-r1",
+    "ses_f75571f15ffeq6J2RwB0RRwP5d": "debate-calib-c-ds-r1",
+    "ses_f755721edffejWK6ldEMeAjuZx": "debate-calib-a1-r1",
+    "ses_f755720c5ffexklA6gFouQuwA2": "debate-calib-a3-r1",
+    "ses_f75572016ffe8raaBdtOxZYbLw": "debate-calib-c-glm-r1",
+    "ses_f755721f1ffeOi4PssnhCeRhf0": "debate-calib-a2-r1",
+    "ses_f75308042ffebqtk7HAN4WuNl1": "Audit of execution-plan.md vs panel answers",
+    "ses_f74d6072fffeDFwmAhzeJRFN3F": "Magnolia main branch install instructions",
+    "ses_f7494c99effeJ4aVLYwXgSCv2G": "Verify name.bib for Magnolia citation",
+    "ses_f743e676effeeZgpkogGkV4b5S": "Recap request",
+    "ses_f709a9310ffejREd7WT1da6ha1": "Conversation recap",
+    "ses_f70889d2bffeKh9XWV7ZjdqUhV": "Magnolia relaunch",
+    "ses_f70832e6fffeurarLvkH0Ab8ro": "Bug fix confirmation",
+    "ses_f706d6cb6ffeLD2yzalPa7F69w": "Magnolia manuscript review by lfnothias",
+    "ses_f6ff7a23bffedC8vAZZbTOUohM": "Release candidate readiness",
+    "ses_f612d4af5ffe4SAGCtNur7bt0e": "arXiv 2609.02702 relevance check",
+    "ses_f60fca205ffeWxHfqgeEnIr6o3": "debate-trace-as-state-k3-r1",
+    "ses_f60fca239ffe1gjo8qd6wPmuDN": "debate-trace-as-state-glm-r1",
+    "ses_f60f7baefffeaNk8Fq2TmaRXQ4": "debate-trace-as-state-glm2-r1",
+    "ses_f60f2d54fffe6chgvGvNFITrjh": "debate-trace-as-state-glm3-r1",
+    "ses_f60f2d554ffez0Ts3IPNdJDulA": "debate-trace-as-state-k3b-r1",
+    "ses_f60121ca5ffe8tKZTCAqwDLXW9": "MD methods for amorphous diffusion tensor",
+    "ses_f5fe92955ffe6qDxsoDcgWdLYL": "Reviewing lfnothias comment on Magnolia paper",
+    "ses_f5c2831f9ffe1gpuu3ecmTMbN3": "Check Mimosa-AI local vs GitHub branch",
+    "ses_f5bfd32b9ffevqFUsoef10vBSx": "API key 401 authentication error",
+    "ses_f5b9c424effebYiBJUbYERtSTh": "Conversation recap",
+    "ses_f57007ae9ffeZeWkTP1ndbRubN": "Conversation recap",
+    "ses_f56fdf0e7ffeii92b61wKrMLM9": "Magnolia startup slow diagnostic results",
+    "ses_f556ccd48ffew2HrfofZKXak8E": "Conversation restart",
+    "ses_f51e210baffezNxHa1cPKjWUNM": "Session restarted",
+    "ses_f519131bcffeiCT6rN2Fq7S71c": "Session restart recap",
+    "ses_f512c8106ffeopi8lzBBvRLH8L": "debate-xiulian-daemon-ds-r1",
+    "ses_f512c8132ffeHRnSEhVG3VggCS": "debate-xiulian-daemon-glm-r1",
+    "ses_f50ccfd03ffe4orXb1IO2I5xDN": "Cleanup duplicate SPARQL project",
+    "ses_f505060d9ffeV0miM2clIWYpO3": "Annotate ck26 cases blind (@general subagent)",
+    "ses_f50505cb5ffetc63vj3IqFQzj4": "Annotate ck25 cases blind (@general subagent)",
+    "ses_f505058adffe4hozPYeytL7EI0": "Annotate db25 cases blind (@general subagent)",
+    "ses_f50505320ffeFO9vEIV04mXeiB": "Annotate db26 cases blind (@general subagent)",
+    "ses_f4fe67e23ffe4i0xMgF3F0gzlj": "Deep-analyze ck26 cases (@general subagent)",
+    "ses_f4fe67996ffeiptd6td76C0LFQ": "Deep-analyze ck25 cases (@general subagent)",
+    "ses_f4fe67624ffevGTe9mg0cHwrmT": "Deep-analyze db25 cases (@general subagent)",
+    "ses_f4fe6724effegu33vHm9QwDMyb": "Deep-analyze db26 cases (@general subagent)",
+    "ses_f4c9e3ba4ffe5PwOimK8lk1iRX": "Paper search: grounding agent memory",
+    "ses_f4c877491ffezhgfhvgQtRMAyb": "Checking arxiv 2609.11873v2",
+    "ses_f4c732152ffehk2pj1LHz2SPi1": "Deep-read RSI paper file (@general subagent)",
+    "ses_f4c3a3b88ffe6FsTu3XQa2uCBV": "debate-litdesign-glm-r1",
+    "ses_f4c3a3b7effe1KfThdBGxFbakN": "debate-litdesign-kimi-r1",
+    "ses_f4c234fb4ffe9qbUILxBN4DLNq": "debate-gate-ds-r1",
+    "ses_f4c234fa6ffeU5vz8O7wq7dS18": "debate-gate-glm-r1",
+    "ses_f3d2eb508ffekycz7MDI0xi9aI": "arXiv paper 2609.19134v1 review",
+    "ses_f3d2a5c8cffexUj0H3JFeAyCo6": "Extract paper details from file (@explore subagent)",
+    "ses_f3cf0696cffe45tlwWRuZf7i7d": "Checking for pull after manuscript review",
+    "ses_f3c257738ffecnPeSIzxfj6ueX": "Socket connection closed error with DeepSeek v4.1 flash",
+    "ses_f38105c66ffeKxkSOIfLyVL7SL": "Recap request",
+    "ses_f380e0224ffeWb4WYbRqIAruf8": "Email Fabien Gandon: coauthor & agent memory",
+    "ses_f36a7be22ffehG1VDp61hkrRYL": "Magnolia boot bottleneck and startup sequence",
+    "ses_f36414376ffeQSGTW2QuXJEz82": "debate-panel-glm-r1",
+    "ses_f36414399ffet33ls275WtFVET": "debate-panel-kimi-r1",
+    "ses_f3640aff0ffeF8x53t090Eql54": "debate-panel-kimi2-r1",
+    "ses_f32db86b9ffezNGAh2OH5WkEqi": "Conversation recap request",
+    "ses_f32d2de9affePZfEewCtFqpMPg": "New session - 2026-09-23T07:31:22.085Z",
+    "ses_f32aa7df9ffeKYF45IocA0dqD3": "URI judgment: class/category vs RAG",
+    "ses_f32790403ffeJL7DjjSz8itoWY": "Digest SoL-Pi paper (@general subagent)",
+    "ses_f3278e382ffeWHy2537JaIp7CP": "Digest Sparse Reward paper (@general subagent)",
+    "ses_f3278b8afffe42sxoumLeA3n2B": "Digest GOLLuM paper (@general subagent)",
+    "ses_f3278950dffegMEbwJuo96XMni": "Digest confidence paper (@general subagent)",
+    "ses_f3278709fffe6haevvYmstzfNi": "Digest Evo-Memory paper (@general subagent)",
+    "ses_f31e8a6a3ffefw437P1UeTH5mK": "Session recap request",
+    "ses_f31caffe3ffeFbc0gz29li4D9G": "Conversation recap",
+    "ses_f311e9b54ffeQOWrPc0fqiLcqc": "Digest WikiSkill paper (@general subagent)",
+    "ses_f311e7123ffevqr7uNjNVv4ivT": "Digest SkillWiki paper (@general subagent)",
+    "ses_f2df831f5ffetb3SnG8TDiGee9": "Session recap",
+    "ses_f2dcb7724ffeogvFlxMn9wMg4U": "Session recap",
+    "ses_f2d9825daffece2yV0aTmW5o1r": "Anthropic AI4S achievements: protein design news",
+    "ses_f2d95bfc6ffeEAXiBbA5ZggaaN": "Conversation restart",
+    "ses_f2d8f3f7effef2G17Cnn0hjy4I": "Deep-read protein binder PDF (@general subagent)",
+    "ses_f2d8f081affeowTxQ8HH8ycnVu": "Deep-read ART enzyme PDF (@general subagent)",
+    "ses_f2d8ee301ffeE3tDjkwoWIdp4c": "Survey hsc70_new and gpx4 projects (@explore subagent)",
+    "ses_f2d6fb294ffeYcQTs93AqoKU09": "Conversation recap",
+    "ses_f2d1345a7ffe80TkwGzgEejZOd": "Extract DSec paper sections (@explore subagent)",
+    "ses_f2cc53978ffe0SINHosihYm9OL": "Survey Mimosa verifier/judge internals (@explore subagent)",
+    "ses_f2c8dd094ffeF3L1KhGqjDMo6o": "Deep-read Dream-RSI paper (@general subagent)",
+    "ses_f2c8b125cffekFuTegt7RQy2D1": "Deep-read RRSI paper (@general subagent)",
+    "ses_f2c72030dffe5ffisPzyN6TaZy": "New session - 2026-09-24T13:14:53.042Z",
+    "ses_f2c705786ffeWRL6SvvE4FExE9": "Smoke test reply: ACKNOWLEDGED",
+    "ses_f2c6e8802ffebNss8RA7wuXCiv": "Smoke test echo reply ACKNOWLEDGED",
+    "ses_f2c6cba85ffeGklKo6QEFp7Ujb": "Smoke test acknowledgment reply",
+    "ses_f2c68b44cffe1Y5XcepqPk6DJt": "Smoke test echo reply ACKNOWLEDGED",
+    "ses_f2c6325daffetb6cIg85arFBGy": "Smoke echo 3 acknowledgment test",
+    "ses_f2c6196ddffexiHDZeSuJSd6vk": "Smoke echo 4 request handling",
+    "ses_f2c5d4d2effexfGQD5pPdeOoqI": "Smoke echo 3 acknowledgment task",
+    "ses_f2c56315bffeBTfj6hj7vVRLnu": "Deep-read Dream-RSI paper (@general subagent)",
+    "ses_f2c5092d6ffe14IUgxJ2HChfKB": "Smoke echo final reply test",
+    "ses_f28a28f08ffeYAAInOiAtjIJ96": "Session recap and status",
+    "ses_f28a2a559ffe1EcmGhwAnNQkgt": "Session recap request",
+    "ses_f283cec09ffefGBsp7yOC5fVQw": "Digest Env-Rethink paper (@general subagent)",
+    "ses_f283ca3edffek7j56F4f6BHxCI": "Digest trace-tampering paper (@general subagent)",
+    "ses_f2801dbffffewdUY3IZ81XZ4lJ": "Digest Bad Genius paper (@general subagent)",
+    "ses_f2801a944ffe5EDkuhgThI20Ng": "Digest ModularRSI paper (@general subagent)",
+    "ses_f28016d47ffezEm8Sr3zV57uTQ": "Digest RobustSGPO paper (@general subagent)",
+    "ses_f28014127ffeItumliolxLza03": "Digest Harness-or-Model paper (@general subagent)",
+    "ses_f27f0bea6ffel6TMCac4vD42Rk": "New session restart",
+    "ses_f27bdffd6ffeZeSj3lpliRf0pL": "Digest process-eval paper (@general subagent)",
+    "ses_f27bdb29fffedXwIRhDZblZJV7": "Digest HackProbe paper (@general subagent)",
+    "ses_f27bd618fffe6piBTkP0vuwtuj": "Digest LLM-judge paper (@general subagent)",
+    "ses_f27bd192bffe5c79FHFdFyTIQ3": "Digest scope-persist paper (@general subagent)",
+    "ses_f27ae9741ffejGtF0QxnmLPVcc": "Digest eviction-audit paper (@general subagent)",
+    "ses_f27ae4babffeytDQ4a2pNdvFjB": "Digest exec-provenance paper (@general subagent)",
+    "ses_f27ade690fferoL87ZWtdOKLfV": "Digest memory-poisoning paper (@general subagent)",
+    "ses_f27ada2dcffeva5wEf4568ej1v": "Digest DolphinBench paper (@general subagent)",
+    "ses_f275035beffenjCF9C24eMh1Ld": "Doorbell live-test with auto-memory instructions",
+    "ses_f19220a8affeZMYX06qPudNcij": "Reviewer feedback on Magnolia memory paper",
+    "ses_f191499e7ffeyLv6C6jaPlqbiO": "Magnolia preprint paper clarification",
+    "ses_f18e933f9ffeb9rJHJQZjhozjg": "Updating goal from Madina's message",
+    "ses_f13ec4120ffeqRVeuMgabOeswJ": "Xiulian session restart errors",
+    "ses_f13e074b1ffeJoPdVhQDTOAQ84": "arXiv 2609.02702 KB placement task",
+    "ses_f13dfeff8ffepX6L2VR14H9uVE": "Literature search for new related papers",
+    "ses_f13d770c0ffegzBhuv9SeDC4rH": "Agent-memory literature check July–Sept 2026",
+    "ses_f13c9336bffe1zhkkHyaHMxCrH": "Agent-memory papers literature search Jul–Sep 2026",
+    "ses_f13c8711effe89SX4Q3bopUvBW": "Smoke test reply check",
+    "ses_f13c7ca9dffef8UUu0nj74MJwb": "Agent-memory paper search July–Sept 2026",
+    "ses_f13b9b02effeWBHCod01vLk65C": "Finding recent arXiv agent-memory papers",
+    "ses_f13b1ccceffejQKkmcJX6yB4Jb": "JSON smoke test reply",
+    "ses_f13b114ccffeS57qNQKf4t53xZ": "JSON smoke test instruction",
+    "ses_f138e7e2effezi6G5R4MOSn4Xs": "Agent-memory paper search July–Sept 2026",
+    "ses_f12636837ffeNdzhIIGahLGsWg": "debate-seriesreal-kimi-on-1-r1",
+    "ses_f12636947ffeN18pXwUmvW5yot": "debate-seriesreal-kimi-off-2-r1",
+    "ses_f126368ffffeFY471k67DJQUo0": "debate-seriesreal-kimi-off-1-r1",
+    "ses_f126368d4ffelL5MCxd5xYuu5K": "debate-seriesreal-kimi-on-2-r1",
+    "ses_f125d58c1ffeQwzXRCxsIVLa6C": "debate-gseries-off-1-r1",
+    "ses_f125d58ddffeH6z7xEGZLy1Yod": "debate-gseries-off-2-r1",
+    "ses_f125d589cffeqU5Zg8VvCALV1M": "debate-gseries-on-2-r1",
+    "ses_f125d589bffebv396vMmCl4krO": "debate-gseries-on-1-r1",
+    "ses_f12546810ffex66eVA7sMG0MLe": "Covalent warhead SMARTS gate preparation",
+    "ses_f12546807ffeP6b6OboEu9DIYB": "Covalent warhead SMARTS pattern gate",
+    "ses_f123d9e0cffeWdt9jKXVFUDS7V": "Switch active branch to master",
+    "ses_f12079b38ffeCkbHQ2J6weOEEF": "Suspicious tool-calling boot check request",
+    "ses_f12016d25ffeFuSTfn18gnnrMe": "debate-hsc70-airfree-off-1-r1",
+    "ses_f11fad304ffefJG1MGIX7fFdpt": "Exact reply MEMONLY_OK test",
+    "ses_f11f94ce2ffe7MGWzjq68WPbQm": "Echo TOOLSONLY command test",
+    "ses_f11f8ed08ffeTJMwbBe0fj2QCZ": "AIR-free cluster scores from caprieval TSVs",
+    "ses_f11f8ee0fffexvuVRZlBKro4Hw": "AIR-free scores from caprieval TSVs",
+    "ses_f116c28f8ffe89uRuiSM0CBitl": "Urgent memory conflict resolution in todo.md",
+    "ses_f116afca1ffeR9qSpRHzPkW1Jl": "Alanine-scan hotspot in scan_complex_haddock.tsv",
+    "ses_f1168647cffe1cEDpVB94cRd1D": "Flexref values for extended ACE/NME peptide",
+    "ses_f11659455ffeWNEuyuENwaQ5CK": "debate-hsc70-fle-off-2-r1",
+    "ses_f115c4785ffeny8T7b1jehHfpp": "Completing HADDOCK3 docking config protocol",
+    "ses_f1158af6dffekbLPqwN5H8EUsl": "Diagnosing stuck KFERQx2 docking job",
+    "ses_f1158b72dffeySkWkQ10o0r4kq": "debate-hsc70-deadlock-off-1-r1",
+    "ses_f114ea78affenqCuZV7HsZXzAe": "debate-scr-fetch-ds-r1",
+    "ses_f113e1543ffeXxMvSABAaWv8vY": "HADDOCK3 flexref range for extended peptide",
+    "ses_f113e1413ffe3Np6s7207RinH4": "HADDOCK3 flexref values for extended peptide",
+    "ses_f113e115cffeMN1hQigyjmK15q": "Completing HADDOCK3 KFERQx2/SBD-beta config",
+    "ses_f113e12c8ffeBluc0yPL0vuzy1": "Complete HADDOCK3 KFERQx2 docking config",
+    "ses_f113dfec3ffeofniSKps3No64K": "debate-w1-protocol-off-a-r1",
+    "ses_f113dfecdffef3dBu2azrd1Arb": "debate-w1-protocol-on-a-r1",
+    "ses_f113dff3bffePd2kVyaHFX3EBa": "debate-w1-protocol-off-b-r1",
+    "ses_f113dfec8ffec31jhwjKI0omDl": "debate-w1-fle-off-b-r1",
+    "ses_f113dfd3dffeWzr5HkrBkUQUPA": "debate-w1-protocol-kimi-a-r1",
+    "ses_f113dff1dffe6ROOvhthFumfVs": "debate-w1-fle-off-a-r1",
+    "ses_f113dfce0ffe2SvS3W1Hu1bLmN": "debate-w1-protocol-kimi-b-r1",
+    "ses_f112a6657ffeJjWMzxeFF2v2Z5": "debate-scr-gpx4-kimi-r1",
+    "ses_f112742bdfferj3IXKzRTh4CMR": "debate-scr-gpx4-kimi2-r1",
+    "ses_f1122e0d6ffeHEa56e2ttWqEmN": "GPX4 covalent docking protocol documentation",
+    "ses_f1122e02dffeiluzU9jElI19Vh": "GPX4 covalent docking protocol with gnina",
+    "ses_f0f032da8ffe2J062rXBEW37GS": "Session recap and status check",
+    "ses_f0ee1e1f3ffeth0V22AVzNoOhb": "Candidature ateliers familles professionnelles",
+    "ses_f0e9fef02ffezfGIMWrniPADub": "debate-wd-blind-ds-2-r1",
+    "ses_f0e9aa727ffef86bsoyJtacIuS": "debate-wd-blind-ds-2-r1",
+    "ses_f0e924097ffe656US7Rdjpr1C0": "GPX4 alkyne ligand vinyl docking definitions",
+    "ses_f0e923860ffe6oNgQd5py0W6j0": "GPX4 covalent docking vinyl product SMILES",
+    "ses_f0e922f68ffeSRieCxUhZtx84H": "GPX4 alkyne vinyl product docking definitions",
+    "ses_f0e928692fferlS17KQMIr1kmT": "debate-wd-blind-ds-1-r1",
+    "ses_f0e9227a5ffe1yIczE2lUo4BBU": "GPX4 alkyne ligand docking definitions",
+    "ses_f0e574862ffevuvfNJ05kk34N2": "GPX4 covalent docking protocol write-up",
+    "ses_f0e573de1ffeN3BJ6DtOOl2jgT": "GPX4 covalent docking protocol recap",
+    "ses_f0e57355affeOr3py2l4hcroV5": "GPX4 covalent docking protocol from SMILES",
+    "ses_f0e571f02ffersuDjswmIPeFGI": "debate-t6-blind-kimi-2-r1",
+    "ses_f0e572e38ffe19UUWAtK5dvPL0": "GPX4 covalent docking protocol for quino_smiles.csv",
+    "ses_f0e571887ffeimkst77e6SedWm": "debate-t4-blind-kimi-c-r1",
+    "ses_f0da11e1dffe8eB8EidafZO29f": "Agent failed to relay memory cleanup proposals",
+    "ses_f0d76dea1ffeVRFE4YMv5gzgtM": "Completing HADDOCK3 KFERQx2 docking config",
+    "ses_f0d711ea0ffecxK1wkXlq6AM9x": "Completing HADDOCK3 config for KFERQx2 docking",
+    "ses_f0d72bae4ffe61BH61AgBlNp6b": "Completing HADDOCK3 docking config",
+    "ses_f0d43f892ffeogKBa3r5Hd0kcq": "Continuing previous work session",
+    "ses_f0d1a4674ffeFtyP3a4PdHlg5y": "HADDOCK3 flexref values for extended peptide",
+    "ses_f0d1994ceffe01LOF00u2gxzfQ": "HADDOCK3 flexref bounds for extended peptide",
+    "ses_f0c2ca09bffe8AcUKzHEBw0J3N": "Restarting after interruption",
+    "ses_f0c124c2bffenfzu0P96khD5Eh": "Restarted session check-in"
+   }
+  }
+ },
+ "notes": "rent = distinct sessions per entry. CANONICAL = curated_clean: get_context sources + entry reads + action-injection blocks (real knowledge delivery). naive mentions overcount (bulk listings); get_context alone undercounts. workhorse = >=3 distinct clean sessions. clean excludes sandbox/replay-class sessions by title (O11 62->37 correction)."
+}
