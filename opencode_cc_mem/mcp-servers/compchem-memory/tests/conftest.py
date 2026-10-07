@@ -85,3 +85,29 @@ def _redirect_default_capture_dir(monkeypatch, tmp_path):
         return real_notices(result, project_dir)
 
     monkeypatch.setattr(_capture, "_attach_distill_notices", notices_redirected)
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_magnolia_flags(monkeypatch):
+    """Strip inherited Magnolia switch env vars (2026-10-07).
+
+    The long-lived compchem-tools daemon exports MAGNOLIA_CONSOLIDATION_AUTO /
+    AUTO_CONFIRM / RETIREMENT from whatever wrapper launch started it, and
+    pytest runs under run_shell inherit them — the auto-band then fires
+    INSIDE unit tests (observed: 25 spurious consolidation failures after a
+    --profile full era daemon replaced an older one). Tests that exercise a
+    switch set it explicitly via monkeypatch; nothing may depend on the
+    ambient environment."""
+    for var in (
+        "MAGNOLIA_CONSOLIDATION_AUTO",
+        "MAGNOLIA_CONSOLIDATION_AUTO_MAX",
+        "MAGNOLIA_AUTO_CONFIRM",
+        "MAGNOLIA_RETIREMENT",
+        "MAGNOLIA_PROSE_NUMBERS",
+        "MAGNOLIA_CONSOLIDATION_SEED",
+        "MAGNOLIA_CONSOLIDATION_SIBLING",
+        "MAGNOLIA_CONSOLIDATION_FLOOR",
+        "MAGNOLIA_ADMISSION_GATE",
+        "MAGNOLIA_DISTILL_SECOND_PASS",
+    ):
+        monkeypatch.delenv(var, raising=False)

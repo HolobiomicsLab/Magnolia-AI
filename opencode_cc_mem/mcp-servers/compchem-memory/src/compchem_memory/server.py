@@ -12,7 +12,46 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+def _newest_session_main_model(db_path: str | None = None) -> dict | None:
+    """Read-only probe of the shared opencode DB: the newest session's main
+    model. Stamped onto boot-timing 'total' rows so launch latency can be
+    correlated with the provider the session ran (2026-10-07 user observation:
+    kimi/glm boots feel slower than flash boots; Kimi's managed OAuth refresh
+    is the prime suspect — see the wrapper's NO_PROXY exemption). Never raises:
+    boot timing must not depend on this probe."""
+    try:
+        import sqlite3
+        db = Path(db_path) if db_path else (
+            Path.home() / ".local" / "share" / "opencode" / "opencode.db")
+        if not db.exists():
+            return None
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            row = con.execute(
+                "SELECT model FROM session ORDER BY time_updated DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            con.close()
+        if not row or not row[0]:
+            return None
+        m = row[0]
+        if isinstance(m, str):
+            try:
+                m = json.loads(m)
+            except json.JSONDecodeError:
+                return {"main_model": m[:60]}
+        if isinstance(m, dict):
+            out = {"main_model": f"{m.get('providerID', '?')}/{m.get('id', '?')}"}
+            if m.get("variant"):
+                out["main_model_variant"] = m["variant"]
+            return out
+        return None
+    except Exception:
+        return None
+
+
 _BOOT_T0 = time.monotonic()  # anchor for server-import latency in the boot-timing rows
+
 
 from fastmcp import FastMCP
 
@@ -106,6 +145,10 @@ def _run_startup_scan_background():
         }
         if error is not None:
             row["error"] = str(error)[:200]
+        if step == "total":
+            probe = _newest_session_main_model()
+            if probe:
+                row.update(probe)
         try:
             p = Path(PROJECT_DIR) / ".magnolia" / "boot-timing.jsonl"
             p.parent.mkdir(parents=True, exist_ok=True)
