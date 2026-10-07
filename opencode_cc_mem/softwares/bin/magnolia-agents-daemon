@@ -25,9 +25,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 AGENTS = ("literature", "xiulian")
+AGENT_REGISTRY_NAME = "agent.json"
 SCAN_INTERVAL_S = 10
 TASK_TIMEOUT_S = 30 * 60
 STATUS_RE = re.compile(r"^([\s>*-]*status:\s*)open\b", re.I | re.M)
+# A ticket line `wait_for: job:<run_id>` parks the letter until the run
+# record <project>/.magnolia/runs/<run_id>.yaml exists with a status; the
+# daemon then re-delivers it (removes the line, appends the recorded result).
+WAIT_FOR_RE = re.compile(r"^wait_for:\s*job:\s*(\S+)\s*$", re.I | re.M)
 
 # Answer gate: the helper's LAST assistant message must begin with the
 # FINAL ANSWER marker. Without an enforced contract, flash-tier models end
@@ -80,11 +85,50 @@ def is_open_task(text: str) -> bool:
     return bool(STATUS_RE.search(text))
 
 
-def discover_tasks(root: str, agents=AGENTS) -> list[Path]:
-    """All open task letters not already handled (path + content hash)."""
+def is_deferred_task(text: str) -> str | None:
+    """Return the wait_for run_id when the letter is parked on a job."""
+    m = WAIT_FOR_RE.search(text)
+    return m.group(1).strip("'\"") if m else None
+
+
+def discover_lanes(root: str) -> dict:
+    """Lane registry: DEFAULT lanes (literature, xiulian — the current
+    deployment) UNION projects declaring <project>/agent.json.
+
+    agent.json: {enabled: bool, model: str, schedule_days: float,
+    schedule_task: str}. Unknown projects become lanes; default lanes may
+    override settings (e.g. xiulian's schedule). enabled:false removes a lane
+    even if it is a default."""
+    lanes: dict[str, dict] = {name: {} for name in AGENTS}
+    proj_root = Path(root) / "opencode_cc_mem" / "projects"
+    if not proj_root.is_dir():
+        return lanes
+    for d in sorted(proj_root.iterdir()):
+        cfg_f = d / AGENT_REGISTRY_NAME
+        if not cfg_f.is_file():
+            continue
+        try:
+            cfg = json.loads(cfg_f.read_text(encoding="utf-8"))
+        except Exception as e:
+            log_line(root, f"[registry] bad {cfg_f}: {e}")
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        if cfg.get("enabled") is False:
+            lanes.pop(d.name, None)
+            continue
+        lanes[d.name] = cfg
+    return lanes
+
+
+def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
+    """All open task letters not already handled (path + content hash).
+    Deferred letters (wait_for) are excluded — the job-delivery pass owns
+    them. `lanes` defaults to the legacy pair for backwards compatibility."""
+    lanes = lanes if lanes is not None else {name: {} for name in AGENTS}
     state = load_state(root)
     found: list[Path] = []
-    for agent in agents:
+    for agent in lanes:
         inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
         if not inbox.is_dir():
             continue
@@ -95,6 +139,8 @@ def discover_tasks(root: str, agents=AGENTS) -> list[Path]:
                 continue
             if not is_open_task(text):
                 continue
+            if is_deferred_task(text):
+                continue  # parked on a job — the delivery pass owns it
             digest = hashlib.sha1(f.read_bytes()).hexdigest()
             if state["done"].get(str(f)) == digest:
                 continue  # already handled, unchanged
@@ -161,13 +207,13 @@ def is_final_answer(text: str) -> bool:
 
 
 def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
-              extra_args: list, run_log: Path | None) -> dict:
+              extra_args: list, run_log: Path | None, binary: str = "opencode") -> dict:
     """One headless `opencode run --model M --format json [extra_args]`.
     Returns parse_run_events output plus "rc" and "stderr_tail"; appends
     the raw events to run_log so failures stay diagnosable (the daemon
     previously discarded stderr — 2026-09-29 0-byte run was undiagnosable)."""
     proc = subprocess.run(
-        ["opencode", "run", "--model", model, "--format", "json", *extra_args],
+        [binary, "run", "--model", model, "--format", "json", *extra_args],
         cwd=project_dir, env=env, timeout=timeout_s,
         capture_output=True, text=True,
     )
@@ -184,6 +230,15 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         except OSError:
             pass
     return parsed
+
+
+def _opencode_bin() -> str:
+    """v2 mode (MAGNOLIA_OPENCODE_V2=1): the pinned v2 binary. Default: v1."""
+    if os.environ.get("MAGNOLIA_OPENCODE_V2", "").lower() in ("1", "true", "yes", "on"):
+        return os.environ.get(
+            "MAGNOLIA_OPENCODE_V2_BIN",
+            str(Path.home() / ".local/share/magnolia-v2/bin/opencode"))
+    return "opencode"
 
 
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
@@ -213,6 +268,16 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
     env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
+    if _opencode_bin() != "opencode":
+        env.setdefault(
+            "OPENCODE_DB",
+            str(Path.home() / ".local/share/opencode/opencode-v2.db"))
+    # Lane session (v2 inbox model): the lane keeps ONE session across
+    # letters — each letter queues into it (`opencode run --session`), so the
+    # lane retains its ticket history. First letter starts a fresh session;
+    # the resulting session id is stored for the next letter.
+    state = load_state(root)
+    lane_sid = (state.get("lanes", {}).get(agent) or {}).get("session_id")
     try:
         runs_dir(root).mkdir(parents=True, exist_ok=True)
         run_log = runs_dir(root) / (f"{datetime.now(timezone.utc):%Y%m%d_%H%M%S}_"
@@ -220,11 +285,18 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     except OSError:
         run_log = None
 
-    args: list = [prompt]
+    args: list = ([ "--session", lane_sid ] if lane_sid else []) + [prompt]
     attempt = 0
     while True:
         attempt += 1
-        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log)
+        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log,
+                           binary=_opencode_bin())
+        if parsed.get("session_id"):
+            # Lane session persistence: the lane keeps ONE session across
+            # letters (v2 queue semantics; v1 resumes with -s the same way).
+            st = load_state(root)
+            st.setdefault("lanes", {}).setdefault(agent, {})["session_id"] = parsed["session_id"]
+            save_state(root, st)
         marker = is_final_answer(parsed["final_text"])
         log_line(root, f"[{agent}] attempt {attempt} rc={parsed['rc']} "
                        f"tools={parsed['n_tools']} "
@@ -286,15 +358,108 @@ def handle_task(task_file: Path, agent: str, root: str,
     return status
 
 
-def scan_once(root: str, agents=AGENTS, runner=default_runner) -> list[str]:
+def scan_once(root: str, agents=AGENTS, runner=default_runner, lanes: dict | None = None) -> list[str]:
+    # `agents` accepts the legacy name tuple; `lanes` (from discover_lanes)
+    # is the registry path and wins when given.
+    lane_map = lanes if lanes is not None else (
+        agents if isinstance(agents, dict) else {a: {} for a in agents})
     results = []
-    for f in discover_tasks(root, agents):
+    for f in discover_tasks(root, lane_map):
         agent = f.parts[f.parts.index("projects") + 1]
         results.append(f"{agent}:{handle_task(f, agent, root, runner)}")
     return results
 
 
-# ------------------------------------------------------------------ main ---
+def deliver_wait_for(root: str, lanes: dict) -> int:
+    """Re-deliver deferred tickets whose job has a recorded status.
+
+    Parked letters (`wait_for: job:<run_id>`) stay out of the runner until the
+    run record <project>/.magnolia/runs/<run_id>.yaml exists with a status
+    line; the letter is then re-opened with the recorded result appended.
+    Durable by design — the run record, not the transient job-notices file,
+    is the source (the job-notify plugin drains that file, so watching it
+    would race)."""
+    delivered = 0
+    for agent in lanes:
+        inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
+        runs = Path(root) / "opencode_cc_mem" / "projects" / agent / ".magnolia" / "runs"
+        if not inbox.is_dir():
+            continue
+        for f in sorted(inbox.rglob("*.task.md")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            rid = is_deferred_task(text)
+            if not rid:
+                continue
+            rec = runs / f"{rid}.yaml"
+            if not rec.is_file():
+                continue  # job still pending
+            try:
+                status_m = re.search(r"^status:\s*(\S+)",
+                                     rec.read_text(encoding="utf-8", errors="replace"), re.M)
+            except OSError:
+                continue
+            result = status_m.group(1) if status_m else "unknown"
+            new_text = WAIT_FOR_RE.sub("", text) + (
+                f"\n\n## Job result ({rid})\n\n- status: {result}\n- record: {rec}\n")
+            new_text = set_status(new_text, "open")
+            try:
+                f.write_text(new_text, encoding="utf-8")
+                log_line(root, f"[{agent}] wait_for delivered: {rid} -> {f.name}")
+                delivered += 1
+            except OSError:
+                pass
+    return delivered
+
+
+def scheduled_sweep_letters(root: str, lanes: dict) -> int:
+    """Write the sweep letter for lanes whose schedule is due.
+
+    Lane cfg: schedule_days (float) + schedule_task (the request text).
+    State tracks the last send per lane; a lane never-swept is due at once
+    (registration starts the cadence)."""
+    sent = 0
+    state = load_state(root)
+    swept = state.setdefault("swept", {})
+    now = datetime.now(timezone.utc)
+    for agent, cfg in sorted(lanes.items()):
+        days = cfg.get("schedule_days")
+        task_text = cfg.get("schedule_task")
+        if not days or not task_text:
+            continue
+        try:
+            days = float(days)
+        except (TypeError, ValueError):
+            continue
+        last = swept.get(agent)
+        if last:
+            try:
+                if (now - datetime.fromisoformat(str(last))).total_seconds() < days * 86400:
+                    continue
+            except ValueError:
+                pass
+        inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
+        if not inbox.is_dir():
+            continue
+        letter = inbox / f"{now:%Y-%m-%d}_{agent}-scheduled-sweep.task.md"
+        if letter.exists():
+            swept[agent] = now.isoformat()  # already sent today — no duplicate
+            save_state(root, state)
+            continue
+        try:
+            letter.write_text(
+                f"# Scheduled sweep ({agent})\n\n- from: agents-daemon\n"
+                f"- date: {now:%Y-%m-%d}\n- status: open\n\n## Request\n\n"
+                f"{task_text}\n", encoding="utf-8")
+            swept[agent] = now.isoformat()
+            save_state(root, state)
+            log_line(root, f"[{agent}] scheduled sweep letter written")
+            sent += 1
+        except OSError:
+            pass
+    return sent
 
 _LOCK_FH = None  # module-level: if the file object is garbage-collected, the
                  # descriptor closes and the flock is silently released.
@@ -330,7 +495,10 @@ def main() -> int:
     log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")
     while True:
         try:
-            for r in scan_once(args.root):
+            lanes = discover_lanes(args.root)
+            scheduled_sweep_letters(args.root, lanes)   # due schedules -> letters
+            deliver_wait_for(args.root, lanes)          # job landed -> reopen ticket
+            for r in scan_once(args.root, lanes=lanes):
                 print(r, flush=True)
         except Exception as e:
             log_line(args.root, f"scan error: {e}")

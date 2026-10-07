@@ -171,7 +171,7 @@ def test_runner_returns_on_marker_first_pass(tmp_path, monkeypatch):
     root = _root(tmp_path)
     calls = []
 
-    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log):
+    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
         calls.append(extra_args)
         if run_log is not None:
             run_log.write_text("{}\n", encoding="utf-8")
@@ -190,7 +190,7 @@ def test_runner_resumes_same_session_then_succeeds(tmp_path, monkeypatch):
     responses = [_parsed("Still looking at the KBs..."),
                  _parsed("FINAL ANSWER: done", tools=0)]
 
-    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log):
+    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
         calls.append(extra_args)
         return responses[len(calls) - 1]
 
@@ -204,7 +204,7 @@ def test_runner_gives_up_after_max_attempts(tmp_path, monkeypatch):
     root = _root(tmp_path)
     calls = []
 
-    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log):
+    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
         calls.append(extra_args)
         return _parsed("narration only, no answer")
 
@@ -219,7 +219,7 @@ def test_runner_gives_up_after_max_attempts(tmp_path, monkeypatch):
 def test_runner_raises_on_nonzero_rc(tmp_path, monkeypatch):
     root = _root(tmp_path)
 
-    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log):
+    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
         return _parsed("", sid=None, rc=2).copy() | {"stderr_tail": "boom"}
 
     monkeypatch.setattr(d, "_run_once", fake_once)
@@ -255,3 +255,102 @@ def test_handle_task_overwrites_stale_reply(tmp_path):
     body = reply.read_text(encoding="utf-8")
     assert "fresh" in body
     assert "STALE" not in body
+
+
+# ---------------------------------------------------------------------------
+# Registry, wait_for, scheduled sweeps (2026-10-07)
+# ---------------------------------------------------------------------------
+
+
+def _lane(root, name, cfg=None):
+    """Create a lane: project dir + inbox + optional agent.json."""
+    proj = Path(root) / "opencode_cc_mem" / "projects" / name
+    (proj / "inbox").mkdir(parents=True, exist_ok=True)
+    if cfg is not None:
+        (proj / "agent.json").write_text(json.dumps(cfg), encoding="utf-8")
+    return proj
+
+
+def test_registry_unknown_project_becomes_lane(tmp_path):
+    root = _root(tmp_path)
+    inbox = _lane(root, "perspicacite", {"enabled": True}) / "inbox"
+    _task(inbox, "x.task.md")
+    lanes = d.discover_lanes(root)
+    assert "perspicacite" in lanes            # registry lane
+    assert "literature" in lanes and "xiulian" in lanes   # defaults stay
+    found = d.discover_tasks(root, lanes)
+    assert any("perspicacite" in str(f) for f in found)
+
+
+def test_registry_disabled_lane_removed(tmp_path):
+    root = _root(tmp_path)
+    _lane(root, "xiulian", {"enabled": False})
+    lanes = d.discover_lanes(root)
+    assert "xiulian" not in lanes and "literature" in lanes
+
+
+def test_unregistered_project_not_discovered(tmp_path):
+    root = _root(tmp_path)
+    inbox = _lane(root, "nobody") / "inbox"     # no agent.json
+    _task(inbox, "x.task.md")
+    lanes = d.discover_lanes(root)
+    found = d.discover_tasks(root, lanes)
+    assert not any("nobody" in str(f) for f in found)
+
+
+def test_wait_for_defers_until_run_record_lands(tmp_path):
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    t = _task(proj / "inbox", "idea.task.md", status="open",
+              body="Prototype the idea.\nwait_for: job:20261007_arm3")
+    lanes = d.discover_lanes(root)
+
+    # parked: discovery skips it
+    assert not d.discover_tasks(root, lanes)
+
+    # job record lands -> the delivery pass re-opens the letter
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "20261007_arm3.yaml").write_text("status: success\n", encoding="utf-8")
+    n = d.deliver_wait_for(root, lanes)
+    assert n == 1
+    text = t.read_text(encoding="utf-8")
+    import re as _re
+    assert _re.search(r"^wait_for:", text, _re.M) is None  # parked line gone
+    assert "Job result" in text and "success" in text
+    # now discoverable again
+    assert d.discover_tasks(root, lanes)
+
+
+def test_scheduled_sweep_letter_written_once(tmp_path):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True, "schedule_days": 1,
+                               "schedule_task": "Run the sweep."})
+    lanes = d.discover_lanes(root)
+    assert d.scheduled_sweep_letters(root, lanes) == 1
+    letters = list((Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox").glob("*scheduled-sweep.task.md"))
+    assert len(letters) == 1 and "Run the sweep." in letters[0].read_text()
+    # second call same day: no duplicate
+    assert d.scheduled_sweep_letters(root, lanes) == 0
+
+
+def test_lane_session_persisted_after_run(tmp_path, monkeypatch):
+    """After a run the lane's session id is stored in state["lanes"][agent]
+    so the next letter queues into the SAME session (v2 inbox model)."""
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True})
+    calls = []
+
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log, binary="opencode"):
+        calls.append(list(extra_args))
+        return {"session_id": "ses_lane1", "final_text": "FINAL ANSWER: ok",
+                "all_text": "x", "n_tools": 0, "rc": 0, "stderr_tail": ""}
+
+    monkeypatch.setattr(d, "_run_once", fake_run_once)
+    out = d.default_runner("literature", str(tmp_path), root, "do the task", 60)
+    assert "FINAL ANSWER" in out
+    state = d.load_state(root)
+    assert state["lanes"]["literature"]["session_id"] == "ses_lane1"
+    # second letter resumes the same session
+    out2 = d.default_runner("literature", str(tmp_path), root, "next letter", 60)
+    assert calls[-1][:2] == ["--session", "ses_lane1"]
