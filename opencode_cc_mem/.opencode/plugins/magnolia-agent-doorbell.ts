@@ -13,17 +13,40 @@
  *
  * Design: docs/agents-daemon-design.md
  */
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs"
 import { join, dirname } from "node:path"
 
 import type { Plugin } from "@opencode-ai/plugin"
 
 const DISABLED = String(process.env.MAGNOLIA_DOORBELL ?? "").toLowerCase() === "0"
-const AGENTS = ["literature", "xiulian"]
-const MENTION_RE = /@(literature|xiulian)\b[,:]?\s*([^\n]*)/gi
+const DEFAULT_AGENTS = ["literature", "xiulian"]
+
+// Lane registry (2026-10-07): the mention set is the default pair UNION every
+// project that declares projects/<name>/agent.json (enabled != false). New
+// agents need no code edit — registering the project is enough.
+function registryAgents(directory: string): string[] {
+  const names = new Set(DEFAULT_AGENTS)
+  try {
+    for (const d of readdirSync(join(directory, "projects"), { withFileTypes: true })) {
+      if (!d.isDirectory()) continue
+      const cfgPath = join(directory, "projects", d.name, "agent.json")
+      if (!existsSync(cfgPath)) continue
+      try {
+        const cfg = JSON.parse(readFileSync(cfgPath, "utf8"))
+        if (cfg && cfg.enabled === false) continue
+      } catch { continue }
+      names.add(d.name)
+    }
+  } catch { /* fall through */ }
+  return [...names]
+}
 
 export const AgentDoorbell: Plugin = async ({ client, directory }) => {
   if (DISABLED) return {}
+
+  const agents = registryAgents(directory)
+  const MENTION_RE = new RegExp(`@(${agents.map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b[,:]?\\s*([^\\n]*)`, "gi")
+  const CHECK_RE = new RegExp(`@(${agents.join("|")})\\b`, "i")
 
   // Current project, same resolution as magnolia-action-retrieval.
   let sourceProject = "unknown"
@@ -68,7 +91,7 @@ export const AgentDoorbell: Plugin = async ({ client, directory }) => {
         if (!output?.parts || !Array.isArray(output.parts)) return
         for (const part of output.parts) {
           if (part?.type !== "text" || typeof part?.text !== "string") continue
-          if (!/@(literature|xiulian)\b/i.test(part.text)) continue
+          if (!CHECK_RE.test(part.text)) continue
 
           const sent: string[] = []
           const newText = part.text.replace(
