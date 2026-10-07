@@ -55,31 +55,50 @@ rule).
 
 ### B. xiulian builder (idea ticket in → prototype + gate report out)
 
-- Reads an idea ticket (auto-run because it is a `.task.md`).
-- Creates a throwaway branch `exp/idea-<slug>` from `experimental`, prototypes
-  the idea there, runs the **unit suite** and — when the idea touches the
-  memory pipeline — a **replay-eval arm** against the frozen corpus.
-- Writes the reply letter with the gate report (arm name, the five metrics vs
-  gates, links to the run dir) and flips the ticket's status.
-- **Merge is always the human's decision** (replay-eval README rule: never
+**There is no xiulian-specific runner.** The builder is just a headless
+xiulian session activated by the general daemon (C), using xiulian's own
+rules, skills, and memory — the same machinery an interactive xiulian session
+uses. A bespoke daemon-side runner would duplicate the agent with worse
+tools. (Design change 2026-10-07, user-suggested simplification.)
+
+What the lane does with a ticket, by its own instructions (rules/skills —
+human-readable, no daemon code):
+- creates a throwaway branch `exp/idea-<slug>` from `experimental`, prototypes
+  there, runs the **unit suite** and — when the idea touches the memory
+  pipeline — a **replay-eval arm** against the frozen corpus;
+- writes the reply letter with the gate report (arm name, the five metrics vs
+  gates, links to the run dir) and flips the ticket's status;
+- **merge is always the human's decision** (replay-eval README rule: never
   auto-merge; the gate report informs the merge discussion, no more).
 
-**Rails:** prototypes only on `exp/idea-*` branches; work only inside its own
-project + inboxes; the FINAL ANSWER gate + auto-resume stay; 30-min timeout;
-one task at a time.
+One genuinely daemon-side piece: a replay arm takes ~1.5 h, longer than the
+daemon's 30-min task timeout. The lane answers "arm started, report pending"
+and the ticket closes at `prototyped`; when the job lands, the compchem-tools
+job-notify poller already writes the notice, and the daemon re-delivers the
+ticket with the result attached (a `wait_for: job:<run_id>` field in the
+ticket header) so the lane evaluates the gate and writes the final reply.
+That watcher is generic — any lane can use `wait_for`.
 
-### C. The general-purpose activator
+**Rails:** prototypes only on `exp/idea-*` branches; work only inside its own
+project + inboxes; the FINAL ANSWER gate + auto-resume stay; 30-min timeout
+for the interactive part; one task at a time.
+
+### C. The general-purpose activator (THE daemon — the only daemon)
 
 The daemon's mailbox watch is already per-agent-generic in structure; the
-generalization is a **registry** instead of hardcoded names:
+generalization is a **registry** instead of hardcoded names, and the registry
+is the whole design:
 
 - `projects/<name>/agent.yaml` declares a project agent: `{name, mailbox,
   workdir, model, allowed_paths, max_runtime}`. A project with an agent.yaml
-  is a daemon lane; a project without one never gets tasks.
+  is a daemon lane; a project without one never gets tasks. **xiulian is just
+  a lane** — literature is just a lane; research projects are future lanes.
 - The doorbell stops hardcoding `[literature, xiulian]` and reads the registry
   (new agents appear without code edits).
 - Unknown agent → the letter goes to `from-unknown` (the known bug item gets
   fixed by the registry).
+- Long-work lifecycles are generic: `wait_for: job:<run_id>` re-delivers the
+  ticket when the poller's notice lands.
 
 ## The missing connector: the idea-ticket format
 
@@ -134,10 +153,12 @@ attached) → accepted/rejected by the human. Only `open` tickets auto-run.
    a `ticket.example.md` under xiulian's inbox. (Docs only; no code.)
 2. **Agent registry** — `agent.yaml` schema + the daemon reads it; doorbell
    reads the registry instead of the hardcoded pair. Fixes `from-unknown`.
-3. **xiulian builder lane** — daemon-side handler for `ticket: idea`:
-   branch → prototype → unit suite → optional replay-eval arm → reply letter
-   with the gate report. This is the biggest build (a new
-   `idea_runner` in the daemon beside `default_runner`).
+   With this the daemon IS the general activator — every lane, including
+   xiulian, is just a registry entry.
+3. **Ticket workflow content** — xiulian's rules/skills gain the idea-ticket
+   workflow (branch, prototype, gate, reply letter shape). This is prose +
+   the `wait_for` field; the only code is the daemon's `wait_for` re-delivery
+   (a ~30-line watcher over the existing job-notices file).
 4. **Scheduled literature sweep** — a `schedule` section in agent.yaml
    (`every: 3d`) + the daemon's timer. Cheap once the registry exists.
 5. **End-to-end smoke** — one hand-written idea ticket through the whole
