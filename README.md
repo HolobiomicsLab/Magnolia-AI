@@ -286,9 +286,9 @@ documented in [`docs/memory.md`](docs/memory.md).
 
 Start with the **[onboarding guide](docs/getting-started.md)** for platform checks,
 OpenCode installation, credentials and a first-session/restart exercise. The supplied
-shell path expects Python 3.11+, Git, Bash, GNU coreutils, curl, `setsid` and OpenCode.
-Linux is the reference environment; macOS needs additional shell utilities and may
-need a manually supervised tools server. Scientific programs are installed separately.
+shell path expects Python 3.11+, Git, Bash, curl and OpenCode. Linux is the reference
+environment; stock macOS also runs the launcher and tools daemon (see the guide for what
+has been exercised there). Scientific programs are installed separately.
 
 The main model is configured in OpenCode. Background memory uses Magnolia's separate
 Python client and credentials; an OpenCode subscription/login does not configure it.
