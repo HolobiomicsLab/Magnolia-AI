@@ -114,6 +114,20 @@ Do not launch until all four pass:
 - Failures are published alongside successes (they reported 0/90 next to the wins).
 - Claims carry their caveat: what was measured, what was not, what remains untested.
 
+## 4.5 Watch panel and epoch discipline
+
+Settled by adversarial panel 2026-10-08 (verdict: `projects/xiulian/runs/2026-10-08_debate-campaign-watch-glm/verdict.md`). Two layers, two cadences, two authority levels:
+
+**L0 — integrity layer (daemon-owned, no LLM, cannot be steered).** Wall-clock tick (~30 min) AND every stage boundary. Three signals earn STOP-THE-LINE (pause the stage, write a stop letter, resume only on editor ack — the stop is inert, never a state modification): instrument-pin mismatch (resolved corpus/config/judge/memory-state vs the epoch manifest), dead end-to-end known-answer check (a real judge call on a known accept/reject pair — a URL ping would have passed the judge-retirement incident), job-terminal violation (job past `time_limit`+margin; a `wait_for` parking line surviving a terminal record). Everything else (inflow rates, dup/dead-weight shares, recurrence counts, retrieval utilization) is ADVISORY: statistical counters with hand-set thresholds false-stop on noise, and a watch that halts science three times gets turned off.
+
+**L1 — semantic layer (supervisor + editor, per stage gate).** Decision-record completeness; kill-ledger integrity; raw-context access check; retrieval fire→decision-change join (never raw fire counts); the standing anomaly question.
+
+**Epoch manifest** (`campaign-epoch.json`, per stage — no manifest, no stage start): Magnolia commit, **memory-state hash** (same code + different memory state is a different instrument), corpus id/hash, judge model id, config hash. Infra changes land ONLY at stage boundaries, as classified letters into the campaign inbox — plumbing (dead-instrument hotfix) / gate (threshold or predicate) / guidance (retrieval behavior) — each stating its expected direction of effect on the watched counters. Gate-like plumbing (judge swap) requires known-answer re-certification before the stage resumes. Chemistry/acceptance gates are frozen in the brief and never amendable by a Magnolia-side letter. No self-measurement: a Magnolia change is evaluated on the frozen-corpus replay eval or the next campaign — never by the campaign it runs under.
+
+**Watchlist** (`watchlist.md`): rows typed `observation` or `gate`. Gate rows frozen per epoch. Observations grow at any gate via the standing anomaly question — asked worker-first, cold, about the work ("what did you see that was not in the brief?"), from raw context; the worker never sees the watch; the answer reaches the supervisor only after the supervisor's own answer is written (write order enforced, not promised). Empty answers are valid, counted, and the empty-rate is reported. Hard cap ~12 active items; never-fired items get mandatory review. New counters that read zero while their channel shows traffic are an integrity alarm, not success.
+
+**Bias ledger** (`bias-ledger.md`): one row per change — date, epoch, commit delta, subsystem, hypothesized bias direction, counters affected, decision. Claims spanning epochs are marked contaminated unless they survive a rerun under one config. Noise band: measured pre-launch (N≥3 unchanged-instrument runs on the frozen corpus) for the corpus metrics, and sampled by the L0 tick for live counters (qualitative until epoch 2 — labeled as such).
+
 ## Common mistakes
 
 | Mistake | Correct |
