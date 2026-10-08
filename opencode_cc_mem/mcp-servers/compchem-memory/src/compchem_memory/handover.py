@@ -57,6 +57,20 @@ _TOUCHED_RE = re.compile(r"\(touched (\d{4}-\d{2}-\d{2})\)")
 _DUE_DATE_RE = re.compile(r"~(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})\b")  # narrow: only ~-prefixed dates are deadlines
 _WORKING_HEADINGS = ("## Done", "## In progress", "## To do", PARKED_HEADING)
 
+# ---- reconcile (2026-10-08): Done <-> not-started contradiction, flag-only ----
+# A '## Done' record and a working item still calling that work unbuilt is a
+# state bug the merge LLM must resolve (prompt rule) and the validator flags
+# (deterministic net). Never auto-delete: false-fresh silently loses a task;
+# false-stale costs one look.
+_RECONCILE_NEGATIVE_RE = re.compile(
+    r"\b(?:not started|not begun|unbuilt|awaiting build"
+    r"|nothing (?:has been )?(?:done|built))\b", re.IGNORECASE)
+_RECONCILE_STOPWORDS = frozenset(
+    "this that with from have been were will must when then item items work "
+    "works status progress session sessions project projects touched merged "
+    "next rest still pending started waiting".split())
+RECONCILE_MIN_SHARED_TOKENS = 2
+
 HANDOVER_MERGE_PROMPT = """You maintain a ROLLING HANDOVER for a computational-chemistry
 agent project, so the next session knows exactly where the work stands. You are given the
 CURRENT HANDOVER and the NEW SESSION TRANSCRIPT (user/assistant text + reasoning since the
@@ -96,6 +110,12 @@ MERGE RULES:
   item with substantive new content gets today's date. A brand-new item gets today's date.
 - DEDUP: an item lives in exactly ONE section. If the same work appears in two sections,
   keep the more advanced copy and drop the other.
+- RECONCILE: a '## Done' record and a working item contradicting each other is a bug —
+  never keep both. If the transcript (or a Done entry) shows work that an '## In progress'
+  or '## To do' item still calls pending / not started / awaiting build, resolve it in
+  this same merge: move the item to Done, reword it to the true remaining step (e.g.
+  'built <date> — remaining: X'), or drop it under the DROP rule. Items listed under
+  RECONCILE FLAGS below MUST be resolved this merge.
 - SIZE: keep the handover compact — it must stay well under ~150 lines. In '## Done', full
   detail (numbers, paths, IDs) ONLY for items this transcript worked on; compress every other
   Done item to ONE line ("what — key result"). The details live in the distilled memory
@@ -601,6 +621,65 @@ def _strip_leading_header(state_text: str) -> str:
     return "\n\n".join(out)
 
 
+def _salient_tokens(text: str) -> set[str]:
+    """Content words for the reconcile overlap test: lowercase, ≥4 chars,
+    minus generic project vocabulary that co-occurs in every item."""
+    return {w for w in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{3,}", text.lower())
+            if w not in _RECONCILE_STOPWORDS}
+
+
+def scan_reconcile_flags(state_text: str) -> list[tuple[str, str, frozenset]]:
+    """Detect Done ↔ working-section contradictions: an In progress / To do
+    item claiming its work is NOT STARTED while a Done item covers the same
+    topic (≥ RECONCILE_MIN_SHARED_TOKENS shared salient tokens). Flag-only.
+
+    Deliberately narrow: purely semantic contradictions — different wording,
+    zero shared tokens, e.g. 'P3 campaign rail — rest not started' vs
+    'Daemon build (3913ddc)' — are NOT caught; the merge-prompt RECONCILE
+    rule is the catch for those. This scan is the deterministic net for
+    lexical overlap the LLM can be held to mechanically."""
+    _, sections = _parse_handover_sections(state_text)
+    done_items: list[tuple[str, set[str]]] = []
+    done_body = sections.get("## Done")
+    if done_body:
+        for chunk in _split_items("## Done\n" + done_body)[1]:
+            done_items.append((_normalize_item(chunk), _salient_tokens(chunk)))
+    flags: list[tuple[str, str, frozenset]] = []
+    if not done_items:
+        return flags
+    for heading in ("## In progress", "## To do"):
+        body = sections.get(heading)
+        if not body:
+            continue
+        for chunk in _split_items(heading + "\n" + body)[1]:
+            if not _RECONCILE_NEGATIVE_RE.search(chunk):
+                continue
+            w_tokens = _salient_tokens(chunk)
+            for d_text, d_tokens in done_items:
+                shared = w_tokens & d_tokens
+                if len(shared) >= RECONCILE_MIN_SHARED_TOKENS:
+                    flags.append((_normalize_item(chunk), d_text,
+                                  frozenset(shared)))
+    return flags
+
+
+def _reconcile_block(state_text: str) -> str:
+    """Injection fed to the merge LLM when the live state carries contradicting
+    pairs — same shape as the hold-back block, but mandatory to resolve."""
+    flags = scan_reconcile_flags(state_text)
+    if not flags:
+        return ""
+    lines = [
+        "=== RECONCILE FLAGS (these working items claim work is 'not started' "
+        "while '## Done' records it; you MUST resolve each this merge: move to "
+        "Done, reword to the true remaining step, or drop under the DROP rule) ==="
+    ]
+    for w_item, d_item, shared in flags:
+        lines.append(f"- {w_item[:140]}  ⇄ Done: {d_item[:140]} "
+                     f"(shared: {', '.join(sorted(shared))})")
+    return "\n\n" + "\n".join(lines)
+
+
 def _post_merge_validate(candidate: str, prev_text: str, store: Path,
                          project_dir: str) -> str:
     """Deterministic post-merge enforcement of the schema-v2 contract.
@@ -692,6 +771,16 @@ def _post_merge_validate(candidate: str, prev_text: str, store: Path,
                 notices.append((item[:80],
                                 f"handover: date-bounded item past due ({due})"))
                 break
+
+    # 3. reconcile scan: Done ↔ not-started contradiction (flag-only). The
+    #    candidate is POST-merge output — a notice here means the merge LLM
+    #    failed to resolve a contradiction it was told about (or one it
+    #    created), which is exactly the alarm we want.
+    for w_item, d_item, shared in scan_reconcile_flags(body):
+        notices.append((w_item[:80],
+                        "handover: contradiction? working item says not-started "
+                        "while Done records similar work (shared: "
+                        + ", ".join(sorted(shared)) + ")"))
 
     for quote, summary in notices:
         push_distill_notice(project_dir, quote=quote, summary=summary)
@@ -885,6 +974,7 @@ def generate_handover(
             + "\n\n=== NEW SESSION TRANSCRIPT (since last handover) ===\n"
             + transcript
             + holdback_block
+            + _reconcile_block(base)
         )
         # deepseek-v4-flash role-plays the transcript (DSML tool-call echo) or
         # burns the budget on reasoning unless thinking is disabled; the

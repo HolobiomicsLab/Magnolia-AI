@@ -4,8 +4,10 @@ Covers: the A/B negative control on the real 2026-10-08 state-file fixture
 (v1 drops ALL Done items on overflow; v2 must keep the newest), the fixed
 boot-context composition (header → Done reserve → In progress → To do → index
 line), the post-merge validator (caps, touched tags, date-due scan, ledger),
-merge-time hold-back eligibility (dormancy-safe by construction), and the
-boot-only project-tier compaction flag."""
+merge-time hold-back eligibility (dormancy-safe by construction), the
+boot-only project-tier compaction flag, and the reconcile mechanism (Done ↔
+not-started contradiction: prompt rule + deterministic flag-only scan, with
+the real incident pair as an honest negative control)."""
 
 import json
 from pathlib import Path
@@ -224,6 +226,121 @@ def test_mapping_session_dates_dedup_and_sort(tmp_path):
             {"ts": "bad", "opencode_session_id": "d"}]
     p.write_text("".join(json.dumps(r) + "\n" for r in rows))
     assert hv._mapping_session_dates(p) == ["2026-10-01", "2026-10-08"]
+
+
+# ---- reconcile scan (Done <-> not-started contradiction, flag-only) ------------
+
+
+def test_reconcile_scan_flags_not_started_vs_done():
+    state = (
+        "## Done\n- Semantic recall scorer built (b2cd45e) + report wiring; "
+        "arm3 measured. (touched 2026-10-08)\n\n"
+        "## In progress\n- hsc70 bake-off — semantic scorer not started, "
+        "wiring pending. (touched 2026-10-01)\n"
+    )
+    flags = hv.scan_reconcile_flags(state)
+    assert len(flags) == 1
+    w_item, _d_item, shared = flags[0]
+    assert "not started" in w_item
+    assert {"semantic", "scorer"} <= shared
+
+
+def test_reconcile_scan_semantic_gap_is_honest_negative_control():
+    """The REAL 2026-10-08 incident pair: 'P3 campaign rail — rest not started'
+    vs 'Daemon build (3913ddc)'. Zero shared salient tokens, so the
+    deterministic scan deliberately does NOT flag it — the merge-prompt
+    RECONCILE rule is the catch for semantic contradiction. If the scan ever
+    grows smart enough to catch this, flip the assertion."""
+    state = (
+        "## Done\n- **Daemon build (`3913ddc` on exp).** Registry lanes, "
+        "`wait_for: job:<run_id>`, scheduled sweeps, persistent lane sessions; "
+        "21 tests pass. (touched 2026-10-08)\n\n"
+        "## In progress\n- **P3 campaign rail** — telemetry opener merged; "
+        "rest not started. (touched 2026-10-07)\n"
+    )
+    assert hv.scan_reconcile_flags(state) == []
+
+
+def test_reconcile_scan_open_residue_is_not_contradiction():
+    """A genuinely-open follow-up on a built feature must NOT be flagged:
+    'residue open' is not a negative-completion claim."""
+    state = (
+        "## Done\n- **Daemon build (`3913ddc`).** Registry lanes, wait_for, "
+        "scheduled sweeps. (touched 2026-10-08)\n\n"
+        "## In progress\n- **Agents daemon follow-ups.** COMPCHEM_TOOLS_PORT "
+        "inheritance residue open. (touched 2026-10-08)\n"
+    )
+    assert hv.scan_reconcile_flags(state) == []
+
+
+def test_reconcile_block_lists_pairs_and_clears_when_resolved():
+    contradicting = (
+        "## Done\n- semantic scorer built and wired into the report "
+        "(touched 2026-10-08)\n\n"
+        "## To do\n- build the semantic scorer — not started (touched 2026-10-01)\n"
+    )
+    block = hv._reconcile_block(contradicting)
+    assert block.startswith("\n\n=== RECONCILE FLAGS")
+    assert "semantic" in block and "scorer" in block
+    assert "Done:" in block                       # pairs the two sides
+    resolved = contradicting.replace(
+        "build the semantic scorer — not started (touched 2026-10-01)",
+        "re-register the semantic scorer as official metric (touched 2026-10-08)")
+    assert hv._reconcile_block(resolved) == ""
+    assert hv._reconcile_block("## Done\n- unrelated\n") == ""
+
+
+def test_validator_reconcile_notice_fires_only_on_unresolved_candidate(proj):
+    # candidate still carries the contradiction -> notice
+    bad = ("## Done\n- semantic scorer built (touched 2026-10-08)\n\n"
+           "## In progress\n- semantic scorer not started (touched 2026-10-01)\n")
+    hv._post_merge_validate(bad, "", proj / ".magnolia", str(proj))
+    notices = (proj / ".magnolia" / ".distill-notices").read_text()
+    assert "contradiction" in notices
+    # a candidate where the merge LLM resolved it -> no notice
+    (proj / ".magnolia" / ".distill-notices").unlink()
+    good = ("## Done\n- semantic scorer built (touched 2026-10-08)\n\n"
+            "## In progress\n- re-register scorer as official metric "
+            "(touched 2026-10-08)\n")
+    hv._post_merge_validate(good, "", proj / ".magnolia", str(proj))
+    q = proj / ".magnolia" / ".distill-notices"
+    assert not q.exists() or "contradiction" not in q.read_text()
+
+
+def test_generate_injects_reconcile_block_then_clears(tmp_path):
+    ensure_project_store(str(tmp_path))
+    store = tmp_path / ".magnolia"
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({"opencode_session_id": "ses_a", "ts": "1"}) + "\n")
+    (store / hv.HANDOVER_STATE_FILE).write_text(
+        "## Done\n- semantic scorer built (touched 2026-10-08)\n\n"
+        "## In progress\n- semantic scorer not started (touched 2026-10-01)\n")
+    export = {"info": {"id": "ses_a"},
+              "messages": [{"info": {"id": "m1", "role": "user"},
+                            "parts": [{"type": "text", "text": "status check"}]}]}
+    captured = {}
+
+    def fake_llm(system, user, max_tokens=2000, **kw):
+        captured["user"] = user
+        # the LLM obeys: resolves the contradiction this merge
+        return ("## Done\n- semantic scorer built (touched 2026-10-08)\n\n"
+                "## In progress\n- re-register scorer as official metric "
+                "(touched 2026-10-08)\n")
+
+    hv.generate_handover(str(tmp_path), exporter=lambda s: export, llm=fake_llm)
+    assert "RECONCILE FLAGS" in captured["user"]        # flagged pair injected
+
+    captured2 = {}
+
+    def fake_llm2(system, user, max_tokens=2000, **kw):
+        captured2["user"] = user
+        return "## Done\n- more work (touched 2026-10-08)\n"
+
+    export2 = {"info": {"id": "ses_a"},
+               "messages": [{"info": {"id": "m2", "role": "user"},
+                             "parts": [{"type": "text", "text": "again"}]}]}
+    hv.generate_handover(str(tmp_path), exporter=lambda s: export2, llm=fake_llm2)
+    assert "RECONCILE FLAGS" not in captured2["user"]   # resolved -> no block
 
 
 # ---- session header ------------------------------------------------------------
