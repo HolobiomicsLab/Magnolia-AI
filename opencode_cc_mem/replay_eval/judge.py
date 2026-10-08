@@ -75,6 +75,27 @@ def resolve_corpus(run_dir, corpus_arg: str | None, default: str) -> str:
     return default
 
 
+def _prior_verdict_stats(judge_dir: Path, name: str, n_cands: int):
+    """Completed verdict file -> its stats dict (resume); else None. Failed
+    parses are never resumed — they get re-judged."""
+    f = judge_dir / f"{name}.json"
+    if not f.exists():
+        return None
+    try:
+        prior = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not (isinstance(prior, dict) and prior.get("parse_ok")):
+        return None
+    verdicts = prior.get("verdicts") or []
+    answered = len(verdicts)
+    return {"n": n_cands, "answered": answered,
+            "missing": max(0, n_cands - answered),
+            "grounded": sum(1 for v in verdicts if v.get("grounded")),
+            "durable": sum(1 for v in verdicts if v.get("durable")),
+            "specific": sum(1 for v in verdicts if v.get("specific"))}
+
+
 def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = None,
               workers: int = 4, temperature: float = 0.0, max_tokens: int = 8000,
               max_attempts: int = 2):
@@ -101,6 +122,9 @@ def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = No
         cands = by_slice.get(name, [])
         if not cands:
             return name, {"n": 0, "answered": 0, "missing": 0}
+        prior = _prior_verdict_stats(judge_dir, name, len(cands))
+        if prior is not None:
+            return name, prior          # resume: completed slice, no LLM call
         user, _ = _blind_payload(slices[name], cands)
         attempts = []
         for _ in range(max(1, max_attempts)):

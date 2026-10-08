@@ -85,3 +85,21 @@ def test_resolve_corpus_flag_beats_recorded_beats_default(tmp_path):
     assert resolve_corpus(run, None, "PKG/corpus") == "replay_eval/corpus/hsc70_bakeoff"
     # explicit flag wins over everything
     assert resolve_corpus(run, "other/corpus", "PKG/corpus") == "other/corpus"
+
+
+def test_prior_verdict_stats_resume_and_rerules(tmp_path):
+    from replay_eval.judge import _prior_verdict_stats
+    jd = tmp_path / "judge"
+    jd.mkdir()
+    # completed parse -> resumed with recomputed stats, no LLM needed
+    (jd / "s1.json").write_text(json.dumps(
+        {"parse_ok": True, "verdicts": [{"id": "a", "grounded": True, "durable": True},
+                                        {"id": "b", "grounded": True}]}))
+    stats = _prior_verdict_stats(jd, "s1", 3)
+    assert stats["answered"] == 2 and stats["missing"] == 1
+    assert stats["grounded"] == 2 and stats["durable"] == 1
+    # failed parse -> None (re-judged)
+    (jd / "s2.json").write_text(json.dumps({"parse_ok": False, "verdicts": []}))
+    assert _prior_verdict_stats(jd, "s2", 2) is None
+    # missing file -> None
+    assert _prior_verdict_stats(jd, "s3", 1) is None
