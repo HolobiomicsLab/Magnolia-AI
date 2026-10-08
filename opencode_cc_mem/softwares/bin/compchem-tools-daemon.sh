@@ -77,6 +77,8 @@ start() {
   # Runs as its own session leader so it survives logout. Env is baked into
   # the child-script text (shell functions don't cross into bash -c children).
   SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_RULES_DIR='rules' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
+  # Stdio is detached so the supervisor never holds the caller's pipe open
+  # (`magnolia … | tail` would otherwise wait forever for EOF).
   # setsid(1) is util-linux only; on macOS the venv's python3 calls setsid(2)
   # and execs bash in place, so $! is still the supervisor's pid.
   if command -v setsid >/dev/null 2>&1; then
@@ -91,7 +93,7 @@ start() {
       echo \"[supervisor] \$(date +%Y-%m-%dT%H:%M:%S%z) server exited rc=\$?; restarting in 2s\" >> '$OUT_LOG'
       sleep 2
     done
-  " &
+  " </dev/null >/dev/null 2>&1 &
   sup_pid=$!
   echo "$sup_pid" > "$PIDFILE"
   # Wait for the HTTP endpoint to come up (server import + bind can take a
