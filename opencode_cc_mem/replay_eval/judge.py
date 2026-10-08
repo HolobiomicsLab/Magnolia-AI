@@ -57,6 +57,24 @@ def _merge_verdicts(attempts):
     return [merged[k] for k in sorted(merged)]
 
 
+def resolve_corpus(run_dir, corpus_arg: str | None, default: str) -> str:
+    """Corpus precedence for the judge step: --corpus flag > the corpus the
+    run itself recorded (summary.json corpus_dir) > package default. The
+    package default bit us twice on 2026-10-08: the run side used the stale
+    21-slice top-level gold, and the judge side then 'judged' zero
+    candidates against slice names the run never produced."""
+    if corpus_arg:
+        return corpus_arg
+    try:
+        s = json.loads((Path(run_dir) / "summary.json").read_text(encoding="utf-8"))
+        recorded = s.get("corpus_dir")
+        if recorded:
+            return recorded
+    except (OSError, json.JSONDecodeError):
+        pass
+    return default
+
+
 def judge_run(run_dir, corpus, judge_model: str, judge_provider: str | None = None,
               workers: int = 4, temperature: float = 0.0, max_tokens: int = 8000,
               max_attempts: int = 2):

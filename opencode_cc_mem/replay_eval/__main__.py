@@ -24,7 +24,8 @@ def main(argv=None):
     p_judge.add_argument("--provider", default=None)
     p_judge.add_argument("--temperature", type=float, default=0.0)
     p_judge.add_argument("--max-tokens", type=int, default=8000)
-    p_judge.add_argument("--corpus", default=str(PKG_DIR / "corpus"))
+    p_judge.add_argument("--corpus", default=None,
+                         help="defaults to the corpus recorded in the run's summary.json")
 
     p_rep = sub.add_parser("report", help="render REPORT.md for a run dir")
     p_rep.add_argument("--run", required=True)
@@ -60,7 +61,8 @@ def main(argv=None):
     if args.cmd == "judge":
         from replay_eval import judge
 
-        corpus = loader.load_corpus(Path(args.corpus))
+        corpus = loader.load_corpus(Path(
+            judge.resolve_corpus(args.run, args.corpus, str(PKG_DIR / "corpus"))))
         res = judge.judge_run(args.run, corpus, args.model, args.provider,
                               temperature=args.temperature, max_tokens=args.max_tokens)
         t = res["totals"]

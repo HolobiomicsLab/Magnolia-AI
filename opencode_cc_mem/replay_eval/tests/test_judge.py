@@ -71,3 +71,17 @@ def test_report_renders_without_judge(tmp_path):
     assert "baseline" in md and "Not judged yet" in md
     out = report.write_report(run)
     assert out.exists()
+
+
+def test_resolve_corpus_flag_beats_recorded_beats_default(tmp_path):
+    import json
+    from replay_eval.judge import resolve_corpus
+    run = tmp_path / "run"
+    run.mkdir()
+    # no summary -> package default
+    assert resolve_corpus(run, None, "PKG/corpus") == "PKG/corpus"
+    # recorded corpus wins over default
+    (run / "summary.json").write_text(json.dumps({"corpus_dir": "replay_eval/corpus/hsc70_bakeoff"}))
+    assert resolve_corpus(run, None, "PKG/corpus") == "replay_eval/corpus/hsc70_bakeoff"
+    # explicit flag wins over everything
+    assert resolve_corpus(run, "other/corpus", "PKG/corpus") == "other/corpus"
