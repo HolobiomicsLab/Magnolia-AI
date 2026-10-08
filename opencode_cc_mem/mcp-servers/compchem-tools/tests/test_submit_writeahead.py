@@ -40,6 +40,9 @@ def test_submit_writes_manifest_into_local_run_dir(fake_subprocess, tmp_path, mo
     work = tmp_path / "work"
     monkeypatch.setattr(ssh_slurm, "_PROJECT_MANAGER",
                         ssh_slurm.ProjectManager(global_base=tmp_path / ".magnolia"))
+    # The packaged profile leaves the account empty (it is per-user, set in
+    # ~/.config/magnolia/clusters.yaml); pin one so the test is hermetic.
+    monkeypatch.setitem(ssh_slurm.CLUSTER_CONFIG["azzurra"], "default_account", "test-account")
     result = ssh_slurm.submit(
         command="xtb x.xyz",
         working_dir=str(work),
