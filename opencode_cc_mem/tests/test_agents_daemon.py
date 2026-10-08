@@ -479,6 +479,65 @@ def test_non_ticket_letter_ignores_trailer(tmp_path):
     assert d.get_status(task.read_text()) == "done"
 
 
+# ---- panel micro-fixes: per-lane model, --once lock, session self-heal
+
+
+def test_per_lane_model_forwarded_only_when_set(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox)
+    seen = {}
+
+    def runner(agent, project_dir, root_, prompt, timeout_s, **kw):
+        seen["model"] = kw.get("model")
+        return "FINAL ANSWER: ok"
+
+    d.handle_task(task, "literature", root, runner=runner,
+                  lane_cfg={"enabled": True, "model": "zai-coding-plan/glm-5.3"})
+    assert seen["model"] == "zai-coding-plan/glm-5.3"
+    # no model in lane cfg -> kwarg absent (5-arg test runners keep working)
+    d.handle_task(task, "literature", root, runner=runner,
+                  lane_cfg={"enabled": True})
+    assert seen["model"] is None
+
+
+def test_once_locks_by_default_and_force_overrides(tmp_path, capsys, monkeypatch):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True})
+    d.acquire_lock(root)                      # simulate the live daemon holding the lock
+    assert d.main(["--once", "--root", root]) == 0
+    assert "already running" in capsys.readouterr().out
+    monkeypatch.setattr(d, "scan_once", lambda *a, **k: [])
+    assert d.main(["--once", "--root", root, "--force"]) == 0
+
+
+def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
+    """A stale stored session id made every future letter fail on resume with
+    no self-heal (panel A5 brick facet): the daemon must clear the id and
+    retry the same letter in a fresh session, once."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    state = d.load_state(root)
+    state.setdefault("lanes", {}).setdefault("xiulian", {})["session_id"] = "ses_stale"
+    d.save_state(root, state)
+    calls = []
+
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log):
+        calls.append(list(extra_args))
+        if "--session" in extra_args:
+            return {"rc": 1, "session_id": None, "final_text": "",
+                    "n_tools": 0, "all_text": "", "stderr_tail": "stale"}
+        return {"rc": 0, "session_id": "ses_fresh", "final_text": "FINAL ANSWER: ok",
+                "n_tools": 1, "all_text": "FINAL ANSWER: ok", "stderr_tail": ""}
+
+    monkeypatch.setattr(d, "_run_once", fake_run_once)
+    out = d.default_runner("xiulian", str(proj), root, "do the thing", 60)
+    assert out == "FINAL ANSWER: ok"
+    assert len(calls) == 2
+    assert "--session" in calls[0] and "--session" not in calls[1]   # fresh retry
+    assert d.load_state(root)["lanes"]["xiulian"]["session_id"] == "ses_fresh"
+
+
 def test_scheduled_sweep_letter_written_once(tmp_path):
     root = _root(tmp_path)
     _lane(root, "literature", {"enabled": True, "schedule_days": 1,
