@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from compchem_memory.tiers.project import ProjectManager
+
 from compchem_tools.tools._resources import apply_tool_memory_floor
 from compchem_tools.tools.recall_gate import recall_gate
 
@@ -742,14 +743,10 @@ def _local_group_alive(pid: int) -> bool:
     try:
         entries = os.listdir("/proc")
     except OSError:
-        # No /proc (non-Linux): fall back to a killpg probe.
-        try:
-            os.killpg(pid, 0)
-            return True
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
+        # No /proc (macOS, BSD): list (pgid, state) with ps. A bare
+        # killpg(pid, 0) probe cannot be used there: macOS answers EPERM for
+        # a group whose only members are zombies, which would read as alive.
+        return _local_group_alive_ps(pid)
 
     for entry in entries:
         if not entry.isdigit():
@@ -763,6 +760,33 @@ def _local_group_alive(pid: int) -> bool:
         except (OSError, IndexError, ValueError):
             continue
         if pgid == pid and state != "Z":
+            return True
+    return False
+
+
+def _local_group_alive_ps(pid: int) -> bool:
+    """``_local_group_alive`` for systems without /proc, via POSIX ``ps``."""
+    import os
+    import subprocess
+
+    try:
+        listing = subprocess.run(
+            ["ps", "-A", "-o", "pgid=,stat="],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        # ps unavailable: last-resort signal probe (may count zombies).
+        try:
+            os.killpg(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    for line in listing.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] == str(pid) and not fields[1].startswith("Z"):
             return True
     return False
 
@@ -830,11 +854,14 @@ def _cancel_local(job_id: str) -> dict[str, Any]:
             except ProcessLookupError:
                 pass
             except PermissionError:
-                return {
-                    "success": False,
-                    "error": f"Permission denied to kill process group {pid}",
-                    "signals_sent": signals_sent,
-                }
+                # macOS answers EPERM when only zombies remain in the group;
+                # that group is already dead, so only a live one is an error.
+                if _local_group_alive(pid):
+                    return {
+                        "success": False,
+                        "error": f"Permission denied to kill process group {pid}",
+                        "signals_sent": signals_sent,
+                    }
             time.sleep(POLL_S)
 
         return {
