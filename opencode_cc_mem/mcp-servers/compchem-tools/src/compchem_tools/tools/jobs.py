@@ -683,7 +683,8 @@ def _submit_local(
                 stdout=out_f,
                 stderr=err_f,
                 start_new_session=True,  # detach from the MCP server's group
-                env={**os.environ, "OMP_NUM_THREADS": str(ncores)},
+                env={**os.environ, "OMP_NUM_THREADS": str(ncores),
+                     "PYTHONUNBUFFERED": "1"},  # long arms: logs must stream (2026-10-08: 2 h of empty .out)
             )
 
         job_id = f"local_{proc.pid}_{sentinel_uid}"
