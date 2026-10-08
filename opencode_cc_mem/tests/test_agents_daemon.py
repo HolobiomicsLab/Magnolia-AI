@@ -501,14 +501,20 @@ def test_per_lane_model_forwarded_only_when_set(tmp_path):
     assert seen["model"] is None
 
 
-def test_once_locks_by_default_and_force_overrides(tmp_path, capsys, monkeypatch):
+def test_once_locks_by_default_and_force_overrides(tmp_path, monkeypatch):
+    """Behavioral contract: while the lock is held elsewhere, a --once scan
+    must NOT run; --force overrides. (acquire_lock is monkeypatched rather
+    than flock-held: same-process double-flock semantics are unreliable.)"""
     root = _root(tmp_path)
     _lane(root, "literature", {"enabled": True})
-    d.acquire_lock(root)                      # simulate the live daemon holding the lock
+    scans = []
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: None)   # lock held elsewhere
+    monkeypatch.setattr(d, "scan_once", lambda *a, **k: scans.append(1) or [])
     assert d.main(["--once", "--root", root]) == 0
-    assert "already running" in capsys.readouterr().out
-    monkeypatch.setattr(d, "scan_once", lambda *a, **k: [])
+    assert scans == []                        # lock held -> no scan
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: 5)      # lock acquired
     assert d.main(["--once", "--root", root, "--force"]) == 0
+    assert len(scans) == 1                    # force scans despite the lock
 
 
 def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
