@@ -662,7 +662,13 @@ def _submit_local(
         log_err = wdir / f"{job_name}.err"
         magnolia_dir = wdir / ".magnolia"
         magnolia_dir.mkdir(parents=True, exist_ok=True)
-        sentinel = magnolia_dir / "local_exit_code"
+        # Per-job sentinel: a single shared path made job N read job N-1's
+        # stale exit code as its own (found 2026-10-08: a 2-hour arm was
+        # stamped completed/pass 4 minutes after launch, which prematurely
+        # fired a wait_for ticket hop downstream). Unique per job by
+        # construction; the poller reads the path from the run record.
+        sentinel_uid = uuid.uuid4().hex[:8]
+        sentinel = magnolia_dir / f"local_exit_code_{sentinel_uid}"
 
         # Run the command, capture its exit code, write it to the sentinel.
         # `rc=$?` is captured immediately after the command so a compound
@@ -680,7 +686,7 @@ def _submit_local(
                 env={**os.environ, "OMP_NUM_THREADS": str(ncores)},
             )
 
-        job_id = f"local_{proc.pid}_{uuid.uuid4().hex[:6]}"
+        job_id = f"local_{proc.pid}_{sentinel_uid}"
         return {
             "success": True,
             "job_id": job_id,
