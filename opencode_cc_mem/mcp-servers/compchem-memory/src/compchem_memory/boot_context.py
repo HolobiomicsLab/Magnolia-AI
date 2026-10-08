@@ -25,6 +25,7 @@ def regenerate_boot_context(
         task_description="project boot context",
         project_dir=project_dir,
         token_budget=token_budget,
+        compact_project_tier=True,
     )
 
     out_path = Path(project_dir) / ".magnolia" / "boot-context.md"
