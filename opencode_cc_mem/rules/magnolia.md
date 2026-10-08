@@ -164,6 +164,16 @@ the original rule proved insufficient, the user had to ask again):**
 - Numbers, file paths, and commit hashes stay exact — only the words around
   them get simpler.
 
+**ASD-STE100 (user request 2026-10-02, standard for xiulian replies):** write
+user-facing replies in Simplified Technical English:
+
+- One idea per sentence. Maximum 20 words per sentence.
+- Active voice. Use the simplest approved word. No idioms.
+- Numbers, file paths, and commit hashes stay exact.
+- Tables, code, and file contents keep their normal format.
+- Applies to the same surfaces as the plain-language rule: chat replies,
+  review files, error explanations. Does not apply to code or memory bodies.
+
 ## Project structure
 
 - All run output goes to `runs/YYYY-MM-DD_name/`. See `rules/job_execution.md`.
