@@ -32,7 +32,8 @@ def test_render_no_tombstone_section_returns_all():
     assert "a" in out and "b" in out
 
 
-# ---- budget_handover_block (section-aware, tail-preserving) ------------------
+# ---- budget_handover_block_v1 (v1 contract, kept for the A/B negative control;
+#      the v2 contract lives in tests/test_handover_v2.py) ----------------------
 
 def _big_block(items: int = 6) -> str:
     done = "\n".join(
@@ -48,12 +49,12 @@ def _big_block(items: int = 6) -> str:
 
 def test_budget_block_passthrough_under_budget():
     block = _big_block()
-    assert hv.budget_handover_block(block, len(block) + 1) == block
+    assert hv.budget_handover_block_v1(block, len(block) + 1) == block
 
 
 def test_budget_block_keeps_priority_sections_and_newest_done():
     block = _big_block()
-    out = hv.budget_handover_block(block, 800)
+    out = hv.budget_handover_block_v1(block, 800)
     assert "In progress" in out and "actively tuning fle_sta_2" in out
     assert "To do" in out and "caprieval" in out
     assert "Key files" in out
@@ -77,7 +78,7 @@ def test_budget_block_overflow_keeps_actionable_sections_whole():
         "## To do\n- final next step\n- second next step\n\n"
         "## Key files\n- runs/2026-06-15_kferq/\n"
     )
-    out = hv.budget_handover_block(block, 320)
+    out = hv.budget_handover_block_v1(block, 320)
     assert out.startswith("## In progress")            # boundary-clean start
     assert "## Key files" not in out                   # reference section dropped
     assert "full handover in .magnolia/.handover-state.md" in out
@@ -101,7 +102,7 @@ def test_budget_block_overflow_elides_oldest_items_first():
         "## To do\n- next\n\n"
         "## Key files\n- " + "p" * 400 + "\n"
     )
-    out = hv.budget_handover_block(block, 180)
+    out = hv.budget_handover_block_v1(block, 180)
     assert new_item in out
     assert old_item not in out
     original_items = {old_item, new_item, "- next"}
@@ -116,7 +117,7 @@ def test_budget_block_overflow_tiny_budget_still_boundary_clean():
         "## In progress\n- alpha " + "z" * 100 + "\n\n"
         "## To do\n- gamma " + "z" * 100 + "\n"
     )
-    out = hv.budget_handover_block(block, 150)
+    out = hv.budget_handover_block_v1(block, 150)
     assert out.startswith("## ")
     assert "full handover in .magnolia/.handover-state.md" in out
     assert "z" * 50 not in out                         # no fragment of any item
@@ -125,10 +126,13 @@ def test_budget_block_overflow_tiny_budget_still_boundary_clean():
 def test_merge_prompt_has_size_and_stale_expiry_rules():
     """Contract: the merge LLM is told to compress old Done items, to cap
     their count, and to expire twice-stale items to tombstones
-    (anti-windup, 2026-08-28; Done cap 2026-09-16)."""
+    (anti-windup, 2026-08-28; code-enforced caps 2026-10-08)."""
     assert "ONE line" in hv.HANDOVER_MERGE_PROMPT
     assert "STALE EXPIRY" in hv.HANDOVER_MERGE_PROMPT
-    assert "at most the 10 most recent" in hv.HANDOVER_MERGE_PROMPT
+    assert "at most 10 Done" in hv.HANDOVER_MERGE_PROMPT
+    assert "Parked / Held" in hv.HANDOVER_MERGE_PROMPT     # schema v2
+    assert "(touched YYYY-MM-DD)" in hv.HANDOVER_MERGE_PROMPT
+    assert "NO HEADER" in hv.HANDOVER_MERGE_PROMPT
 
 
 # ---- read_handover_block ----------------------------------------------------

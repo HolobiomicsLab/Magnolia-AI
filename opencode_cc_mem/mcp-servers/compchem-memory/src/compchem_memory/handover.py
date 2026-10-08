@@ -22,8 +22,10 @@ path; the boot worker additionally wraps each step in try/except, so even a hard
 filesystem error in the final write cannot crash the launch.
 """
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -41,6 +43,20 @@ HANDOVER_SESSION_LIST_LIMIT = 5000                   # `session list -n`; a list
 HANDOVER_SESSION_LIST_TIMEOUT = 30                   # seconds for the one listing call per boot
 TOMBSTONE_HEADING = "## Won't-do / Archived"
 
+# ---- schema v2 (2026-10-08; see docs/boot-context-handover-v2-plan.md) ----
+PARKED_HEADING = "## Parked / Held"
+DONE_CAP = 10                                        # code-enforced (the prompt rule alone was not honored: 13 observed)
+IN_PROGRESS_CAP = 15
+TODO_CAP = 20
+RESERVE_DONE_CHARS = 1500                            # boot-context slice guaranteed to the newest Done items
+HOLD_BACK_MIN_UNCHANGED_MERGES = 3                   # N: consecutive merges carrying an item unchanged
+HOLD_BACK_MIN_SESSIONS_SINCE = 5                     # M: mapping sessions since the item's touched date (merge-time aging: a dormant project has 0 merges and never holds back)
+HANDOVER_STALENESS_FILE = ".handover-staleness.json" # per-item {hash: {touched, unchanged_merges}}
+_HANDOVER_HEADER_MAX_CHARS = 400                     # the machine-built "Generated ..." line is capped at this
+_TOUCHED_RE = re.compile(r"\(touched (\d{4}-\d{2}-\d{2})\)")
+_DUE_DATE_RE = re.compile(r"~(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})\b")  # narrow: only ~-prefixed dates are deadlines
+_WORKING_HEADINGS = ("## Done", "## In progress", "## To do", PARKED_HEADING)
+
 HANDOVER_MERGE_PROMPT = """You maintain a ROLLING HANDOVER for a computational-chemistry
 agent project, so the next session knows exactly where the work stands. You are given the
 CURRENT HANDOVER and the NEW SESSION TRANSCRIPT (user/assistant text + reasoning since the
@@ -51,6 +67,7 @@ be empty, except keep '## Won't-do / Archived' verbatim if present):
 - '## Done' — completed work, with the specific result (residues / scores / run dirs / files).
 - '## In progress' — started but not finished, with current state.
 - '## To do' — pending next steps.
+- '## Parked / Held' — items intentionally out of active work (see PARKING rules).
 - '## Stale?' — items carried with no activity (see rules); flag for a keep/kill decision.
 - '## Key files' — paths worth knowing, one per line with a short note.
 - '## Won't-do / Archived' — tombstones; see rules.
@@ -69,13 +86,27 @@ MERGE RULES:
 - STALE EXPIRY: an item already in '## Stale?' that this transcript AGAIN shows no activity
   for → move it to '## Won't-do / Archived' (append "(stale, archived)"). Tombstones never
   re-enter the working sections. This is how the handover prunes itself.
+- PARKING: an item that is user-parked, deferred, gated on something, not started, or marked
+  Optional belongs in '## Parked / Held', ONE line each, keeping its (touched …) tag. Never
+  delete parked items. Never move a parked item back to the working sections unless the
+  transcript shows the user explicitly un-parking it. Items listed under HOLD-BACK ELIGIBLE
+  MAY also move to '## Parked / Held' — allowed, not required.
+- TOUCHED TAGS: end every item in Done / In progress / To do / Parked / Held with
+  '(touched YYYY-MM-DD)'. Keep an unchanged item's existing tag EXACTLY as it was; only an
+  item with substantive new content gets today's date. A brand-new item gets today's date.
+- DEDUP: an item lives in exactly ONE section. If the same work appears in two sections,
+  keep the more advanced copy and drop the other.
 - SIZE: keep the handover compact — it must stay well under ~150 lines. In '## Done', full
   detail (numbers, paths, IDs) ONLY for items this transcript worked on; compress every other
   Done item to ONE line ("what — key result"). The details live in the distilled memory
-  entries; the handover needs the outcome, not the story. Keep at most the 10 most recent
-  Done items — older completed work already lives in the distilled entries and the notebook.
+  entries; the handover needs the outcome, not the story. Caps: at most 10 Done, 15
+  In progress, 20 To do items — when a section is over its cap, drop the OLDEST items first.
+  Order '## Done' NEWEST-FIRST (the newest completed work is the first item under '## Done').
+  'Park / Held' has no cap.
 - NEVER re-add anything listed under '## Won't-do / Archived'. Preserve that section as-is.
 - Ground items in specifics (residues, scores, IDs, run directories, file paths), not vague summaries.
+- NO HEADER: do not write any title or 'Generated …' line before the first '## ' section —
+  the machine adds it.
 
 IGNORE memory-system plumbing: the agent's use of memory_search, memory_get_context,
 consolidation / merge proposals, distillation, promotion, staging, scan_headers, and pending-
@@ -126,8 +157,12 @@ def _split_items(section_body: str) -> tuple[str, list[str]]:
     return header, chunks
 
 
-def budget_handover_block(block: str, char_budget: int) -> str:
-    """Section-aware, tail-preserving compression of the handover view.
+def budget_handover_block_v1(block: str, char_budget: int) -> str:
+    """v1 behavior (superseded 2026-10-08 by ``budget_handover_block``). Kept
+    importable for the A/B negative-control test on the 2026-10-08 fixture:
+    v1 drops ALL Done items when the non-Done sections alone exceed the budget;
+    v2 must keep the newest ones. Delete after level-3 verification
+    (docs/boot-context-handover-v2-plan.md §4 Phase 5).
 
     A naive head-slice (the old behavior) lost exactly the NEWEST content —
     Done is chronological, so its tail is last session's work, and it was cut
@@ -216,6 +251,118 @@ def budget_handover_block(block: str, char_budget: int) -> str:
     if done:
         out.append(done)
     return "\n\n".join(out)
+
+
+def _parse_handover_sections(block: str) -> tuple[str, dict[str, str]]:
+    """Split a handover block into (leading header text, {heading: body}).
+
+    The leading header is everything before the first '## ' line (the
+    machine-built 'Generated …' line; absent in legacy state files)."""
+    header_lines: list[str] = []
+    sections: dict[str, str] = {}
+    cur_heading: str | None = None
+    cur: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("## "):
+            if cur_heading is None:
+                header_lines.extend(cur)
+            else:
+                sections[cur_heading] = "\n".join(cur).strip()
+            cur_heading = line.strip()
+            cur = []
+        else:
+            cur.append(line)
+    if cur_heading is None:
+        header_lines.extend(cur)
+    else:
+        sections[cur_heading] = "\n".join(cur).strip()
+    return "\n".join(header_lines).strip(), sections
+
+
+def budget_handover_block(block: str, char_budget: int) -> str:
+    """v2 (2026-10-08): fixed-composition compression of the handover view.
+
+    Composition, in order: the machine-built session header → the newest Done
+    items (a reserved slice, RESERVE_DONE_CHARS — the failure of 2026-10-08 was
+    exactly this: the newest facts lost while the budget went to reference
+    sections) → '## In progress' → '## To do' → one index line. 'Parked / Held',
+    '## Stale?', '## Key files' and tombstones are NEVER injected; the index
+    line counts what was held back.
+
+    Items are only ever elided WHOLE, oldest-first, and the session header +
+    index line survive any budget — the output may exceed a pathologically
+    small budget by header+index length, never cut mid-line."""
+    header_text, sections = _parse_handover_sections(block)
+    if len(header_text) > _HANDOVER_HEADER_MAX_CHARS:
+        cut = header_text[:_HANDOVER_HEADER_MAX_CHARS]
+        sp = cut.rfind(" ")
+        header_text = cut[: sp if sp > 0 else len(cut)] + " …"
+
+    done_body = sections.get("## Done", "")
+    ip_body = sections.get("## In progress", "")
+    td_body = sections.get("## To do", "")
+    # _split_items expects the '## ' heading as its first line; the parsed
+    # section bodies exclude it, so it is prepended back everywhere below.
+    parked_items = _split_items(PARKED_HEADING + "\n" + sections[PARKED_HEADING])[1] if sections.get(PARKED_HEADING) else []
+    stale_items = _split_items("## Stale?\n" + sections["## Stale?"])[1] if sections.get("## Stale?") else []
+    done_chunks = _split_items("## Done\n" + done_body)[1] if done_body else []
+
+    pieces: list[str] = []
+    used = 0
+    if header_text:
+        pieces.append(header_text)
+        used += len(header_text) + 2
+
+    # Reserved slice: the FIRST Done chunks (the merge contract pins Done
+    # newest-first, and the live state file confirms it: the 2026-10-08 file
+    # lists the latest work at the top). Always keep at least the newest one —
+    # the newest fact must survive even when it alone overflows the reserve.
+    shown_done = 0
+    if done_chunks:
+        kept: list[str] = []
+        spent = 0
+        for c in done_chunks:
+            if kept and spent + len(c) + 2 > RESERVE_DONE_CHARS:
+                break
+            kept.append(c)
+            spent += len(c) + 2
+        pieces.append("\n".join(["## Done", *kept]).strip())
+        used += spent + len("## Done") + 2
+        shown_done = len(kept)
+
+    # Active sections share what remains; In progress fills first (as in v1).
+    elided_active = 0
+    for heading, body in (("## In progress", ip_body), ("## To do", td_body)):
+        if not body:
+            continue
+        sec_header, chunks = _split_items(heading + "\n" + body)
+        avail = char_budget - used - 40 - 2   # 40 ≈ index-line headroom; the exact line is appended below
+        kept = []
+        spent = 0
+        for c in reversed(chunks):
+            if spent + len(c) + 2 > avail:
+                break
+            kept.append(c)
+            spent += len(c) + 2
+        elided_active += len(chunks) - len(kept)
+        if kept:
+            kept.reverse()
+            section = "\n".join([sec_header, *kept]).strip()
+            pieces.append(section)
+            used += len(section) + 2
+
+    held_done = max(0, len(done_chunks) - shown_done)
+    index_bits = []
+    if elided_active:
+        index_bits.append(f"{elided_active} older items elided")
+    index_bits.append(
+        f"held: {held_done} done · {len(parked_items)} parked · "
+        f"{len(stale_items)} stale"
+    )
+    index = ("*(" + " · ".join(index_bits) +
+             " — full handover in .magnolia/.handover-state.md)*")
+    pieces.append(index)
+    return "\n\n".join(pieces)
 
 
 def read_handover_block(store: Path) -> str | None:
@@ -374,6 +521,252 @@ def _migrate_legacy_cursor(store: Path) -> None:
     old.unlink()
 
 
+# ---- schema v2 helpers: touched tags, caps, staleness ledger, header --------
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _normalize_item(text: str) -> str:
+    """Item text with its (touched …) tag stripped and whitespace collapsed —
+    the identity used for unchanged-detection, so a carry-over merge that
+    merely re-prints the tag does not reset the staleness counter."""
+    stripped = _TOUCHED_RE.sub("", text)
+    return " ".join(stripped.split())
+
+
+def _item_key(text: str) -> str:
+    return hashlib.sha1(_normalize_item(text).encode()).hexdigest()[:12]
+
+
+def _load_ledger(store: Path) -> dict:
+    p = Path(store) / HANDOVER_STALENESS_FILE
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_ledger(store: Path, ledger: dict) -> None:
+    atomic_write_text(Path(store) / HANDOVER_STALENESS_FILE,
+                      json.dumps(ledger, indent=1, sort_keys=True) + "\n")
+
+
+def _mapping_session_dates(mapping: Path) -> list[str]:
+    """Deduplicated, sorted YYYY-MM-DD dates of the project's opencode sessions
+    (the mapping rows carry an ISO `ts`). Merge-time aging input: an item's
+    `sessions_since_touched` counts dates STRICTLY AFTER its touched date."""
+    dates: set[str] = set()
+    try:
+        for line in mapping.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ts = json.loads(line).get("ts")
+            except json.JSONDecodeError:
+                continue
+            if isinstance(ts, str) and len(ts) >= 10:
+                dates.add(ts[:10])
+    except OSError:
+        return []
+    return sorted(dates)
+
+
+def _iter_working_items(state_text: str):
+    """Yield (heading, item_text) for every item in the working sections
+    (Done / In progress / To do / Parked / Held). Reference sections
+    (Stale?, Key files, Won't-do) are not tracked."""
+    _, sections = _parse_handover_sections(state_text)
+    for heading in _WORKING_HEADINGS:
+        body = sections.get(heading)
+        if not body:
+            continue
+        for chunk in _split_items(heading + "\n" + body)[1]:
+            yield heading, chunk
+
+
+def _strip_leading_header(state_text: str) -> str:
+    """Remove any non-section content before the first '## ' line (the LLM is
+    told not to emit a header; if it does anyway, the machine replaces it)."""
+    _, sections = _parse_handover_sections(state_text)
+    out = []
+    for heading in ("## Done", "## In progress", "## To do", PARKED_HEADING,
+                    "## Stale?", "## Key files", TOMBSTONE_HEADING):
+        body = sections.get(heading)
+        if body:
+            out.append(heading + "\n" + body)
+    return "\n\n".join(out)
+
+
+def _post_merge_validate(candidate: str, prev_text: str, store: Path,
+                         project_dir: str) -> str:
+    """Deterministic post-merge enforcement of the schema-v2 contract.
+
+    - caps: Done ≤ DONE_CAP, In progress ≤ IN_PROGRESS_CAP, To do ≤ TODO_CAP;
+      overflow is trimmed OLDEST-first with a notice (the prompt rule alone
+      proved soft: 13 Done items observed 2026-10-08).
+    - touched tags: an unchanged item that lost its tag gets it restored from
+      the previous state; a new item gets today; a changed item gets today.
+    - staleness ledger: unchanged_merges per item updated; pruned to items
+      still present.
+    - date-due scan: a ~-prefixed date in the past → notice (narrow regex so
+      commit hashes and date ranges never trigger).
+    - leading header: stripped (the machine re-adds it).
+    Never raises; on any surprise the candidate is returned as-is minus the
+    leading header."""
+    from compchem_memory.distill_log import push_distill_notice
+
+    body = _strip_leading_header(candidate)
+    _, sections = _parse_handover_sections(body)
+    prev_items: dict[str, str] = {}
+    for _h, item in _iter_working_items(prev_text):
+        prev_items.setdefault(_item_key(item), item)
+    ledger = _load_ledger(store)
+    today = _today()
+    new_ledger: dict = {}
+    notices: list[tuple[str, str]] = []
+
+    # 1. caps (oldest-first trim) + touched tags + ledger update
+    rebuilt: dict[str, str] = {}
+    for heading, cap in (("## Done", DONE_CAP),
+                         ("## In progress", IN_PROGRESS_CAP),
+                         ("## To do", TODO_CAP)):
+        sec = sections.get(heading)
+        if not sec:
+            continue
+        sec_header, chunks = _split_items(heading + "\n" + sec)
+        if len(chunks) > cap:
+            dropped = chunks[: len(chunks) - cap]
+            chunks = chunks[len(chunks) - cap:]
+            notices.append((dropped[0][:80],
+                            f"handover: '{heading[3:]}' over cap — {len(dropped)} "
+                            f"oldest item(s) trimmed"))
+        fixed: list[str] = []
+        for chunk in chunks:
+            key = _item_key(chunk)
+            tag = _TOUCHED_RE.search(chunk)
+            prev = prev_items.get(key)
+            if tag:
+                touched = tag.group(1)
+            elif prev is not None:
+                ptag = _TOUCHED_RE.search(prev)
+                touched = ptag.group(1) if ptag else today
+                chunk = chunk.rstrip() + f" (touched {touched})"
+                notices.append((chunk[:80],
+                                "handover: touched tag restored from previous state"))
+            else:
+                touched = today
+                chunk = chunk.rstrip() + f" (touched {touched})"
+            unchanged = prev is not None
+            entry = ledger.get(key) if isinstance(ledger.get(key), dict) else {}
+            merges = (entry.get("unchanged_merges", 0) + 1) if unchanged else 1
+            new_ledger[key] = {"touched": touched,
+                               "unchanged_merges": int(merges),
+                               "excerpt": _normalize_item(chunk)[:100]}
+            fixed.append(chunk)
+        rebuilt[heading] = "\n".join([sec_header, *fixed]).strip()
+
+    kept_headings = [h for h in ("## Done", "## In progress", "## To do",
+                                 PARKED_HEADING, "## Stale?", "## Key files",
+                                 TOMBSTONE_HEADING)
+                     if sections.get(h)]
+    out_parts = []
+    for h in kept_headings:
+        out_parts.append((h + "\n" + rebuilt[h]) if h in rebuilt
+                         else (h + "\n" + sections[h]))
+    body = "\n\n".join(out_parts)
+
+    # 2. date-due scan (~-prefixed dates in the past)
+    for _h, item in _iter_working_items(body):
+        for m in _DUE_DATE_RE.finditer(item):
+            raw = m.group(1)
+            due = raw if len(raw) == 10 else f"{today[:4]}-{raw}"
+            try:
+                overdue = due < today
+            except ValueError:
+                continue
+            if overdue:
+                notices.append((item[:80],
+                                f"handover: date-bounded item past due ({due})"))
+                break
+
+    for quote, summary in notices:
+        push_distill_notice(project_dir, quote=quote, summary=summary)
+    if notices:
+        print(f"[handover] validator: {len(notices)} adjustment(s) on merge",
+              file=sys.stderr)
+    if PARKED_HEADING not in sections:
+        print("[handover] validator: no 'Parked / Held' section in merge "
+              "(accepted; section is optional)", file=sys.stderr)
+    _save_ledger(store, new_ledger)
+    return body
+
+
+def _sessions_since(session_dates: list[str], touched: str) -> int:
+    return sum(1 for d in session_dates if d > touched)
+
+
+def _hold_back_eligible(state_text: str, ledger: dict,
+                        session_dates: list[str]) -> list[str]:
+    """Excerpts of items eligible to move to 'Parked / Held': unchanged across
+    ≥ HOLD_BACK_MIN_UNCHANGED_MERGES merges AND ≥ HOLD_BACK_MIN_SESSIONS_SINCE
+    sessions since their touched date. Merge-time aging: a dormant project has
+    no new sessions and no merges, so nothing ever becomes eligible."""
+    out: list[str] = []
+    for _h, item in _iter_working_items(state_text):
+        key = _item_key(item)
+        entry = ledger.get(key) if isinstance(ledger.get(key), dict) else {}
+        merges = int(entry.get("unchanged_merges", 0) or 0)
+        if merges < HOLD_BACK_MIN_UNCHANGED_MERGES:
+            continue
+        tag = _TOUCHED_RE.search(item)
+        touched = tag.group(1) if tag else today_str_safe(entry)
+        if _sessions_since(session_dates, touched) < HOLD_BACK_MIN_SESSIONS_SINCE:
+            continue
+        out.append(_normalize_item(item)[:100])
+    return out
+
+
+def today_str_safe(entry: dict) -> str:
+    """Best touched date for a ledger entry without an item tag (should not
+    happen post-validator; the epoch fallback simply blocks hold-back)."""
+    t = entry.get("touched")
+    return t if isinstance(t, str) and len(t) == 10 else "9999-12-31"
+
+
+def _topic_from_transcript(transcript: str) -> str:
+    """≤8-word topic for the session header: the first usable transcript line."""
+    for line in transcript.splitlines():
+        s = line.strip()
+        if len(s) < 12 or s.startswith(("#", "=", "-", ">", "|", "```")):
+            continue
+        words = s.split()[:8]
+        return " ".join(words)
+    return "(no text)"
+
+
+def _handover_header(merged_infos: list[tuple[str, str, str]],
+                     n_merged: int) -> str:
+    """Machine-built first line: Generated <ISO> · last sessions: <sid>
+    (<date>, ≤8-word topic); … · merged: <n>. Built in code, never by the
+    LLM (the merge prompt forbids a header; the validator strips one)."""
+    parts = [f"Generated {_now_iso()}"]
+    shown = merged_infos[-3:]
+    if shown:
+        bits = [f"{sid} ({date}, {topic})" for sid, date, topic in shown]
+        parts.append("last sessions: " + "; ".join(bits))
+    parts.append(f"merged: {n_merged}")
+    line = " · ".join(parts)
+    if len(line) > _HANDOVER_HEADER_MAX_CHARS:
+        cut = line[:_HANDOVER_HEADER_MAX_CHARS]
+        sp = cut.rfind(" ")
+        line = cut[: sp if sp > 0 else len(cut)] + " …"
+    return line
+
+
 def generate_handover(
     project_dir: str,
     *,
@@ -448,8 +841,23 @@ def generate_handover(
         except OSError:
             base = ""
 
+    # Schema v2 (2026-10-08): merge-time hold-back. Items unchanged across
+    # HOLD_BACK_MIN_UNCHANGED_MERGES merges with ≥ HOLD_BACK_MIN_SESSIONS_SINCE
+    # sessions since their touched date are offered to the merge LLM as
+    # candidates for 'Parked / Held' (allowed, not required; never deleted).
+    session_dates = _mapping_session_dates(mapping)
+    eligible = _hold_back_eligible(base, _load_ledger(store), session_dates)
+    holdback_block = ""
+    if eligible:
+        holdback_block = (
+            "\n\n=== HOLD-BACK ELIGIBLE (MAY move to '## Parked / Held'; do NOT "
+            "delete; keep their (touched …) tags) ===\n"
+            + "\n".join(f"- {e}" for e in eligible)
+        )
+
     wrote = False
     skipped = 0
+    merged_infos: list[tuple[str, str, str]] = []
     for sid in sids:
         record = _read_cursor_record(store, sid)
         cursor = record.get("cursor") if record else None
@@ -476,6 +884,7 @@ def generate_handover(
             + (base.strip() or "(none yet — create the first handover)")
             + "\n\n=== NEW SESSION TRANSCRIPT (since last handover) ===\n"
             + transcript
+            + holdback_block
         )
         # deepseek-v4-flash role-plays the transcript (DSML tool-call echo) or
         # burns the budget on reasoning unless thinking is disabled; the
@@ -512,8 +921,11 @@ def generate_handover(
         if merged is None:
             break        # LLM failed or returned non-handover output — stop; state + cursors for prior sessions stay consistent
 
+        merged = _post_merge_validate(merged, base, store, project_dir)
         base = merged.strip()
-        atomic_write_text(state_path, base + "\n")
+        merged_infos.append((sid, _today(), _topic_from_transcript(transcript)))
+        header = _handover_header(merged_infos, len(merged_infos))
+        atomic_write_text(state_path, header + "\n\n" + base + "\n")
         _write_session_cursor(store, sid, _last_message_id(new_msgs) or cursor,
                               sealed_at_ms=(t0_ms if sid != latest_sid else None))
         wrote = True
