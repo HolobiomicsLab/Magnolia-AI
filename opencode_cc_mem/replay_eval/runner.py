@@ -129,7 +129,8 @@ def run_arm(corpus, arm: dict, out_dir: Path, limit: int | None = None,
             raise RuntimeError(
                 f"arm {arm['name']}: admission_gate flag set but code_ref has "
                 f"no compchem_memory.admission: {e}")
-        admission_gate = _AG(out_dir / "gate-store")
+        admission_gate = _AG(out_dir / "gate-store",
+                             leakage_screen=bool(flags.get("leakage_screen")))
         workers = 1
 
     def one(slc):

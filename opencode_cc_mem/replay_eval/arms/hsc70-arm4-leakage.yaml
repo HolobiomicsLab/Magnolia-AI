@@ -1,0 +1,22 @@
+# Arm 4 — RRSI-style admission leakage screen (2026-10-08, idea ticket
+# ACT-MEM-LEAKAGE-SCREEN from arXiv 2609.24972 redigest). Same as
+# hsc70-arm3-v6repair plus the deterministic Stage-1.5 session-leakage
+# screen (admission.leakage_screen, flag leakage_screen: true).
+# Hypothesis under test: the screen suppresses session-local candidates
+# (one-off paths / session ids / bare run ids / unanchored numbers) and so
+# buys dead-weight and volume WITHOUT dropping workhorse recall below the
+# arm3-v6repair baseline. Honest-negative clause: if recall is already the
+# binding gate and the screen only buys volume, stop and report a negative
+# result; do not merge a volume-only win (see the ticket's Acceptance).
+name: hsc70-arm4-leakage
+code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
+model: deepseek-flash
+provider: deepseek
+prompt_version: v6-repair
+flags:
+  max_tokens: 4000
+  disable_thinking: true
+  temperature: null
+  admission_gate: true
+  leakage_screen: true
+  chronological: true

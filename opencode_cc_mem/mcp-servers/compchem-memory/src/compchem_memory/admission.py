@@ -160,6 +160,59 @@ class AdmissionResult:
     judge_available: bool = True
 
 
+# ── Stage 1.5: session-leakage screen (ACT-MEM-LEAKAGE-SCREEN; RRSI EV-6/EV-7) ──
+# Deterministic pre-judge screen: reject candidates whose TITLE (the claim)
+# is carried by session-local referents — an opencode session id, an absolute
+# path, a bare run-dir id, or a bare numeric result with no durable domain
+# noun. Content is deliberately NOT screened: a durable lesson may cite paths
+# and ids as evidence; the claim must not REST on them. Conservative by
+# design — the screen buys precision, while the binding gate is recall; arm
+# acceptance stops if workhorse recall drops. Fail-open per candidate.
+_SESSION_ID_RE = re.compile(r"\bses_[0-9a-zA-Z]{8,}")  # opencode ids mix case: ses_f612d4af5ffe4SAG
+_ABS_PATH_RE = re.compile(r"(^|\s)/(?:home|tmp|scratch|Users|root)/\S", re.IGNORECASE)
+_RUN_ID_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}_[a-z0-9][a-z0-9_-]{5,}\b", re.IGNORECASE)
+_BARE_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?\s*(?:%|pts?\b|points?\b)")
+_LEAKAGE_DOMAIN_NOUNS = frozenset(
+    "corpus arm arms gate gates recall volume fidelity dead-weight dup dups judge "
+    "admission consolidation memory handover distill distillation extraction "
+    "promotion staging entry entries rule rules skill skills daemon canary soak "
+    "merge branch commit test tests suite replay eval hsc70 gpx4 docking haddock "
+    "gnina gromacs energy rmsd pocket pockets residue residues peptide protein "
+    "ligand receptor cluster clusters boot context budget floor label labels "
+    "retire retirement park parked parking survey digest kb server mcp opencode "
+    "magnolia prompt model provider score scores metric metrics band noise "
+    "screen sweep lane task letter ticket".split())
+
+
+def leakage_screen(candidate: dict) -> str | None:
+    """Return a session-leakage reason string, or None if the candidate passes.
+
+    Screens the TITLE only (the claim), never the content (the evidence).
+    Never raises: a dead screen must not zero a session (fail-open)."""
+    try:
+        title = str(candidate.get("title") or "")
+        if not title:
+            return None
+        if _SESSION_ID_RE.search(title):
+            return "session id in title"
+        if _ABS_PATH_RE.search(title):
+            return "absolute path carries the claim"
+        title_l = _SESSION_ID_RE.sub(" ", title.lower())
+        title_l = _RUN_ID_RE.sub(" ", title_l)
+        # domain nouns are matched with the id-like spans REMOVED: a run id
+        # like 2026-10-02_080245_hsc70-arm2-admission contains "hsc70" as a
+        # substring, but the id itself is the leakage, not a durable referent.
+        has_domain = any(n in title_l for n in _LEAKAGE_DOMAIN_NOUNS)
+        run_id = _RUN_ID_RE.search(title)
+        if run_id and not has_domain:
+            return f"bare run id '{run_id.group(0)}' with no durable referent"
+        if _BARE_NUMBER_RE.search(title) and not has_domain:
+            return "numeric result with no named protocol or target"
+        return None
+    except Exception:  # noqa: BLE001 - fail-open
+        return None
+
+
 class AdmissionGate:
     """Stateful gate for one store. The harness points it at a per-run store
     (out_dir); production points it at the project's .magnolia store."""
@@ -171,12 +224,14 @@ class AdmissionGate:
         profile: str | None = None,
         llm_json: Callable[..., Any] | None = None,
         idle_gate: bool = True,
+        leakage_screen: bool = False,
     ):
         from pathlib import Path as _P
         self.store = _P(store)
         self.store.mkdir(parents=True, exist_ok=True)
         self.profile = profile or load_profile(self.store)
         self.idle_gate = idle_gate
+        self.leakage_screen = leakage_screen
         if llm_json is None:
             from compchem_memory.llm import call_llm_json as _cl
             llm_json = _cl
@@ -252,6 +307,25 @@ class AdmissionGate:
             batch_titles.append(title)
         if not pending:
             return res
+
+        # Stage 1.5 — leakage screen (optional, arm-flagged). Deterministic
+        # pre-judge rejection of session-local claims (RRSI EV-6/EV-7 analog):
+        # a leaking candidate never reaches the judge, so it can never earn
+        # the inflated admit that would attract later merges.
+        if self.leakage_screen:
+            screened: list[dict] = []
+            for c in pending:
+                reason = leakage_screen(c)
+                if reason:
+                    res.rejected.append({"candidate": c, "stage": "leakage",
+                                         "reason": f"session_leakage: {reason}"})
+                    self._log(now, session, c.get("title", ""), "reject",
+                              f"session_leakage: {reason}")
+                else:
+                    screened.append(c)
+            pending = screened
+            if not pending:
+                return res
 
         # Stage 2 — R1/R2 judge (one batched call)
         verdicts = self._judge(pending, recent)
