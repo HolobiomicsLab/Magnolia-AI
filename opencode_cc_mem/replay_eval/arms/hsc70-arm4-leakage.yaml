@@ -9,6 +9,7 @@
 # binding gate and the screen only buys volume, stop and report a negative
 # result; do not merge a volume-only win (see the ticket's Acceptance).
 name: hsc70-arm4-leakage
+corpus: replay_eval/corpus/hsc70_bakeoff
 code_ref: /home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/mcp-servers/compchem-memory/src
 model: deepseek-flash
 provider: deepseek

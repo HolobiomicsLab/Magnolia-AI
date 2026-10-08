@@ -40,12 +40,19 @@ def main(argv=None):
     if args.cmd == "run":
         from replay_eval import runner
 
-        corpus = loader.load_corpus(Path(args.corpus))
         arm = runner.load_arm(Path(args.arm))
+        # Corpus precedence: --corpus flag > arm-yaml `corpus:` > package
+        # default. The arm field exists because the package default (the
+        # stale 21-slice top-level gold) silently produced an invalid arm
+        # (2026-10-08): bake-off arms must pin their corpus.
+        corpus_path = (args.corpus or arm.get("corpus")
+                       or str(PKG_DIR / "corpus"))
+        corpus = loader.load_corpus(Path(corpus_path))
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
         out = Path(args.out) if args.out else PKG_DIR / "runs" / f"{stamp}_{arm['name']}"
         summary = runner.run_arm(corpus, arm, out, limit=args.limit)
         print(f"run dir: {out}")
+        print(f"corpus: {corpus_path}")
         print(f"slices={summary['n_slices']} ok={summary['ok']} "
               f"parse_fail={summary['parse_fail']} candidates={summary['total_candidates']}")
         return 0

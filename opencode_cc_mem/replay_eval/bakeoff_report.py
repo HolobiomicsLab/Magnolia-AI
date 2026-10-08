@@ -188,7 +188,10 @@ def main() -> int:
     verdict = (fidelity >= 0.6 and recall >= 0.95 and volume <= 0.40
                and dead_rej >= 0.70 and len(dups) == 0)
     print(f"\nOVERALL: {'PASS — admission line may phase-gate to master' if verdict else 'FAIL — iterate before merge'}")
-    return 0
+    # Exit code mirrors the verdict: a chained `run && judge && report` must
+    # NOT be green on a failing arm (2026-10-08: an invalid arm — wrong
+    # corpus, judge 0% completeness — exited 0 end to end).
+    return 0 if verdict else 1
 
 
 if __name__ == "__main__":
