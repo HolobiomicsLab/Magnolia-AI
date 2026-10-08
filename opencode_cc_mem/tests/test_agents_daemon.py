@@ -342,6 +342,143 @@ def test_wait_for_matches_date_prefixed_run_records(tmp_path):
     assert d.discover_tasks(root, lanes)
 
 
+# ---- status subsystem rewrite (panel verdict #1: value-agnostic, header-only)
+
+
+def test_set_status_rewrites_any_value_and_get_status_reads_header():
+    letter = "---\nstatus: prototyped\nfrom: literature\n---\n\nbody\n"
+    assert d.get_status(letter) == "prototyped"
+    out = d.set_status(letter, "open")
+    assert "status: open" in out and "prototyped" not in out
+    assert d.is_open_task(out) is True
+    assert d.is_open_task(letter) is False          # prototyped is not runnable
+
+
+def test_body_status_line_never_reopens_edited_letter(tmp_path):
+    """A body line `status: open` must not count: the old matcher re-ran such
+    letters after any later edit (zombie reprocess)."""
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox, body="example header:\n\n- status: open\n")
+    def fake_runner(agent, project_dir, root_, prompt, timeout_s):
+        return "FINAL ANSWER: ok"
+    assert d.handle_task(task, "literature", root, runner=fake_runner) == "done"
+    # simulate a later edit of the consumed letter
+    task.write_text(task.read_text() + "\nfollow-up note\n", encoding="utf-8")
+    assert d.discover_tasks(root) == []             # no zombie reprocess
+
+
+def test_deferred_rid_validation():
+    ok = "wait_for: job:replay-eval_20261008_121845_7db43d"
+    assert d.is_deferred_task(ok) == "replay-eval_20261008_121845_7db43d"
+    assert d.is_deferred_task("wait_for: job:../../etc/passwd") is None
+    assert d.is_deferred_task("wait_for: job:*") is None
+
+
+def test_wait_for_ignores_non_terminal_run_records(tmp_path):
+    """submit_job writes the record at submission; a `running` record must not
+    burn the single hop (panel verdict #2)."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    _task(proj / "inbox", "idea3.task.md", status="open",
+          body="Prototype.\nwait_for: job:arm_x")
+    lanes = d.discover_lanes(root)
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "arm_x.yaml").write_text("status: running\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, lanes) == 0
+    (runs / "arm_x.yaml").write_text("status: success\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, lanes) == 1
+
+
+# ---- ticket trailer: the lane decides, the daemon writes (verdict seam)
+
+
+def _ticket(inbox: Path, name: str, status: str = "open") -> Path:
+    inbox.mkdir(parents=True, exist_ok=True)
+    f = inbox / name
+    f.write_text(f"---\nstatus: {status}\nfrom: literature\nto: xiulian\n"
+                 f"ticket: idea\n---\n\n# Idea ticket\n\n## Idea\nDo a thing.\n",
+                 encoding="utf-8")
+    return f
+
+
+def test_ticket_trailer_parks_on_run(tmp_path):
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_park.task.md")
+
+    def builder(agent, project_dir, root_, prompt, timeout_s):
+        return ("FINAL ANSWER: prototype built.\n"
+                "ticket-status: prototyped\n"
+                "park: job:replay-eval_20261008_121845_7db43d\n")
+
+    result = d.handle_task(ticket, "xiulian", root, runner=builder)
+    assert result == "prototyped"
+    text = ticket.read_text(encoding="utf-8")
+    assert "status: prototyped" in text and "status: done" not in text
+    assert "wait_for: job:replay-eval_20261008_121845_7db43d" in text
+    # not consumed: parked, then delivered once the record is terminal
+    assert d.discover_tasks(root) == []             # parked letters never auto-run
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "20261008_replay-eval_20261008_121845_7db43d.yaml").write_text(
+        "status: success\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, d.discover_lanes(root)) == 1
+    text = ticket.read_text(encoding="utf-8")
+    assert "Job result" in text and d.get_status(text) == "open"
+
+
+def test_ticket_trailer_evaluated_closes_lifecycle(tmp_path):
+    """Full evaluation hop: parked ticket -> terminal record -> daemon
+    re-delivers with the result -> lane replies trailer -> ticket evaluated."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_eval.task.md", status="open")
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "20261008_replay-eval_20261008_121845_7db43d.yaml").write_text(
+        "status: fail\n", encoding="utf-8")
+    letter = d._upsert_wait_for(d.set_status(ticket.read_text(), "prototyped"),
+                                "replay-eval_20261008_121845_7db43d")
+    ticket.write_text(letter, encoding="utf-8")
+    lanes = d.discover_lanes(root)
+    assert d.discover_tasks(root, lanes) == []       # parked: not auto-run
+    assert d.deliver_wait_for(root, lanes) == 1      # terminal -> re-opened
+    text = ticket.read_text(encoding="utf-8")
+    assert d.get_status(text) == "open" and "Job result" in text
+
+    def evaluator(agent, project_dir, root_, prompt, timeout_s):
+        assert "Job result" in prompt               # re-delivery context visible
+        return "FINAL ANSWER: gate FAIL, negative result.\nticket-status: evaluated\n"
+
+    result = d.handle_task(ticket, "xiulian", root, runner=evaluator)
+    assert result == "evaluated"
+    assert d.get_status(ticket.read_text()) == "evaluated"
+    assert d.discover_tasks(root, lanes) == []       # evaluated never re-runs
+
+
+def test_ticket_without_trailer_is_consumed_done(tmp_path):
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_plain.task.md")
+    result = d.handle_task(ticket, "xiulian", root,
+                           runner=lambda *a, **k: "FINAL ANSWER: narrated only")
+    assert result == "done"
+    assert d.get_status(ticket.read_text()) == "done"
+    assert d.discover_tasks(root) == []             # no infinite re-run
+
+
+def test_non_ticket_letter_ignores_trailer(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox, body="Mention ticket-status: evaluated in prose.")
+    result = d.handle_task(task, "literature", root,
+                           runner=lambda *a, **k: "FINAL ANSWER: ok")
+    assert result == "done"
+    assert d.get_status(task.read_text()) == "done"
+
+
 def test_scheduled_sweep_letter_written_once(tmp_path):
     root = _root(tmp_path)
     _lane(root, "literature", {"enabled": True, "schedule_days": 1,
