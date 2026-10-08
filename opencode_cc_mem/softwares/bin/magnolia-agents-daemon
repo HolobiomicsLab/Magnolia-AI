@@ -380,7 +380,13 @@ def deliver_wait_for(root: str, lanes: dict) -> int:
                 continue
             rec = runs / f"{rid}.yaml"
             if not rec.is_file():
-                continue  # job still pending
+                # submit_job writes date-prefixed records (YYYYMMDD_<run_id>.yaml);
+                # fall back to a run-id-suffix match so wait_for fires for real
+                # records (found 2026-10-08: exact-name lookup never matched).
+                hits = sorted(runs.glob(f"*_{rid}.yaml")) if runs.is_dir() else []
+                if not hits:
+                    continue  # job still pending
+                rec = hits[-1]
             try:
                 status_m = re.search(r"^status:\s*(\S+)",
                                      rec.read_text(encoding="utf-8", errors="replace"), re.M)

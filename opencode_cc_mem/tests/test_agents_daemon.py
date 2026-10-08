@@ -322,6 +322,26 @@ def test_wait_for_defers_until_run_record_lands(tmp_path):
     assert d.discover_tasks(root, lanes)
 
 
+def test_wait_for_matches_date_prefixed_run_records(tmp_path):
+    """Real records are written as YYYYMMDD_<run_id>.yaml (submit_job naming);
+    the exact-name lookup alone never matches them (found 2026-10-08 on the
+    first live wait_for)."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    t = _task(proj / "inbox", "idea2.task.md", status="open",
+              body="Prototype the idea.\nwait_for: job:replay-eval_20261008_112903_12cd20")
+    lanes = d.discover_lanes(root)
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "20261008_replay-eval_20261008_112903_12cd20.yaml").write_text(
+        "status: success\n", encoding="utf-8")
+    n = d.deliver_wait_for(root, lanes)
+    assert n == 1
+    text = t.read_text(encoding="utf-8")
+    assert "Job result" in text and "success" in text
+    assert d.discover_tasks(root, lanes)
+
+
 def test_scheduled_sweep_letter_written_once(tmp_path):
     root = _root(tmp_path)
     _lane(root, "literature", {"enabled": True, "schedule_days": 1,
