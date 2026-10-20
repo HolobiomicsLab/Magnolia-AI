@@ -85,8 +85,5 @@ behaviour regresses.
 
 ## Licence
 
-The project is distributed under the **MIT Licence with a Non-Military Clause**
-([`LICENSE`](LICENSE)). Because clause 2 restricts a field of use, this is not the unmodified MIT
-licence and is not an OSI-approved open-source licence; please do not describe the project as
-MIT-licensed or as open source. By submitting a contribution you agree that it is distributed under
-those same terms.
+The project is distributed under the **MIT Licence** ([`LICENSE`](LICENSE)). By submitting a
+contribution you agree that it is distributed under the same terms.
