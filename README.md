@@ -7,7 +7,7 @@
 **A persistent-memory AI agent framework for computational research, developed through computational chemistry.**
 
 <p>
-  <img alt="Licence: MIT with Non-Military Clause" src="https://img.shields.io/badge/licence-MIT%20%2B%20Non--Military-4c6ef5?style=flat-square">
+  <img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-4c6ef5?style=flat-square">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="Protocol: MCP" src="https://img.shields.io/badge/protocol-MCP-6b4fbb?style=flat-square">
   <img alt="Interface: OpenCode" src="https://img.shields.io/badge/interface-OpenCode-333333?style=flat-square">
@@ -471,15 +471,8 @@ you actually used: the assistant's behaviour depends on its rules, and those cha
 
 ## Licence
 
-Magnolia is released under the **MIT Licence with a Non-Military Clause** — see
-[`LICENSE`](LICENSE). Clause 2 forbids use for the development, production or operation of weapons
-or military systems, and any application causing harm to civilian populations.
-
-Because that clause restricts a field of use, this is **not** the unmodified MIT licence and is not
-an OSI-approved open-source licence. The source is available under the terms above; please do not
-describe the project as MIT-licensed or as open source. The project nonetheless follows open-science
-practice — legible provenance, reviewable records, portable artefacts — and that distinction is
-maintained deliberately.
+Magnolia is released under the **MIT Licence** — see [`LICENSE`](LICENSE). This is the standard,
+OSI-approved MIT licence.
 
 ## Acknowledgements
 
