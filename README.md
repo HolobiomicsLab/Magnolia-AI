@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/magnolia-logo.png" alt="Magnolia AI logo" width="260">
+
 # Project Magnolia
 
 **A persistent-memory AI agent framework for computational research, developed through computational chemistry.**
