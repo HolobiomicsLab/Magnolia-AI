@@ -218,6 +218,27 @@ def _attach_distill_notices(result: Any, project_dir: str,
         return result
 
 
+def _reported_failure(result: Any) -> str | None:
+    """Return the error text when a tool RETURNED a failure payload.
+
+    The compchem-tools wrappers signal failure with ``{"success": false,
+    "error": ...}`` instead of raising. Journaling that as ``tool_success``
+    hides it from the error-resolution logic (extraction.py, audit.py), which
+    keys on ``tool_error`` events. So inspect the payload here: a JSON string
+    is parsed, a dict is read directly; anything else is a success.
+    """
+    payload = result
+    if isinstance(result, str):
+        try:
+            payload = json.loads(result)
+        except (ValueError, TypeError):
+            return None
+    if isinstance(payload, dict) and payload.get("success") is False:
+        error = payload.get("error") or payload.get("message") or "success=false"
+        return str(error)[:500]
+    return None
+
+
 def captured(source: str):
     """Decorator: log tool_call + tool_success/tool_error around an MCP tool;
     inline-trigger extraction when threshold met.
@@ -261,14 +282,24 @@ def captured(source: str):
                 raise
 
             duration_ms = int((time.time() - t0) * 1000)
+            failure = _reported_failure(result)
             try:
                 if mgr is not None:
-                    mgr.record("tool_success", {
-                        "source": source,
-                        "tool": tool_name,
-                        "duration_ms": duration_ms,
-                        "result_summary": _summarize_result(result),
-                    })
+                    if failure is not None:
+                        mgr.record("tool_error", {
+                            "source": source,
+                            "tool": tool_name,
+                            "duration_ms": duration_ms,
+                            "error": f"ToolReportedFailure: {failure}",
+                            "result_summary": _summarize_result(result),
+                        })
+                    else:
+                        mgr.record("tool_success", {
+                            "source": source,
+                            "tool": tool_name,
+                            "duration_ms": duration_ms,
+                            "result_summary": _summarize_result(result),
+                        })
             except Exception:
                 pass
             _maybe_inline_extract(mgr, project_dir)

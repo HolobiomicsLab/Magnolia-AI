@@ -392,13 +392,15 @@ def gromacs_setup(
     box_type: str = "dodecahedron",
     box_distance: float = 1.0,
     output_dir: str | None = None,
+    ignh: bool = False,
 ) -> str:
     """Set up a GROMACS MD simulation: generate topology, box, solvate, ions.
     Returns paths to .gro, .top, and other setup files.
 
     Call this when: preparing a GROMACS MD simulation system from an initial structure."""
     result = _gromacs_setup(
-        structure, topology, forcefield, water, box_type, box_distance, output_dir
+        structure, topology, forcefield, water, box_type, box_distance,
+        output_dir, ignh,
     )
     return json.dumps(result, indent=2)
 

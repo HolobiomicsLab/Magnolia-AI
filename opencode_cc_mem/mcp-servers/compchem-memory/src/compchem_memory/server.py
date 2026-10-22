@@ -7,6 +7,7 @@ former .magnolia/skills skill tier was retired; protocols live in
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from fastmcp import FastMCP
 
 from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
-from compchem_memory.tiers.project import ProjectManager
+from compchem_memory.tiers.project import AmbiguousEntryError, ProjectManager
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.context_assembly import assemble_context, _memory_store
 from compchem_memory.retrieval import select_relevant_entries
@@ -114,7 +115,7 @@ def _run_startup_scan_background():
         except Exception:
             pass
         suffix = "" if ok else f" (error: {error})"
-        print(f"[boot-timing] {step}: {int(ms)} ms{suffix}")
+        print(f"[boot-timing] {step}: {int(ms)} ms{suffix}", file=sys.stderr)
 
     def _worker():
         _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
@@ -124,7 +125,7 @@ def _run_startup_scan_background():
             try:
                 step_fn()
             except Exception as e:
-                print(f"[{step_name}] error: {e}")
+                print(f"[{step_name}] error: {e}", file=sys.stderr)
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
             else:
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
@@ -135,7 +136,7 @@ def _run_startup_scan_background():
             current.parent.mkdir(parents=True, exist_ok=True)
             current.write_text(session_id)
         except Exception as e:
-            print(f"[session_id] error: {e}")
+            print(f"[session_id] error: {e}", file=sys.stderr)
         _log_boot_step("total", (time.monotonic() - t_all) * 1000)
 
     threading.Thread(target=_worker, daemon=True).start()
@@ -166,7 +167,7 @@ def _distill_timer_tick(project_dir: str) -> None:
     try:
         scan_and_distill(project_dir)
     except Exception as e:
-        print(f"[distill_timer] tick error: {e}")
+        print(f"[distill_timer] tick error: {e}", file=sys.stderr)
 
 
 def _run_distill_timer_background() -> None:
@@ -228,7 +229,7 @@ def _safe_version_commit(store: Path, message: str) -> None:
     try:
         versioning.commit_all(store, message)
     except Exception as e:  # noqa: BLE001 - versioning must never break distill
-        print(f"[versioning] commit skipped: {e}")
+        print(f"[versioning] commit skipped: {e}", file=sys.stderr)
 
 
 def _drop_review_file(pd: str, filename: str) -> None:
@@ -546,6 +547,29 @@ def memory_confirm(
     proj_m = _get_project_mgr()
     try:
         return proj_m.confirm_staging(pd, entry_name, acknowledge=acknowledge)
+    except AmbiguousEntryError as e:
+        return json.dumps(
+            {
+                "status": "ambiguous_entry",
+                "entry": entry_name,
+                "message": str(e),
+                "candidates": e.candidates,
+                "how_to_proceed": (
+                    "Several staging entries match. Call memory_confirm again "
+                    "with one exact candidate file name or id."
+                ),
+            },
+            indent=2,
+        )
+    except ValueError as e:
+        return json.dumps(
+            {
+                "status": "invalid_entry_name",
+                "entry": entry_name,
+                "message": str(e),
+            },
+            indent=2,
+        )
     except ConflictCandidatesError as e:
         return json.dumps(
             {
