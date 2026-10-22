@@ -1,0 +1,28 @@
+name: project-terms
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write private deny list
+        env:
+          PROJECT_TERMS_DENY: ${{ secrets.PROJECT_TERMS_DENY }}
+        run: |
+          if [ -z "$PROJECT_TERMS_DENY" ]; then
+            echo "::error::PROJECT_TERMS_DENY repository secret is not set"
+            exit 1
+          fi
+          printf '%s\n' "$PROJECT_TERMS_DENY" > "$RUNNER_TEMP/project-terms-deny.txt"
+          echo "PROJECT_TERMS_DENY_FILE=$RUNNER_TEMP/project-terms-deny.txt" >> "$GITHUB_ENV"
+
+      - name: Scan tracked files
+        run: python3 opencode_cc_mem/scripts/check_project_terms.py --all
