@@ -37,6 +37,25 @@ ENTRY_TYPES = (
 )
 
 
+class AmbiguousEntryError(ValueError):
+    """Several staging entries matched the requested name.
+
+    Raised instead of silently promoting the first directory listing hit
+    (issue #22: a shared fragment such as "2026" or "" promoted the wrong
+    learning into the durable project tier).
+    """
+
+    def __init__(self, entry_name: str, tier: str, candidates: list[str]):
+        self.entry_name = entry_name
+        self.tier = tier
+        self.candidates = candidates
+        super().__init__(
+            f"Ambiguous staging entry '{entry_name}': {len(candidates)} files "
+            f"match by {tier}. Pass the exact file name or id. Candidates: "
+            + ", ".join(candidates)
+        )
+
+
 def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge `patch` into `base`. Patch values override; nested
     dicts are merged element-wise; non-dict values replace whole.
@@ -331,6 +350,73 @@ class ProjectManager:
             entry.pop("_sort_date", None)
         return result[:limit]
 
+    def _find_staging_entry(self, staging: Path, entry_name: str) -> Path | None:
+        """Resolve ``entry_name`` to exactly one staging file, or raise.
+
+        Matching is layered: exact file name / stem, exact frontmatter id,
+        case-insensitive versions of both, then a unique substring match.
+        A tier that matches more than one file raises ``AmbiguousEntryError``
+        instead of silently taking the first directory hit (issue #22).
+        """
+        name = (entry_name or "").strip()
+        if not name:
+            raise ValueError("entry_name must not be empty")
+        files = sorted(staging.glob("*.md"))
+        folded = name.casefold()
+
+        def _unique(hits: list[Path], tier: str) -> Path | None:
+            if len(hits) == 1:
+                return hits[0]
+            if len(hits) > 1:
+                raise AmbiguousEntryError(name, tier, [h.name for h in hits])
+            return None
+
+        hit = _unique(
+            [f for f in files if f.name == name or f.stem == name],
+            "exact file name or stem",
+        )
+        if hit is not None:
+            return hit
+        hit = _unique(self._staging_id_hits(files, name), "frontmatter id")
+        if hit is not None:
+            return hit
+        hit = _unique(
+            [f for f in files if f.name.casefold() == folded or f.stem.casefold() == folded],
+            "case-insensitive file name or stem",
+        )
+        if hit is not None:
+            return hit
+        hit = _unique(
+            self._staging_id_hits(files, name, casefold=True),
+            "case-insensitive frontmatter id",
+        )
+        if hit is not None:
+            return hit
+        return _unique(
+            [f for f in files if folded in f.name.casefold()],
+            "substring",
+        )
+
+    def _staging_id_hits(
+        self, files: list[Path], entry_name: str, casefold: bool = False
+    ) -> list[Path]:
+        """Staging files whose frontmatter ``id`` equals ``entry_name``."""
+        hits: list[Path] = []
+        for f in files:
+            try:
+                meta = self._parse_frontmatter(
+                    f.read_text(encoding="utf-8", errors="replace"))
+            except Exception:
+                continue
+            entry_id = str(meta.get("id", "") or "")
+            if not entry_id:
+                continue
+            if entry_id == entry_name or (
+                casefold and entry_id.casefold() == entry_name.casefold()
+            ):
+                hits.append(f)
+        return hits
+
     def confirm_staging(
         self,
         project_dir: str,
@@ -339,11 +425,7 @@ class ProjectManager:
     ) -> str:
         staging = self._staging_dir(project_dir)
         entries = self._entries_dir(project_dir)
-        source = None
-        for f in staging.glob("*.md"):
-            if f.name == entry_name or entry_name in f.name or entry_name in f.stem:
-                source = f
-                break
+        source = self._find_staging_entry(staging, entry_name)
         if not source:
             raise FileNotFoundError(f"Staging entry not found: {entry_name}")
         if not acknowledge:
@@ -448,23 +530,23 @@ class ProjectManager:
         dated observation block so a re-observed learning is never lost.
         Returns True if found."""
         staging = self._staging_dir(project_dir)
-        for f in staging.glob("*.md"):
-            if f.name == entry_name or entry_name in f.name or entry_name in f.stem:
-                text = f.read_text()
-                meta = self._parse_frontmatter(text)
-                new_count = meta.get("observation_count", 0) + 1
-                sessions = list(meta.get("observed_in_sessions", []) or [])
-                if session_id and session_id not in sessions:
-                    sessions.append(session_id)
-                # Enrich, don't discard: append the new content if it adds info.
-                if content and content.strip() and content.strip() not in text:
-                    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                    block = f"\n\n## Observation {new_count} ({date})\n\n{content.strip()}\n"
-                    atomic_write_text(f, text.rstrip() + block)
-                self._update_entry_frontmatter(f, "observation_count", new_count)
-                self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
-                return True
-        return False
+        source = self._find_staging_entry(staging, entry_name)
+        if source is None:
+            return False
+        text = source.read_text()
+        meta = self._parse_frontmatter(text)
+        new_count = meta.get("observation_count", 0) + 1
+        sessions = list(meta.get("observed_in_sessions", []) or [])
+        if session_id and session_id not in sessions:
+            sessions.append(session_id)
+        # Enrich, don't discard: append the new content if it adds info.
+        if content and content.strip() and content.strip() not in text:
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            block = f"\n\n## Observation {new_count} ({date})\n\n{content.strip()}\n"
+            atomic_write_text(source, text.rstrip() + block)
+        self._update_entry_frontmatter(source, "observation_count", new_count)
+        self._update_entry_frontmatter(source, "observed_in_sessions", sessions)
+        return True
 
     # Common words that carry no topic; ignored when comparing titles.
     _STOPWORDS = frozenset({
