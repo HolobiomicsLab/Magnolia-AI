@@ -9,6 +9,10 @@ uv.lock
 /EXECUTION_PLAN.md
 # user research data (scaffolded per launch; never the 111G originals)
 opencode_cc_mem/projects/
+# misplaced run trees at repo root — machine-local only
+/projects/
+# machine-local launcher (absolute home path)
+/start.sh
 # heavy re-installable local tool binaries/weights
 opencode_cc_mem/softwares/boltzgen/cache/
 opencode_cc_mem/softwares/namd/
@@ -31,6 +35,9 @@ opencode_cc_mem/softwares/bin/*
 __pycache__/
 *.pyc
 *.log
+*.err
+# ad-hoc run redirects typed at package root; real outputs belong in run dirs
+opencode_cc_mem/*.out
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -95,8 +102,16 @@ opencode_cc_mem/replay_eval/runs/
 # agents-daemon machine-local state
 .magnolia-agents/
 
+# anatomy skill under evaluation — keep local until its usefulness is decided
+opencode_cc_mem/.opencode/skills/anatomy/
+
 # replay-eval corpus bulk (regenerable via replay_eval/project_a_freeze.py; the
-# manifests and labels are tracked for Goodhart versioning)
+# manifests and sanitized label summaries are tracked for Goodhart versioning;
+# the full labels stay local because they name project entries and sessions)
 opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/transcripts/
 opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/exports/
 opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/extraction_gold/slices/
+opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/labels.json
+# fixed recall universe: keep the manifest tracked, the copied store bulk local
+opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/store-snapshot/entries/
+opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/store-snapshot/staging/
