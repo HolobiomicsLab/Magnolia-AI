@@ -3,13 +3,20 @@
 import json
 import tempfile
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 import pytest
 
 from compchem_tools.tools.workflow import load_workflow, get_workflow_status
 from compchem_tools.tools.p2rank import p2rank_predict, _parse_predictions_csv
-from compchem_tools.tools.gromacs import gromacs_setup, gromacs_run, gromacs_parse
+from compchem_tools.tools.gromacs import (
+    gromacs_setup,
+    gromacs_run,
+    gromacs_parse,
+    _parse_energy,
+    _parse_xvg,
+)
 
 
 @pytest.fixture
@@ -302,6 +309,81 @@ class TestGromacsParse:
             trajectory="/nonexistent.xtc"
         )
         assert result["success"] is False
+
+
+# ── GROMACS Parse: issue #18 regressions ────────────────────────────────────
+
+
+class TestGromacsEnergyParsing:
+    def test_parse_xvg_reads_numbered_legends(self, tmp_dir):
+        """Issue #18: GROMACS writes `@ s0 legend "..."`; the old test
+        `"s legend" in line` never matched, so every term was dropped."""
+        xvg = tmp_dir / "energy.xvg"
+        xvg.write_text(
+            '# gmx energy\n'
+            '@ title "Energy"\n'
+            '@ s0 legend "Potential"\n'
+            '@ s1 legend "Temperature"\n'
+            '0.0  1.0  300.0\n'
+            '1.0  2.0  301.0\n'
+            '2.0  3.0  302.0\n'
+        )
+        result = _parse_xvg(xvg)
+        assert result["parsed"] is True
+        assert result["frame_count"] == 3
+        assert result["terms"]["Potential"]["mean"] == 2.0
+        assert result["terms"]["Temperature"]["last"] == 302.0
+
+    def test_parse_energy_sends_one_name_per_line(self, tmp_dir, monkeypatch):
+        """Issue #18: GROMACS 2026.3 keeps only the LAST name when several are
+        sent on one line, so `gmx energy` must receive one per line."""
+        edr = tmp_dir / "md.edr"
+        edr.write_text("fake edr")
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["input"] = kwargs.get("input")
+            (tmp_dir / "energy.xvg").write_text(
+                '@ s0 legend "Potential"\n0.0  1.0\n'
+            )
+            return CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(
+            "compchem_tools.tools.gromacs.subprocess.run", fake_run
+        )
+        result = _parse_energy(edr)
+
+        assert captured["input"] == (
+            "Potential\nKinetic-En.\nTotal-Energy\nTemperature\nPressure\n\n"
+        )
+        assert result["frame_count"] == 1
+        assert "Potential" in result["terms"]
+
+
+class TestGromacsSetupInputs:
+    def test_ions_mdp_uses_valid_integrator_and_resolves_paths(self, tmp_dir, monkeypatch):
+        """Issue #17: `integrator = minimization` is not a GROMACS enum; use
+        `steep`. Also verify relative paths resolve and `ignh` is passed."""
+        monkeypatch.chdir(tmp_dir)
+        pdb = tmp_dir / "trpcage.pdb"
+        pdb.write_text("ATOM      1  CA  ALA A   1       0.000   0.000   0.000\nEND\n")
+        out = tmp_dir / "setup"
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(
+            "compchem_tools.tools.gromacs.subprocess.run", fake_run
+        )
+        result = gromacs_setup("trpcage.pdb", output_dir=str(out), ignh=True)
+
+        assert result["success"] is True
+        assert "integrator = steep" in (out / "ions.mdp").read_text()
+        pdb2gmx = calls[0]
+        assert str(pdb.resolve()) in pdb2gmx
+        assert "-ignh" in pdb2gmx
 
 
 # ── Workflow Status ──────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from subprocess import CompletedProcess
 
 import pytest
 
@@ -175,6 +176,42 @@ class TestXtbSinglepoint:
     def test_missing_input(self):
         result = xtb_singlepoint("/nonexistent.xyz")
         assert result["success"] is False
+
+
+class TestXtbOptimizeOutputFormat:
+    def test_sdf_input_reports_xtbopt_sdf(self, tmp_dir, monkeypatch):
+        """Issue #19: xTB writes the optimised geometry in the input format.
+        An SDF input produces xtbopt.sdf, not xtbopt.xyz."""
+        inp = tmp_dir / "caffeine.sdf"
+        inp.write_text("fake sdf")
+        out = tmp_dir / "opt"
+
+        def fake_run(cmd, **kwargs):
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "xtbopt.sdf").write_text("optimized sdf")
+            (out / "xtbopt.log").write_text("log")
+            return CompletedProcess(cmd, 0, "TOTAL ENERGY  -42.15 Eh\n", "")
+
+        monkeypatch.setattr("compchem_tools.tools.xtb.subprocess.run", fake_run)
+        result = xtb_optimize(str(inp), output_dir=str(out))
+
+        assert result["success"] is True
+        assert result["optimized_structure"].endswith("xtbopt.sdf")
+
+    def test_xyz_output_still_reported(self, tmp_dir, monkeypatch):
+        inp = tmp_dir / "mol.xyz"
+        inp.write_text("1\n\nC 0 0 0\n")
+        out = tmp_dir / "opt"
+
+        def fake_run(cmd, **kwargs):
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "xtbopt.xyz").write_text("optimized xyz")
+            return CompletedProcess(cmd, 0, "TOTAL ENERGY  -1.0 Eh\n", "")
+
+        monkeypatch.setattr("compchem_tools.tools.xtb.subprocess.run", fake_run)
+        result = xtb_optimize(str(inp), output_dir=str(out))
+
+        assert result["optimized_structure"].endswith("xtbopt.xyz")
 
 
 # ── Covalent Gates ───────────────────────────────────────────────────────────
