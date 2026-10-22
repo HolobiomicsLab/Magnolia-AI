@@ -52,10 +52,19 @@ else
     VPN_USER="$HPC_USER"
 fi
 
+# Is something listening on :$PORT? ss (iproute2) on Linux; lsof on macOS.
+port_bound() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN
+    else
+        lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
+    fi
+}
+
 # 1. Already running AND port bound? (-x matches the openconnect process
 # exactly, avoiding false positives on wrapper command lines.)
 if pgrep -x openconnect >/dev/null 2>&1; then
-    if ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+    if port_bound; then
         log "tunnel already up (openconnect process + :$PORT bound)"
         exit 0
     else
@@ -65,7 +74,7 @@ if pgrep -x openconnect >/dev/null 2>&1; then
 fi
 
 # 2. Port already listening (not by us)?
-if ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+if port_bound; then
     log "SOCKS :$PORT already listening (not started by this script)"
     exit 0
 fi
@@ -107,7 +116,7 @@ disown
 
 # 4. Poll for the port to come up.
 for i in $(seq 1 $TIMEOUT_S); do
-    if ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+    if port_bound; then
         log "tunnel up (bound :$PORT after ${i}s)"
         exit 0
     fi

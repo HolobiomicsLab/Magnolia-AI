@@ -171,7 +171,8 @@ round1|resume)
   ) >/dev/null 2>&1 &
   PID=$!
   echo "$PID" > "$ROOT/pid_r$R"
-  sed -i "s/^ROUNDS=.*/ROUNDS=$R/" "$ROOT/meta.env"
+  # Portable in-place edit: BSD sed (macOS) -i needs a suffix argument.
+  sed "s/^ROUNDS=.*/ROUNDS=$R/" "$ROOT/meta.env" > "$ROOT/meta.env.tmp" && mv "$ROOT/meta.env.tmp" "$ROOT/meta.env"
   echo "MODEL_r$R=$MODEL" >> "$ROOT/meta.env"
   echo "PID_r$R=$PID" >> "$ROOT/meta.env"
   echo "launched round $R (model $MODEL, pid $PID); poll: debate.sh status $NAME"

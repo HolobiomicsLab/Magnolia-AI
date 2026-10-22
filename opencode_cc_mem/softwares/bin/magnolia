@@ -378,6 +378,19 @@ cmd_memory_set() {
     echo "memory model set: $model (enabled). Restart opencode to activate."
 }
 
+# timeout(1) is GNU coreutils: use gtimeout (Homebrew coreutils) or perl's
+# alarm on stock macOS. The alarm survives exec, so the command is killed.
+run_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$secs" "$@"
+    else
+        perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' "$secs" "$@"
+    fi
+}
+
 cmd_memory_status() {
     echo "setup side file: $LLM_SETUP"
     if [ -f "$LLM_SETUP" ]; then
@@ -433,7 +446,7 @@ except Exception:
     ans="$(_read_from_tty "  main model: " || true)"
     if [ -n "$ans" ]; then
         echo "  verifying with one real round-trip (may take ~1 min)…"
-        if timeout 180 opencode run -m "$ans" 'Reply with exactly: MAIN_MODEL_OK' 2>&1 | grep -q MAIN_MODEL_OK; then
+        if run_with_timeout 180 opencode run -m "$ans" 'Reply with exactly: MAIN_MODEL_OK' 2>&1 | grep -q MAIN_MODEL_OK; then
             setup_set "main_model=$ans"
             echo "  OK — main model verified."
         else

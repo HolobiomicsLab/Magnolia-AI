@@ -77,14 +77,23 @@ start() {
   # Runs as its own session leader so it survives logout. Env is baked into
   # the child-script text (shell functions don't cross into bash -c children).
   SERVER_ENV="MAGNOLIA_ROOT='$ROOT' MAGNOLIA_RULES_DIR='rules' MAGNOLIA_PROJECT_DIR='$PROJECT_DIR' COMPCHEM_TOOLS_TRANSPORT='http' COMPCHEM_TOOLS_HOST='$HOST' COMPCHEM_TOOLS_PORT='$PORT' PATH='$ROOT/opencode_cc_mem/softwares/bin:$PATH'"
-  setsid bash -c "
-    echo \"[supervisor] \$(date -Is) start\" >> '$OUT_LOG'
+  # Stdio is detached so the supervisor never holds the caller's pipe open
+  # (`magnolia … | tail` would otherwise wait forever for EOF).
+  # setsid(1) is util-linux only; on macOS the venv's python3 calls setsid(2)
+  # and execs bash in place, so $! is still the supervisor's pid.
+  if command -v setsid >/dev/null 2>&1; then
+    NEW_SESSION=(setsid)
+  else
+    NEW_SESSION=("$PY" -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])')
+  fi
+  "${NEW_SESSION[@]}" bash -c "
+    echo \"[supervisor] \$(date +%Y-%m-%dT%H:%M:%S%z) start\" >> '$OUT_LOG'
     while true; do
       env $SERVER_ENV '$PY' -m compchem_tools.server >> '$OUT_LOG' 2>&1
-      echo \"[supervisor] \$(date -Is) server exited rc=\$?; restarting in 2s\" >> '$OUT_LOG'
+      echo \"[supervisor] \$(date +%Y-%m-%dT%H:%M:%S%z) server exited rc=\$?; restarting in 2s\" >> '$OUT_LOG'
       sleep 2
     done
-  " &
+  " </dev/null >/dev/null 2>&1 &
   sup_pid=$!
   echo "$sup_pid" > "$PIDFILE"
   # Wait for the HTTP endpoint to come up (server import + bind can take a

@@ -5,8 +5,13 @@
 set -uo pipefail
 
 COMMAND="$*"
-START_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
-START_EPOCH_MS=$(($(date +%s%N) / 1000000))
+
+# "<ISO-8601 UTC with microseconds> <epoch ms>". BSD date (macOS) has no %N,
+# so the clock is read through python3, which escape_json already requires.
+now_iso_and_ms() {
+    python3 -c 'import datetime, time; t = time.time(); print(datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"), int(t * 1000))'
+}
+read -r START_ISO START_EPOCH_MS <<< "$(now_iso_and_ms)"
 
 PROJECT_DIR=""
 
@@ -90,8 +95,7 @@ printf '{"event_type":"tool_call","timestamp":"%s","session_id":"%s","project_id
 "$@"
 EXIT_CODE=$?
 
-END_ISO="$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)"
-END_EPOCH_MS=$(($(date +%s%N) / 1000000))
+read -r END_ISO END_EPOCH_MS <<< "$(now_iso_and_ms)"
 DURATION_MS=$((END_EPOCH_MS - START_EPOCH_MS))
 
 if [ $EXIT_CODE -eq 0 ]; then

@@ -21,7 +21,7 @@ if [ ! -d "$MEMORY_DIR" ]; then
     exit 1
 fi
 
-TIMESTAMP=$(date -Iseconds)
+TIMESTAMP=$(date +%Y-%m-%dT%H:%M:%S%z)
 LOG_FILE="$MEMORY_DIR/selfreflex.log"
 
 # Pick random quotes from the single-source Python module
@@ -79,6 +79,6 @@ magnolia-memory sync-queue \
     --project-dir "$PROJECT_DIR" \
     --delete-after >> "$LOG_FILE" 2>&1 || true
 
-TIMESTAMP=$(date -Iseconds)
+TIMESTAMP=$(date +%Y-%m-%dT%H:%M:%S%z)
 echo "[$TIMESTAMP] $CLOSING" >> "$LOG_FILE"
 echo "[$TIMESTAMP] magnolia-selfreflex finished" >> "$LOG_FILE"

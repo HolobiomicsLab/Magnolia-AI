@@ -1,5 +1,8 @@
+import os
+import subprocess
 import time
 from pathlib import Path
+
 from compchem_tools.tools.jobs import _submit_local
 
 
@@ -77,19 +80,25 @@ def test_local_submit_records_remote_block_and_tags(tmp_path, monkeypatch):
 
 
 def _alive_non_zombie(pid: int) -> bool:
-    """Linux helper: True if pid exists and is not a zombie."""
+    """True if pid exists and is not a zombie (/proc on Linux, ps elsewhere)."""
     try:
         with open(f"/proc/{pid}/stat") as f:
             state = f.read().rsplit(") ", 1)[1].split()[0]
         return state != "Z"
     except FileNotFoundError:
-        return False
+        if os.path.isdir("/proc"):
+            return False
+    listing = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True
+    ).stdout.strip()
+    return bool(listing) and not listing.startswith("Z")
 
 
 def test_cancel_local_kills_children(tmp_path):
     """Regression (P0.2): cancel must kill the whole process group, not just
     the master. The job spawns a background child; both must die on cancel."""
     import time as _time
+
     from compchem_tools.tools.jobs import _cancel_local, _local_group_alive
 
     child_pidfile = tmp_path / "child.pid"
@@ -129,6 +138,7 @@ def test_cancel_local_kills_children(tmp_path):
 def test_cancel_local_already_terminated(tmp_path):
     """Cancel of a finished job succeeds without signalling errors."""
     import time as _time
+
     from compchem_tools.tools.jobs import _cancel_local
 
     res = _submit_local("sh -c 'exit 0'", tmp_path, "job", 1)

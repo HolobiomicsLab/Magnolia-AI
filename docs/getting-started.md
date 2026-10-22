@@ -14,7 +14,7 @@ Commands run from the repository root unless stated otherwise.
 |---|---|---|
 | Git and access to this repository | `git --version` | Source, protocols and local memory history |
 | Python 3.11+, with venv and pip | `python3 --version` | Both Magnolia packages |
-| Bash, GNU coreutils, curl and `setsid` | Checks below | Launching, execution logging and daemon supervision |
+| Bash and curl (GNU coreutils and `setsid` optional) | Checks below | Launching, execution logging and daemon supervision |
 | OpenCode | `opencode --version` | Interactive harness and plugins |
 | Main-model credentials | Authenticate in OpenCode | Conversation and tool use |
 | Separate memory-model credentials | Step 4 | Extraction, handover and reranking |
@@ -36,21 +36,21 @@ opencode --version
 Check the shell utilities before launching:
 
 ```bash
-command -v git python3 bash curl timeout setsid
-date +%s%N
+command -v git python3 bash curl
 ```
 
-The date command must print digits only. A result ending in `N` is incompatible with
-Magnolia's GNU nanosecond timestamps. `setsid` starts the tool-daemon supervisor;
-`timeout` is used by the model setup probe.
+The launch scripts prefer GNU tools when present (`setsid` for the tool-daemon
+supervisor, `timeout` for the model setup probe) and fall back to portable
+equivalents otherwise; timestamps are read through `python3`.
 
-**macOS:** the Python packages can be installed, but stock BSD `date` and the absence
-of `setsid` prevent the supplied shell path from working as written. Use GNU coreutils
-with its unprefixed commands on `PATH`; installing `gdate` alone is not enough. Without
-`setsid`, run the tools server in a separate foreground terminal as described in
-[harness adaptation](harness-adaptation.md#start-the-tool-server). This does not provide
-automatic daemon restart. Check capture and reconnection before relying on this
-arrangement; it is not an end-to-end macOS compatibility claim.
+**macOS:** stock macOS works without GNU coreutils: `/bin/bash` 3.2 and the BSD
+userland are sufficient, and OpenCode can be installed with `brew install opencode`.
+Without `setsid`, the supervisor is detached through the virtual environment's Python;
+without `timeout`, the setup probe uses `gtimeout` if installed, else `perl`. The
+setup, memory probe, tools daemon (start, status, stop), `magnolia-run` capture and a
+session calling both MCP servers have been exercised on macOS 26 (Apple Silicon) with
+OpenCode 2.0. Scientific executables and the cluster/VPN path have not been exercised
+on macOS.
 
 Scientific programs, a GPU, a cluster and Perspicacité are optional at this stage.
 The Python packages expose interfaces; they do not install HADDOCK3, ORCA, GROMACS
@@ -279,7 +279,7 @@ even if the assistant produces a plausible answer.
 | Symptom | Check and next action |
 |---|---|
 | Python import fails | Repeat both installs in the same `.venv`; record Python/package versions |
-| `setsid` missing or timestamp arithmetic fails | Revisit step 1; a model change cannot repair shell dependencies |
+| Tools daemon or timestamp errors | Revisit step 1; a model change cannot repair shell dependencies |
 | Main model works, memory does not | Check the separate key/model route and `magnolia memory status`; rerun its probe |
 | Memory tools absent | Inspect generated `mcp.compchem-memory.enabled`; restart after successful setup |
 | Execution tools absent | Check daemon/client status and `opencode_cc_mem/logs/compchem-tools-http.log` |
