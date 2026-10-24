@@ -1,0 +1,19 @@
+{
+  "bad1_memory_tools": {
+    "ids": [
+      "bad1_canonical_d3_search.md",
+      "bad1_source_memory_consolidate.md",
+      "bad1_source_memory_search.md"
+    ],
+    "confidence": 0.9,
+    "rationale": "All three entries describe the memory_search tool's keyword-splitting feature and its behavior across tiers, with the first noting the consolidation tool's tier restriction and the latter two documenting the search behavior."
+  },
+  "bad2_stub_run": {
+    "ids": [
+      "bad2_canonical_stable_2cluster.md",
+      "bad2_source_stub_run.md"
+    ],
+    "confidence": 0.9,
+    "rationale": "Both assert that HADDOCK3 runs for subject3 (subject1) with various peptides produce exactly 2 clusters in caprieval."
+  }
+}

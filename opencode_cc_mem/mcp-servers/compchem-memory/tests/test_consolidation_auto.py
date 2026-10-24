@@ -15,24 +15,25 @@ from compchem_memory.consolidation import (
 )
 
 
-def _write(staging: Path, name: str, title: str, body: str, ses: str) -> str:
+def _write(staging: Path, name: str, title: str, body: str, ses: str,
+           tools: list[str] | None = None) -> str:
     fm = {"title": title, "type": "scientific_finding",
           "opencode_session_id": ses, "observed_in_sessions": [ses],
-          "tags": [], "tools": [], "confidence": 0.6}
+          "tags": [], "tools": tools or [], "confidence": 0.6}
     p = staging / name
     p.write_text("---\n" + yaml.dump(fm) + "---\n\n" + body + "\n")
     return str(p)
 
 
 def _store_with_pairs(tmp_path: Path, n_pairs: int = 2) -> Path:
-    """A store whose staging holds n_pairs of same-claim entries (each pair
-    shares a session so observation counting stays simple)."""
+    """A store whose staging holds n_pairs of same-claim entries. Each pair
+    shares a tool, so the auto-band's evidence gate accepts it."""
     store = tmp_path / ".magnolia"
     staging = store / "staging"
     staging.mkdir(parents=True)
     for k in range(n_pairs):
-        _write(staging, f"a{k}.md", f"pair {k} variant A", f"body alpha {k} " + "x" * (k + 1), f"ses_{k}a")
-        _write(staging, f"b{k}.md", f"pair {k} variant B", f"body beta {k}", f"ses_{k}b")
+        _write(staging, f"a{k}.md", f"pair {k} variant A", f"body alpha {k} " + "x" * (k + 1), f"ses_{k}a", tools=[f"tool_{k}"])
+        _write(staging, f"b{k}.md", f"pair {k} variant B", f"body beta {k}", f"ses_{k}b", tools=[f"tool_{k}"])
     return store
 
 

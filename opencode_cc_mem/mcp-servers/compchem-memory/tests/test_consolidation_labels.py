@@ -15,10 +15,10 @@ from compchem_memory.consolidation import (
 )
 
 
-def _write(staging, name, title, body, ses):
+def _write(staging, name, title, body, ses, tools=None):
     fm = {"title": title, "type": "scientific_finding",
           "opencode_session_id": ses, "observed_in_sessions": [ses],
-          "tags": [], "tools": [], "confidence": 0.6}
+          "tags": [], "tools": tools or [], "confidence": 0.6}
     (staging / name).write_text("---\n" + yaml.dump(fm) + "---\n\n" + body + "\n")
     return str(staging / name)
 
@@ -27,8 +27,8 @@ def _store(tmp_path, conf=0.95):
     store = tmp_path / ".magnolia"
     staging = store / "staging"
     staging.mkdir(parents=True)
-    a = _write(staging, "a.md", "A finding", "longer canonical body", "s1")
-    b = _write(staging, "b.md", "B finding", "short", "s2")
+    a = _write(staging, "a.md", "A finding", "longer canonical body", "s1", tools=["same_tool"])
+    b = _write(staging, "b.md", "B finding", "short", "s2", tools=["same_tool"])
     consolidate_project_findings(
         str(store),
         clusterer=lambda p: [{"ids": ["a.md", "b.md"], "confidence": conf,
