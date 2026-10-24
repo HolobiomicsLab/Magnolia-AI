@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root))
+
+from campaign_runner.cli import main
+
+raise SystemExit(main())

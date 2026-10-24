@@ -25,6 +25,7 @@ opencode_cc_mem/softwares/bin/*
 !opencode_cc_mem/softwares/bin/magnolia-run
 !opencode_cc_mem/softwares/bin/magnolia-selfreflex
 !opencode_cc_mem/softwares/bin/magnolia-exp
+!opencode_cc_mem/softwares/bin/magnolia-campaign
 !opencode_cc_mem/softwares/bin/tests/
 !opencode_cc_mem/softwares/bin/tests/**
 # caches / logs
