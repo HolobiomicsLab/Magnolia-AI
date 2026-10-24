@@ -24,6 +24,9 @@ permissions:
   - action: edit
     resource: "runs/*/work/**"
     effect: allow
+  - action: edit
+    resource: "work/**"
+    effect: allow
   - action: compchem-memory_memory_get_context
     resource: "*"
     effect: allow

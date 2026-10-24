@@ -23,6 +23,11 @@ Implemented and tested:
 - CLI commands for validate, init, status, approve, pause, resume, halt,
   reconcile, run, and daemon.
 
+A live smoke on 2026-10-24 ran one real opencode v2 worker through the new
+supervisor. The worker wrote `work/out.md`, the gate passed, and the campaign
+completed. Usage was recorded as 2,252 input, 217 output, 42 reasoning, and
+3,584 cache-read tokens, with cost 0.000504 USD.
+
 Not created yet:
 
 - a real Nle campaign protocol. The exact peptide sequence, reference peptide,
