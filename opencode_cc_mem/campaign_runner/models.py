@@ -137,6 +137,7 @@ class Budget:
     max_attempts_per_stage: int
     max_parallel_jobs: int
     max_followups: int
+    max_cost_usd: float | None = None
 
     @classmethod
     def from_dict(cls, value: Any, where: str) -> "Budget":
@@ -148,8 +149,10 @@ class Budget:
             "max_attempts_per_stage",
             "max_parallel_jobs",
             "max_followups",
+            "max_cost_usd",
         }
         _check_keys(data, allowed, where)
+        max_cost = data.get("max_cost_usd")
         return cls(
             max_tokens=_integer(_required(data, "max_tokens", where), f"{where}.max_tokens", 1),
             max_wall_hours=_number(
@@ -168,6 +171,11 @@ class Budget:
             ),
             max_followups=_integer(
                 _required(data, "max_followups", where), f"{where}.max_followups"
+            ),
+            max_cost_usd=(
+                _number(max_cost, f"{where}.max_cost_usd")
+                if max_cost is not None
+                else None
             ),
         )
 
@@ -246,6 +254,7 @@ class Stage:
     id: str
     type: str
     model: str | None = None
+    hard: bool = False
     inputs: tuple[str, ...] = ()
     outputs: tuple[str, ...] = ()
     command: tuple[str, ...] | str | None = None
@@ -263,6 +272,7 @@ class Stage:
             "id",
             "type",
             "model",
+            "hard",
             "inputs",
             "outputs",
             "command",
@@ -290,6 +300,9 @@ class Stage:
         model_value = data.get("model")
         if model_value is not None and stage_type != "opencode":
             raise _error(f"{where}.model", "only opencode stages may override the model")
+        hard = _boolean(data.get("hard", False), f"{where}.hard")
+        if hard and stage_type != "opencode":
+            raise _error(f"{where}.hard", "only opencode stages may be marked hard")
         review = _boolean(data.get("review", False), f"{where}.review")
         if review and stage_type != "opencode":
             raise _error(f"{where}.review", "only opencode stages may use a reviewer")
@@ -321,6 +334,7 @@ class Stage:
             id=stage_id,
             type=stage_type,
             model=_model(model_value, f"{where}.model", False),
+            hard=hard,
             inputs=_string_list(data.get("inputs", []), f"{where}.inputs", True),
             outputs=_string_list(data.get("outputs", []), f"{where}.outputs", True),
             command=command,
@@ -380,6 +394,12 @@ class Protocol:
             budget=Budget.from_dict(_required(data, "budget", "protocol"), "protocol.budget"),
             stages=stages,
         )
+        for stage in protocol.stages:
+            if stage.hard and not protocol.worker.hard_stage_model:
+                raise _error(
+                    f"protocol.stages.{stage.id}.hard",
+                    "worker.hard_stage_model is required for a hard stage",
+                )
         return protocol
 
     def stage(self, stage_id: str) -> Stage:

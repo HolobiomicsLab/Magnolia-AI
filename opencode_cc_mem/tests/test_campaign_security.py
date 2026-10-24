@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 from campaign_runner.security import (  # noqa: E402
     SecurityError,
     ensure_within,
+    redact_file,
     redact_secrets,
     redact_structure,
 )
@@ -40,3 +41,40 @@ def test_redact_secrets_and_structure():
     clean = redact_structure(value)
     assert "secretvalue" not in clean["error"]
     assert clean["items"] == ["<redacted>"]
+
+
+def test_json_secret_fields_are_redacted_without_touching_metrics():
+    text = '{"api_key": "abcdefghijklmnop", "input_tokens": 12345678}'
+    redacted = redact_secrets(text)
+    assert "abcdefghijklmnop" not in redacted
+    assert "12345678" in redacted
+    value = {
+        "api_key": "abcdefghijklmnop",
+        "nested": {"password": "1234567890123456"},
+        "input_tokens": 7,
+    }
+    clean = redact_structure(value)
+    assert clean["api_key"] == "<redacted>"
+    assert clean["nested"]["password"] == "<redacted>"
+    assert clean["input_tokens"] == 7
+
+
+def test_hash_and_run_id_survive_redaction():
+    body = (
+        "sha256=" + "a" * 64 + "\n"
+        "run_id=haddock3_2026_abc\n"
+        "DEEPSEEK_API_KEY_MIMOSA=supersecretvalue\n"
+    )
+    redacted = redact_secrets(body)
+    assert "a" * 64 in redacted
+    assert "haddock3_2026_abc" in redacted
+    assert "supersecretvalue" not in redacted
+
+
+def test_redact_file_changes_only_when_needed(tmp_path):
+    path = tmp_path / "log.txt"
+    path.write_text("token: supersecretvalue\nsha=" + "b" * 64)
+    assert redact_file(path) is True
+    assert "supersecretvalue" not in path.read_text()
+    assert "b" * 64 in path.read_text()
+    assert redact_file(path) is False

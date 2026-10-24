@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from .process import run_process
-from .security import SecurityError, ensure_within
+from .process import ProcessControl, run_process
+from .security import SecurityError, ensure_within, redact_paths, redact_structure
 
 
 class GateError(Exception):
@@ -31,6 +31,7 @@ class GateResult:
     outputs: list[OutputRecord] = field(default_factory=list)
     exit_code: int | None = None
     timed_out: bool = False
+    stopped_reason: str | None = None
     stdout_path: str | None = None
     stderr_path: str | None = None
 
@@ -85,6 +86,7 @@ def run_gate(
     context: Mapping[str, str],
     attempt_dir: Path,
     timeout_seconds: int = 300,
+    control: ProcessControl | None = None,
 ) -> GateResult:
     rendered = render_argv(argv, context)
     stdout_path = attempt_dir / "gate.stdout.log"
@@ -106,6 +108,7 @@ def run_gate(
             timeout_seconds=timeout_seconds,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
+            control=control,
         )
     except OSError as exc:
         return GateResult(
@@ -115,6 +118,8 @@ def run_gate(
             stderr_path=str(stderr_path),
         )
     errors: list[str] = []
+    if outcome.stopped_reason:
+        errors.append(f"gate stopped: {outcome.stopped_reason}")
     if outcome.timed_out:
         errors.append(f"gate timed out after {timeout_seconds}s")
     if outcome.returncode != 0:
@@ -122,11 +127,14 @@ def run_gate(
         tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-2000:]
         if tail.strip():
             errors.append(tail.strip())
+    redact_paths([stdout_path, stderr_path])
+    errors = redact_structure(errors)
     return GateResult(
         passed=not errors,
         errors=errors,
         exit_code=outcome.returncode,
         timed_out=outcome.timed_out,
+        stopped_reason=outcome.stopped_reason,
         stdout_path=str(stdout_path),
         stderr_path=str(stderr_path),
     )
@@ -136,7 +144,7 @@ def write_receipt(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
     temporary.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        json.dumps(redact_structure(payload), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     temporary.replace(path)

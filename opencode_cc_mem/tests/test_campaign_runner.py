@@ -1,22 +1,34 @@
 import json
+import os
 import sys
+import threading
+import time
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from campaign_runner.jobs import FakeJobBackend, JobController, JobStatus  # noqa: E402
+from campaign_runner.lease import AttemptLease  # noqa: E402
 from campaign_runner.reviewers import ReviewResult  # noqa: E402
 from campaign_runner.runner import CampaignRunner, RunnerConfig  # noqa: E402
 from campaign_runner.state import CampaignStore  # noqa: E402
 from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
 
 
-def protocol_payload(max_tokens=1000, retry="repair_once", prepare_gate="raise SystemExit(0)"):
-    return {
+def protocol_payload(
+    max_tokens=1000,
+    retry="repair_once",
+    prepare_gate="raise SystemExit(0)",
+    hard_analyze=False,
+    max_cost_usd=None,
+):
+    payload = {
         "schema": 1,
         "id": "runner-pilot",
-        "project": "hsc70_new",
+        "project": "project",
         "worker": {
             "model": "opencode-go/deepseek-v4.1-flash",
             "hard_stage_model": "kimi-code-plan-cn/k3.1-pro#high",
@@ -72,13 +84,38 @@ def protocol_payload(max_tokens=1000, retry="repair_once", prepare_gate="raise S
             {"id": "final", "type": "human"},
         ],
     }
+    if hard_analyze:
+        for stage in payload["stages"]:
+            if stage["id"] == "analyze":
+                stage.pop("model")
+                stage["hard"] = True
+    if max_cost_usd is not None:
+        payload["budget"]["max_cost_usd"] = max_cost_usd
+    return payload
 
 
-def initialize(tmp_path, max_tokens=1000, retry="repair_once", prepare_gate="raise SystemExit(0)"):
+def initialize(
+    tmp_path,
+    max_tokens=1000,
+    retry="repair_once",
+    prepare_gate="raise SystemExit(0)",
+    hard_analyze=False,
+    max_cost_usd=None,
+):
     source = tmp_path / "campaign"
     source.mkdir()
     protocol = source / "protocol.json"
-    protocol.write_text(json.dumps(protocol_payload(max_tokens, retry, prepare_gate)))
+    protocol.write_text(
+        json.dumps(
+            protocol_payload(
+                max_tokens,
+                retry,
+                prepare_gate,
+                hard_analyze,
+                max_cost_usd,
+            )
+        )
+    )
     brief = source / "brief.md"
     brief.write_text("brief")
     prompts = source / "prompts"
@@ -119,6 +156,7 @@ class FakeWorker:
         stem="worker",
         resume_session=None,
         retries=None,
+        control=None,
     ):
         self.calls.append(prompt)
         (self.run_dir / "work").mkdir(parents=True, exist_ok=True)
@@ -138,16 +176,67 @@ class FakeWorker:
         )
 
 
+class SleepWorker:
+    def __init__(self):
+        self.started = False
+
+    def run(
+        self,
+        prompt,
+        cwd,
+        attempt_dir,
+        stem="worker",
+        resume_session=None,
+        retries=None,
+        control=None,
+    ):
+        self.started = True
+        deadline = 10
+        while deadline > 0:
+            reason = control.should_stop() if control else None
+            if reason:
+                return WorkerResult(
+                    returncode=-15,
+                    timed_out=False,
+                    duration_seconds=0.1,
+                    session_id="ses_sleep",
+                    final_text="",
+                    all_text="",
+                    tool_calls=0,
+                    usage=empty_usage(),
+                    attempts=1,
+                    stdout_paths=[],
+                    stderr_paths=[],
+                    stopped_reason=reason,
+                )
+            time.sleep(0.05)
+            deadline -= 0.05
+        return WorkerResult(
+            returncode=0,
+            timed_out=False,
+            duration_seconds=1,
+            session_id="ses_sleep",
+            final_text="late",
+            all_text="late",
+            tool_calls=0,
+            usage=empty_usage(),
+            attempts=1,
+            stdout_paths=[],
+            stderr_paths=[],
+        )
+
+
 class FakeReviewer:
-    def __init__(self, issues=None):
+    def __init__(self, issues=None, followups=None):
         self.issues = issues or []
+        self.followups = followups or []
         self.calls = []
 
-    def run(self, model, prompt, cwd, attempt_dir, run_dir):
+    def run(self, model, prompt, cwd, attempt_dir, run_dir, control=None):
         self.calls.append((model, prompt))
         return ReviewResult(
             issues=self.issues,
-            followups=[],
+            followups=self.followups,
             raw_text="{}",
             session_id="ses_review",
             usage=empty_usage(),
@@ -173,8 +262,60 @@ def make_runner(store, fake_worker, fake_reviewer, statuses=None):
     return runner
 
 
+def test_hard_stage_uses_hard_model(tmp_path):
+    store = initialize(tmp_path, hard_analyze=True)
+    store.approve_start("tao", "start")
+    fake_worker = FakeWorker(store.run_dir)
+    fake_reviewer = FakeReviewer()
+    models: list[str] = []
+    project = store.run_dir.parent.parent
+    runner = CampaignRunner(
+        store,
+        project,
+        RunnerConfig(
+            worker_factory=lambda model, timeout: (
+                models.append(model) or fake_worker
+            ),
+            jobs=JobController(store, project, FakeJobBackend()),
+            reviewer=fake_reviewer,
+        ),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+    assert models == ["kimi-code-plan-cn/k3.1-pro#high"]
+    assert fake_reviewer.calls[0][0] == "opencode-go/deepseek-v4.1-flash"
+
+
+def test_startup_approval_is_required_before_any_stage(tmp_path):
+    store = initialize(tmp_path)
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    result = runner.run_once()
+    assert result["state"]["state"] == "queued"
+    assert result["actions"] == ["awaiting startup approval"]
+    assert (store.control_dir / "requests" / "start.md").is_file()
+    assert list(store.attempts_dir.iterdir()) == []
+
+
+def test_project_mismatch_is_rejected(tmp_path):
+    store = initialize(tmp_path)
+    wrong_project = tmp_path / "wrong"
+    wrong_project.mkdir()
+    with pytest.raises(Exception, match="does not match"):
+        CampaignRunner(
+            store,
+            wrong_project,
+            RunnerConfig(
+                worker_factory=lambda model, timeout: FakeWorker(store.run_dir),
+                jobs=JobController(store, wrong_project, FakeJobBackend()),
+                reviewer=FakeReviewer(),
+            ),
+        )
+
+
 def test_full_campaign_with_human_gates(tmp_path):
     store = initialize(tmp_path)
+    store.approve_start("tao", "start")
     fake_worker = FakeWorker(store.run_dir)
     fake_reviewer = FakeReviewer()
     runner = make_runner(
@@ -206,10 +347,38 @@ def test_full_campaign_with_human_gates(tmp_path):
     )
     assert analysis_receipt["session_id"] == "ses_fake"
     assert analysis_receipt["usage"]["input_tokens"] == 0
+    dock_receipt = json.loads(
+        (store.attempts_dir / "dock" / "001" / "receipt.json").read_text()
+    )
+    assert dock_receipt["run_ids"] == ["fake-1"]
+    assert dock_receipt["command_hashes"]
+    assert dock_receipt["test_double"] is True
+
+
+def test_job_core_hours_are_counted_once_per_attempt(tmp_path):
+    store = initialize(tmp_path)
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    state = store.load()
+    runner._record_job_usage(
+        state,
+        JobStatus(terminal=False, state="RUNNING", core_hours=8),
+    )
+    assert store.load().usage["core_hours"] == 8
+    runner._record_job_usage(
+        state,
+        JobStatus(terminal=False, state="RUNNING", core_hours=8),
+    )
+    assert store.load().usage["core_hours"] == 8
+    runner._record_job_usage(
+        state,
+        JobStatus(terminal=True, success=True, core_hours=10),
+    )
+    assert store.load().usage["core_hours"] == 10
 
 
 def test_reviewer_blocker_stops_for_human(tmp_path):
     store = initialize(tmp_path)
+    store.approve_start("tao", "start")
     evidence = store.run_dir / "work" / "analysis.md"
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text("analysis")
@@ -230,8 +399,33 @@ def test_reviewer_blocker_stops_for_human(tmp_path):
     assert result["state"]["stage"] == "analyze"
 
 
+def test_reviewer_followup_limit_is_enforced(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    result = runner.run_once()
+    assert result["state"]["state"] == "waiting_human"
+    receipt = json.loads(
+        (store.attempts_dir / "analyze" / "001" / "receipt.json").read_text()
+    )
+    assert any("followups" in error for error in receipt["errors"])
+
+
 def test_gate_failure_repairs_once_then_waits(tmp_path):
     store = initialize(tmp_path, prepare_gate="raise SystemExit(4)")
+    store.approve_start("tao", "start")
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
     runner.run_once()
     store.approve("tao", "start")
@@ -245,10 +439,65 @@ def test_gate_failure_repairs_once_then_waits(tmp_path):
 
 def test_budget_exceeded_halts(tmp_path):
     store = initialize(tmp_path, max_tokens=1)
+    store.approve_start("tao", "start")
     store.update_usage({"input_tokens": 2}, "test usage")
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
     result = runner.run_once()
     assert result["state"]["state"] == "halted"
+
+
+def test_cost_budget_exceeded_halts(tmp_path):
+    store = initialize(tmp_path, max_cost_usd=1)
+    store.approve_start("tao", "start")
+    store.update_usage({"cost_usd": 2}, "test usage")
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    result = runner.run_once()
+    assert result["state"]["state"] == "halted"
+
+
+def test_zero_cost_budget_is_disabled(tmp_path):
+    store = initialize(tmp_path, max_cost_usd=0)
+    store.approve_start("tao", "start")
+    store.update_usage({"cost_usd": 2}, "subscription cost")
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    result = runner.run_once()
+    assert result["state"]["state"] == "waiting_human"
+
+
+def test_validating_requires_attempt_lease(tmp_path):
+    store = initialize(tmp_path)
+    store.transition("running", "test", stage="analyze", attempt=1)
+    store.transition("validating", "test")
+    lease = AttemptLease.acquire(store.run_dir, "analyze", 1)
+    try:
+        runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+        result = runner.run_once()
+    finally:
+        lease.release()
+    assert result["state"]["state"] == "validating"
+    assert result["actions"] and result["actions"][0].startswith("busy:")
+
+
+def test_stale_validation_lease_requires_human(tmp_path):
+    store = initialize(tmp_path)
+    store.transition("running", "test", stage="analyze", attempt=1)
+    store.transition("validating", "test")
+    path = store.leases_dir / "analyze-1.json"
+    path.write_text(
+        json.dumps(
+            {
+                "stage": "analyze",
+                "attempt": 1,
+                "owner_pid": 99999999,
+                "owner_pgid": 99999999,
+                "hostname": os.uname().nodename,
+            }
+        )
+    )
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    result = runner.run_once()
+    assert result["state"]["state"] == "waiting_human"
+    assert "stale lease" in result["actions"][0]
 
 
 def test_interrupted_running_state_waits_for_human(tmp_path):
@@ -261,6 +510,7 @@ def test_interrupted_running_state_waits_for_human(tmp_path):
 
 def test_job_infrastructure_failure_retries_once(tmp_path):
     store = initialize(tmp_path)
+    store.approve_start("tao", "start")
     fake_worker = FakeWorker(store.run_dir)
     statuses = {
         "fake-1": [
@@ -275,10 +525,70 @@ def test_job_infrastructure_failure_retries_once(tmp_path):
     result = runner.run_once()
     assert result["state"]["state"] == "waiting_human"
     assert result["state"]["stage"] == "final"
+    dock_receipts = list((store.attempts_dir / "dock").rglob("receipt.json"))
+    assert len(dock_receipts) == 2
+
+
+def test_halt_interrupts_active_worker(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    worker = SleepWorker()
+    runner = make_runner(store, worker, FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    result: dict = {}
+
+    def execute():
+        result.update(runner.run_once())
+
+    thread = threading.Thread(target=execute)
+    thread.start()
+    deadline = time.monotonic() + 3
+    while not worker.started and time.monotonic() < deadline:
+        time.sleep(0.02)
+    (store.run_dir / "HALT").write_text("stop")
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert result["state"]["state"] == "halted"
+    receipt = store.attempts_dir / "analyze" / "001" / "receipt.json"
+    assert receipt.is_file()
+    assert json.loads(receipt.read_text())["status"] == "stopped"
+
+
+def test_pause_resume_reuses_waiting_job_attempt(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(),
+        statuses={
+            "fake-1": [
+                JobStatus(terminal=False, state="RUNNING"),
+                JobStatus(terminal=False, state="RUNNING"),
+            ]
+        },
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    submitted = runner.run_once()
+    assert submitted["state"]["state"] == "waiting_job"
+    assert submitted["state"]["attempt"] == 1
+    store.pause("hold")
+    paused = store.load()
+    assert paused.paused_from == "waiting_job"
+    resumed = store.resume("continue")
+    assert resumed.state == "waiting_job"
+    assert resumed.attempt == 1
+    result = runner.run_once()
+    assert result["state"]["state"] == "waiting_job"
+    assert result["state"]["attempt"] == 1
+    assert len(runner.fake_backend.submitted) == 1
 
 
 def test_halt_file_cancels_active_jobs(tmp_path):
     store = initialize(tmp_path)
+    store.approve_start("tao", "start")
     runner = make_runner(
         store,
         FakeWorker(store.run_dir),

@@ -24,22 +24,40 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import yaml
 
-
-# Conservative secret shapes — clear keys/tokens, not ordinary prose.
+# Conservative secret shapes. Do not use broad long-hex or long-base64 rules:
+# they destroy SHA-256 evidence and run identifiers.
+_SECRET_KEY_TEXT = (
+    r"(?:API[_-]?KEY|APIKEY|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|"
+    r"AUTH[_-]?TOKEN|BEARER[_-]?TOKEN|TOKEN|SECRET|PASSWORD|"
+    r"[A-Z0-9_.-]*[_-](?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)"
+    r"(?:[_-][A-Z0-9_]+)*)"
+)
+_JSON_SECRET_FIELD = re.compile(
+    rf"(?i)(?P<prefix>[\"']{_SECRET_KEY_TEXT}[\"']\s*:\s*)"
+    r"(?P<quote>[\"'])(?P<value>[^\"']{8,})(?P=quote)"
+)
 _SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
-    re.compile(r"\b[A-Fa-f0-9]{32,}\b"),          # long hex (hashes/tokens)
-    re.compile(r"\b[A-Za-z0-9+/]{40,}={0,2}\b"),  # long base64-ish blobs
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    re.compile(
+        r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|"
+        r"auth[_-]?token|token|secret|password)\b"
+        r"\s*[:=]\s*['\"]?[^\s'\",;]{8,}"
+    ),
 ]
+
+
+def _redact_json_field(match: re.Match[str]) -> str:
+    quote = match.group("quote")
+    return f"{match.group('prefix')}{quote}[REDACTED_SECRET]{quote}"
 
 
 def scrub_secrets(text: str) -> str:
     """Redact known secret shapes before content reaches an external LLM."""
-    out = text
+    out = _JSON_SECRET_FIELD.sub(_redact_json_field, text)
     for pat in _SECRET_PATTERNS:
         out = pat.sub("[REDACTED_SECRET]", out)
     return out

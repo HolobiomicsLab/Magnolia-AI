@@ -12,6 +12,12 @@ permissions:
   - action: read
     resource: "*.env*"
     effect: deny
+  - action: read
+    resource: "**/.magnolia/campaign-service.json"
+    effect: deny
+  - action: read
+    resource: "**/.magnolia/campaign-service.log"
+    effect: deny
   - action: glob
     resource: "*"
     effect: allow

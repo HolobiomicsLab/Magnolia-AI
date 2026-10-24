@@ -44,6 +44,8 @@ if mode == "timeout":
     raise SystemExit(0)
 if mode == "review":
     text = '{"issues":[],"followups":[]}'
+elif mode == "secret":
+    text = "token: supersecretvalue sha=" + "a" * 64
 else:
     text = "DONE"
 print(json.dumps({"type": "step_start", "sessionID": session, "part": {"type": "step-start"}}))
@@ -140,6 +142,24 @@ def test_executor_retries_empty_output_in_same_session(tmp_path):
     second_args = json.loads(log.read_text())
     assert "--session" in second_args
     assert second_args[second_args.index("--session") + 1] == "ses_fake"
+
+
+def test_executor_redacts_secret_but_keeps_hash(tmp_path):
+    binary = fake_binary(tmp_path)
+    executor = OpenCodeExecutor(
+        binary=str(binary),
+        model="opencode-go/deepseek-v4.1-flash",
+        agent="campaign-worker",
+        environment={"FAKE_MODE": "secret"},
+        timeout_seconds=10,
+    )
+    result = executor.run("do work", tmp_path, tmp_path / "attempt")
+    log = (tmp_path / "attempt" / "worker_1.jsonl").read_text()
+    final = (tmp_path / "attempt" / "worker_final.md").read_text()
+    for body in (log, final):
+        assert "supersecretvalue" not in body
+        assert "a" * 64 in body
+    assert "supersecretvalue" in result.final_text
 
 
 def test_executor_nonzero_exit_keeps_result(tmp_path):

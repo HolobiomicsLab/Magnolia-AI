@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from campaign_runner import CampaignBusyError, CampaignStore, StateError  # noqa: E402
+from campaign_runner.state import CampaignStateChangedError  # noqa: E402
 
 
 def protocol_payload():
@@ -50,11 +51,12 @@ def protocol_payload():
 
 
 def make_store(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     protocol = tmp_path / "protocol.json"
     protocol.write_text(json.dumps(protocol_payload()), encoding="utf-8")
     brief = tmp_path / "brief.md"
     brief.write_text("# Approved brief\n\nDo the fixed protocol.\n", encoding="utf-8")
-    store = CampaignStore(tmp_path / "run")
+    store = CampaignStore(tmp_path / "project" / "runs" / "run")
     state = store.initialize(protocol, brief)
     return store, state, protocol, brief
 
@@ -93,6 +95,28 @@ def test_transition_updates_state_and_journal(tmp_path):
     assert events[-1]["from"] == "queued"
     assert events[-1]["to"] == "running"
     assert events[-1]["reason"] == "start stage"
+
+
+def test_transition_if_current_rejects_stale_runner(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    stale = store.load()
+    store.transition("running", "first runner")
+    with pytest.raises(CampaignStateChangedError, match="state changed"):
+        store.transition_if_current(
+            "running",
+            "stale runner",
+            expected_state=stale.state,
+            expected_stage=stale.stage,
+            expected_attempt=stale.attempt,
+        )
+
+
+def test_start_approval_rejects_and_repairs_empty_record(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    store.start_approval_path.write_text("{}", encoding="utf-8")
+    assert store.start_approved() is False
+    store.approve_start("tao", "replace malformed approval")
+    assert store.start_approved() is True
 
 
 def test_invalid_transition_is_refused(tmp_path):
@@ -185,12 +209,76 @@ def test_usage_and_jobs_survive_reconcile(tmp_path):
     assert repaired.jobs["job/1/a"]["run_id"] == "r1"
 
 
+def test_state_and_journal_redact_job_secrets(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    secret = "sk-abcdefghijklmnop"
+    store.update_jobs({"job/1/a": {"command": [secret]}}, "secret job")
+    assert secret not in store.events_path.read_text()
+    assert secret not in store.campaign_path.read_text()
+
+
+def test_reconcile_preserves_pause_origin_after_usage_event(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    store.transition("running", "run", stage="analyze", attempt=1)
+    store.transition("waiting_job", "wait", stage="analyze", attempt=1)
+    store.pause("hold")
+    store.update_usage({"input_tokens": 1}, "usage while paused")
+    store.campaign_path.unlink()
+    repaired = store.reconcile()
+    assert repaired.paused_from == "waiting_job"
+    resumed = store.resume("continue")
+    assert resumed.state == "waiting_job"
+    assert resumed.attempt == 1
+
+
 def test_final_human_approval_completes_campaign(tmp_path):
     store, _, _, _ = make_store(tmp_path)
     store.transition("running", "start", stage="final")
     store.transition("waiting_human", "final")
     state = store.approve("tao", "accepted")
     assert state.state == "completed"
+
+
+def test_startup_approval_is_explicit_and_counts_human_minutes(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    assert store.start_approved() is False
+    state = store.approve_start("tao", "go", minutes=12)
+    assert state.state == "queued"
+    assert state.usage["human_minutes"] == 12
+    assert store.start_approved() is True
+    with pytest.raises(StateError, match="already approved"):
+        store.approve_start("tao", "again")
+    store.transition("running", "start")
+    store.transition("waiting_human", "check")
+    state = store.approve("tao", "ok", minutes=7)
+    assert state.usage["human_minutes"] == 19
+
+
+def test_fail_from_running_and_paused(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    store.transition("running", "start")
+    assert store.fail("stop failed").state == "failed"
+    other, _, _, _ = make_store(tmp_path / "other")
+    other.transition("running", "start")
+    other.transition("paused", "pause")
+    assert other.fail("stop failed").state == "failed"
+
+
+def test_memory_hash_detects_project_memory_change(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    entries = store.run_dir.parent.parent / ".magnolia" / "entries"
+    entries.mkdir(parents=True)
+    (entries / "one.md").write_text("one")
+    from campaign_runner.state import memory_state_for_run
+
+    snapshot = memory_state_for_run(store.run_dir)
+    assert snapshot["entry_count"] == 1
+    state = store.load()
+    state.memory_state = snapshot
+    store.save(state)
+    (entries / "one.md").write_text("changed")
+    with pytest.raises(StateError, match="memory changed"):
+        store.verify_memory_state()
 
 
 def test_corrupt_middle_event_is_rejected(tmp_path):

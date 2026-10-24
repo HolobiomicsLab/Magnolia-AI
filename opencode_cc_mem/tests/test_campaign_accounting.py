@@ -70,4 +70,6 @@ def test_read_session_usage_sums_assistant_rows(tmp_path):
 def test_elapsed_to_core_hours():
     assert elapsed_to_core_hours("02:00:00", 4) == 8
     assert elapsed_to_core_hours("00:30:00", 2) == 1
+    assert elapsed_to_core_hours("30:00", 2) == 1
+    assert elapsed_to_core_hours("1-02:00:00", 4) == 104
     assert elapsed_to_core_hours("bad", 2) == 0

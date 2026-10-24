@@ -56,12 +56,27 @@ def merge_usage(total: Mapping[str, float], addition: Mapping[str, float]) -> di
 
 
 def elapsed_to_core_hours(elapsed: str, ncores: int) -> float:
-    parts = elapsed.strip().split(":")
-    if len(parts) != 3:
-        return 0.0
+    text = elapsed.strip()
+    days = 0
+    if "-" in text:
+        day_text, text = text.split("-", 1)
+        try:
+            days = int(day_text)
+        except ValueError:
+            return 0.0
+    parts = text.split(":")
     try:
-        hours, minutes, seconds = (int(part) for part in parts)
+        values = [int(part) for part in parts]
     except ValueError:
         return 0.0
-    total_hours = hours + minutes / 60 + seconds / 3600
+    if len(values) == 3:
+        hours, minutes, seconds = values
+    elif len(values) == 2:
+        hours, minutes = 0, values[0]
+        seconds = values[1]
+    else:
+        return 0.0
+    if min(hours, minutes, seconds, days) < 0:
+        return 0.0
+    total_hours = days * 24 + hours + minutes / 60 + seconds / 3600
     return max(0.0, total_hours) * max(0, ncores)

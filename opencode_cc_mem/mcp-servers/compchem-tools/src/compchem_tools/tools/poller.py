@@ -182,7 +182,7 @@ def dispatch_terminal(
         # chance does not get a third without a human). Conservative by
         # design: safe before the full governor exists. If the retry cannot
         # be issued, fall back to the old flag-and-fail behavior.
-        if _auto_retry_enabled() and int(remote.get("restart_count") or 0) < 1:
+        if _auto_retry_enabled(run_record) and int(remote.get("restart_count") or 0) < 1:
             result = _auto_retry_slurm(run_record, project_dir=project_dir)
             if result.get("success"):
                 try:
@@ -300,9 +300,19 @@ _HEALTH_PATTERNS = ("Fatal error", "Segmentation fault", "MPI_ABORT")
 _HEALTH_TAIL_LINES = 200
 
 
-def _auto_retry_enabled() -> bool:
-    """Single-retry auto-resubmission for infra failures. MAGNOLIA_AUTO_RETRY=0
-    disables (mirrors the MAGNOLIA_HANDOVER_SKIP_EXPORT kill-switch pattern)."""
+def _auto_retry_enabled(run_record: dict[str, Any] | None = None) -> bool:
+    """Return whether a run may be retried by the background poller.
+
+    Campaign-owned runs carry the ``campaign`` system tag. Their protocol's
+    explicit retry policy is authoritative, so the background poller must not
+    resubmit them independently. ``MAGNOLIA_AUTO_RETRY=0`` disables all other
+    automatic retries.
+    """
+    tags = (run_record or {}).get("system_tags") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    if "campaign" in tags:
+        return False
     return os.environ.get("MAGNOLIA_AUTO_RETRY", "") != "0"
 
 

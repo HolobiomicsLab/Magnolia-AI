@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from .process import run_process
+from .process import ProcessControl, run_process
+from .security import redact_paths
 
 
 EMPTY_OUTPUT_NOTE = (
@@ -44,6 +45,7 @@ class WorkerResult:
     attempts: int
     stdout_paths: list[Path]
     stderr_paths: list[Path]
+    stopped_reason: str | None = None
 
 
 def empty_usage() -> dict[str, float]:
@@ -133,18 +135,33 @@ class OpenCodeExecutor:
         stem: str = "worker",
         resume_session: str | None = None,
         retries: int | None = None,
+        control: ProcessControl | None = None,
     ) -> WorkerResult:
         attempt_dir.mkdir(parents=True, exist_ok=True)
         retry_limit = self.max_format_retries if retries is None else retries
         environment = dict(os.environ)
         if self.environment:
             environment.update(self.environment)
+        environment["PWD"] = str(Path(cwd).resolve())
         if self.db_path:
             environment["OPENCODE_DB"] = self.db_path
         if self.max_steps is not None:
-            environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(
-                {"agents": {self.agent: {"steps": self.max_steps}}}
-            )
+            try:
+                config = json.loads(environment.get("OPENCODE_CONFIG_CONTENT", "{}"))
+                if not isinstance(config, dict):
+                    config = {}
+            except json.JSONDecodeError:
+                config = {}
+            agents = config.setdefault("agents", {})
+            if not isinstance(agents, dict):
+                agents = {}
+                config["agents"] = agents
+            agent_config = agents.setdefault(self.agent, {})
+            if not isinstance(agent_config, dict):
+                agent_config = {}
+                agents[self.agent] = agent_config
+            agent_config["steps"] = self.max_steps
+            environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
         session_id = resume_session
         final_text = ""
         all_text = ""
@@ -155,6 +172,7 @@ class OpenCodeExecutor:
         total_duration = 0.0
         returncode = 0
         timed_out = False
+        stopped_reason: str | None = None
         current_prompt = prompt
         attempts = 0
         for attempt_index in range(retry_limit + 1):
@@ -170,6 +188,7 @@ class OpenCodeExecutor:
                     timeout_seconds=self.timeout_seconds,
                     stdout_path=stdout_path,
                     stderr_path=stderr_path,
+                    control=control,
                 )
             except OSError as exc:
                 raise WorkerError(f"cannot start worker: {exc}") from exc
@@ -178,6 +197,7 @@ class OpenCodeExecutor:
             total_duration += outcome.duration_seconds
             returncode = outcome.returncode
             timed_out = outcome.timed_out
+            stopped_reason = outcome.stopped_reason
             parsed = parse_run_events(
                 stdout_path.read_text(encoding="utf-8", errors="replace")
             )
@@ -187,6 +207,8 @@ class OpenCodeExecutor:
             all_text = parsed.all_text
             total_tool_calls += parsed.tool_calls
             _merge_usage(total_usage, parsed.usage)
+            if outcome.stopped_reason:
+                break
             if outcome.timed_out or outcome.returncode != 0:
                 break
             if final_text.strip():
@@ -196,6 +218,7 @@ class OpenCodeExecutor:
             current_prompt = EMPTY_OUTPUT_NOTE
             session_id = parsed.session_id
         (attempt_dir / f"{stem}_final.md").write_text(final_text, encoding="utf-8")
+        redact_paths([*stdout_paths, *stderr_paths, attempt_dir / f"{stem}_final.md"])
         return WorkerResult(
             returncode=returncode,
             timed_out=timed_out,
@@ -208,6 +231,7 @@ class OpenCodeExecutor:
             attempts=attempts,
             stdout_paths=stdout_paths,
             stderr_paths=stderr_paths,
+            stopped_reason=stopped_reason,
         )
 
     def _argv(self, prompt: str, session_id: str | None) -> list[str]:

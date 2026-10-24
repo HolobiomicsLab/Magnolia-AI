@@ -21,6 +21,7 @@ from .models import (
     load_protocol,
     protocol_sha256,
 )
+from .security import redact_structure
 
 
 STATES = (
@@ -35,10 +36,12 @@ STATES = (
     "paused",
 )
 TERMINAL_STATES = frozenset({"completed", "failed", "halted"})
-PAUSABLE_STATES = frozenset({"queued", "waiting_job", "validating"})
+PAUSABLE_STATES = frozenset({"queued", "running", "waiting_job", "validating"})
 TRANSITIONS: dict[str, frozenset[str]] = {
-    "queued": frozenset({"running", "paused", "halted", "failed"}),
-    "running": frozenset({"validating", "waiting_job", "waiting_human", "failed", "halted"}),
+    "queued": frozenset({"running", "waiting_human", "paused", "halted", "failed"}),
+    "running": frozenset(
+        {"validating", "waiting_job", "waiting_human", "failed", "halted", "paused"}
+    ),
     "waiting_job": frozenset(
         {"validating", "waiting_human", "failed", "halted", "paused"}
     ),
@@ -46,7 +49,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
         {"queued", "running", "waiting_human", "completed", "failed", "halted", "paused"}
     ),
     "waiting_human": frozenset({"queued", "completed", "failed", "halted", "paused"}),
-    "paused": frozenset({"queued", "halted"}),
+    "paused": frozenset({"queued", "waiting_job", "validating", "halted", "failed"}),
     "completed": frozenset(),
     "failed": frozenset(),
     "halted": frozenset(),
@@ -74,6 +77,8 @@ CAMPAIGN_KEYS = {
     "updated_at",
     "brief_sha256",
     "memory_state",
+    "job_core_hours",
+    "paused_from",
 }
 
 
@@ -83,6 +88,10 @@ class StateError(CampaignError):
 
 class CampaignBusyError(StateError):
     """Raised when another process holds the campaign lock."""
+
+
+class CampaignStateChangedError(CampaignBusyError):
+    """Raised when a runner's loaded state is no longer current."""
 
 
 def utc_now() -> str:
@@ -112,6 +121,8 @@ class CampaignState:
     updated_at: str = field(default_factory=utc_now)
     brief_sha256: str | None = None
     memory_state: dict[str, Any] | None = None
+    job_core_hours: dict[str, float] = field(default_factory=dict)
+    paused_from: str | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "CampaignState":
@@ -153,6 +164,17 @@ class CampaignState:
         memory_state = value.get("memory_state")
         if memory_state is not None and not isinstance(memory_state, dict):
             raise StateError("memory_state must be an object")
+        paused_from = value.get("paused_from")
+        if paused_from is not None and paused_from not in STATES:
+            raise StateError(f"unknown paused_from state '{paused_from}'")
+        raw_job_core = value.get("job_core_hours", {})
+        if not isinstance(raw_job_core, dict):
+            raise StateError("job_core_hours must be an object")
+        job_core_hours: dict[str, float] = {}
+        for key, item in raw_job_core.items():
+            if isinstance(item, bool) or not isinstance(item, (int, float)):
+                raise StateError(f"job_core_hours[{key!r}] must be numeric")
+            job_core_hours[str(key)] = float(item)
         return cls(
             schema=1,
             protocol_id=str(value["protocol_id"]),
@@ -168,6 +190,8 @@ class CampaignState:
                 str(value["brief_sha256"]) if value.get("brief_sha256") is not None else None
             ),
             memory_state=dict(memory_state) if memory_state is not None else None,
+            job_core_hours=job_core_hours,
+            paused_from=paused_from,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -184,6 +208,8 @@ class CampaignState:
             "updated_at": self.updated_at,
             "brief_sha256": self.brief_sha256,
             "memory_state": self.memory_state,
+            "job_core_hours": self.job_core_hours,
+            "paused_from": self.paused_from,
         }
 
 
@@ -204,8 +230,30 @@ def _atomic_write_bytes(path: Path, body: bytes) -> None:
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
-    body = json.dumps(value, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    body = (
+        json.dumps(redact_structure(value), indent=2, sort_keys=True).encode("utf-8")
+        + b"\n"
+    )
     _atomic_write_bytes(path, body)
+
+
+def memory_state_for_run(run_dir: Path) -> dict[str, Any]:
+    if Path(run_dir).parent.name != "runs":
+        return {"entries_sha256": None, "entry_count": 0}
+    project_dir = Path(run_dir).parent.parent
+    entries_dir = project_dir / ".magnolia" / "entries"
+    if not entries_dir.is_dir():
+        return {"entries_sha256": None, "entry_count": 0}
+    digest = hashlib.sha256()
+    count = 0
+    for path in sorted(entries_dir.glob("*.md")):
+        relative = path.relative_to(entries_dir).as_posix().encode()
+        digest.update(relative)
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+        count += 1
+    return {"entries_sha256": digest.hexdigest(), "entry_count": count}
 
 
 class CampaignStore:
@@ -221,6 +269,12 @@ class CampaignStore:
         self.events_path = self.control_dir / "events.jsonl"
         self.jobs_path = self.control_dir / "jobs.json"
         self.approvals_dir = self.control_dir / "approvals"
+        self.leases_dir = self.control_dir / "leases"
+        self.requests_dir = self.control_dir / "requests"
+        self.distill_queue_path = self.control_dir / "distill-queue.jsonl"
+        self.job_errors_path = self.control_dir / "job-errors.jsonl"
+        self.cancel_errors_path = self.control_dir / "cancel-errors.jsonl"
+        self.start_approval_path = self.approvals_dir / "start.json"
         self.lock_path = self.control_dir / ".lock"
 
     def _ensure_dirs(self) -> None:
@@ -230,6 +284,8 @@ class CampaignStore:
             self.attempts_dir,
             self.reports_dir,
             self.approvals_dir,
+            self.requests_dir,
+            self.leases_dir,
             self.control_dir / "scripts",
             self.control_dir / "checks",
         ):
@@ -289,7 +345,9 @@ class CampaignStore:
                 created_at=now,
                 updated_at=now,
                 brief_sha256=brief_hash,
-                memory_state=memory_state,
+                memory_state=(
+                    memory_state if memory_state is not None else memory_state_for_run(self.run_dir)
+                ),
             )
             initial = {
                 "schema": 1,
@@ -338,6 +396,13 @@ class CampaignStore:
             raise StateError(f"campaign refers to unknown stage '{state.stage}'")
         return state
 
+    def verify_memory_state(self) -> None:
+        state = self.load()
+        current = memory_state_for_run(self.run_dir)
+        expected = state.memory_state or {}
+        if expected.get("entries_sha256") != current.get("entries_sha256"):
+            raise StateError("project memory changed since campaign initialization")
+
     def save(self, state: CampaignState) -> None:
         _atomic_write_json(self.campaign_path, state.to_dict())
 
@@ -363,7 +428,7 @@ class CampaignStore:
     def _append_event_locked(self, event: dict[str, Any]) -> None:
         self.control_dir.mkdir(parents=True, exist_ok=True)
         with self.events_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event, sort_keys=True) + "\n")
+            handle.write(json.dumps(redact_structure(event), sort_keys=True) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -377,7 +442,7 @@ class CampaignStore:
     ) -> dict[str, Any]:
         events = self.read_events()
         seq = int(events[-1]["seq"]) + 1 if events else 1
-        return {
+        event = {
             "schema": 1,
             "ts": utc_now(),
             "seq": seq,
@@ -388,6 +453,9 @@ class CampaignStore:
             "stage": stage,
             "attempt": attempt,
         }
+        if state.state == "paused" and state.paused_from:
+            event["paused_from"] = state.paused_from
+        return event
 
     def transition(
         self,
@@ -397,6 +465,29 @@ class CampaignStore:
         attempt: int | None = None,
     ) -> CampaignState:
         with self.lock():
+            return self._transition_locked(target, reason, stage, attempt)
+
+    def transition_if_current(
+        self,
+        target: str,
+        reason: str,
+        *,
+        expected_state: str,
+        expected_stage: str,
+        expected_attempt: int,
+        stage: str | None = None,
+        attempt: int | None = None,
+    ) -> CampaignState:
+        """Transition only when the campaign still matches the loaded state."""
+        with self.lock():
+            current = self.load()
+            actual = (current.state, current.stage, current.attempt)
+            expected = (expected_state, expected_stage, expected_attempt)
+            if actual != expected:
+                raise CampaignStateChangedError(
+                    "campaign state changed while acquiring the attempt lease: "
+                    f"expected {expected}, found {actual}"
+                )
             return self._transition_locked(target, reason, stage, attempt)
 
     def _transition_locked(
@@ -423,8 +514,12 @@ class CampaignStore:
         if resolved_attempt < 0:
             raise StateError("attempt must be >= 0")
         event = self._new_event(state, target, reason, resolved_stage, resolved_attempt)
+        if target == "paused":
+            event["paused_from"] = state.state
         self._append_event_locked(event)
         state.state = target
+        if target == "paused":
+            state.paused_from = str(event["paused_from"])
         state.stage = resolved_stage
         state.attempt = resolved_attempt
         state.updated_at = str(event["ts"])
@@ -434,12 +529,43 @@ class CampaignStore:
     def update_usage(self, delta: Mapping[str, float], reason: str) -> CampaignState:
         with self.lock():
             state = self.load()
-            for key, value in delta.items():
-                if key not in state.usage:
-                    raise StateError(f"unknown usage field '{key}'")
-                state.usage[key] = float(state.usage[key]) + float(value)
+            return self._add_usage_locked(state, delta, reason)
+
+    def _add_usage_locked(
+        self,
+        state: CampaignState,
+        delta: Mapping[str, float],
+        reason: str,
+    ) -> CampaignState:
+        for key, value in delta.items():
+            if key not in state.usage:
+                raise StateError(f"unknown usage field '{key}'")
+            state.usage[key] = float(state.usage[key]) + float(value)
+        event = self._new_event(state, state.state, reason, state.stage, state.attempt)
+        event["usage_after"] = state.usage
+        self._append_event_locked(event)
+        state.updated_at = str(event["ts"])
+        self.save(state)
+        return state
+
+    def update_job_usage(
+        self,
+        attempt_key: str,
+        core_hours: float,
+        reason: str,
+    ) -> CampaignState:
+        with self.lock():
+            state = self.load()
+            previous = float(state.job_core_hours.get(attempt_key, 0))
+            if core_hours <= previous:
+                return state
+            state.job_core_hours[attempt_key] = float(core_hours)
+            state.usage["core_hours"] = float(state.usage["core_hours"]) + (
+                float(core_hours) - previous
+            )
             event = self._new_event(state, state.state, reason, state.stage, state.attempt)
             event["usage_after"] = state.usage
+            event["job_core_hours_after"] = state.job_core_hours
             self._append_event_locked(event)
             state.updated_at = str(event["ts"])
             self.save(state)
@@ -475,6 +601,16 @@ class CampaignStore:
                 state.usage = {key: float(value) for key, value in last["usage_after"].items()}
             if isinstance(last.get("jobs_after"), dict):
                 state.jobs = dict(last["jobs_after"])
+            if isinstance(last.get("job_core_hours_after"), dict):
+                state.job_core_hours = {
+                    str(key): float(value)
+                    for key, value in last["job_core_hours_after"].items()
+                }
+            if last.get("to") == "paused":
+                if last.get("paused_from"):
+                    state.paused_from = str(last["paused_from"])
+            else:
+                state.paused_from = None
             state.updated_at = str(last.get("ts", state.updated_at))
             self.save(state)
             return state
@@ -493,6 +629,16 @@ class CampaignStore:
                 state.usage = {key: float(value) for key, value in event["usage_after"].items()}
             if isinstance(event.get("jobs_after"), dict):
                 state.jobs = dict(event["jobs_after"])
+            if isinstance(event.get("job_core_hours_after"), dict):
+                state.job_core_hours = {
+                    str(key): float(value)
+                    for key, value in event["job_core_hours_after"].items()
+                }
+            if event.get("to") == "paused":
+                if event.get("paused_from"):
+                    state.paused_from = str(event["paused_from"])
+            else:
+                state.paused_from = None
             state.updated_at = str(event.get("ts", state.updated_at))
         return state
 
@@ -508,7 +654,30 @@ class CampaignStore:
             state = self.load()
             if state.state != "paused":
                 raise StateError(f"cannot resume from state '{state.state}'")
-            return self._transition_locked("queued", reason)
+            origin = state.paused_from
+            target = "queued"
+            if origin in {"waiting_job", "validating"}:
+                target = origin
+            elif origin is None and self._has_resumable_job_attempt(state):
+                target = "waiting_job"
+            elif origin == "running" and self._has_resumable_job_attempt(state):
+                target = "waiting_job"
+            result = self._transition_locked(target, reason, attempt=state.attempt)
+            result.paused_from = None
+            self.save(result)
+            return result
+
+    def _has_resumable_job_attempt(self, state: CampaignState) -> bool:
+        for record in state.jobs.values():
+            if not isinstance(record, dict):
+                continue
+            if (
+                record.get("stage") == state.stage
+                and record.get("attempt") == state.attempt
+                and record.get("status") in {"submitted", "running", "succeeded"}
+            ):
+                return True
+        return False
 
     def halt(self, reason: str = "operator halt") -> CampaignState:
         with self.lock():
@@ -519,11 +688,72 @@ class CampaignStore:
                 return self._transition_locked("halted", reason)
             return self._transition_locked("halted", reason)
 
+    def fail(self, reason: str) -> CampaignState:
+        with self.lock():
+            state = self.load()
+            if state.state in TERMINAL_STATES:
+                raise StateError(f"campaign is already terminal: {state.state}")
+            return self._transition_locked("failed", reason)
+
+    def start_approved(self) -> bool:
+        try:
+            approval = json.loads(
+                self.start_approval_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(approval, dict):
+            return False
+        if not all(
+            isinstance(approval.get(key), str) and approval[key].strip()
+            for key in ("ts", "approver", "reason")
+        ):
+            return False
+        expected = protocol_sha256(self.verify_protocol())
+        return approval.get("protocol_sha256") == expected
+
+    def approve_start(
+        self,
+        approver: str,
+        reason: str,
+        minutes: float = 0,
+    ) -> CampaignState:
+        if minutes < 0:
+            raise StateError("minutes must be >= 0")
+        if not approver.strip() or not reason.strip():
+            raise StateError("approver and reason must not be empty")
+        with self.lock():
+            state = self.load()
+            if state.state != "queued":
+                raise StateError("startup approval is only valid for a queued campaign")
+            if self.start_approved():
+                raise StateError("startup is already approved")
+            approval = {
+                "ts": utc_now(),
+                "approver": approver,
+                "reason": reason,
+                "minutes": float(minutes),
+                "stage": state.stage,
+                "attempt": state.attempt,
+                "protocol_sha256": protocol_sha256(self.verify_protocol()),
+            }
+            _atomic_write_json(self.start_approval_path, approval)
+            if minutes:
+                state = self._add_usage_locked(
+                    state,
+                    {"human_minutes": float(minutes)},
+                    f"startup approval by {approver}",
+                )
+            return state
+
     def approve(
         self,
         approver: str,
         reason: str,
+        minutes: float = 0,
     ) -> CampaignState:
+        if minutes < 0:
+            raise StateError("minutes must be >= 0")
         with self.lock():
             state = self.load()
             if state.state != "waiting_human":
@@ -536,6 +766,7 @@ class CampaignStore:
                 "ts": utc_now(),
                 "approver": approver,
                 "reason": reason,
+                "minutes": float(minutes),
                 "stage": state.stage,
                 "attempt": state.attempt,
                 "from": state.state,
@@ -546,23 +777,31 @@ class CampaignStore:
             )
             _atomic_write_json(self.approvals_dir / filename, approval)
             if target == "completed":
-                return self._transition_locked(
+                result = self._transition_locked(
                     "completed",
                     f"approved by {approver}: {reason}",
                     allow_human_exit=True,
                 )
-            if stage.type == "human":
-                return self._transition_locked(
+            elif stage.type == "human":
+                result = self._transition_locked(
                     "queued",
                     f"approved by {approver}: {reason}",
                     stage=next_stage,
                     attempt=0,
                     allow_human_exit=True,
                 )
-            return self._transition_locked(
-                "queued",
-                f"approved by {approver}: {reason}",
-                stage=state.stage,
-                attempt=state.attempt,
-                allow_human_exit=True,
-            )
+            else:
+                result = self._transition_locked(
+                    "queued",
+                    f"approved by {approver}: {reason}",
+                    stage=state.stage,
+                    attempt=state.attempt,
+                    allow_human_exit=True,
+                )
+            if minutes:
+                result = self._add_usage_locked(
+                    result,
+                    {"human_minutes": float(minutes)},
+                    f"human approval by {approver}",
+                )
+            return result

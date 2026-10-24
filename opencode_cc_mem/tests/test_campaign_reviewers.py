@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -192,6 +193,45 @@ def test_reviewer_retries_invalid_json(tmp_path):
     )
     assert result.attempts == 2
     assert result.issues == []
+
+
+def test_reviewer_uses_database_usage(tmp_path):
+    binary = fake_binary(tmp_path)
+    database = tmp_path / "review.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE session_message (session_id TEXT, type TEXT, data TEXT)"
+    )
+    connection.execute(
+        "INSERT INTO session_message VALUES (?, ?, ?)",
+        (
+            "ses_review",
+            "assistant",
+            json.dumps(
+                {
+                    "cost": 0.2,
+                    "tokens": {
+                        "input": 10,
+                        "output": 2,
+                        "reasoning": 1,
+                        "cache": {"read": 0, "write": 0},
+                    },
+                }
+            ),
+        ),
+    )
+    connection.commit()
+    connection.close()
+    reviewer = Reviewer(binary=str(binary), db_path=str(database))
+    result = reviewer.run(
+        "opencode-go/deepseek-v4.1-flash",
+        "review",
+        tmp_path,
+        tmp_path / "attempt",
+        tmp_path,
+    )
+    assert result.usage["input_tokens"] == 10
+    assert result.usage["cost_usd"] == 0.2
 
 
 def test_reviewer_invalid_after_retry_raises(tmp_path):

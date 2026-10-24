@@ -13,15 +13,26 @@ The supervisor executes the protocol and handles routine waiting and recovery.
 
 Implemented and tested:
 
-- protocol validation with per-stage model routing;
-- campaign state, journal, locks, approvals, and reconciliation;
+- protocol validation with per-stage model routing and hard-stage selection;
+- campaign state, journal, per-attempt leases, approvals, and reconciliation;
+- startup approval before any campaign execution;
+- supervised worker and gate execution with immediate HALT, pause, and budget stop;
 - opencode v2 worker execution and observed JSON parsing;
-- optional independent reviewer with evidence-path validation;
+- optional independent reviewer with evidence-path validation and DB usage;
 - deterministic script and gate execution with process-group timeout;
-- job templates, submission, polling, retries, cancellation, and usage;
-- token, cost, and core-hour accounting;
-- CLI commands for validate, init, status, approve, pause, resume, halt,
-  reconcile, run, and daemon.
+- job templates, full pre-submission hash validation, the real `poll_jobs`
+  lifecycle, retries, timeout cancellation, sibling cleanup, and failed-attempt
+  receipts;
+- attempt ownership across job waiting and validation, with local and ssh-slurm
+  scheduler validation;
+- pause/resume that preserves the attempt and run IDs, status checks before job
+  timeout, and campaign-tagged run records that disable background auto-retry;
+- complete mechanical pre-job validators for HADDOCK3 inputs;
+- secret redaction for logs and receipts without destroying hashes or run IDs;
+- token, cost, core-hour, and explicit human-minute accounting;
+- dedicated per-project opencode service management;
+- CLI commands for validate, init, approve-start, status, approve, pause,
+  resume, halt, reconcile, run, daemon, service, and distill-queue.
 
 A live smoke on 2026-10-24 ran one real opencode v2 worker through the new
 supervisor. The worker wrote `work/out.md`, the gate passed, and the campaign
@@ -260,17 +271,18 @@ Reject unknown top-level fields and unknown stage types.
     {"id": "patch_nle", "type": "opencode", "review": false},
     {"id": "build_and_validate", "type": "opencode", "review": false},
     {"id": "paired_docking", "type": "job"},
-    {"id": "analyze", "type": "opencode", "model": "kimi-code-plan-cn/k3.1-pro#high", "review": true},
+    {"id": "analyze", "type": "opencode", "hard": true, "review": true},
     {"id": "final_review", "type": "human"}
   ]
 }
 ```
 
 Model routing is explicit. `worker.model` is the cheap default for routine
-stages. An `opencode` stage may override it with `worker.hard_stage_model` or
-another explicit model. The example reserves K3.1 Pro for final analysis.
-`reviewer.alternate_model` is used for model-family separation and ablation,
-not as an automatic fallback. Never fall back to the global default model.
+stages. A stage may set `model` explicitly. A stage marked `"hard": true` uses
+`worker.hard_stage_model` when no explicit model is present. The example
+reserves K3.1 Pro for final analysis. `reviewer.alternate_model` is used for
+model-family separation and ablation, not as an automatic fallback. Never fall
+back to the global default model.
 
 For a decisive review, the reviewer must be from a different model family than
 the worker. A Kimi worker uses the DeepSeek reviewer. A DeepSeek worker uses the
@@ -940,12 +952,26 @@ magnolia-campaign validate campaigns/<name>/protocol.json
 magnolia-campaign init campaigns/<name>/protocol.json \
   --run-dir projects/<project>/runs/<date>_<name> \
   --brief campaigns/<name>/brief.md
-magnolia-campaign run <run-dir> --server http://127.0.0.1:<port>
-magnolia-campaign daemon <run-dir> --server http://127.0.0.1:<port>
+magnolia-campaign approve-start <run-dir> --approver <name> --reason <reason>
+magnolia-campaign run <run-dir>
+magnolia-campaign daemon <run-dir>
 magnolia-campaign status <run-dir>
-magnolia-campaign approve <run-dir> --approver <name> --reason <reason>
+magnolia-campaign approve <run-dir> --approver <name> --reason <reason> [--minutes N]
 magnolia-campaign halt <run-dir> --reason <reason>
+magnolia-campaign service start|status|stop <project-dir>
+magnolia-campaign distill-queue <run-dir> [--preview] [--limit N]
+magnolia-campaign run <run-dir> --distill-on-complete
 ```
+
+Job templates must name a supported scheduler explicitly: `local` or
+`ssh-slurm`. A template that omits the scheduler or names `slurm`/`pbs` is
+rejected before submission. A directory with `config.cfg` requires
+`tool = "haddock3"`.
+
+`run` and `daemon` start a dedicated per-project service when no explicit
+`--server` is given. Worker discovery requires the service working directory and
+`PWD` to point at the project. A healthy service is required; the supervisor does
+not silently fall back to the shared service.
 
 `halt` cancels recorded jobs before setting the halted state. A `HALT` file has
 the same effect on the next supervisor pass. A `PAUSE` file pauses only at a

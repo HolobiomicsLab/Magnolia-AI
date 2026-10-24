@@ -4,20 +4,28 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shlex
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .accounting import elapsed_to_core_hours
 from .gates import render_token
 from .models import Stage
-from .state import CampaignStore
+from .prejob import PrejobError, validate_prejob
+from .security import redact_structure
+from .state import CampaignStore, utc_now
 
 
 class JobError(Exception):
     """Raised when a job plan or submission is invalid."""
+
+
+class JobIntegrityError(JobError):
+    """Raised when submission identity or idempotency cannot be trusted."""
 
 
 SUBMIT_KEYS = {
@@ -60,6 +68,9 @@ class JobStatus:
 
 class JobBackend(Protocol):
     def submit(self, request: JobRequest, project_dir: Path) -> dict[str, Any]:
+        ...
+
+    def poll(self, project_dir: Path) -> dict[str, Any]:
         ...
 
     def status(
@@ -150,6 +161,12 @@ def load_job_plan(
                 f"{where}.submit has unknown fields: {', '.join(extra_submit)}"
             )
         submit = _render(submit_value, context)
+        submit["system_tags"] = _campaign_tags(submit.get("system_tags"))
+        scheduler = submit.get("scheduler")
+        if scheduler not in {"local", "ssh-slurm"}:
+            raise JobIntegrityError(
+                f"{where}.submit.scheduler must be 'local' or 'ssh-slurm'"
+            )
         requests.append(
             JobRequest(
                 key=key,
@@ -161,6 +178,22 @@ def load_job_plan(
             )
         )
     return requests
+
+
+def _campaign_tags(value: Any) -> list[str]:
+    if value is None:
+        tags: list[Any] = []
+    elif isinstance(value, str):
+        tags = [value]
+    elif isinstance(value, list):
+        tags = list(value)
+    else:
+        raise JobError("submit.system_tags must be an array of strings")
+    if any(not isinstance(tag, str) for tag in tags):
+        raise JobError("submit.system_tags must contain only strings")
+    if "campaign" not in tags:
+        tags.append("campaign")
+    return tags
 
 
 def _canonical_hash(request: JobRequest) -> str:
@@ -176,7 +209,10 @@ def _canonical_hash(request: JobRequest) -> str:
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(redact_structure(value), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
@@ -196,6 +232,25 @@ def _job_keys(stage: str, attempt: int) -> str:
     return f"{stage}/{attempt}/"
 
 
+def _append_jsonl(path: Path, value: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(redact_structure(value), sort_keys=True) + "\n")
+        handle.flush()
+
+
+def _parse_time(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 class JobController:
     def __init__(
         self,
@@ -208,6 +263,7 @@ class JobController:
         self.project_dir = project_dir
         self.backend = backend
         self.max_parallel_jobs = max_parallel_jobs
+        self.last_cancel_errors: list[dict[str, Any]] = []
 
     @property
     def path(self) -> Path:
@@ -243,14 +299,46 @@ class JobController:
             )
         jobs = _load_json(self.path)
         prefix = _job_keys(stage.id, attempt)
+        prepared: list[tuple[JobRequest, str, str]] = []
         for request in requests:
             key = prefix + request.key
             existing = jobs.get(key)
-            if isinstance(existing, dict) and existing.get("run_id"):
-                continue
-            if isinstance(existing, dict) and existing.get("status") == "submitting":
-                raise JobError(f"job submission state is uncertain: {key}")
             command_hash = _canonical_hash(request)
+            if isinstance(existing, dict):
+                if existing.get("command_sha256") != command_hash:
+                    raise JobIntegrityError(
+                        f"command hash changed for {key}: "
+                        f"{existing.get('command_sha256')} -> {command_hash}"
+                    )
+                status = existing.get("status")
+                if existing.get("run_id"):
+                    if status not in {"submitted", "running", "succeeded"}:
+                        raise JobIntegrityError(
+                            f"job record {key} has status {status!r}; "
+                            "use a new attempt instead of reusing it"
+                        )
+                    continue
+                if status in {"submitting", "submit_uncertain"}:
+                    raise JobIntegrityError(
+                        f"job submission state is uncertain: {key}"
+                    )
+                raise JobIntegrityError(
+                    f"job record {key} cannot be reused from status {status!r}"
+                )
+            prepared.append((request, key, command_hash))
+        active = sum(
+            1
+            for value in jobs.values()
+            if isinstance(value, dict)
+            and value.get("status")
+            in {"submitted", "running", "submitting", "submit_uncertain"}
+        )
+        if active + len(prepared) > self.max_parallel_jobs:
+            raise JobIntegrityError(
+                f"{active} jobs are already active and {len(prepared)} new jobs "
+                f"would exceed the limit of {self.max_parallel_jobs}"
+            )
+        for request, key, command_hash in prepared:
             record = {
                 "key": key,
                 "stage": stage.id,
@@ -261,6 +349,7 @@ class JobController:
                 "working_dir": str(request.working_dir),
                 "submit": request.submit,
                 "status": "submitting",
+                "submitted_at": utc_now(),
             }
             jobs[key] = record
             _write_json(self.path, jobs)
@@ -268,16 +357,43 @@ class JobController:
             try:
                 result = self.backend.submit(request, self.project_dir)
             except Exception as exc:
-                record["status"] = "submit_failed"
+                record["status"] = "submit_uncertain"
                 record["error"] = str(exc)
                 _write_json(self.path, jobs)
-                return False, f"job {key} submission failed: {exc}"
-            if not result.get("success") or not result.get("run_id"):
+                cleanup = self._cleanup_submission_failure(
+                    f"submission exception for {key}"
+                )
+                detail = f"job {key} submission is uncertain: {exc}"
+                if cleanup:
+                    detail += f"; sibling cleanup failed: {cleanup}"
+                return False, detail
+            if not result.get("success"):
                 record["status"] = "submit_failed"
-                record["error"] = result.get("error", "submission returned no run_id")
+                record["error"] = result.get("error", "submission failed")
                 record["result"] = result
                 _write_json(self.path, jobs)
+                cleanup = self._cleanup_submission_failure(
+                    f"submission failure for {key}"
+                )
+                if cleanup:
+                    return (
+                        False,
+                        f"job {key} submission is uncertain; sibling cleanup "
+                        f"failed: {cleanup}",
+                    )
                 return False, f"job {key} submission failed: {record['error']}"
+            if not result.get("run_id"):
+                record["status"] = "submit_uncertain"
+                record["error"] = "submission returned no run_id"
+                record["result"] = result
+                _write_json(self.path, jobs)
+                cleanup = self._cleanup_submission_failure(
+                    f"missing run id for {key}"
+                )
+                detail = f"job {key} submission is uncertain; no run id recorded"
+                if cleanup:
+                    detail += f"; sibling cleanup failed: {cleanup}"
+                return False, detail
             record["status"] = "submitted"
             record["run_id"] = str(result["run_id"])
             record["result"] = result
@@ -286,8 +402,34 @@ class JobController:
         self.store.update_jobs(jobs, f"submitted jobs for {stage.id}/{attempt}")
         return True, f"submitted {len(requests)} job(s)"
 
-    def poll(self, stage: Stage, attempt: int) -> JobStatus:
+    def _cleanup_submission_failure(self, reason: str) -> list[dict[str, Any]]:
+        self.cancel_all(reason)
+        return list(self.last_cancel_errors)
+
+    def poll(
+        self,
+        stage: Stage,
+        attempt: int,
+        timeout_seconds: int | None = None,
+    ) -> JobStatus:
         jobs = _load_json(self.path)
+        try:
+            self.backend.poll(self.project_dir)
+        except Exception as exc:
+            _append_jsonl(
+                self.store.job_errors_path,
+                {
+                    "ts": utc_now(),
+                    "stage": stage.id,
+                    "attempt": attempt,
+                    "error": f"poller failed: {exc}",
+                },
+            )
+            return JobStatus(
+                terminal=False,
+                category="pending",
+                detail=f"poller failed: {exc}",
+            )
         prefix = _job_keys(stage.id, attempt)
         records = [
             (key, value)
@@ -303,17 +445,22 @@ class JobController:
             )
         successes = 0
         pending: JobStatus | None = None
+        failures: list[JobStatus] = []
         for key, record in records:
             if not record.get("run_id") or record.get("status") in {
                 "submit_failed",
                 "cancelled",
             }:
-                return JobStatus(
-                    terminal=True,
-                    success=False,
-                    category="failure",
-                    detail=f"job record is not active: {key}",
+                record["status"] = "failed"
+                failures.append(
+                    JobStatus(
+                        terminal=True,
+                        success=False,
+                        category="failure",
+                        detail=f"job record is not active: {key}",
+                    )
                 )
+                continue
             try:
                 status = self.backend.status(record, self.project_dir)
             except Exception as exc:
@@ -327,7 +474,6 @@ class JobController:
             record["last_detail"] = status.detail
             if status.core_hours > float(record.get("core_hours", 0) or 0):
                 record["core_hours"] = status.core_hours
-            _write_json(self.path, jobs)
             if not status.terminal:
                 pending = JobStatus(
                     terminal=False,
@@ -338,17 +484,79 @@ class JobController:
                 )
                 continue
             if not status.success:
-                self.store.update_jobs(jobs, f"job failed: {key}")
-                return JobStatus(
-                    terminal=True,
-                    success=False,
-                    category=status.category,
-                    state=status.state,
-                    detail=status.detail,
-                    core_hours=sum(float(item.get("core_hours", 0)) for _, item in records),
+                record["status"] = (
+                    "cancelled" if status.category == "cancelled" else "failed"
                 )
+                failures.append(
+                    JobStatus(
+                        terminal=True,
+                        success=False,
+                        category=status.category,
+                        state=status.state,
+                        detail=status.detail,
+                        core_hours=status.core_hours,
+                    )
+                )
+                continue
             record["status"] = "succeeded"
             successes += 1
+        core_hours = sum(float(item.get("core_hours", 0)) for _, item in records)
+        _write_json(self.path, jobs)
+        if (
+            not failures
+            and pending is not None
+            and not pending.detail.startswith("status check failed")
+            and timeout_seconds is not None
+        ):
+            active_records = [
+                record
+                for _, record in records
+                if record.get("status") in {"submitted", "running", "submitting"}
+            ]
+            submitted_times = [
+                _parse_time(record.get("submitted_at")) for record in active_records
+            ]
+            valid_times = [value for value in submitted_times if value is not None]
+            if valid_times:
+                oldest = min(valid_times)
+                elapsed = (datetime.now(timezone.utc) - oldest).total_seconds()
+                if elapsed > timeout_seconds:
+                    self.cancel_all(f"job stage timeout after {timeout_seconds}s")
+                    jobs = _load_json(self.path)
+                    category = "infra"
+                    detail = f"job stage timed out after {timeout_seconds}s"
+                    if self.last_cancel_errors:
+                        category = "cleanup_failure"
+                        detail += "; cancellation failed"
+                    self.store.update_jobs(jobs, detail)
+                    return JobStatus(
+                        terminal=True,
+                        success=False,
+                        category=category,
+                        detail=detail,
+                        core_hours=core_hours,
+                    )
+        if failures:
+            first = failures[0]
+            self.cancel_all(f"job failure: {first.detail}")
+            jobs = _load_json(self.path)
+            detail = first.detail
+            category = first.category
+            if self.last_cancel_errors:
+                category = "cleanup_failure"
+                detail += (
+                    "; sibling cleanup failed: "
+                    f"{self.last_cancel_errors}"
+                )
+            self.store.update_jobs(jobs, f"job failed: {detail}")
+            return JobStatus(
+                terminal=True,
+                success=False,
+                category=category,
+                state=first.state,
+                detail=detail,
+                core_hours=core_hours,
+            )
         if pending is not None:
             return pending
         self.store.update_jobs(jobs, f"jobs succeeded for {stage.id}/{attempt}")
@@ -357,14 +565,24 @@ class JobController:
             success=True,
             category="success",
             detail=f"{successes} job(s) succeeded",
-            core_hours=sum(float(item.get("core_hours", 0)) for _, item in records),
+            core_hours=core_hours,
         )
 
     def cancel_all(self, reason: str) -> list[str]:
         jobs = _load_json(self.path)
         cancelled: list[str] = []
+        self.last_cancel_errors = []
         for key, record in jobs.items():
             if not isinstance(record, dict):
+                continue
+            if record.get("status") in {"submitting", "submit_uncertain"}:
+                error = "job submission state is uncertain; cancel manually"
+                self.last_cancel_errors.append({"job": key, "error": error})
+                _append_jsonl(
+                    self.store.cancel_errors_path,
+                    {"ts": utc_now(), "job": key, "error": error},
+                )
+                cancelled.append(key)
                 continue
             if record.get("status") not in {"submitted", "running"}:
                 continue
@@ -374,9 +592,20 @@ class JobController:
                     record["status"] = "cancelled"
                     record["cancel_result"] = result
                 else:
-                    record["cancel_error"] = result.get("error", "cancellation failed")
+                    error = result.get("error", "cancellation failed")
+                    record["cancel_error"] = error
+                    self.last_cancel_errors.append({"job": key, "error": error})
+                    _append_jsonl(
+                        self.store.cancel_errors_path,
+                        {"ts": utc_now(), "job": key, "error": error},
+                    )
             except Exception as exc:
                 record["cancel_error"] = str(exc)
+                self.last_cancel_errors.append({"job": key, "error": str(exc)})
+                _append_jsonl(
+                    self.store.cancel_errors_path,
+                    {"ts": utc_now(), "job": key, "error": str(exc)},
+                )
             cancelled.append(key)
         _write_json(self.path, jobs)
         if cancelled:
@@ -390,6 +619,7 @@ class FakeJobBackend:
         self.submitted: list[JobRequest] = []
         self.cancelled: list[str] = []
         self.counter = 0
+        self.poll_calls = 0
 
     def submit(self, request: JobRequest, project_dir: Path) -> dict[str, Any]:
         self.counter += 1
@@ -401,7 +631,12 @@ class FakeJobBackend:
             "job_id": str(1000 + self.counter),
             "scheduler": request.submit.get("scheduler", "local"),
             "working_dir": str(request.working_dir),
+            "test_double": True,
         }
+
+    def poll(self, project_dir: Path) -> dict[str, Any]:
+        self.poll_calls += 1
+        return {"polled": 0}
 
     def status(self, record: Mapping[str, Any], project_dir: Path) -> JobStatus:
         run_id = str(record["run_id"])
@@ -428,6 +663,13 @@ class CompchemJobBackend:
 
     def submit(self, request: JobRequest, project_dir: Path) -> dict[str, Any]:
         jobs_module = self._module()
+        try:
+            validate_prejob(
+                request.working_dir,
+                str(request.submit.get("tool") or ""),
+            )
+        except PrejobError as exc:
+            return {"success": False, "error": f"pre-job check failed: {exc}"}
         command = shlex.join(request.command)
         result = jobs_module.submit_job(
             command=command,
@@ -439,6 +681,30 @@ class CompchemJobBackend:
             return {"success": False, "error": "submit_job returned a non-object"}
         return result
 
+    def poll(self, project_dir: Path) -> dict[str, Any]:
+        try:
+            from compchem_tools.tools import poller
+        except ImportError as exc:
+            raise JobError(
+                "compchem-tools poller is not importable; run magnolia-campaign with "
+                "the project virtual environment"
+            ) from exc
+        previous_auto_retry = os.environ.get("MAGNOLIA_AUTO_RETRY")
+        os.environ["MAGNOLIA_AUTO_RETRY"] = "0"
+        try:
+            result = poller.poll_jobs(str(project_dir))
+        finally:
+            if previous_auto_retry is None:
+                os.environ.pop("MAGNOLIA_AUTO_RETRY", None)
+            else:
+                os.environ["MAGNOLIA_AUTO_RETRY"] = previous_auto_retry
+        if not isinstance(result, dict):
+            raise JobError("poll_jobs returned a non-object")
+        errors = result.get("errors", 0)
+        if errors:
+            raise JobError(f"poll_jobs reported {errors} error(s): {result}")
+        return result
+
     def status(self, record: Mapping[str, Any], project_dir: Path) -> JobStatus:
         run_id = str(record.get("run_id", ""))
         path = _find_run_record(project_dir, run_id)
@@ -448,17 +714,34 @@ class CompchemJobBackend:
         values = _scalar_values(body)
         lifecycle = values.get("lifecycle", "")
         status = values.get("status", "")
-        retry_recommended = values.get("retry_recommended", "") == "true"
-        terminal = lifecycle in {"fetched", "failed", "cancelled"} or status in {
+        retry_recommended = (
+            values.get("retry_recommended", "") == "true"
+            or _nested_value(body, "remote", "retry_recommended") == "true"
+        )
+        failure_block = _has_nested_key(body, "remote", "failure")
+        terminal = lifecycle in {"fetched", "completed", "failed", "cancelled"} or status in {
             "pass",
             "fail",
             "completed",
             "failed",
             "cancelled",
         }
-        ncores = _integer_value(body, "ncores", 2)
+        submit = record.get("submit") if isinstance(record.get("submit"), dict) else {}
+        try:
+            fallback_ncores = int(submit.get("ncores") or 2)
+        except (TypeError, ValueError):
+            fallback_ncores = 2
+        ncores = _integer_value(body, "ncores", fallback_ncores)
         elapsed = _nested_value(body, "slurm", "elapsed")
         core_hours = elapsed_to_core_hours(elapsed, ncores) if elapsed else 0.0
+        if submit.get("scheduler") == "local":
+            started = _parse_time(record.get("submitted_at"))
+            if started is not None:
+                local_hours = max(
+                    0.0,
+                    (datetime.now(timezone.utc) - started).total_seconds() / 3600,
+                )
+                core_hours = max(core_hours, local_hours * ncores)
         if not terminal:
             return JobStatus(
                 terminal=False,
@@ -475,10 +758,22 @@ class CompchemJobBackend:
                 detail=str(path),
                 core_hours=core_hours,
             )
-        success = status in {"pass", "completed", "success"} and lifecycle in {
-            "fetched",
-            "",
-        }
+        if lifecycle == "cancelled" or status == "cancelled":
+            return JobStatus(
+                terminal=True,
+                success=False,
+                category="cancelled",
+                state=lifecycle or status,
+                detail=str(path),
+                core_hours=core_hours,
+            )
+        failed_status = {"fail", "failed"}
+        if lifecycle == "completed":
+            success = status not in failed_status and not failure_block
+        elif lifecycle in {"fetched", ""}:
+            success = status in {"pass", "completed", "success"} and not failure_block
+        else:
+            success = False
         return JobStatus(
             terminal=True,
             success=success,
@@ -521,6 +816,26 @@ def _scalar_values(body: str) -> dict[str, str]:
             key, value = match.groups()
             values.setdefault(key, value.strip("'\""))
     return values
+
+
+def _has_nested_key(body: str, parent: str, child: str) -> bool:
+    in_parent = False
+    parent_indent = 0
+    for line in body.splitlines():
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        stripped = line.strip()
+        if stripped == f"{parent}:":
+            in_parent = True
+            parent_indent = indent
+            continue
+        if in_parent:
+            if indent <= parent_indent:
+                break
+            if stripped.startswith(f"{child}:"):
+                return True
+    return False
 
 
 def _nested_value(body: str, parent: str, child: str) -> str:

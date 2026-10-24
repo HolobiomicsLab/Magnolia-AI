@@ -15,7 +15,7 @@ def protocol_payload():
     return {
         "schema": 1,
         "id": "cli-pilot",
-        "project": "hsc70_new",
+        "project": "project",
         "worker": {
             "model": "opencode-go/deepseek-v4.1-flash",
             "agent": "campaign-worker",
@@ -42,9 +42,11 @@ def protocol_payload():
 
 
 def make_inputs(tmp_path):
-    protocol = tmp_path / "protocol.json"
+    campaign_dir = tmp_path / "project" / "campaigns"
+    campaign_dir.mkdir(parents=True, exist_ok=True)
+    protocol = campaign_dir / "protocol.json"
     protocol.write_text(json.dumps(protocol_payload()), encoding="utf-8")
-    brief = tmp_path / "brief.md"
+    brief = campaign_dir / "brief.md"
     brief.write_text("# Brief\n", encoding="utf-8")
     return protocol, brief
 
@@ -61,7 +63,7 @@ def test_validate_command(tmp_path, capsys):
 
 def test_init_status_pause_resume_halt(tmp_path, capsys):
     protocol, brief = make_inputs(tmp_path)
-    run_dir = tmp_path / "run"
+    run_dir = tmp_path / "project" / "runs" / "run"
     assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 0
     assert main(["status", str(run_dir)]) == 0
     assert main(["pause", str(run_dir), "--reason", "test"]) == 0
@@ -73,7 +75,7 @@ def test_init_status_pause_resume_halt(tmp_path, capsys):
 
 def test_approve_command(tmp_path, capsys):
     protocol, brief = make_inputs(tmp_path)
-    run_dir = tmp_path / "run"
+    run_dir = tmp_path / "project" / "runs" / "run"
     store = CampaignStore(run_dir)
     store.initialize(protocol, brief)
     store.transition("running", "start")
@@ -105,6 +107,55 @@ def test_executable_entrypoint(tmp_path):
     assert json.loads(result.stdout)["id"] == "cli-pilot"
 
 
+def test_fake_backend_rejected_in_production(tmp_path, capsys, monkeypatch):
+    protocol, brief = make_inputs(tmp_path)
+    project = tmp_path / "project"
+    run_dir = project / "runs" / "run"
+    assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 0
+    monkeypatch.delenv("MAGNOLIA_TESTING", raising=False)
+    assert (
+        main(
+            [
+                "run",
+                str(run_dir),
+                "--project-dir",
+                str(project),
+                "--job-backend",
+                "fake",
+            ]
+        )
+        == 2
+    )
+    assert "MAGNOLIA_TESTING" in capsys.readouterr().err
+
+
+def test_protocol_project_mismatch_rejected(tmp_path, capsys):
+    payload = protocol_payload()
+    payload["project"] = "other-project"
+    campaign_dir = tmp_path / "project" / "campaigns"
+    campaign_dir.mkdir(parents=True)
+    protocol = campaign_dir / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = campaign_dir / "brief.md"
+    brief.write_text("brief")
+    run_dir = tmp_path / "project" / "runs" / "run"
+    assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 2
+    assert "does not match" in capsys.readouterr().err
+
+
+def test_protocol_outside_allowed_root_rejected(tmp_path, capsys):
+    payload = protocol_payload()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    protocol = outside / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = outside / "brief.md"
+    brief.write_text("brief")
+    run_dir = tmp_path / "project" / "runs" / "run"
+    assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 2
+    assert "campaigns/" in capsys.readouterr().err
+
+
 def test_run_command_executes_script_stage(tmp_path, capsys):
     payload = protocol_payload()
     payload["stages"] = [
@@ -121,13 +172,28 @@ def test_run_command_executes_script_stage(tmp_path, capsys):
         },
         {"id": "review", "type": "human"},
     ]
-    protocol = tmp_path / "protocol.json"
-    protocol.write_text(json.dumps(payload))
-    brief = tmp_path / "brief.md"
-    brief.write_text("brief")
     project = tmp_path / "project"
+    campaign_dir = project / "campaigns"
+    campaign_dir.mkdir(parents=True)
+    protocol = campaign_dir / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = campaign_dir / "brief.md"
+    brief.write_text("brief")
     run_dir = project / "runs" / "run"
     assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 0
+    assert (
+        main(
+            [
+                "approve-start",
+                str(run_dir),
+                "--approver",
+                "tao",
+                "--reason",
+                "start",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
     assert (
         main(
@@ -136,8 +202,6 @@ def test_run_command_executes_script_stage(tmp_path, capsys):
                 str(run_dir),
                 "--project-dir",
                 str(project),
-                "--job-backend",
-                "fake",
             ]
         )
         == 0
