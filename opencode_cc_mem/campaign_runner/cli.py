@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Sequence
 
+from .jobs import CompchemJobBackend, FakeJobBackend, JobController
 from .models import CampaignError, load_protocol, protocol_sha256
+from .reviewers import Reviewer
+from .runner import CampaignRunner, RunnerConfig
 from .state import CampaignState, CampaignStore
+from .workers import OpenCodeExecutor
 
 
 def _print_state(state: CampaignState) -> None:
@@ -43,14 +49,117 @@ def _build_parser() -> argparse.ArgumentParser:
     resume.add_argument("run_dir")
     resume.add_argument("--reason", default="operator resume")
 
-    halt = subparsers.add_parser("halt", help="halt a campaign")
+    halt = subparsers.add_parser("halt", help="halt a campaign and cancel its jobs")
     halt.add_argument("run_dir")
     halt.add_argument("--reason", default="operator halt")
 
     reconcile = subparsers.add_parser("reconcile", help="repair state from journal")
     reconcile.add_argument("run_dir")
 
+    run = subparsers.add_parser("run", help="execute one campaign pass")
+    _add_runtime_arguments(run)
+
+    daemon = subparsers.add_parser("daemon", help="run the campaign loop")
+    _add_runtime_arguments(daemon)
+    daemon.add_argument("--interval", type=float, default=10.0)
+    daemon.add_argument("--max-iterations", type=int, default=None)
+
     return parser
+
+
+def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("run_dir")
+    parser.add_argument("--project-dir")
+    parser.add_argument("--opencode-bin")
+    parser.add_argument("--server")
+    parser.add_argument("--db")
+    parser.add_argument("--job-backend", choices=("compchem", "fake"), default="compchem")
+
+
+def _default_binary() -> str:
+    return os.environ.get(
+        "MAGNOLIA_OPENCODE_V2_BIN",
+        str(Path.home() / ".local/share/magnolia-v2/bin/opencode"),
+    )
+
+
+def _default_db() -> str:
+    return os.environ.get(
+        "OPENCODE_DB",
+        str(Path.home() / ".local/share/opencode/opencode-v2.db"),
+    )
+
+
+def _derive_project_dir(run_dir: Path) -> Path:
+    if run_dir.parent.name != "runs":
+        raise CampaignError(
+            f"cannot derive project directory from {run_dir}; pass --project-dir"
+        )
+    return run_dir.parent.parent
+
+
+def _build_runner(args: argparse.Namespace) -> CampaignRunner:
+    store = CampaignStore(args.run_dir)
+    protocol = store.verify_protocol()
+    project_dir = (
+        Path(args.project_dir).resolve()
+        if getattr(args, "project_dir", None)
+        else _derive_project_dir(store.run_dir)
+    )
+    if not project_dir.is_dir():
+        raise CampaignError(f"project directory does not exist: {project_dir}")
+    binary = getattr(args, "opencode_bin", None) or _default_binary()
+    server = getattr(args, "server", None) or os.environ.get("MAGNOLIA_OPENCODE_SERVER")
+    database = getattr(args, "db", None) or _default_db()
+    environment = {
+        "MAGNOLIA_PROJECT_DIR": str(project_dir),
+        "MAGNOLIA_ROOT": str(project_dir.parents[1]),
+    }
+
+    def worker_factory(model: str, timeout: int) -> OpenCodeExecutor:
+        return OpenCodeExecutor(
+            binary=binary,
+            model=model,
+            agent="campaign-worker",
+            server_url=server,
+            db_path=database,
+            environment=environment,
+            timeout_seconds=timeout,
+            max_steps=protocol.worker.max_steps,
+        )
+
+    reviewer = None
+    if protocol.reviewer.enabled:
+        reviewer = Reviewer(
+            binary=binary,
+            server_url=server,
+            db_path=database,
+            environment=environment,
+            timeout_seconds=protocol.reviewer.timeout_seconds,
+            max_retries=protocol.reviewer.repair_attempts,
+            max_steps=protocol.reviewer.max_steps,
+        )
+    backend = (
+        FakeJobBackend()
+        if getattr(args, "job_backend", "compchem") == "fake"
+        else CompchemJobBackend()
+    )
+    jobs = JobController(
+        store,
+        project_dir,
+        backend,
+        max_parallel_jobs=protocol.budget.max_parallel_jobs,
+    )
+    return CampaignRunner(
+        store,
+        project_dir,
+        RunnerConfig(
+            worker_factory=worker_factory,
+            jobs=jobs,
+            reviewer=reviewer,
+            usage_db=database,
+        ),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -91,10 +200,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             _print_state(store.resume(args.reason))
             return 0
         if args.command == "halt":
+            try:
+                runner = _build_runner(args)
+                runner.cancel_jobs(args.reason)
+            except Exception as exc:
+                print(f"warning: job cancellation failed: {exc}", file=sys.stderr)
             _print_state(store.halt(args.reason))
             return 0
         if args.command == "reconcile":
             _print_state(store.reconcile())
+            return 0
+        if args.command == "run":
+            runner = _build_runner(args)
+            print(json.dumps(runner.run_once(), indent=2, sort_keys=True))
+            return 0
+        if args.command == "daemon":
+            runner = _build_runner(args)
+            try:
+                runner.run_forever(args.interval, args.max_iterations)
+            except KeyboardInterrupt:
+                print("daemon interrupted", file=sys.stderr)
+                return 130
+            _print_state(store.load())
             return 0
     except CampaignError as exc:
         print(f"error: {exc}", file=sys.stderr)

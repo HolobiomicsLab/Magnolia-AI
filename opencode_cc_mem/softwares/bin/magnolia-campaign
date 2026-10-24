@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+import os
 import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+venv_python = root.parent / ".venv" / "bin" / "python3"
+if (
+    venv_python.is_file()
+    and Path(sys.executable).resolve() != venv_python.resolve()
+    and os.environ.get("MAGNOLIA_CAMPAIGN_NO_REEXEC") != "1"
+):
+    os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]])
+
 sys.path.insert(0, str(root))
 
 from campaign_runner.cli import main

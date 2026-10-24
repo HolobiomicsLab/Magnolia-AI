@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -98,6 +99,50 @@ def test_executable_entrypoint(tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        env={**os.environ, "MAGNOLIA_CAMPAIGN_NO_REEXEC": "1"},
     )
     assert result.returncode == 0
     assert json.loads(result.stdout)["id"] == "cli-pilot"
+
+
+def test_run_command_executes_script_stage(tmp_path, capsys):
+    payload = protocol_payload()
+    payload["stages"] = [
+        {
+            "id": "prepare",
+            "type": "script",
+            "command": [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; Path('work/out.txt').write_text('ok')",
+            ],
+            "outputs": ["work/out.txt"],
+            "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+        },
+        {"id": "review", "type": "human"},
+    ]
+    protocol = tmp_path / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = tmp_path / "brief.md"
+    brief.write_text("brief")
+    project = tmp_path / "project"
+    run_dir = project / "runs" / "run"
+    assert main(["init", str(protocol), "--run-dir", str(run_dir), "--brief", str(brief)]) == 0
+    capsys.readouterr()
+    assert (
+        main(
+            [
+                "run",
+                str(run_dir),
+                "--project-dir",
+                str(project),
+                "--job-backend",
+                "fake",
+            ]
+        )
+        == 0
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert output["state"]["state"] == "waiting_human"
+    assert output["state"]["stage"] == "review"
+    assert (run_dir / "work" / "out.txt").is_file()

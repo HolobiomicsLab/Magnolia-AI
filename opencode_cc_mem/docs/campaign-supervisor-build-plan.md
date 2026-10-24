@@ -9,6 +9,28 @@ This plan adds partial automation to Magnolia. It does not attempt open-ended
 scientific discovery. A human approves the protocol and the scientific claims.
 The supervisor executes the protocol and handles routine waiting and recovery.
 
+## Implementation status (2026-10-24)
+
+Implemented and tested:
+
+- protocol validation with per-stage model routing;
+- campaign state, journal, locks, approvals, and reconciliation;
+- opencode v2 worker execution and observed JSON parsing;
+- optional independent reviewer with evidence-path validation;
+- deterministic script and gate execution with process-group timeout;
+- job templates, submission, polling, retries, cancellation, and usage;
+- token, cost, and core-hour accounting;
+- CLI commands for validate, init, status, approve, pause, resume, halt,
+  reconcile, run, and daemon.
+
+Not created yet:
+
+- a real Nle campaign protocol. The exact peptide sequence, reference peptide,
+  construct termini, and experimental oracle are still unresolved. Creating a
+  launchable protocol now would imply validation that does not exist.
+- adaptive follow-up execution. The schema is described here, but the first
+  version records follow-ups only from the reviewer and does not execute them.
+
 ## 1. Decisions already made
 
 1. Build an always-on supervisor, not a permanent chat session.
@@ -377,12 +399,14 @@ running -> failed
 running -> halted
 waiting_job -> validating
 waiting_job -> halted
-validating -> running           # only an approved repair attempt
+validating -> queued            # next stage, or approved repair attempt
+validating -> running           # transition record for a started repair
 validating -> waiting_human
 validating -> completed
 validating -> failed
 validating -> halted
-waiting_human -> queued         # after explicit approval
+waiting_human -> queued         # approval of a non-human stage
+waiting_human -> completed      # approval of the final human stage
 paused -> queued                # after explicit resume
 any active state -> halted      # operator stop or hard budget stop
 ```
@@ -445,6 +469,12 @@ The prompt must name exact input and output paths. The worker may write only in
 - Reconcile from durable run YAML, not only the transient notices file.
 - On restart, inspect existing run IDs before submitting anything.
 - Operator stop calls `cancel_job` for every active run ID.
+
+A job stage names a template file at `control/jobs/<template-id>.json`. The file
+contains a `jobs` array. Each entry has `key`, `command`, `working_dir`, and
+optional `submit` arguments. Placeholders `{run_dir}`, `{project_dir}`,
+`{work_dir}`, `{stage}`, and `{attempt}` are rendered by the supervisor only.
+Workers cannot add templates or arguments.
 
 ### 9.4 `human`
 
@@ -593,7 +623,8 @@ therefore mandatory even when dollar cost is zero.
 
 Enforce:
 
-- `steps` in the worker agent configuration;
+- `steps` from the protocol through `OPENCODE_CONFIG_CONTENT` for workers and
+  reviewers;
 - wall-clock timeout per attempt;
 - maximum attempts per stage;
 - campaign token and core-hour limits;
@@ -880,7 +911,42 @@ Accept the partial-automation pilot only if all are true:
 - If a design assumption conflicts with observed v2 behavior, stop and report
   the conflict instead of silently choosing another interface.
 
-## 21. Main references
+## 21. Implemented interfaces and operating commands
+
+Code lives in `opencode_cc_mem/campaign_runner/`:
+
+- `models.py`: protocol schema and model routing.
+- `state.py`: campaign state and journal.
+- `workers.py` and `process.py`: opencode and process execution.
+- `reviewers.py`: independent review validation and routing.
+- `gates.py`, `jobs.py`, `accounting.py`, and `security.py`: checks and records.
+- `runner.py`: stage dispatch and recovery.
+- `cli.py`: command line.
+
+The v2 probe showed these JSON event types: `step_start`, `tool_use`,
+`step_finish`, and `text`. Worker parsing uses those observed shapes.
+Session usage is read from `session_message`; the standalone probe produced
+zero rows in the `event` table but usable `session_message` rows.
+
+Common commands:
+
+```bash
+magnolia-campaign validate campaigns/<name>/protocol.json
+magnolia-campaign init campaigns/<name>/protocol.json \
+  --run-dir projects/<project>/runs/<date>_<name> \
+  --brief campaigns/<name>/brief.md
+magnolia-campaign run <run-dir> --server http://127.0.0.1:<port>
+magnolia-campaign daemon <run-dir> --server http://127.0.0.1:<port>
+magnolia-campaign status <run-dir>
+magnolia-campaign approve <run-dir> --approver <name> --reason <reason>
+magnolia-campaign halt <run-dir> --reason <reason>
+```
+
+`halt` cancels recorded jobs before setting the halted state. A `HALT` file has
+the same effect on the next supervisor pass. A `PAUSE` file pauses only at a
+safe state boundary.
+
+## 22. Main references
 
 Local implementation references:
 

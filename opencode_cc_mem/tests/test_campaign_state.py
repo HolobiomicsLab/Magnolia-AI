@@ -44,6 +44,7 @@ def protocol_payload():
                 "prompt": "prompts/analyze.md",
                 "gate": ["/bin/true"],
             },
+            {"id": "final", "type": "human"},
         ],
     }
 
@@ -171,6 +172,25 @@ def test_reconcile_reconstructs_missing_state_file(tmp_path):
     assert repaired.state == "running"
     assert repaired.protocol_id == "state-pilot"
     assert store.load().state == "running"
+
+
+def test_usage_and_jobs_survive_reconcile(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    store.update_usage({"input_tokens": 12, "cost_usd": 0.5}, "test usage")
+    store.update_jobs({"job/1/a": {"run_id": "r1"}}, "test jobs")
+    store.campaign_path.unlink()
+    repaired = store.reconcile()
+    assert repaired.usage["input_tokens"] == 12
+    assert repaired.usage["cost_usd"] == 0.5
+    assert repaired.jobs["job/1/a"]["run_id"] == "r1"
+
+
+def test_final_human_approval_completes_campaign(tmp_path):
+    store, _, _, _ = make_store(tmp_path)
+    store.transition("running", "start", stage="final")
+    store.transition("waiting_human", "final")
+    state = store.approve("tao", "accepted")
+    assert state.state == "completed"
 
 
 def test_corrupt_middle_event_is_rejected(tmp_path):

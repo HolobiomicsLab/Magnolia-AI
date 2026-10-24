@@ -6,11 +6,12 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     CampaignError,
@@ -42,9 +43,9 @@ TRANSITIONS: dict[str, frozenset[str]] = {
         {"validating", "waiting_human", "failed", "halted", "paused"}
     ),
     "validating": frozenset(
-        {"running", "waiting_human", "completed", "failed", "halted", "paused"}
+        {"queued", "running", "waiting_human", "completed", "failed", "halted", "paused"}
     ),
-    "waiting_human": frozenset({"queued", "failed", "halted", "paused"}),
+    "waiting_human": frozenset({"queued", "completed", "failed", "halted", "paused"}),
     "paused": frozenset({"queued", "halted"}),
     "completed": frozenset(),
     "failed": frozenset(),
@@ -54,6 +55,9 @@ USAGE_KEYS = (
     "input_tokens",
     "output_tokens",
     "reasoning_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cost_usd",
     "core_hours",
     "human_minutes",
 )
@@ -269,6 +273,11 @@ class CampaignStore:
             brief_hash = hashlib.sha256(brief_bytes).hexdigest()
             _atomic_write_bytes(self.protocol_path, protocol_body + b"\n")
             _atomic_write_bytes(self.brief_path, brief_bytes)
+            source_dir = Path(protocol_path).resolve().parent
+            for asset in ("prompts", "scripts", "checks", "jobs"):
+                source = source_dir / asset
+                if source.is_dir():
+                    shutil.copytree(source, self.control_dir / asset, dirs_exist_ok=True)
             now = utc_now()
             state = CampaignState(
                 schema=1,
@@ -422,6 +431,31 @@ class CampaignStore:
         self.save(state)
         return state
 
+    def update_usage(self, delta: Mapping[str, float], reason: str) -> CampaignState:
+        with self.lock():
+            state = self.load()
+            for key, value in delta.items():
+                if key not in state.usage:
+                    raise StateError(f"unknown usage field '{key}'")
+                state.usage[key] = float(state.usage[key]) + float(value)
+            event = self._new_event(state, state.state, reason, state.stage, state.attempt)
+            event["usage_after"] = state.usage
+            self._append_event_locked(event)
+            state.updated_at = str(event["ts"])
+            self.save(state)
+            return state
+
+    def update_jobs(self, jobs: dict[str, dict[str, Any]], reason: str) -> CampaignState:
+        with self.lock():
+            state = self.load()
+            state.jobs = jobs
+            event = self._new_event(state, state.state, reason, state.stage, state.attempt)
+            event["jobs_after"] = state.jobs
+            self._append_event_locked(event)
+            state.updated_at = str(event["ts"])
+            self.save(state)
+            return state
+
     def reconcile(self) -> CampaignState:
         with self.lock():
             events = self.read_events()
@@ -437,6 +471,10 @@ class CampaignStore:
                 state.stage = str(last["stage"])
             if "attempt" in last:
                 state.attempt = int(last["attempt"])
+            if isinstance(last.get("usage_after"), dict):
+                state.usage = {key: float(value) for key, value in last["usage_after"].items()}
+            if isinstance(last.get("jobs_after"), dict):
+                state.jobs = dict(last["jobs_after"])
             state.updated_at = str(last.get("ts", state.updated_at))
             self.save(state)
             return state
@@ -451,6 +489,10 @@ class CampaignStore:
             state.state = str(event["to"])
             state.stage = str(event.get("stage", state.stage))
             state.attempt = int(event.get("attempt", state.attempt))
+            if isinstance(event.get("usage_after"), dict):
+                state.usage = {key: float(value) for key, value in event["usage_after"].items()}
+            if isinstance(event.get("jobs_after"), dict):
+                state.jobs = dict(event["jobs_after"])
             state.updated_at = str(event.get("ts", state.updated_at))
         return state
 
@@ -486,20 +528,41 @@ class CampaignStore:
             state = self.load()
             if state.state != "waiting_human":
                 raise StateError("campaign is not waiting for approval")
-            now = utc_now()
+            protocol = self.verify_protocol()
+            stage = protocol.stage(state.stage)
+            next_stage = protocol.next_stage_id(state.stage)
+            target = "completed" if stage.type == "human" and next_stage is None else "queued"
             approval = {
-                "ts": now,
+                "ts": utc_now(),
                 "approver": approver,
                 "reason": reason,
                 "stage": state.stage,
                 "attempt": state.attempt,
                 "from": state.state,
-                "to": "queued",
+                "to": target,
             }
-            filename = f"{now.replace(':', '').replace('+', '_')}-{os.getpid()}.json"
+            filename = (
+                f"{approval['ts'].replace(':', '').replace('+', '_')}-{os.getpid()}.json"
+            )
             _atomic_write_json(self.approvals_dir / filename, approval)
+            if target == "completed":
+                return self._transition_locked(
+                    "completed",
+                    f"approved by {approver}: {reason}",
+                    allow_human_exit=True,
+                )
+            if stage.type == "human":
+                return self._transition_locked(
+                    "queued",
+                    f"approved by {approver}: {reason}",
+                    stage=next_stage,
+                    attempt=0,
+                    allow_human_exit=True,
+                )
             return self._transition_locked(
                 "queued",
                 f"approved by {approver}: {reason}",
+                stage=state.stage,
+                attempt=state.attempt,
                 allow_human_exit=True,
             )
