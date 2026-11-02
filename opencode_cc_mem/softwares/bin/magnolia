@@ -836,4 +836,4 @@ if [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemo
 fi
 
 cd "$OPENCODE_DIR"
-exec opencode
+exec "$OPENCODE_BIN"
