@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from compchem_memory.contradictions import find_conflict_candidates, load_entries
+
 
 def run_health_check(
     project_dir: str,
@@ -54,6 +56,12 @@ def run_health_check(
     for s in stalled:
         all_issues.append({"check": "stalled_staging", **s})
 
+    # 7. Contradiction candidates (same topic, different numbers) — report
+    # only, never auto-fixed: deciding which side is right is a judgement.
+    conflicts = _check_contradiction_candidates(entries_dir, staging_dir)
+    for c in conflicts:
+        all_issues.append({"check": "contradiction_candidate", **c})
+
     # Apply fixes if requested
     if fix:
         broken_fixes = _fix_broken_refs(entries_dir, broken)
@@ -66,7 +74,7 @@ def run_health_check(
 
     return {
         "status": "issues_found" if all_issues else "healthy",
-        "checks_run": 6,
+        "checks_run": 7,
         "issues_found": len(all_issues),
         "issues_fixed": fixes_applied,
         "report_markdown": report_md,
@@ -237,6 +245,29 @@ def _check_stalled_staging(staging_dir: Path, stall_days: int = 30) -> list[dict
     return results
 
 
+def _check_contradiction_candidates(entries_dir: Path, staging_dir: Path) -> list[dict]:
+    """Find pairs of entries on the same specific topic stating different numbers.
+
+    Scans project-vs-project and staging-vs-project (the staging-to-project
+    boundary where the w_air conflict slipped through). Staging-vs-staging is
+    left to consolidation's duplicate clustering. Report-only: a candidate is
+    not proven wrong — deciding which side is correct is a human judgement.
+    """
+    loaded = load_entries(entries_dir, staging_dir)
+    pairs = find_conflict_candidates(loaded, max_pairs=20)
+    results = []
+    for p in pairs:
+        results.append({
+            "filename": p["a"]["filename"],
+            "other_filename": p["b"]["filename"],
+            "a": p["a"],
+            "b": p["b"],
+            "signal_terms": p["signal_terms"],
+            "param_conflicts": p["param_conflicts"],
+        })
+    return results
+
+
 def _fix_broken_refs(entries_dir: Path, broken: list[dict]) -> int:
     """Remove broken related_entries IDs from frontmatter."""
     fixes = 0
@@ -286,6 +317,21 @@ def _update_frontmatter_value(fpath: Path, key: str, value_or_fn: Any) -> None:
     fpath.write_text(f"---\n{new_fm}---\n\n{body}")
 
 
+def _format_contradiction(i: dict) -> str:
+    a, b = i["a"], i["b"]
+    lines = [
+        f"- `{a['filename']}` ({a['tier']}) \"{a['title']}\""
+        f"  vs  `{b['filename']}` ({b['tier']}) \"{b['title']}\"",
+    ]
+    for pc in i["param_conflicts"]:
+        lines.append(
+            f"  parameter `{pc['param']}`: first cites {{"
+            f"{', '.join(pc['a_values'])}}}, second cites {{"
+            f"{', '.join(pc['b_values'])}}}"
+        )
+    return "\n".join(lines)
+
+
 def _build_report(
     project_dir: str,
     issues: list[dict],
@@ -298,7 +344,7 @@ def _build_report(
         f"**Date:** {datetime.now(timezone.utc).isoformat()}\n",
         f"**Mode:** {'auto-fix' if fix_mode else 'dry-run'}\n\n",
         f"## Summary\n\n",
-        f"- Checks run: 6\n",
+        f"- Checks run: 7\n",
         f"- Issues found: {len(issues)}\n",
         f"- Issues fixed: {fixes}\n\n",
     ]
@@ -322,6 +368,7 @@ def _build_report(
         "duplicate": ("Potential Duplicates", lambda i: f"- \"{i['normalized_title']}\" — {len(i['files'])} copies: {', '.join(f['filename'] for f in i['files'])}"),
         "broken_ref": ("Broken References", lambda i: f"- `{i['filename']}` — references missing IDs: {', '.join(i['broken_ids'])}"),
         "stalled_staging": ("Stalled Staging Entries", lambda i: f"- `{i['filename']}` — {i['age_days']} days old (obs: {i['observation_count']}, conf: {i['confidence']})"),
+        "contradiction_candidate": ("Contradiction Candidates (same topic, different numbers — decide which side is right)", _format_contradiction),
     }
 
     for check_key, (heading, formatter) in sections.items():

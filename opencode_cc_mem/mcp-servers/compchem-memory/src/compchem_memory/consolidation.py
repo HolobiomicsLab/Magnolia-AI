@@ -13,6 +13,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
 
@@ -369,7 +370,6 @@ def consolidate_project_findings(
         if seed:
             clusterer = functools.partial(_default_clusterer, reject_hint=seed)
     clusters = cluster_findings(entries, clusterer)
-
     proposals = []
     for c in clusters:
         preview = merge_entries(c["members"])
@@ -423,24 +423,35 @@ def _cluster_key(sources: list[str]) -> tuple[str, ...]:
     return tuple(sorted(Path(s).name for s in sources))
 
 
+def _key_pairs(key: tuple[str, ...]) -> set[tuple[str, ...]]:
+    """Pair-granular form of a cluster key: every 2-combination of its sorted
+    source basenames. Rejection memory is stored and matched at this granularity
+    so a clusterer that re-groups a rejected cluster's SUBSET (e.g. 3 of 4
+    members) is still suppressed — the 2026-09-30 fig7 regression."""
+    return set(combinations(sorted(key), 2))
+
+
 def _serialize_keys(keys: set[tuple[str, ...]]) -> list[list[str]]:
     """JSON-serializable, deterministically ordered form of a key set."""
     return sorted(list(k) for k in keys if len(k) >= 2)
 
 
 def _contains_rejected_pair(sources: list[str], rejected_keys: set[tuple[str, ...]]) -> bool:
-    """True if the proposed cluster CONTAINS any durably-rejected pair. Subset
-    semantics: 'these sources do not belong together' holds however the clusterer
-    re-groups them — including larger supersets that add a third member."""
+    """True if the proposed cluster contains any durably-rejected PAIR of
+    sources. Keys are stored at pair granularity (see `_key_pairs`): "these
+    sources do not belong together" holds however the clusterer re-groups them —
+    subsets, supersets, and partial regroups all trip the guard."""
     key_set = set(_cluster_key(sources))
     return any(set(k) <= key_set for k in rejected_keys if len(k) >= 2)
 
 
 def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
-    """Content keys of durably rejected clusters. Reads the artifact's
-    `rejected_keys` (persistent across regenerations); also folds in the legacy
-    index-based `rejected` list so artifacts written before `rejected_keys`
-    existed still contribute their rejections."""
+    """Content keys of durably rejected clusters, EXPANDED TO PAIRS. Reads the
+    artifact's `rejected_keys` (persistent across regenerations); also folds in
+    the legacy index-based `rejected` list so artifacts written before
+    `rejected_keys` existed still contribute their rejections. Cluster-level
+    keys written by older versions are expanded to their pairs on load, so old
+    artifacts gain subset suppression without any migration."""
     if not artifact.exists():
         return set()
     try:
@@ -450,11 +461,11 @@ def _prior_rejected_keys(artifact: Path) -> set[tuple[str, ...]]:
     keys: set[tuple[str, ...]] = set()
     for k in prior.get("rejected_keys", []):
         if isinstance(k, list) and len(k) >= 2:
-            keys.add(tuple(sorted(k)))
+            keys |= _key_pairs(tuple(sorted(k)))
     old = prior.get("proposals", [])
     for idx in prior.get("rejected", []):
         if isinstance(idx, int) and 0 <= idx < len(old):
-            keys.add(_cluster_key(old[idx].get("sources", [])))
+            keys |= _key_pairs(_cluster_key(old[idx].get("sources", [])))
     return keys
 
 
@@ -537,8 +548,7 @@ def apply_proposals(
                 and i not in already and i not in rejected_set and i not in dismissed_set):
             rejected_set.add(i)
             key = _cluster_key(proposals[i].get("sources", []))
-            if len(key) >= 2:
-                rejected_keys.add(key)
+            rejected_keys |= _key_pairs(key)
             label_rows.append(_label("reject", proposals[i], key))
             rejected_count += 1
 
@@ -565,8 +575,7 @@ def apply_proposals(
             # re-surfaced it every session.
             dismissed_set.add(i)
             key = _cluster_key(proposals[i].get("sources", []))
-            if len(key) >= 2:
-                rejected_keys.add(key)
+            rejected_keys |= _key_pairs(key)
             dismissed.append(i)
             label_rows.append(_label("dismiss_stale", proposals[i], key))
             _persist()
@@ -852,11 +861,9 @@ def render_review_markdown(store_dir: str) -> str | None:
         "How to read this file:",
         "",
         "- **confidence** is the clustering model's own certainty that the entries",
-        "  assert the SAME claim: **>= 0.8** same claim, near-duplicate (accepting",
-        "  is safe); **0.5-0.79** grouped despite doubt, usually same topic with",
-        "  different claims (read the `why` line; default to reject); **< 0.5** weak.",
-        "- **sources** lists what each entry actually says (title, headings, excerpt).",
-        "  Read these before accepting: a shared topic is not a shared claim.",
+        "  assert the SAME claim. Only clusters scoring **>= 0.8** (same claim,",
+        "  near-duplicate — accepting is safe) are proposed at all; lower-confidence",
+        "  groupings are never surfaced for review.",
         "- **accept** merges the sources into one entry under the title below;",
         "  member bodies are kept as corroborating observations; the merge is",
         "  committed to the versioning repo (git-reversible). **reject** durably",

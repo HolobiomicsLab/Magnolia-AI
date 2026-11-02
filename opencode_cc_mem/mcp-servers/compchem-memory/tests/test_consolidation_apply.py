@@ -91,7 +91,7 @@ def test_render_review_markdown_to_visible_dir(tmp_path):
     assert "N-term ALA wins" in md or "ALA beats C-term" in md
     # Self-explanatory review: glossary + plain-words confidence + effects.
     assert "How to read this file" in md
-    assert ">= 0.8" in md and "0.5-0.79" in md
+    assert ">= 0.8" in md and "never surfaced" in md
     assert "git-reversible" in md
     assert "Nothing is applied until you tell the agent" in md
     assert "confidence: 0." in md and ("near-duplicate" in md or "doubt" in md or "weak grouping" in md)
@@ -305,3 +305,55 @@ def test_apply_tool_dismisses_stale_and_cleans_review_dir(tmp_path, monkeypatch)
 
     assert out["dismissed"] == [0]
     assert not (tmp_path / "magnolia-review").exists()      # all handled -> cleaned
+
+
+# ---- Pair-level rejection memory (the 2026-09-30 fig7 regression) ----
+
+def test_rejected_cluster_suppresses_subset_regrouping(tmp_path):
+    """Rejecting a 4-member cluster must also suppress a later proposal that
+    re-groups only 3 of its members. The old code stored the whole cluster as
+    ONE key, so the subset matched nothing and the same rejection re-surfaced
+    on the user's desk (fig7, 2026-09-30). A genuinely new pair stays pending."""
+    store = tmp_path / ".magnolia"; staging = store / "staging"; staging.mkdir(parents=True)
+    for n, ses in (("a", "s1"), ("b", "s2"), ("c", "s3"), ("d", "s4"), ("e", "s5")):
+        _write(staging, f"{n}.md", f"{n.upper()} finding", f"body {n} longer text", ses)
+
+    consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["a.md", "b.md", "c.md", "d.md"], "confidence": 0.9, "rationale": "same claim"}])
+    apply_proposals(str(store), [], reject=[0])
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert sorted(map(sorted, data["rejected_keys"])) == sorted(map(sorted, [
+        ["a.md", "b.md"], ["a.md", "c.md"], ["a.md", "d.md"],
+        ["b.md", "c.md"], ["b.md", "d.md"], ["c.md", "d.md"]]))
+
+    # Next sweep: the 3-of-4 subset is auto-rejected; an unrelated pair stays pending.
+    consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["a.md", "b.md", "d.md"], "confidence": 0.9, "rationale": "regrouped subset"},
+        {"ids": ["d.md", "e.md"], "confidence": 0.9, "rationale": "different claim"}])
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert data["rejected"] == [0]
+    md = render_review_markdown(str(store))
+    assert md is not None and "[1]" in Path(md).read_text()
+
+
+def test_old_format_cluster_key_expands_to_pairs_on_load(tmp_path):
+    """Artifacts written before pair-level storage hold whole-cluster keys; the
+    loader expands them to pairs on read, so old rejections gain subset
+    suppression without any data migration."""
+    store = tmp_path / ".magnolia"; staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "a.md", "A finding", "body a longer text", "s1")
+    _write(staging, "b.md", "B finding", "body b", "s2")
+    _write(staging, "c.md", "C finding", "body c", "s3")
+    reflex = store / "reflex"; reflex.mkdir(parents=True)
+    (reflex / "consolidation-proposal.json").write_text(json.dumps({
+        "proposals": [], "applied": [], "rejected": [],
+        "rejected_keys": [["a.md", "b.md", "c.md"]]}))
+
+    from compchem_memory.consolidation import _prior_rejected_keys
+    keys = _prior_rejected_keys(reflex / "consolidation-proposal.json")
+    assert keys == {("a.md", "b.md"), ("a.md", "c.md"), ("b.md", "c.md")}
+
+    consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["a.md", "c.md"], "confidence": 0.9, "rationale": "subset of old cluster"}])
+    data = json.loads((reflex / "consolidation-proposal.json").read_text())
+    assert data["rejected"] == [0]

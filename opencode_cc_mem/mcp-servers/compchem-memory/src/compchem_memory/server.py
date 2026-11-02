@@ -72,6 +72,7 @@ from compchem_memory.compaction import (
     estimate_tokens,
 )
 from compchem_memory.health import run_health_check
+from compchem_memory.contradictions import ConflictCandidatesError
 from compchem_memory.notebook import generate_notebook
 from compchem_memory.storage import (
     ensure_project_store,
@@ -363,6 +364,21 @@ def memory_get_context(
         token_budget=token_budget,
         conversation_history=conversation_history,
     )
+    # R5 surfacing counter: log served entries with SERVING-STORE attribution
+    # (resolved .magnolia, not the calling project path).
+    try:
+        from compchem_memory.context_assembly import _memory_store
+        from compchem_memory.surfacing import guess_session_id, log_surfacing
+        _store = _memory_store(pd)
+        log_surfacing(
+            _store,
+            result.sources,
+            "get_context",
+            session_id=guess_session_id(_store),
+            task_description=task_description,
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never break the tool
+        pass
     return json.dumps(
         {
             "content": result.content,
@@ -640,13 +656,36 @@ def post_run_assess(
 def memory_confirm(
     entry_name: str,
     project_dir: str | None = None,
+    acknowledge: bool = False,
 ) -> str:
     """Confirm a staging entry, moving it to the active project entries.
+
+    If the entry may contradict a project entry already in memory (same topic,
+    different numbers) the promotion is HELD and a conflict_hold payload lists
+    the pairs. Review both sides, resolve the wrong one, then re-run with
+    acknowledge=True to promote anyway.
 
     Call this when: reviewing staging entries you want to promote to the durable project tier (staging → project; for project → rules elevation use memory_review_promotions/memory_apply_promotions)."""
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
-    return proj_m.confirm_staging(pd, entry_name)
+    try:
+        return proj_m.confirm_staging(pd, entry_name, acknowledge=acknowledge)
+    except ConflictCandidatesError as e:
+        return json.dumps(
+            {
+                "status": "conflict_hold",
+                "entry": entry_name,
+                "message": str(e),
+                "candidates": e.candidates,
+                "how_to_proceed": (
+                    "Compare the two entries. If the project entry is right, fix "
+                    "the staging entry. If the staging entry is right, correct or "
+                    "archive the project entry. Then call memory_confirm again "
+                    "with acknowledge=True."
+                ),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()

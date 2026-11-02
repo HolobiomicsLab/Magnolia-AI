@@ -44,7 +44,7 @@
  */
 import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
-import { join, dirname, resolve } from "node:path"
+import { join, dirname, resolve, basename } from "node:path"
 import { promisify } from "node:util"
 
 const execFileP = promisify(execFile)
@@ -251,6 +251,7 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
         })
       }
     } catch { /* never throw into opencode */ }
+
   }
 
   /** Kick off retrieval for an instrumented call (tool.execute.before). */
@@ -342,6 +343,31 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
         provisional: !!h.provisional,
       })),
     })
+    // R5 surfacing counter: one row per INJECTED entry, written to the
+    // SERVING store's surfacing.jsonl (store = two levels above the hit
+    // file: <store>/entries/x.md or <store>/staging/x.md). Always counts
+    // toward exposure — a real tool call just ran in this session.
+    for (const h of hits) {
+      try {
+        const p = String(h.path ?? "")
+        if (!p) continue
+        const storeDir = dirname(dirname(p))
+        const tier = p.includes("/staging/") ? "staging" : "project"
+        appendFileSync(
+          join(storeDir, "surfacing.jsonl"),
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            channel: "action_memory",
+            store: storeDir,
+            session_id: sessionID ?? null,
+            tier,
+            id: basename(p),
+            counts_for_exposure: true,
+            task_len: 0,
+          }) + "\n",
+        )
+      } catch { /* never throw into opencode */ }
+    }
     // P3 telemetry: remember this injection so the session.idle probe can
     // test whether the turn's reply actually used it.
     if (injectedTurns.size > 40) {

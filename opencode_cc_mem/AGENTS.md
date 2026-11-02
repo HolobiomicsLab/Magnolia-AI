@@ -110,6 +110,16 @@ one project.
 
 Reading another project's memory is fine and is not blocked — only writing is.
 
+## When a tool returns review_required
+
+If a memory tool returns a JSON payload with `"status": "review_required"`, the
+real result was withheld because memory reviews (duplicate-merge proposals,
+rule-elevation proposals) are waiting. In your reply, tell the user in plain
+words what is waiting and ask whether to review it now. Nothing is applied
+without their confirmation. Then call the same tool again to get the real
+result. This fires at most once per project per day; while it is latched, the
+old tail-of-result notices are suppressed — do not treat silence as "handled".
+
 ## Shell commands
 
 Use `compchem-tools_run_shell(cmd=...)` for any shell command. Opencode's bash tool is

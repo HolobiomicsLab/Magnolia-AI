@@ -130,3 +130,40 @@ def test_default_clusterer_resilient_to_bad_llm_output(monkeypatch):
     for bad in (None, "not a dict", ["a", "list"], {"clusters": None}, {"no_clusters": 1}):
         monkeypatch.setattr(llm, "call_llm_json", lambda *a, **k: bad)
         assert consolidation._default_clusterer(payload) == []
+
+
+# ---- Confidence floor (2026-09-30): only >= 0.8 clusters are proposed ----
+
+def test_confidence_floor_drops_sub_0_8_clusters(tmp_path):
+    """Clusters the model itself scores below 0.8 (usually same-topic,
+    different-claim) are never proposed — they cost the user review time for
+    near-certain rejects. Skipped fresh each sweep, not durably dismissed."""
+    store = tmp_path / ".magnolia"
+    staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "a.md", "N-term ALA wins", "canonical body longer text", ses="ses_1")
+    _write(staging, "b.md", "ALA beats C-term", "short", ses="ses_2")
+    _write(staging, "c.md", "flexref values", "body c", ses="ses_3")
+    _write(staging, "d.md", "flexref range", "body d", ses="ses_4")
+
+    result = consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["a.md", "b.md"], "confidence": 0.85, "rationale": "same claim"},
+        {"ids": ["c.md", "d.md"], "confidence": 0.55, "rationale": "same topic only"}])
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert result["clusters"] == 1
+    assert [p["confidence"] for p in data["proposals"]] == [0.85]
+    assert {Path(s).name for s in data["proposals"][0]["sources"]} == {"a.md", "b.md"}
+
+
+def test_confidence_floor_boundary_exactly_0_8_is_proposed(tmp_path):
+    store = tmp_path / ".magnolia"
+    staging = store / "staging"; staging.mkdir(parents=True)
+    _write(staging, "a.md", "N-term ALA wins", "canonical body longer text", ses="ses_1")
+    _write(staging, "b.md", "ALA beats C-term", "short", ses="ses_2")
+
+    result = consolidate_project_findings(str(store), clusterer=lambda p: [
+        {"ids": ["a.md", "b.md"], "confidence": 0.8, "rationale": "same claim"}])
+
+    data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
+    assert result["clusters"] == 1
+    assert data["proposals"][0]["confidence"] == 0.8

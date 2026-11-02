@@ -116,3 +116,7 @@ opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/labels.json
 # fixed recall universe: keep the manifest tracked, the copied store bulk local
 opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/store-snapshot/entries/
 opencode_cc_mem/replay_eval/corpus/project_a_bakeoff/store-snapshot/staging/
+
+# Local backups of project memory stores (contain research-project data) — never track
+backups/
+opencode_cc_mem/backups/
