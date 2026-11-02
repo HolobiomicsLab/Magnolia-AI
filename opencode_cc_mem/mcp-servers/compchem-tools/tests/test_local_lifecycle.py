@@ -19,7 +19,10 @@ def test_submit_local_writes_exit_sentinel_nonzero(tmp_path):
     assert res["local_run_dir"] == str(tmp_path)
     code = _wait_sentinel(res["exit_sentinel"])
     assert code == "3"
-    assert Path(res["exit_sentinel"]) == tmp_path / ".magnolia" / "local_exit_code"
+    # per-job sentinel (unique suffix): jobs must not share one exit-code file
+    sentinel = Path(res["exit_sentinel"])
+    assert sentinel.parent == tmp_path / ".magnolia"
+    assert sentinel.name.startswith("local_exit_code_")
 
 
 def test_submit_local_writes_exit_sentinel_zero_and_logs(tmp_path):
@@ -71,7 +74,7 @@ def test_local_submit_records_remote_block_and_tags(tmp_path, monkeypatch):
     assert rec["remote"]["scheduler"] == "local"
     assert rec["remote"]["local_run_dir"] == str(proj)
     assert rec["remote"]["job_id"].startswith("local_")
-    assert rec["remote"]["exit_sentinel"].endswith("local_exit_code")
+    assert rec["remote"]["exit_sentinel"].startswith(str(proj / ".magnolia" / "local_exit_code_"))
     assert rec["system_tags"] == ["peptide", "6mer"]
     assert rec["lifecycle"] == "running"
     assert rec["resources"] == {

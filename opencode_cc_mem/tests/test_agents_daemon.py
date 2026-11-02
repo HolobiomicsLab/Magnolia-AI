@@ -322,6 +322,228 @@ def test_wait_for_defers_until_run_record_lands(tmp_path):
     assert d.discover_tasks(root, lanes)
 
 
+def test_wait_for_matches_date_prefixed_run_records(tmp_path):
+    """Real records are written as YYYYMMDD_<run_id>.yaml (submit_job naming);
+    the exact-name lookup alone never matches them (found 2026-10-08 on the
+    first live wait_for)."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    t = _task(proj / "inbox", "idea2.task.md", status="open",
+              body="Prototype the idea.\nwait_for: job:replay-eval_20261008_112903_12cd20")
+    lanes = d.discover_lanes(root)
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "20261008_replay-eval_20261008_112903_12cd20.yaml").write_text(
+        "status: success\n", encoding="utf-8")
+    n = d.deliver_wait_for(root, lanes)
+    assert n == 1
+    text = t.read_text(encoding="utf-8")
+    assert "Job result" in text and "success" in text
+    assert d.discover_tasks(root, lanes)
+
+
+# ---- status subsystem rewrite (panel verdict #1: value-agnostic, header-only)
+
+
+def test_set_status_rewrites_any_value_and_get_status_reads_header():
+    letter = "---\nstatus: prototyped\nfrom: literature\n---\n\nbody\n"
+    assert d.get_status(letter) == "prototyped"
+    out = d.set_status(letter, "open")
+    assert "status: open" in out and "prototyped" not in out
+    assert d.is_open_task(out) is True
+    assert d.is_open_task(letter) is False          # prototyped is not runnable
+
+
+def test_body_status_line_never_reopens_edited_letter(tmp_path):
+    """A body line `status: open` must not count: the old matcher re-ran such
+    letters after any later edit (zombie reprocess)."""
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox, body="example header:\n\n- status: open\n")
+    def fake_runner(agent, project_dir, root_, prompt, timeout_s):
+        return "FINAL ANSWER: ok"
+    assert d.handle_task(task, "literature", root, runner=fake_runner) == "done"
+    # simulate a later edit of the consumed letter
+    task.write_text(task.read_text() + "\nfollow-up note\n", encoding="utf-8")
+    assert d.discover_tasks(root) == []             # no zombie reprocess
+
+
+def test_deferred_rid_validation():
+    ok = "wait_for: job:replay-eval_20261008_121845_7db43d"
+    assert d.is_deferred_task(ok) == "replay-eval_20261008_121845_7db43d"
+    assert d.is_deferred_task("wait_for: job:../../etc/passwd") is None
+    assert d.is_deferred_task("wait_for: job:*") is None
+
+
+def test_wait_for_ignores_non_terminal_run_records(tmp_path):
+    """submit_job writes the record at submission; a `running` record must not
+    burn the single hop (panel verdict #2)."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    _task(proj / "inbox", "idea3.task.md", status="open",
+          body="Prototype.\nwait_for: job:arm_x")
+    lanes = d.discover_lanes(root)
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "arm_x.yaml").write_text("status: running\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, lanes) == 0
+    (runs / "arm_x.yaml").write_text("status: success\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, lanes) == 1
+
+
+# ---- ticket trailer: the lane decides, the daemon writes (verdict seam)
+
+
+def _ticket(inbox: Path, name: str, status: str = "open") -> Path:
+    inbox.mkdir(parents=True, exist_ok=True)
+    f = inbox / name
+    f.write_text(f"---\nstatus: {status}\nfrom: literature\nto: xiulian\n"
+                 f"ticket: idea\n---\n\n# Idea ticket\n\n## Idea\nDo a thing.\n",
+                 encoding="utf-8")
+    return f
+
+
+def test_ticket_trailer_parks_on_run(tmp_path):
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_park.task.md")
+
+    def builder(agent, project_dir, root_, prompt, timeout_s):
+        return ("FINAL ANSWER: prototype built.\n"
+                "ticket-status: prototyped\n"
+                "park: job:replay-eval_20261008_121845_7db43d\n")
+
+    result = d.handle_task(ticket, "xiulian", root, runner=builder)
+    assert result == "prototyped"
+    text = ticket.read_text(encoding="utf-8")
+    assert "status: prototyped" in text and "status: done" not in text
+    assert "wait_for: job:replay-eval_20261008_121845_7db43d" in text
+    # not consumed: parked, then delivered once the record is terminal
+    assert d.discover_tasks(root) == []             # parked letters never auto-run
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "20261008_replay-eval_20261008_121845_7db43d.yaml").write_text(
+        "status: success\n", encoding="utf-8")
+    assert d.deliver_wait_for(root, d.discover_lanes(root)) == 1
+    text = ticket.read_text(encoding="utf-8")
+    assert "Job result" in text and d.get_status(text) == "open"
+
+
+def test_ticket_trailer_evaluated_closes_lifecycle(tmp_path):
+    """Full evaluation hop: parked ticket -> terminal record -> daemon
+    re-delivers with the result -> lane replies trailer -> ticket evaluated."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_eval.task.md", status="open")
+    runs = proj / ".magnolia" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "20261008_replay-eval_20261008_121845_7db43d.yaml").write_text(
+        "status: fail\n", encoding="utf-8")
+    letter = d._upsert_wait_for(d.set_status(ticket.read_text(), "prototyped"),
+                                "replay-eval_20261008_121845_7db43d")
+    ticket.write_text(letter, encoding="utf-8")
+    lanes = d.discover_lanes(root)
+    assert d.discover_tasks(root, lanes) == []       # parked: not auto-run
+    assert d.deliver_wait_for(root, lanes) == 1      # terminal -> re-opened
+    text = ticket.read_text(encoding="utf-8")
+    assert d.get_status(text) == "open" and "Job result" in text
+
+    def evaluator(agent, project_dir, root_, prompt, timeout_s):
+        assert "Job result" in prompt               # re-delivery context visible
+        return "FINAL ANSWER: gate FAIL, negative result.\nticket-status: evaluated\n"
+
+    result = d.handle_task(ticket, "xiulian", root, runner=evaluator)
+    assert result == "evaluated"
+    assert d.get_status(ticket.read_text()) == "evaluated"
+    assert d.discover_tasks(root, lanes) == []       # evaluated never re-runs
+
+
+def test_ticket_without_trailer_is_consumed_done(tmp_path):
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    ticket = _ticket(proj / "inbox", "idea_plain.task.md")
+    result = d.handle_task(ticket, "xiulian", root,
+                           runner=lambda *a, **k: "FINAL ANSWER: narrated only")
+    assert result == "done"
+    assert d.get_status(ticket.read_text()) == "done"
+    assert d.discover_tasks(root) == []             # no infinite re-run
+
+
+def test_non_ticket_letter_ignores_trailer(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox, body="Mention ticket-status: evaluated in prose.")
+    result = d.handle_task(task, "literature", root,
+                           runner=lambda *a, **k: "FINAL ANSWER: ok")
+    assert result == "done"
+    assert d.get_status(task.read_text()) == "done"
+
+
+# ---- panel micro-fixes: per-lane model, --once lock, session self-heal
+
+
+def test_per_lane_model_forwarded_only_when_set(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    task = _task(inbox)
+    seen = {}
+
+    def runner(agent, project_dir, root_, prompt, timeout_s, **kw):
+        seen["model"] = kw.get("model")
+        return "FINAL ANSWER: ok"
+
+    d.handle_task(task, "literature", root, runner=runner,
+                  lane_cfg={"enabled": True, "model": "zai-coding-plan/glm-5.3"})
+    assert seen["model"] == "zai-coding-plan/glm-5.3"
+    # no model in lane cfg -> kwarg absent (5-arg test runners keep working)
+    d.handle_task(task, "literature", root, runner=runner,
+                  lane_cfg={"enabled": True})
+    assert seen["model"] is None
+
+
+def test_once_locks_by_default_and_force_overrides(tmp_path, monkeypatch):
+    """Behavioral contract: while the lock is held elsewhere, a --once scan
+    must NOT run; --force overrides. (acquire_lock is monkeypatched rather
+    than flock-held: same-process double-flock semantics are unreliable.)"""
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True})
+    scans = []
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: None)   # lock held elsewhere
+    monkeypatch.setattr(d, "scan_once", lambda *a, **k: scans.append(1) or [])
+    assert d.main(["--once", "--root", root]) == 0
+    assert scans == []                        # lock held -> no scan
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: 5)      # lock acquired
+    assert d.main(["--once", "--root", root, "--force"]) == 0
+    assert len(scans) == 1                    # force scans despite the lock
+
+
+def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
+    """A stale stored session id made every future letter fail on resume with
+    no self-heal (panel A5 brick facet): the daemon must clear the id and
+    retry the same letter in a fresh session, once."""
+    root = _root(tmp_path)
+    proj = _lane(root, "xiulian", {"enabled": True})
+    state = d.load_state(root)
+    state.setdefault("lanes", {}).setdefault("xiulian", {})["session_id"] = "ses_stale"
+    d.save_state(root, state)
+    calls = []
+
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log):
+        calls.append(list(extra_args))
+        if "--session" in extra_args:
+            return {"rc": 1, "session_id": None, "final_text": "",
+                    "n_tools": 0, "all_text": "", "stderr_tail": "stale"}
+        return {"rc": 0, "session_id": "ses_fresh", "final_text": "FINAL ANSWER: ok",
+                "n_tools": 1, "all_text": "FINAL ANSWER: ok", "stderr_tail": ""}
+
+    monkeypatch.setattr(d, "_run_once", fake_run_once)
+    out = d.default_runner("xiulian", str(proj), root, "do the thing", 60)
+    assert out == "FINAL ANSWER: ok"
+    assert len(calls) == 2
+    assert "--session" in calls[0] and "--session" not in calls[1]   # fresh retry
+    assert d.load_state(root)["lanes"]["xiulian"]["session_id"] == "ses_fresh"
+
+
 def test_scheduled_sweep_letter_written_once(tmp_path):
     root = _root(tmp_path)
     _lane(root, "literature", {"enabled": True, "schedule_days": 1,

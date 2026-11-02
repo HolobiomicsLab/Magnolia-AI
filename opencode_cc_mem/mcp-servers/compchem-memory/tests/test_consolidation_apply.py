@@ -87,7 +87,7 @@ def test_render_review_markdown_to_visible_dir(tmp_path):
     assert path == str(tmp_path / "magnolia-review" / "proposals.md")
     md = Path(path).read_text()
     assert "[0]" in md
-    assert "action: accept" in md
+    assert "action: reject" in md
     assert "N-term ALA wins" in md or "ALA beats C-term" in md
     # Self-explanatory review: glossary + plain-words confidence + effects.
     assert "How to read this file" in md

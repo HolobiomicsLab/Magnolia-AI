@@ -11,6 +11,7 @@ deterministic tool-output keeps the existing lexical dedup.
 import functools
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -25,6 +26,72 @@ from compchem_memory.reflex_common import (
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
             "note", "workflow_note")
+
+# Entries produced by a previous consolidation merge concatenate several source
+# bodies under this heading. They cannot be merged again safely: the judge sees
+# only a short prefix, so later claims are invisible to it. The standard
+# `## Observation N` append format is NOT excluded — it usually restates the
+# same claim with more evidence (and both good merges in the 2026-10-22 incident
+# carried it). Only the merge-produced marker is a reliable multi-claim signal.
+_CLAIM_SECTION_RE = re.compile(
+    r"^##\s+Corroborating observations \(merged\)\s*$",
+    re.MULTILINE,
+)
+_OBSERVATION_RE = re.compile(r"^##\s+Observation\s+\d+.*$", re.MULTILINE)
+_HEADING_RE = re.compile(r"^##\s+.+$", re.MULTILINE)
+_STUB_METRICS_RE = re.compile(r'"[#=*_-]{6,}"\s*:')
+_EMPTY_SCORE_TITLE_RE = re.compile(r"\(score:\s*\)\s*$", re.IGNORECASE)
+
+
+def _is_multi_claim(entry: dict[str, Any]) -> bool:
+    """True when the entry was produced by a previous consolidation merge and
+    therefore already holds several source bodies."""
+    return bool(_CLAIM_SECTION_RE.search(entry.get("body") or ""))
+
+
+def _is_stub_record(entry: dict[str, Any]) -> bool:
+    """True for a generic tool-event wrapper: empty score and/or a placeholder
+    metrics key. These are run bookkeeping, not findings to consolidate."""
+    meta = entry.get("meta") or {}
+    title = str(meta.get("title") or "").strip()
+    body = entry.get("body") or ""
+    return bool(_EMPTY_SCORE_TITLE_RE.search(title)
+                or _STUB_METRICS_RE.search(body))
+
+
+def _eligible_for_merge(entry: dict[str, Any]) -> bool:
+    """An entry may enter a merge only when it is not parked, asserts exactly one
+    claim, and is not a generic run record."""
+    meta = entry.get("meta") or {}
+    if meta.get("parked"):
+        return False
+    return not _is_multi_claim(entry) and not _is_stub_record(entry)
+
+
+def _pair_shares_tool(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """True when two entries share a tool. The tool is the analysis channel, so
+    a shared tool is evidence that the claims come from the same computation.
+    Tags are free-text labels and can be generic (e.g. entity8, entity7); they are
+    deliberately NOT used by the auto-band gate."""
+    ma, mb = a.get("meta") or {}, b.get("meta") or {}
+    return bool(set(ma.get("tools") or []) & set(mb.get("tools") or []))
+
+
+def _evidence_connected(entries: list[dict[str, Any]]) -> bool:
+    """True when every member is linked to the cluster through at least one
+    shared tool (a connected graph, not necessarily every pair)."""
+    n = len(entries)
+    if n < 2:
+        return False
+    seen = {0}
+    stack = [0]
+    while stack:
+        i = stack.pop()
+        for j in range(n):
+            if j not in seen and _pair_shares_tool(entries[i], entries[j]):
+                seen.add(j)
+                stack.append(j)
+    return len(seen) == n
 
 
 def _sessions_of(meta: dict[str, Any]) -> set[str]:
@@ -86,7 +153,10 @@ def merge_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _load_findings(staging_dir: Path, types: tuple[str, ...] = NL_TYPES) -> list[dict[str, Any]]:
     """Load natural-language finding entries from staging as
-    {"id","path","meta","body"}; id is the filename (stable, unique)."""
+    {"id","path","meta","body"}; id is the filename (stable, unique).
+
+    Stub run records and entries that already carry several claims are excluded:
+    they cannot be merged without losing or mixing claims (2026-10-22 incident)."""
     staging_dir = Path(staging_dir)
     out: list[dict[str, Any]] = []
     if not staging_dir.exists():
@@ -107,7 +177,10 @@ def _load_findings(staging_dir: Path, types: tuple[str, ...] = NL_TYPES) -> list
         if meta.get("parked"):
             continue  # R9: parked entries stay out of the consolidation pool
         if meta.get("type") in types:
-            out.append({"id": f.name, "path": str(f), "meta": meta, "body": body.strip()})
+            entry = {"id": f.name, "path": str(f), "meta": meta, "body": body.strip()}
+            if not _eligible_for_merge(entry):
+                continue
+            out.append(entry)
     return out
 
 
@@ -116,20 +189,33 @@ def cluster_findings(
     clusterer: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Ask `clusterer` to group same-claim entries. Payload sent to the clusterer
-    is compact (id/title/gist/type/session). Returns clusters of >=2 resolved
-    members with confidence + rationale; singletons are dropped."""
+    is compact (id/title/gist/tools/tags/type/session). Returns clusters of >=2
+    resolved members with confidence + rationale; singletons are dropped.
+
+    Entries that are not merge-eligible (multi-claim or stub) are never sent to
+    the clusterer. A cluster that names ANY excluded id is dropped whole: the
+    grouping was justified by an entry that cannot be merged, so keeping the
+    residual members would silently create a different, unvetted cluster."""
+    eligible = [e for e in entries if _eligible_for_merge(e)]
     payload = [{
         "id": e["id"],
         "title": e["meta"].get("title", ""),
-        "gist": e["body"][:200],
+        "gist": e["body"][:600],
         "type": e["meta"].get("type"),
+        "tools": sorted(set(e["meta"].get("tools") or [])),
+        "tags": sorted(set(e["meta"].get("tags") or [])),
+        "observations": [h.strip() for h in
+                         _OBSERVATION_RE.findall(e["body"])][:8],
         "session": e["meta"].get("opencode_session_id"),
-    } for e in entries]
+    } for e in eligible]
     raw = clusterer(payload) or []
-    by_id = {e["id"]: e for e in entries}
+    by_id = {e["id"]: e for e in eligible}
     clusters: list[dict[str, Any]] = []
     for c in raw:
-        members = [by_id[i] for i in c.get("ids", []) if i in by_id]
+        ids = c.get("ids", [])
+        if any(i not in by_id for i in ids):
+            continue
+        members = [by_id[i] for i in ids]
         if len(members) >= 2:
             clusters.append({
                 "members": members,
@@ -148,10 +234,13 @@ _CLUSTER_BATCH = 30
 
 _CLUSTER_SYSTEM = (
     "You consolidate a computational-chemistry project's memory. Given a JSON "
-    "list of finding entries (id, title, gist), group ONLY entries that assert "
-    "the SAME claim about the SAME system. Do NOT group entries that merely "
-    "share a topic or differ in any material detail (different peptide, metric, "
-    "residue, or conclusion). Most entries will be singletons. "
+    "list of finding entries (id, title, gist, tools, tags, observations), group "
+    "ONLY entries that assert the SAME claim about the SAME system. Do NOT group "
+    "entries that merely share a topic or differ in any material detail (different "
+    "peptide, metric, residue, tool, or conclusion). Entries with disjoint tool "
+    "sets usually describe different claims; do not group them unless the text is "
+    "explicitly the same claim. Entries that carry `## Observation N` sections "
+    "have appended evidence; group them only when the MAIN claim is the same. "
     "Before grouping a pair, ask: if these entries were merged into one, would "
     "any information be lost? If yes, do NOT group them. Return FEWER, "
     "higher-certainty clusters rather than more speculative ones — an EMPTY "
@@ -566,25 +655,48 @@ def _env_flag(name: str) -> bool:
         "1", "true", "yes", "on")
 
 
+def _auto_band_ready(proposal: dict[str, Any]) -> tuple[bool, str]:
+    """Deterministic gate for the auto-band, independent of the judge's score.
+
+    Re-reads the proposal's sources and requires:
+    - every surviving source is merge-eligible (single claim, not a stub);
+    - the members are connected by at least one shared tool.
+    A cluster that fails either check stays pending for human review. A stale
+    cluster (<2 surviving sources) is left to apply_proposals, which dismisses
+    it durably."""
+    entries = [e for e in (_parse_entry(s) for s in proposal.get("sources", [])) if e]
+    if len(entries) < 2:
+        return True, ""
+    if any(not _eligible_for_merge(e) for e in entries):
+        return False, "ineligible_source"
+    if not _evidence_connected(entries):
+        return False, "no_shared_tool"
+    return True, ""
+
+
 def auto_apply_band(store_dir: str) -> dict[str, Any]:
     """Apply pending proposals in the auto band (see AUTO_BAND_MIN_CONFIDENCE).
 
     No-op unless MAGNOLIA_CONSOLIDATION_AUTO is set (same accepted values as
     the admission gate: 1/true/yes/on). At most MAGNOLIA_CONSOLIDATION_AUTO_MAX
     proposals per call (default AUTO_BAND_DEFAULT_CAP), highest confidence
-    first, so one bad sweep cannot rewrite the whole store. Appends one JSONL
-    receipt row per run to <store>/reflex/consolidation-auto-log.jsonl — the
-    seed of the label store: what was auto-applied, at which confidence, from
-    which sources, so later analysis can audit the band. Applies through the
-    same apply_proposals path as human review (identical merges, same versioning
-    commits). Never raises."""
+    first, so one bad sweep cannot rewrite the whole store. A proposal must also
+    pass the deterministic `_auto_band_ready` gate (single-claim sources, shared
+    tool); failures are DEFERRED to human review, never applied. Appends one
+    JSONL receipt row per run to <store>/reflex/consolidation-auto-log.jsonl —
+    the seed of the label store: what was auto-applied or deferred, at which
+    confidence, from which sources, so later analysis can audit the band.
+    Applies through the same apply_proposals path as human review (identical
+    merges, same versioning commits). Never raises."""
     try:
         if not _env_flag("MAGNOLIA_CONSOLIDATION_AUTO"):
-            return {"applied": 0, "merged": [], "skipped_reason": "disabled"}
+            return {"applied": 0, "merged": [], "deferred": [],
+                    "skipped_reason": "disabled"}
         store = Path(store_dir)
         artifact = store / "reflex" / "consolidation-proposal.json"
         if not artifact.exists():
-            return {"applied": 0, "merged": [], "skipped_reason": "no_artifact"}
+            return {"applied": 0, "merged": [], "deferred": [],
+                    "skipped_reason": "no_artifact"}
         data = json.loads(artifact.read_text())
         proposals = data.get("proposals", [])
         pending = _pending_indices(data)
@@ -596,20 +708,30 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
         cap = max(cap, 0)
 
         conf_by_index: dict[int, float] = {}
+        deferred: list[dict[str, Any]] = []
         for i in pending:
             try:
                 conf = float(proposals[i].get("confidence") or 0.0)
             except (TypeError, ValueError):
                 conf = 0.0
-            if conf >= AUTO_BAND_MIN_CONFIDENCE:
+            if conf < AUTO_BAND_MIN_CONFIDENCE:
+                continue
+            ok, reason = _auto_band_ready(proposals[i])
+            if ok:
                 conf_by_index[i] = conf
+            else:
+                deferred.append({"index": i, "confidence": conf,
+                                 "reason": reason})
         # Highest confidence first; ties resolved by artifact order (index).
         chosen = sorted(conf_by_index, key=lambda i: (-conf_by_index[i], i))[:cap]
-        if not chosen:
-            return {"applied": 0, "merged": [], "skipped_reason": "none_in_band"}
+        if not chosen and not deferred:
+            return {"applied": 0, "merged": [], "deferred": [],
+                    "skipped_reason": "none_in_band"}
 
-        res = apply_proposals(store_dir, accepted=chosen, via="auto",
-                              evidence=f"auto-band >= {AUTO_BAND_MIN_CONFIDENCE}")
+        res = (apply_proposals(store_dir, accepted=chosen, via="auto",
+                               evidence=f"auto-band >= {AUTO_BAND_MIN_CONFIDENCE}")
+               if chosen else
+               {"applied": 0, "merged": [], "dismissed": [], "failed": []})
         receipt = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "auto": True,
@@ -618,6 +740,7 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
             "merged": res["merged"],
             "dismissed": res["dismissed"],
             "failed": res["failed"],
+            "deferred": deferred,
             "candidates": [{"index": i,
                             "confidence": conf_by_index[i],
                             "sources": [Path(s).name
@@ -643,20 +766,25 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
                     "action, this is the heads-up.")
         except Exception:
             pass
-        return res
+        return {**res, "deferred": deferred}
     except Exception as e:  # noqa: BLE001 - auto-band must never break the sweep
         print(f"[consolidation] auto-band skipped: {e}")
-        return {"applied": 0, "merged": [], "failed": [], "error": str(e)}
+        return {"applied": 0, "merged": [], "deferred": [], "failed": [],
+                "error": str(e)}
 
 
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     """Apply one consolidation: re-read the still-present sources, merge them, write
     the merged entry OVER the canonical file, and remove the other sources. Re-reads
     from disk (authoritative — tolerates sources changed/removed since the proposal).
-    Requires >=2 surviving sources, else skips. Returns
+    Requires >=2 surviving sources, else skips. Refuses to merge when any source is
+    a stub run record or already carries several claims (multi-claim bodies cannot
+    be concatenated without mixing claims). Returns
     {"merged": path|None, "removed": [...], "skipped": bool}."""
     entries = [e for e in (_parse_entry(p) for p in source_paths) if e]
     if len(entries) < 2:
+        return {"merged": None, "removed": [], "skipped": True}
+    if any(not _eligible_for_merge(e) for e in entries):
         return {"merged": None, "removed": [], "skipped": True}
     merged = merge_entries(entries)
     canonical = merged["canonical"]
@@ -674,10 +802,35 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     return {"merged": canonical, "removed": removed, "skipped": False}
 
 
+def _first_paragraph(body: str) -> str:
+    """Short plain-text excerpt of an entry body, skipping heading lines."""
+    for chunk in re.split(r"\n\s*\n", body or ""):
+        text = " ".join(line.strip() for line in chunk.splitlines()
+                        if line.strip() and not line.lstrip().startswith("#"))
+        if text:
+            return text[:200] + ("…" if len(text) > 200 else "")
+    return ""
+
+
+def _source_summary(path: str) -> tuple[str, list[str], str]:
+    """Title, claim headings, and first paragraph of one proposal source."""
+    entry = _parse_entry(path)
+    if not entry:
+        return "", [], ""
+    meta = entry.get("meta") or {}
+    title = str(meta.get("title") or "")
+    heads = [h.strip() for h in _HEADING_RE.findall(entry.get("body") or "")][:6]
+    return title, heads, _first_paragraph(entry.get("body") or "")
+
+
 def render_review_markdown(store_dir: str) -> str | None:
     """Write a human-readable review of the UNAPPLIED proposals to a VISIBLE,
     ephemeral `<project>/magnolia-review/proposals.md` (sibling of .magnolia — not
-    hidden). Returns the path, or None if there is nothing left to review."""
+    hidden). Returns the path, or None if there is nothing left to review.
+
+    The default action is REJECT. Every proposal lists each source with its title,
+    claim headings, and a short excerpt so the reviewer can compare the claims,
+    not only the merged canonical preview (2026-10-22 bad-merge fix)."""
     store = Path(store_dir)
     artifact = store / "reflex" / "consolidation-proposal.json"
     if not artifact.exists():
@@ -692,8 +845,9 @@ def render_review_markdown(store_dir: str) -> str | None:
         "# Consolidation proposals — review",
         "",
         "Each finding below was distilled multiple times; the agent proposes merging",
-        "the duplicates into one entry. For each: leave `action: accept` to merge, or",
-        "change it to `reject`. Then tell the agent which to apply (e.g. \"apply 0 and 2\").",
+        "the duplicates into one entry. The default is `action: reject`. Change it to",
+        "`accept` only after reading every source. Then tell the agent which to apply",
+        "(e.g. \"apply 0 and 2\").",
         "",
         "How to read this file:",
         "",
@@ -701,6 +855,8 @@ def render_review_markdown(store_dir: str) -> str | None:
         "  assert the SAME claim: **>= 0.8** same claim, near-duplicate (accepting",
         "  is safe); **0.5-0.79** grouped despite doubt, usually same topic with",
         "  different claims (read the `why` line; default to reject); **< 0.5** weak.",
+        "- **sources** lists what each entry actually says (title, headings, excerpt).",
+        "  Read these before accepting: a shared topic is not a shared claim.",
         "- **accept** merges the sources into one entry under the title below;",
         "  member bodies are kept as corroborating observations; the merge is",
         "  committed to the versioning repo (git-reversible). **reject** durably",
@@ -723,12 +879,21 @@ def render_review_markdown(store_dir: str) -> str | None:
             conf_words = "weak grouping"
         lines += [
             f"## [{i}] {mp.get('title', '')}",
-            "- action: accept",
+            "- action: reject",
             f"- confidence: {conf} — {conf_words}  |  distinct sessions: {mp.get('observation_count')}",
             f"- why: {p.get('rationale', '')}",
-            "- sources:",
+            "- sources (read each before accepting):",
         ]
-        lines += [f"    - {Path(s).name}" for s in p.get("sources", [])]
+        for s in p.get("sources", []):
+            title, heads, excerpt = _source_summary(s)
+            label = f"    - `{Path(s).name}`"
+            if title:
+                label += f" — {title}"
+            lines.append(label)
+            for h in heads:
+                lines.append(f"        - {h}")
+            if excerpt:
+                lines.append(f"        - {excerpt}")
         body = mp.get("body", "") or ""
         shown = body[:1500] + ("\n…(truncated)" if len(body) > 1500 else "")
         # `~~~~` fence won't be closed early by a ``` block inside a finding body.

@@ -28,7 +28,30 @@ AGENTS = ("literature", "xiulian")
 AGENT_REGISTRY_NAME = "agent.json"
 SCAN_INTERVAL_S = 10
 TASK_TIMEOUT_S = 30 * 60
-STATUS_RE = re.compile(r"^([\s>*-]*status:\s*)open\b", re.I | re.M)
+# Status lives in the LETTER HEADER (first STATUS_HEADER_LINES lines) and may
+# hold any word (open/done/error/prototyped/evaluated/...). The old matcher
+# (whole document, value locked to `open`) was the root cause of three
+# 2026-10-08 defects: body `status: open` lines zombie-reprocessing edited
+# letters, `prototyped` tickets dead-lettering (wait_for could never re-open
+# them), and idea tickets force-flipped to `done` (panel verdict #1).
+STATUS_HEADER_LINES = 15
+_STATUS_LINE_RE = re.compile(r"^([\s>*-]*status:\s*)(\S+?)[ \t]*$", re.I)
+_VALID_RID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")   # wait_for rid: path-safe charset
+_TERMINAL_RUN_STATUSES = frozenset(
+    {"success", "completed", "pass", "fail", "failed", "error", "cancelled"})
+_TICKET_RE = re.compile(r"^ticket:[ \t]*idea[ \t]*$", re.I | re.M)
+_TRAILER_STATUS_RE = re.compile(
+    r"^[ \t]*ticket-status:[ \t]*([a-z_-]+)[ \t]*$", re.I | re.M)
+_TRAILER_PARK_RE = re.compile(
+    r"^[ \t]*park:[ \t]*job:[ \t]*([A-Za-z0-9_-]{1,128})[ \t]*$", re.I | re.M)
+# A ticket answer trailer (`ticket-status:` / `park: job:<rid>`) lets a lane
+# move a ticket without file permissions: the lane decides, the daemon writes.
+_TICKET_TRAILER_HINT = (
+    "\nTrailer contract: if this letter is an idea ticket, END your FINAL "
+    "ANSWER with one or both machine lines: 'ticket-status: "
+    "<open|prototyped|evaluated|accepted|rejected>' and, when you started a "
+    "tracked computation, 'park: job:<run-id>'. The daemon applies them to "
+    "the ticket; do not restate them anywhere else.\n")
 # A ticket line `wait_for: job:<run_id>` parks the letter until the run
 # record <project>/.magnolia/runs/<run_id>.yaml exists with a status; the
 # daemon then re-delivers it (removes the line, appends the recorded result).
@@ -81,14 +104,36 @@ def save_state(root: str, state: dict) -> None:
 
 # ------------------------------------------------------------ discovery ---
 
+def _header_window(text: str) -> str:
+    """The letter's header block (first STATUS_HEADER_LINES lines) — the only
+    region where machine-read state (status:, ticket:) is recognized."""
+    return "\n".join(text.splitlines()[:STATUS_HEADER_LINES])
+
+
+def get_status(text: str) -> str | None:
+    """The letter's header status value (lowercased), or None. Header-only:
+    a `status:` mention in the body is content, never state."""
+    for line in text.splitlines()[:STATUS_HEADER_LINES]:
+        m = _STATUS_LINE_RE.match(line)
+        if m:
+            return m.group(2).lower()
+    return None
+
+
 def is_open_task(text: str) -> bool:
-    return bool(STATUS_RE.search(text))
+    return get_status(text) == "open"
 
 
 def is_deferred_task(text: str) -> str | None:
-    """Return the wait_for run_id when the letter is parked on a job."""
+    """Return the wait_for run_id when the letter is parked on a job.
+    The rid is charset-validated: it is interpolated into a runs-dir path
+    downstream, so anything beyond [A-Za-z0-9_-] is a malformed park, not a
+    deferral (the letter then runs as a normal task — visible, not silent)."""
     m = WAIT_FOR_RE.search(text)
-    return m.group(1).strip("'\"") if m else None
+    if not m:
+        return None
+    rid = m.group(1).strip("'\"")
+    return rid if _VALID_RID_RE.fullmatch(rid) else None
 
 
 def discover_lanes(root: str) -> dict:
@@ -151,7 +196,28 @@ def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
 # ------------------------------------------------------------- execution ---
 
 def set_status(text: str, new_status: str) -> str:
-    return STATUS_RE.sub(rf"\g<1>{new_status}", text, count=1)
+    """Rewrite the header status line's VALUE, whatever it currently is
+    (open/done/error/prototyped/evaluated/...). Returns text unchanged when
+    the header carries no status line; body status mentions are never touched."""
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines[:STATUS_HEADER_LINES]):
+        m = _STATUS_LINE_RE.match(line)
+        if m:
+            lines[i] = m.group(1) + new_status + ("\n" if line.endswith("\n") else "")
+            return "".join(lines)
+    return text
+
+
+def _upsert_wait_for(letter: str, rid: str) -> str:
+    """Drop any existing wait_for line, then insert `wait_for: job:<rid>`
+    directly after the header status line."""
+    body = WAIT_FOR_RE.sub("", letter)
+    lines = body.splitlines(keepends=True)
+    for i, line in enumerate(lines[:STATUS_HEADER_LINES]):
+        if _STATUS_LINE_RE.match(line):
+            lines.insert(i + 1, f"wait_for: job:{rid}\n")
+            return "".join(lines)
+    return letter.rstrip() + f"\n\nwait_for: job:{rid}\n"
 
 
 def write_reply(task_file: Path, agent: str, body: str) -> Path:
@@ -244,7 +310,7 @@ def _opencode_bin() -> str:
 
 
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
-                   timeout_s: int) -> str:
+                   timeout_s: int, model: str | None = None) -> str:
     """Real headless run with the answer gate. Separate function so tests
     can stub it.
 
@@ -259,14 +325,16 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     --model is REQUIRED in practice: without it, `opencode run` falls back to
     the GLOBAL config's default model, which on this machine names a retired
     model (zai-coding-plan/glm-4.6) and fails with ProviderModelNotFoundError
-    (found 2026-09-24, first smoke). MAGNOLIA_AGENTS_MODEL overrides.
+    (found 2026-09-24, first smoke). Precedence: lane cfg `model` (agent.json,
+    panel B7 — previously silently ignored) > MAGNOLIA_AGENTS_MODEL env >
+    the deepseek/deepseek-flash default.
 
     Default deepseek/deepseek-flash = DeepSeek-V4.1-Flash on the official
     api.deepseek.com (verified live 2026-09-29); needs DEEPSEEK_API_KEY in
     the launcher env. Chosen after glm-5.3-flash ended its turn after one
     60-char message without doing the task (2026-09-29 letter test)."""
-    model = os.environ.get("MAGNOLIA_AGENTS_MODEL",
-                           "deepseek/deepseek-flash")
+    model = model or os.environ.get("MAGNOLIA_AGENTS_MODEL",
+                                    "deepseek/deepseek-flash")
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
     env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
@@ -288,6 +356,8 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
         run_log = None
 
     args: list = ([ "--session", lane_sid ] if lane_sid else []) + [prompt]
+    resumed = bool(lane_sid)
+    healed = False
     attempt = 0
     while True:
         attempt += 1
@@ -303,6 +373,22 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                        f"tools={parsed['n_tools']} "
                        f"marker={'yes' if marker else 'no'} model={model}")
         if parsed["rc"] != 0:
+            if resumed and not healed:
+                # Stale/expired stored session id bricks the lane: every
+                # future letter fails on resume and the bad id is never
+                # cleaned (panel A5). Self-heal once: clear the stored id and
+                # retry the SAME letter in a fresh session.
+                healed = True
+                try:
+                    st = load_state(root)
+                    st.setdefault("lanes", {}).setdefault(agent, {})["session_id"] = None
+                    save_state(root, st)
+                except Exception:
+                    pass
+                log_line(root, f"[{agent}] resume failed rc={parsed['rc']} — "
+                               f"stored session id cleared, retrying fresh")
+                args = [prompt]
+                continue
             raise RuntimeError(f"opencode run exit={parsed['rc']}: "
                                f"{parsed['stderr_tail']}")
         if marker:
@@ -317,13 +403,15 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
 
 
 def handle_task(task_file: Path, agent: str, root: str,
-                runner=default_runner, timeout_s: int = TASK_TIMEOUT_S) -> str:
+                runner=default_runner, timeout_s: int = TASK_TIMEOUT_S,
+                lane_cfg: dict | None = None) -> str:
     """Run one task letter; write the reply; flip its status; update state.
     Returns 'done' or 'error' (the letter is consumed either way — a failed
     task is reported in the reply file, not retried in a loop)."""
     state = load_state(root)
     text = task_file.read_text(encoding="utf-8", errors="replace")
     project_dir = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
+    is_ticket = bool(_TICKET_RE.search(_header_window(text)))
     prompt = (
         f"You are the on-duty {agent} helper. A request letter arrived in "
         f"your inbox:\n\n---\n{text}\n---\n\n"
@@ -335,25 +423,71 @@ def handle_task(task_file: Path, agent: str, root: str,
         f"message. Answer contract: your FINAL message must BEGIN with the "
         f"line 'FINAL ANSWER:' followed by the complete answer — never end "
         f"your turn without it; if you are still investigating, keep "
-        f"calling tools instead of stopping.\n"
+        f"calling tools instead of stopping."
+        + (_TICKET_TRAILER_HINT if is_ticket else "\n")
     )
     status = "done"
+    body = ""
+    # Per-lane model (agent.json `model`): forwarded to the runner only when
+    # set, so injected test runners with the 5-arg signature keep working.
+    lane_model = (lane_cfg or {}).get("model") or None
     try:
-        body = runner(agent, project_dir, root, prompt, timeout_s)
+        body = runner(agent, project_dir, root, prompt, timeout_s,
+                      **({"model": lane_model} if lane_model else {}))
         # The agent printed the answer (stdout IS the reply); always
         # overwrite so a re-run never leaves a stale earlier reply.
         write_reply(task_file, agent, body)
     except Exception as e:
         status = "error"
         body = f"## Task failed\n\nThe helper run raised: {e}\n\n"
-        body += "Edit this letter (any change reopens it) to try again."
+        body += "To try again, set this letter's `status:` line back to `open`."
         write_reply(task_file, agent, body)
+
+    # Ticket answers may steer the lifecycle via the reply trailer: the lane
+    # decides, the daemon writes (lanes have no file permissions).
+    if status == "done" and is_ticket:
+        tstat = _TRAILER_STATUS_RE.search(body or "")
+        park = _TRAILER_PARK_RE.search(body or "")
+        new_state = tstat.group(1).lower() if tstat else None
+        if park and new_state in (None, "prototyped"):
+            # builder hop: park the ticket on the run; NOT done — the
+            # terminal run record re-opens it for the evaluation hop.
+            letter = _upsert_wait_for(set_status(text, "prototyped"),
+                                      park.group(1))
+            try:
+                task_file.write_text(letter, encoding="utf-8")
+            except Exception:
+                pass
+            state = load_state(root)          # runner may have saved state
+            state["done"].pop(str(task_file), None)
+            save_state(root, state)
+            log_line(root, f"[{agent}] {task_file.name} -> prototyped "
+                           f"(parked on {park.group(1)})")
+            return "prototyped"
+        if new_state in ("evaluated", "accepted", "rejected", "prototyped"):
+            try:
+                task_file.write_text(set_status(text, new_state),
+                                     encoding="utf-8")
+            except Exception:
+                pass
+            state = load_state(root)          # runner may have saved state
+            state["done"][str(task_file)] = \
+                hashlib.sha1(task_file.read_bytes()).hexdigest()
+            save_state(root, state)
+            log_line(root, f"[{agent}] {task_file.name} -> {new_state}")
+            return new_state
+        # missing/unknown trailer on a ticket: consumed like any letter
+        # (visible in the reply file; never re-runs)
+
     try:
         task_file.write_text(set_status(text, status), encoding="utf-8")
     except Exception:
         pass
-    digest = hashlib.sha1(task_file.read_bytes()).hexdigest()
-    state["done"][str(task_file)] = digest
+    # reload: the runner persists lane-session ids mid-run; the snapshot from
+    # before the run must not clobber them (lost-update class, panel A7/B6)
+    state = load_state(root)
+    state["done"][str(task_file)] = \
+        hashlib.sha1(task_file.read_bytes()).hexdigest()
     save_state(root, state)
     log_line(root, f"[{agent}] {task_file.name} -> {status}")
     return status
@@ -367,7 +501,9 @@ def scan_once(root: str, agents=AGENTS, runner=default_runner, lanes: dict | Non
     results = []
     for f in discover_tasks(root, lane_map):
         agent = f.parts[f.parts.index("projects") + 1]
-        results.append(f"{agent}:{handle_task(f, agent, root, runner)}")
+        result = handle_task(f, agent, root, runner,
+                             lane_cfg=lane_map.get(agent))
+        results.append(f"{agent}:{result}")
     return results
 
 
@@ -396,13 +532,24 @@ def deliver_wait_for(root: str, lanes: dict) -> int:
                 continue
             rec = runs / f"{rid}.yaml"
             if not rec.is_file():
-                continue  # job still pending
+                # submit_job writes date-prefixed records (YYYYMMDD_<run_id>.yaml);
+                # fall back to a run-id-suffix match so wait_for fires for real
+                # records (found 2026-10-08: exact-name lookup never matched).
+                hits = sorted(runs.glob(f"*_{rid}.yaml")) if runs.is_dir() else []
+                if not hits:
+                    continue  # job still pending
+                rec = hits[-1]
             try:
                 status_m = re.search(r"^status:\s*(\S+)",
                                      rec.read_text(encoding="utf-8", errors="replace"), re.M)
             except OSError:
                 continue
             result = status_m.group(1) if status_m else "unknown"
+            if result not in _TERMINAL_RUN_STATUSES:
+                # running/pending — submit_job writes the record at SUBMISSION
+                # time; delivering here would burn the single hop on a job
+                # that has not finished (panel verdict #2)
+                continue
             new_text = WAIT_FOR_RE.sub("", text) + (
                 f"\n\n## Job result ({rid})\n\n- status: {result}\n- record: {rec}\n")
             new_text = set_status(new_text, "open")
@@ -481,16 +628,20 @@ def acquire_lock(root: str) -> int | None:
     return fh.fileno()  # keep the fd open: the lock lives as long as we do
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="magnolia-agents-daemon")
     ap.add_argument("--root", default=os.environ.get("MAGNOLIA_ROOT") or os.getcwd())
     ap.add_argument("--once", action="store_true", help="one scan, no loop")
+    ap.add_argument("--force", action="store_true",
+                    help="skip the singleton lock — deliberate concurrent scan "
+                         "(--once now LOCKS by default: two runners resuming one "
+                         "lane session corrupt state.json, panel B8)")
     ap.add_argument("--interval", type=int, default=SCAN_INTERVAL_S)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if os.environ.get("MAGNOLIA_AGENTS", "") == "0":
         print("agents daemon disabled (MAGNOLIA_AGENTS=0)")
         return 0
-    if not args.once and acquire_lock(args.root) is None:
+    if acquire_lock(args.root) is None and not args.force:
         print("agents daemon already running")
         return 0
     log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")

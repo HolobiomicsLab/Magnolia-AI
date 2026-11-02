@@ -19,10 +19,11 @@ def _artifact(store, pending):
     art.write_text(json.dumps(data))
 
 
-def _entry(staging: Path, name: str, title: str, body: str, ses: str) -> str:
+def _entry(staging: Path, name: str, title: str, body: str, ses: str,
+           tools: list[str] | None = None) -> str:
     fm = {"title": title, "type": "scientific_finding",
           "opencode_session_id": ses, "observed_in_sessions": [ses],
-          "tags": [], "tools": [], "confidence": 0.6}
+          "tags": [], "tools": tools or [], "confidence": 0.6}
     p = staging / name
     p.write_text("---\n" + yaml.dump(fm) + "---\n\n" + body + "\n")
     return str(p)
@@ -38,8 +39,8 @@ def test_auto_band_precleans_existing_queue_before_guard(tmp_path, monkeypatch):
     staging.mkdir(parents=True)
     a0 = _entry(staging, "a0.md", "pair 0 variant A", "body alpha 0 xxx", "s0a")
     b0 = _entry(staging, "b0.md", "pair 0 variant B", "body beta 0", "s0b")
-    a1 = _entry(staging, "a1.md", "pair 1 variant A", "body alpha 1 xxxx", "s1a")
-    b1 = _entry(staging, "b1.md", "pair 1 variant B", "body beta 1", "s1b")
+    a1 = _entry(staging, "a1.md", "pair 1 variant A", "body alpha 1 xxxx", "s1a", tools=["tool_1"])
+    b1 = _entry(staging, "b1.md", "pair 1 variant B", "body beta 1", "s1b", tools=["tool_1"])
     art = store / "reflex" / "consolidation-proposal.json"
     art.parent.mkdir(parents=True, exist_ok=True)
     art.write_text(json.dumps({"proposals": [

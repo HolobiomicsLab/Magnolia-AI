@@ -48,7 +48,14 @@ def assemble_context(
     token_budget: int = 8000,
     current_run_id: str | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
+    compact_project_tier: bool = False,
 ) -> ContextAssembly:
+    """compact_project_tier (2026-10-08, boot-context only): render project
+    entries as one-line index records (title, type, confidence, observations,
+    path) instead of full bodies. The task-targeted memory_get_context keeps
+    full bodies — this flag is passed only by regenerate_boot_context, where
+    full bodies crowded out the session tier (observed 2026-10-08: five full
+    entry bodies ≈ 23 KB while the newest Done items were elided)."""
     allocation = allocate_budget(token_budget)
     store = _memory_store(project_dir)
     sections: list[str] = []
@@ -97,11 +104,23 @@ def assemble_context(
             content = entry.get("content", "")
             title = entry.get("title", entry.get("filename", ""))
             if entry.get("provisional"):
-                header = f"[PROVISIONAL — unconfirmed staging learning, verify before relying: {title}]"
                 tier = "staging"
             else:
-                header = f"[PROJECT: {title}]"
                 tier = "project"
+            if compact_project_tier:
+                sub = "staging" if tier == "staging" else "entries"
+                meta = (f"{entry.get('type', 'note')}, "
+                        f"conf {entry.get('confidence', 0.5)}, "
+                        f"obs {entry.get('observation_count', 0)}")
+                sections.append(
+                    f"- {title} ({meta}) — .magnolia/{sub}/{entry.get('filename', '')}"
+                )
+                sources.append({"tier": tier, "id": entry.get("filename", "")})
+                continue
+            if entry.get("provisional"):
+                header = f"[PROVISIONAL — unconfirmed staging learning, verify before relying: {title}]"
+            else:
+                header = f"[PROJECT: {title}]"
             sections.append(f"{header}\n{content}")
             sources.append({"tier": tier, "id": entry.get("filename", "")})
             remaining -= _estimate_tokens(content)
