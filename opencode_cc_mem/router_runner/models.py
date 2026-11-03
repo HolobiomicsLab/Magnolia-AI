@@ -45,6 +45,8 @@ WORK_ITEM_TRANSITIONS = {
         WorkItemState.FAILED,
         WorkItemState.WAITING_HUMAN,
         WorkItemState.STOPPED,
+        # Recovery edge: an interrupted attempt (dead owner) is requeued.
+        WorkItemState.QUEUED,
     },
     WorkItemState.WAITING_HUMAN: {WorkItemState.QUEUED, WorkItemState.STOPPED},
     WorkItemState.COMPLETED: set(),
@@ -66,6 +68,9 @@ class AssignmentState:
     PENDING = "pending"
     RUNNING = "running"
     ENDED = "ended"
+    # A crashed attempt: owner process died before finalizing. Recovery may
+    # reconcile its external run instead of blindly re-executing.
+    INTERRUPTED = "interrupted"
 
 
 @dataclass(frozen=True)

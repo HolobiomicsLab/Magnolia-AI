@@ -13,6 +13,7 @@ no duplication (idempotency keys on effects).
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from .admission import (
@@ -37,6 +38,20 @@ from .store import ControlStore, dumps
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _pid_alive(pid: int | None) -> bool:
+    """Owner-alive check for attempt leases (local prototype; see lease.py
+    in campaign_runner for the production pattern this mirrors)."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True  # exists but owned by another user
+    except OSError:
+        return False
 
 
 class ControlEngine:
@@ -202,11 +217,65 @@ class ControlEngine:
 
     # ---------- execution ----------
 
-    def execute(self, work_item_id: str) -> dict:
-        """Run the fake campaign through the adapter, exactly once.
+    def recover(self) -> list[str]:
+        """Startup recovery sweep: every RUNNING Work Item whose attempt owner
+        is dead is marked interrupted and returned to QUEUED. Live owners are
+        left alone (a second engine must not steal a running attempt)."""
+        recovered = []
+        for wi in self.store.all("work_items", "state = ?", (WorkItemState.RUNNING,)):
+            self._recover_running(wi["work_item_id"])
+            recovered.append(wi["work_item_id"])
+        return recovered
 
-        The Effect is stored BEFORE the external side effect (invariant 10).
-        Re-execution with the same idempotency key returns the stored receipt.
+    def _recover_running(self, work_item_id: str) -> None:
+        running = self.store.all(
+            "assignments", "work_item_id = ? AND state = ?",
+            (work_item_id, AssignmentState.RUNNING),
+        )
+        for asg in running:
+            if _pid_alive(asg.get("owner_pid")):
+                raise RouterError(
+                    f"attempt {asg['attempt']} already in progress "
+                    f"(owner pid {asg['owner_pid']} is alive)"
+                )
+        if not running:
+            # RUNNING with no live assignment record: treat as interrupted.
+            running = []
+        with self.store.tx():
+            for asg in running:
+                self.store.update(
+                    "assignments", "assignment_id", asg["assignment_id"],
+                    {"state": AssignmentState.INTERRUPTED, "ended_at": _now()},
+                )
+                self._record_decision(
+                    self._get_work_item(work_item_id)["trigger_id"],
+                    "passed", "recovered",
+                    f"attempt {asg['attempt']} interrupted (owner dead); requeued",
+                )
+            self._transition(work_item_id, WorkItemState.QUEUED)
+
+    def _last_unfinished_attempt(self, work_item_id: str) -> dict | None:
+        """Latest interrupted attempt whose external run may already exist
+        (Effect stored, no receipt). Reconciliation candidate."""
+        interrupted = self.store.all(
+            "assignments", "work_item_id = ? AND state = ?",
+            (work_item_id, AssignmentState.INTERRUPTED),
+        )
+        for asg in sorted(interrupted, key=lambda a: a["attempt"], reverse=True):
+            effect = self.store.get(
+                "effects", "idempotency_key", f"run:{work_item_id}:{asg['attempt']}"
+            )
+            if effect and not effect["receipt"]:
+                return asg
+        return None
+
+    def execute(self, work_item_id: str) -> dict:
+        """Run the campaign through the adapter, exactly once.
+
+        Crash safety: (1) a live attempt owner blocks re-execution; (2) a dead
+        owner is recovered to QUEUED; (3) before any NEW side effect, an
+        interrupted attempt is reconciled against the adapter — if the external
+        run already exists, its result is finalized instead of duplicated.
         """
         wi = self._get_work_item(work_item_id)
         if wi["state"] == WorkItemState.COMPLETED:
@@ -216,9 +285,24 @@ class ControlEngine:
                 (work_item_id, "campaign_run"),
             )
             return {"already_completed": True, "receipt": effect["receipt"]}
+        if wi["state"] == WorkItemState.RUNNING:
+            self._recover_running(work_item_id)
+            wi = self._get_work_item(work_item_id)
         mandate = self.store.get("mandates", "mandate_id", wi["mandate_id"] or "")
         if mandate is None:
             raise RouterError("no Mandate: only admitted work may execute")
+
+        previous = self._last_unfinished_attempt(work_item_id)
+        if previous is not None:
+            result = self.adapter.reconcile(wi, mandate, previous["attempt"])
+            if result is not None:
+                return self._finalize(
+                    work_item_id, previous["attempt"], previous["assignment_id"],
+                    result, reconciled=True,
+                )
+            # No external run found: fall through to a fresh attempt. Unknown
+            # submission outcomes belong to human review in the real adapter.
+
         attempt = (
             len(self.store.all("assignments", "work_item_id = ?", (work_item_id,))) + 1
         )
@@ -232,9 +316,10 @@ class ControlEngine:
                 {
                     "assignment_id": assignment_id,
                     "work_item_id": work_item_id,
-                    "executor_kind": "fake-campaign-adapter",
+                    "executor_kind": "composite-adapter",
                     "attempt": attempt,
                     "state": AssignmentState.RUNNING,
+                    "owner_pid": os.getpid(),
                     "created_at": now,
                     "ended_at": None,
                 },
@@ -253,7 +338,19 @@ class ControlEngine:
                 },
             )
         # Side effect happens AFTER the effect is durably stored.
-        result = self.adapter.run(wi, mandate)
+        result = self.adapter.run(wi, mandate, attempt=attempt)
+        return self._finalize(work_item_id, attempt, assignment_id, result)
+
+    def _finalize(
+        self,
+        work_item_id: str,
+        attempt: int,
+        assignment_id: str,
+        result: dict,
+        reconciled: bool = False,
+    ) -> dict:
+        """Post-side-effect writes: receipt, assignment close, evidence, state."""
+        idem_key = f"run:{work_item_id}:{attempt}"
         with self.store.tx():
             self.store.update(
                 "effects",
@@ -278,6 +375,9 @@ class ControlEngine:
                 self._link_evidence(
                     work_item_id, "ranked_candidates", result["run_id"], result["candidate_file"]
                 )
+            wi = self._get_work_item(work_item_id)
+            if wi["state"] == WorkItemState.QUEUED:
+                self._transition(work_item_id, WorkItemState.RUNNING)
             self._transition(
                 work_item_id,
                 WorkItemState.COMPLETED
@@ -287,7 +387,7 @@ class ControlEngine:
             self.store.update(
                 "work_items", "work_item_id", work_item_id, {"outcome": result["outcome"]}
             )
-        return {"already_completed": False, "result": result}
+        return {"already_completed": False, "result": result, "reconciled": reconciled}
 
     def reply(self, work_item_id: str, text: str) -> dict:
         """One receipted reply per Work Item (durable outbox record)."""

@@ -31,7 +31,7 @@ def protocol_hash(name: str) -> str:
 
 
 class FakeCampaignAdapter:
-    def run(self, work_item: dict, mandate: dict) -> dict:
+    def run(self, work_item: dict, mandate: dict, attempt: int = 1) -> dict:
         """Produce a deterministic run record + gate report + receipt.
 
         In the real system this is the campaign supervisor's job; the Router
@@ -66,8 +66,16 @@ class TaskPackAdapter:
     def __init__(self, out_root=None):
         self.out_root = out_root
 
-    def run(self, work_item: dict, mandate: dict) -> dict:
-        return run_task_pack(work_item["protocol"], work_item, mandate, self.out_root)
+    def run(self, work_item: dict, mandate: dict, attempt: int = 1) -> dict:
+        return run_task_pack(
+            work_item["protocol"], work_item, mandate, self.out_root, attempt=attempt
+        )
+
+    def reconcile(self, work_item: dict, mandate: dict, attempt: int) -> dict | None:
+        from .taskpacks import reconcile_task_pack
+        return reconcile_task_pack(
+            work_item["protocol"], work_item, mandate, attempt, self.out_root
+        )
 
 
 class CompositeAdapter:
@@ -77,7 +85,13 @@ class CompositeAdapter:
         self.fake = FakeCampaignAdapter()
         self.packs = TaskPackAdapter(out_root)
 
-    def run(self, work_item: dict, mandate: dict) -> dict:
+    def run(self, work_item: dict, mandate: dict, attempt: int = 1) -> dict:
         if work_item["protocol"] in PROTOCOLS:
-            return self.fake.run(work_item, mandate)
-        return self.packs.run(work_item, mandate)
+            return self.fake.run(work_item, mandate, attempt=attempt)
+        return self.packs.run(work_item, mandate, attempt=attempt)
+
+    def reconcile(self, work_item: dict, mandate: dict, attempt: int) -> dict | None:
+        """Fake protocols have no external state to reconcile; task packs do."""
+        if work_item["protocol"] in PROTOCOLS:
+            return None
+        return self.packs.reconcile(work_item, mandate, attempt)

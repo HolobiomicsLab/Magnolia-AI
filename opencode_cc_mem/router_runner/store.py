@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS assignments (
     executor_kind TEXT NOT NULL,
     attempt INTEGER NOT NULL,
     state TEXT NOT NULL,
+    owner_pid INTEGER,
     created_at TEXT NOT NULL,
     ended_at TEXT
 );

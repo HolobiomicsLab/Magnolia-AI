@@ -48,9 +48,13 @@ def default_policy() -> AdmissionPolicy:
 
 
 def get_engine(db: str, out_root: str | None = None) -> ControlEngine:
-    return ControlEngine(
+    engine = ControlEngine(
         ControlStore(db), default_policy(), CompositeAdapter(out_root=out_root)
     )
+    # Startup recovery sweep: interrupted attempts are requeued, never stolen
+    # from a live owner. Runs on every daemon (re)start.
+    engine.recover()
+    return engine
 
 
 def ingest_letter(engine: ControlEngine, letter: dict) -> dict:
