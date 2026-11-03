@@ -1,0 +1,52 @@
+{
+  "run_id": "2026-11-03_v0.1",
+  "seed": 20261103,
+  "stages": {
+    "generate": {
+      "raw_unique": 324,
+      "per_generator_requested": 120
+    },
+    "filter": {
+      "kept": 324,
+      "killed": 0
+    },
+    "calibrate": {
+      "passed": true,
+      "rule": "NKB_wt score > every negative score AND positive median > negative max",
+      "positive_scores": {
+        "NKB_wt": 6.0,
+        "NKA_control": 5.0,
+        "SubstanceP_control": 5.0
+      },
+      "negative_scores": {
+        "NKB_scrambled": 2.0,
+        "NKB_reversed": 3.0,
+        "KFERQ_unrelated": 1.5,
+        "polyG_negative": 1.5
+      },
+      "note": "calibrates the funnel heuristic only; NOT an NK2R binding validation"
+    },
+    "rank": {
+      "selected": 60,
+      "generator_shares": {
+        "guided_random": 20,
+        "motif": 20,
+        "mutagenesis": 20
+      }
+    }
+  },
+  "acceptance": {
+    "three_generators_present": true,
+    "no_generator_above_50pct": true,
+    "calibration_passed": true,
+    "target_n_reached": true
+  },
+  "honest_negative_clause": "if any acceptance item is false, the run is reported as a failed instrument check, not as a peptide-design result",
+  "gated_stages_not_run": [
+    "dock_prepare",
+    "dock",
+    "selectivity",
+    "package"
+  ],
+  "gating_reason": "NK2R structure + active-site definition + real docking backend required"
+}

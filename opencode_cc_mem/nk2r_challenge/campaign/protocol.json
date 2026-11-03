@@ -1,0 +1,37 @@
+{
+  "protocol_id": "nk2r-challenge-v0.1-provisional",
+  "status": "PROVISIONAL — choices subject to change; see docs/campaign-brief.md",
+  "target": {
+    "receptor": "NK2R (TACR2), neurokinin-2 receptor, class A GPCR",
+    "endogenous_agonist": "NKB = DMHDFFVGLM-NH2",
+    "selectivity_family": ["NK1R (TACR1)", "NK3R (TACR3)"],
+    "structure": "GATED — NK2R structural data not yet obtained; see data/target-notes.md"
+  },
+  "stages": [
+    {"id": "generate", "status": "implemented", "tool": "src/nk2r_funnel.py",
+     "rule": "three independent generators; deduplicated"},
+    {"id": "filter", "status": "implemented",
+     "rule": "length 8-12; no Cys; net charge [-2,+2]; homopolymer run <= 3; NKB reserved as control"},
+    {"id": "calibrate", "status": "implemented",
+     "rule": "NKB_wt score > all negatives AND positive median > negative max (funnel sanity only)"},
+    {"id": "rank", "status": "implemented",
+     "rule": "target_n=60; every generator present; no generator > 50%"},
+    {"id": "dock_prepare", "status": "gated",
+     "needs": ["NK2R structure (PDB or competition package)", "active-site definition",
+               "peptide builder (reuse hsc70 _peptide_build machinery)",
+               "HADDOCK3 config from hsc70 protocol, sampling pre-registered"]},
+    {"id": "dock", "status": "gated",
+     "needs": ["real Slurm acceptance test", "NKB-NK2R positive-control docking calibration"],
+     "budget_hint": {"sampling": "s10000 as in hsc70 late runs", "backend": "ssh-slurm azzurra"}},
+    {"id": "selectivity", "status": "gated",
+     "needs": ["NK1R and NK3R structures", "same docking protocol applied uniformly"],
+     "rule": "round-2 analog: rank on NK2R score minus max(NK1R, NK3R) score"},
+    {"id": "package", "status": "gated",
+     "needs": ["competition submission format — unknown, see docs/campaign-brief.md unknowns"]}
+  ],
+  "pre_registered_acceptance": {
+    "funnel_run": ["three_generators_present", "no_generator_above_50pct",
+                   "calibration_passed", "target_n_reached"],
+    "docking_campaign": "written before launch in docs/campaign-brief.md; includes honest-negative clause"
+  }
+}

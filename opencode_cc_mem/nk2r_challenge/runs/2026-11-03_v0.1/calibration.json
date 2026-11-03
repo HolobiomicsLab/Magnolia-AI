@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "rule": "NKB_wt score > every negative score AND positive median > negative max",
+  "positive_scores": {
+    "NKB_wt": 6.0,
+    "NKA_control": 5.0,
+    "SubstanceP_control": 5.0
+  },
+  "negative_scores": {
+    "NKB_scrambled": 2.0,
+    "NKB_reversed": 3.0,
+    "KFERQ_unrelated": 1.5,
+    "polyG_negative": 1.5
+  },
+  "note": "calibrates the funnel heuristic only; NOT an NK2R binding validation"
+}
