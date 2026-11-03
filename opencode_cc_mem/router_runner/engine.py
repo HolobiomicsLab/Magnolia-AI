@@ -21,7 +21,7 @@ from .admission import (
     new_approval_request,
     verify_approval,
 )
-from .campaign_adapter import FakeCampaignAdapter, protocol_hash
+from .campaign_adapter import CompositeAdapter, protocol_hash
 from .models import (
     AssignmentState,
     IllegalTransition,
@@ -44,11 +44,11 @@ class ControlEngine:
         self,
         store: ControlStore,
         policy: AdmissionPolicy,
-        adapter: FakeCampaignAdapter | None = None,
+        adapter: CompositeAdapter | None = None,
     ):
         self.store = store
         self.policy = policy
-        self.adapter = adapter or FakeCampaignAdapter()
+        self.adapter = adapter or CompositeAdapter()
 
     # ---------- intake ----------
 
@@ -274,7 +274,16 @@ class ControlEngine:
                 result["run_id"],
                 dumps(result["gate_report"]),
             )
-            self._transition(work_item_id, WorkItemState.COMPLETED)
+            if result.get("candidate_file"):
+                self._link_evidence(
+                    work_item_id, "ranked_candidates", result["run_id"], result["candidate_file"]
+                )
+            self._transition(
+                work_item_id,
+                WorkItemState.COMPLETED
+                if result["outcome"] == "completed"
+                else WorkItemState.FAILED,
+            )
             self.store.update(
                 "work_items", "work_item_id", work_item_id, {"outcome": result["outcome"]}
             )

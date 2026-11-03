@@ -11,6 +11,7 @@ The adapter is deterministic, uses no LLM, and submits no real jobs.
 from __future__ import annotations
 
 from .models import RouterError, canonical_hash, new_id
+from .taskpacks import TASK_PACKS, run_task_pack, task_pack_hash
 
 PROTOCOLS = {
     "hsc70-met-proxy-v1": {
@@ -22,9 +23,11 @@ PROTOCOLS = {
 
 
 def protocol_hash(name: str) -> str:
-    if name not in PROTOCOLS:
-        raise RouterError(f"protocol not pre-registered: {name}")
-    return canonical_hash({"name": name, "definition": PROTOCOLS[name]})
+    if name in PROTOCOLS:
+        return canonical_hash({"name": name, "definition": PROTOCOLS[name]})
+    if name in TASK_PACKS:
+        return task_pack_hash(name)
+    raise RouterError(f"protocol not pre-registered: {name}")
 
 
 class FakeCampaignAdapter:
@@ -55,3 +58,26 @@ class FakeCampaignAdapter:
                 "result": "fake-known-answer-ok",
             },
         }
+
+
+class TaskPackAdapter:
+    """Runs real (local) task-pack stages; no Slurm, no external side effects."""
+
+    def __init__(self, out_root=None):
+        self.out_root = out_root
+
+    def run(self, work_item: dict, mandate: dict) -> dict:
+        return run_task_pack(work_item["protocol"], work_item, mandate, self.out_root)
+
+
+class CompositeAdapter:
+    """Dispatch: fake protocols for control-plane demos, task packs for real work."""
+
+    def __init__(self, out_root=None):
+        self.fake = FakeCampaignAdapter()
+        self.packs = TaskPackAdapter(out_root)
+
+    def run(self, work_item: dict, mandate: dict) -> dict:
+        if work_item["protocol"] in PROTOCOLS:
+            return self.fake.run(work_item, mandate)
+        return self.packs.run(work_item, mandate)
