@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     outcome TEXT,
     thread_id TEXT,
     parent_work_item_id TEXT,
+    job_run_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -107,6 +108,11 @@ CREATE TABLE IF NOT EXISTS thread_posts (
     text TEXT NOT NULL,
     delivered INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS consumed_notices (
+    source_event_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    consumed_at TEXT NOT NULL
 );
 """
 

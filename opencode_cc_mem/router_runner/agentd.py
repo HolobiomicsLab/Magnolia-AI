@@ -123,14 +123,76 @@ def demo_nk2r(db: str, out_root: str | None = None) -> int:
     return 0 if result["outcome"] == "completed" else 2
 
 
+def demo_jobloop(db: str, out_root: str | None = None) -> int:
+    """The full cluster-job loop: park on a job, mid-wait user info, watcher
+    notice wakes the owner, delta package carries BOTH pieces of new knowledge."""
+    import tempfile
+    engine = get_engine(db, out_root)
+    print("--- ingest + approve ---")
+    req = ingest_letter(engine, NK2R_LETTER)
+    wi = req["work_item_id"]
+    engine.approve(wi, req["nonce"], "human:tao (simulated)")
+
+    print("--- worker submits a cluster job and PARKS (no process waits) ---")
+    engine.park_on_job(wi, "run_demo_0001")
+    print(f"state={engine.store.get('work_items', 'work_item_id', wi)['state']}")
+
+    print("--- mid-wait user follow-up: context post, no execution ---")
+    engine.follow_up(wi, "human:tao", "while you wait: use s20000 next round")
+
+    print("--- poller detects terminal; job_watcher emits the notice ---")
+    with tempfile.TemporaryDirectory() as tmp:
+        inbox = Path(tmp) / "inbox" / "from-jobs"
+        _write_demo_notice(inbox, wi)
+        summary = engine.consume_job_notices(inbox.parent, include_context=False)
+        print(f"woken={summary['woken']}")
+        print("--- duplicate sweep is idempotent ---")
+        again = engine.consume_job_notices(inbox.parent)
+        print(f"second sweep woken={again['woken']}")
+
+    print("--- wake-up context package: job notice AND user follow-up in delta ---")
+    package = engine.context_package(wi)
+    for post in package["delta"]["new_posts"]:
+        print(f"  delta[{post['actor']}]: {post['text']}")
+    print(f"state={package['delta']['current_state']}")
+
+    print("--- next batch executes with all knowledge present ---")
+    outcome = engine.execute(wi)
+    print(f"outcome={outcome['result']['outcome']} candidates={outcome['result']['receipt']['selected']}")
+    print("DEMO-JOBLOOP OK")
+    return 0
+
+
+def _write_demo_notice(inbox: Path, work_item_id: str) -> None:
+    """Same shape as compchem_tools job_watcher.emit_job_notice output."""
+    inbox.mkdir(parents=True, exist_ok=True)
+    notice = {
+        "kind": "job_notice",
+        "version": 1,
+        "run_id": "run_demo_0001",
+        "tool": "haddock3",
+        "state": "COMPLETED",
+        "category": "success",
+        "job_id": "11454253",
+        "work_item_id": work_item_id,
+        "event": {
+            "source_id": "jobs:poller",
+            "source_event_id": "run_demo_0001:COMPLETED",
+            "actor": "system:job-watcher",
+        },
+    }
+    (inbox / "run_demo_0001__completed.json").write_text(json.dumps(notice, indent=2))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
-        if name == "watch":
+        if name in ("watch", "consume-jobs"):
             p.add_argument("--inbox", type=Path, required=True)
+        if name == "watch":
             p.add_argument("--once", action="store_true")
         if name == "ingest":
             p.add_argument("letter", type=Path)
@@ -141,7 +203,7 @@ def main() -> int:
         if name == "follow-up":
             p.add_argument("--text", required=True)
             p.add_argument("--actor", default="human:tao")
-        if name in ("watch", "execute", "demo-nk2r"):
+        if name in ("watch", "execute", "demo-nk2r", "demo-jobloop"):
             p.add_argument("--out-root", default=None)
     args = parser.parse_args()
 
@@ -176,6 +238,12 @@ def main() -> int:
         engine = get_engine(args.db)
         print(json.dumps(engine.follow_up(args.work_item_id, args.actor, args.text), indent=2))
         return 0
+    if args.command == "consume-jobs":
+        engine = get_engine(args.db)
+        print(json.dumps(engine.consume_job_notices(args.inbox, include_context=True), indent=2, default=str))
+        return 0
+    if args.command == "demo-jobloop":
+        return demo_jobloop(args.db, args.out_root)
     return 1
 
 

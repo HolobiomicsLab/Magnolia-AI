@@ -29,6 +29,9 @@ class WorkItemState:
     QUEUED = "queued"
     RUNNING = "running"
     WAITING_HUMAN = "waiting_human"
+    # Parked on an external cluster job: no worker process stays alive.
+    # The job watcher wakes the owner with a notice -> QUEUED.
+    WAITING_JOB = "waiting_job"
     COMPLETED = "completed"
     FAILED = "failed"
     STOPPED = "stopped"
@@ -47,6 +50,13 @@ WORK_ITEM_TRANSITIONS = {
         WorkItemState.STOPPED,
         # Recovery edge: an interrupted attempt (dead owner) is requeued.
         WorkItemState.QUEUED,
+        # Park edge: worker submitted a cluster job and parks (no process waits).
+        WorkItemState.WAITING_JOB,
+    },
+    WorkItemState.WAITING_JOB: {
+        # Wake edge: job watcher delivered a terminal notice for this run.
+        WorkItemState.QUEUED,
+        WorkItemState.STOPPED,
     },
     WorkItemState.WAITING_HUMAN: {WorkItemState.QUEUED, WorkItemState.STOPPED},
     WorkItemState.COMPLETED: set(),
@@ -61,6 +71,7 @@ ACTIVE_STATES = {
     WorkItemState.QUEUED,
     WorkItemState.RUNNING,
     WorkItemState.WAITING_HUMAN,
+    WorkItemState.WAITING_JOB,
 }
 
 

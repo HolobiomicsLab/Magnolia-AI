@@ -145,6 +145,7 @@ class ControlEngine:
                     "outcome": None,
                     "thread_id": new_id("thr"),
                     "parent_work_item_id": None,
+                    "job_run_id": None,
                     "created_at": now,
                     "updated_at": now,
                 },
@@ -522,6 +523,90 @@ class ControlEngine:
             "parent_chain": chain,
             "bounds": {"attempts": k, "parent_depth": 5},
         }
+
+    # ---------- job parking and wake-up ----------
+
+    def park_on_job(self, work_item_id: str, run_id: str) -> dict:
+        """Worker submitted a cluster job: park, don't wait. No process stays
+        alive — the job watcher (poller) owns the waiting from here."""
+        with self.store.tx():
+            wi = self._get_work_item(work_item_id)
+            if wi["state"] == WorkItemState.QUEUED:
+                self._transition(work_item_id, WorkItemState.RUNNING)
+            self.store.update(
+                "work_items", "work_item_id", work_item_id, {"job_run_id": run_id}
+            )
+            self._transition(work_item_id, WorkItemState.WAITING_JOB)
+            self._record_decision(
+                wi["trigger_id"], "passed", "parked", f"waiting on job {run_id}"
+            )
+            return self._get_work_item(work_item_id)
+
+    def handle_job_notice(self, notice: dict) -> dict:
+        """Consume one job_notice: wake the owning Work Item (WAITING_JOB ->
+        QUEUED), attach evidence + a delta post. Idempotent per source event;
+        notices without an owner are left for other consumers."""
+        run_id = notice["run_id"]
+        state = notice.get("state", "")
+        event_key = (notice.get("event") or {}).get("source_event_id") or f"{run_id}:{state}"
+        with self.store.tx():
+            if self.store.get("consumed_notices", "source_event_id", event_key):
+                return {"consumed": False, "reason": "duplicate", "run_id": run_id}
+            wi = self.store.find_one(
+                "work_items",
+                "job_run_id = ? AND state = ?",
+                (run_id, WorkItemState.WAITING_JOB),
+            )
+            if wi is None:
+                return {"consumed": False, "reason": "no_owner", "run_id": run_id}
+            work_item_id = wi["work_item_id"]
+            self.store.insert(
+                "consumed_notices",
+                {"source_event_id": event_key, "run_id": run_id, "consumed_at": _now()},
+            )
+            self._link_evidence(work_item_id, "job_notice", run_id, state)
+            self.store.insert(
+                "thread_posts",
+                {
+                    "post_id": new_id("post"),
+                    "work_item_id": work_item_id,
+                    "actor": "system:job-watcher",
+                    "text": f"job {run_id} terminal: {state} ({notice.get('category', '?')})",
+                    "delivered": 0,
+                    "created_at": _now(),
+                },
+            )
+            self._record_decision(
+                wi["trigger_id"], "passed", "job_notice", f"{run_id} -> {state}"
+            )
+            self._transition(work_item_id, WorkItemState.QUEUED)
+            return {"consumed": True, "work_item_id": work_item_id, "state": state}
+
+    def consume_job_notices(self, inbox_dir, include_context: bool = False) -> dict:
+        """Sweep an inbox/from-jobs directory of notice JSON files."""
+        import json as _json
+        from pathlib import Path as _Path
+
+        results = []
+        base = _Path(inbox_dir)
+        scan_dir = base / "from-jobs" if (base / "from-jobs").is_dir() else base
+        for path in sorted(scan_dir.glob("*.json")):
+            try:
+                notice = _json.loads(path.read_text())
+                outcome = self.handle_job_notice(notice)
+                outcome["notice_file"] = path.name
+            except Exception as exc:  # malformed notice must not block the sweep
+                outcome = {"consumed": False, "reason": f"error: {exc}", "notice_file": path.name}
+            results.append(outcome)
+        summary = {
+            "woken": [r["work_item_id"] for r in results if r.get("consumed")],
+            "results": results,
+        }
+        if include_context:
+            summary["context_packages"] = {
+                wi: self.context_package(wi) for wi in summary["woken"]
+            }
+        return summary
 
     # ---------- internals ----------
 
