@@ -114,6 +114,15 @@ CREATE TABLE IF NOT EXISTS consumed_notices (
     run_id TEXT NOT NULL,
     consumed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS findings (
+    finding_id TEXT PRIMARY KEY,
+    work_item_id TEXT NOT NULL,
+    attempt INTEGER,
+    kind TEXT NOT NULL,
+    outcome_status TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 

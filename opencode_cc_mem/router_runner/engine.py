@@ -391,6 +391,8 @@ class ControlEngine:
             self.store.update(
                 "work_items", "work_item_id", work_item_id, {"outcome": result["outcome"]}
             )
+            if result["outcome"] == "completed":
+                self._promote_findings(work_item_id)
         return {"already_completed": False, "result": result, "reconciled": reconciled}
 
     def reply(self, work_item_id: str, text: str) -> dict:
@@ -520,8 +522,24 @@ class ControlEngine:
             "evidence_index": [
                 {"kind": l["kind"], "ref_id": l["ref_id"], "path": l["path"]} for l in links
             ],
+            "findings_digest": self._findings_digest(work_item_id),
             "parent_chain": chain,
             "bounds": {"attempts": k, "parent_depth": 5},
+        }
+
+    def _findings_digest(self, work_item_id: str) -> dict:
+        """Wake-ups see validated knowledge preferentially, intermediates as counts."""
+        rows = self.findings(work_item_id)
+        counts = {}
+        for row in rows:
+            counts[row["outcome_status"]] = counts.get(row["outcome_status"], 0) + 1
+        return {
+            "counts": counts,
+            "final": [
+                {"finding_id": r["finding_id"], "kind": r["kind"],
+                 "status": r["outcome_status"], "text": r["text"]}
+                for r in rows if r["outcome_status"] in self.FINAL_STATUSES
+            ][:5],
         }
 
     # ---------- job parking and wake-up ----------
@@ -607,6 +625,108 @@ class ControlEngine:
                 wi: self.context_package(wi) for wi in summary["woken"]
             }
         return summary
+
+    # ---------- findings with outcome status (assessment §11.5) ----------
+
+    FINDING_KINDS = frozenset({"scientific", "operational"})
+    OUTCOME_STATUSES = frozenset({"intermediate", "completed_campaign", "human_validated"})
+    FINAL_STATUSES = frozenset({"completed_campaign", "human_validated"})
+
+    def record_finding(
+        self,
+        work_item_id: str,
+        kind: str,
+        text: str,
+        outcome_status: str = "intermediate",
+        attempt: int | None = None,
+    ) -> dict:
+        """Write-path enforcement: every finding carries kind + outcome_status.
+
+        Default is INTERMEDIATE (an observation from one attempt) — an
+        intermediate success must never silently become a durable rule.
+        """
+        if kind not in self.FINDING_KINDS:
+            raise RouterError(f"finding kind must be one of {sorted(self.FINDING_KINDS)}")
+        if outcome_status not in self.OUTCOME_STATUSES:
+            raise RouterError(
+                f"outcome_status must be one of {sorted(self.OUTCOME_STATUSES)}"
+            )
+        self._get_work_item(work_item_id)
+        if attempt is None:
+            attempts = self.store.all("assignments", "work_item_id = ?", (work_item_id,))
+            attempt = max((a["attempt"] for a in attempts), default=1)
+        with self.store.tx():
+            finding_id = new_id("fnd")
+            self.store.insert(
+                "findings",
+                {
+                    "finding_id": finding_id,
+                    "work_item_id": work_item_id,
+                    "attempt": attempt,
+                    "kind": kind,
+                    "outcome_status": outcome_status,
+                    "text": text,
+                    "created_at": _now(),
+                },
+            )
+            self._link_evidence(work_item_id, "finding", finding_id, outcome_status)
+            return self.store.get("findings", "finding_id", finding_id)
+
+    def _promote_findings(self, work_item_id: str) -> int:
+        """On COMPLETED outcome only: intermediate -> completed_campaign."""
+        promoted = self.store.all(
+            "findings",
+            "work_item_id = ? AND outcome_status = ?",
+            (work_item_id, "intermediate"),
+        )
+        for finding in promoted:
+            self.store.update(
+                "findings", "finding_id", finding["finding_id"],
+                {"outcome_status": "completed_campaign"},
+            )
+        if promoted:
+            wi = self._get_work_item(work_item_id)
+            self._record_decision(
+                wi["trigger_id"], "passed", "findings_promoted",
+                f"{len(promoted)} finding(s) -> completed_campaign",
+            )
+        return len(promoted)
+
+    def validate_finding(self, finding_id: str, approver: str) -> dict:
+        """Human validation: the only path to the strongest lesson status."""
+        finding = self.store.get("findings", "finding_id", finding_id)
+        if finding is None:
+            raise RouterError(f"unknown finding: {finding_id}")
+        with self.store.tx():
+            self.store.update(
+                "findings", "finding_id", finding_id,
+                {"outcome_status": "human_validated"},
+            )
+            self._record_decision(
+                self._get_work_item(finding["work_item_id"])["trigger_id"],
+                "passed", "finding_validated", f"{finding_id} by {approver}",
+            )
+            return self.store.get("findings", "finding_id", finding_id)
+
+    def findings(
+        self,
+        work_item_id: str | None = None,
+        kind: str | None = None,
+        final_only: bool = False,
+    ) -> list[dict]:
+        """Read-path enforcement for protocol decisions: final_only excludes
+        intermediate observations from guidance use."""
+        clauses, params = ["1=1"], []
+        if work_item_id:
+            clauses.append("work_item_id = ?")
+            params.append(work_item_id)
+        if kind:
+            clauses.append("kind = ?")
+            params.append(kind)
+        rows = self.store.all("findings", " AND ".join(clauses), tuple(params))
+        if final_only:
+            rows = [r for r in rows if r["outcome_status"] in self.FINAL_STATUSES]
+        return rows
 
     # ---------- internals ----------
 
