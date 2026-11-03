@@ -24,6 +24,7 @@ from .admission import (
 )
 from .campaign_adapter import CompositeAdapter, protocol_hash
 from .models import (
+    ACTIVE_STATES,
     AssignmentState,
     IllegalTransition,
     RouterError,
@@ -142,6 +143,8 @@ class ControlEngine:
                     "scope": work_spec.scope,
                     "budget": work_spec.budget,
                     "outcome": None,
+                    "thread_id": new_id("thr"),
+                    "parent_work_item_id": None,
                     "created_at": now,
                     "updated_at": now,
                 },
@@ -424,6 +427,101 @@ class ControlEngine:
                 f"human stop by {by}",
             )
             return self._get_work_item(work_item_id)
+
+    # ---------- follow-ups and wake-up context ----------
+
+    def follow_up(self, work_item_id: str, actor: str, text: str, work_spec: WorkSpec | None = None) -> dict:
+        """Route a human follow-up.
+
+        ACTIVE Work Item: a context-only thread post (no new authority, no new
+        execution). TERMINAL Work Item (completed/failed/stopped): never
+        resurrect — open a NEW Work Item linked by Thread + parent, with fresh
+        approval (assessment: follow-up ownership and hand-back).
+        """
+        wi = self._get_work_item(work_item_id)
+        if wi["state"] in ACTIVE_STATES:
+            with self.store.tx():
+                post_id = new_id("post")
+                self.store.insert(
+                    "thread_posts",
+                    {
+                        "post_id": post_id,
+                        "work_item_id": work_item_id,
+                        "actor": actor,
+                        "text": text,
+                        "delivered": 0,
+                        "created_at": _now(),
+                    },
+                )
+                return {"kind": "post", "work_item_id": work_item_id, "post_id": post_id}
+
+        spec = work_spec or WorkSpec(
+            project=wi["project"], protocol=wi["protocol"], scope=wi["scope"], budget=wi["budget"]
+        )
+        trigger, _ = self.ingest(
+            TriggerSpec(
+                source_id=f"followup:{work_item_id}",
+                source_event_id=new_id("evt"),
+                actor=actor,
+                project_hint=wi["project"],
+                payload={"text": text, "parent": work_item_id},
+            )
+        )
+        req = self.request_work(trigger["trigger_id"], spec)
+        with self.store.tx():
+            self.store.update(
+                "work_items",
+                "work_item_id",
+                req["work_item_id"],
+                {
+                    "thread_id": wi["thread_id"] or work_item_id,
+                    "parent_work_item_id": work_item_id,
+                },
+            )
+        return {"kind": "work_item", **req, "parent": work_item_id}
+
+    def context_package(self, work_item_id: str, k: int = 3, mark_delivered: bool = True) -> dict:
+        """Bounded rolling wake-up package (NOT a transcript replay).
+
+        Contract: Work Item + Mandate + latest K attempt receipts + undelivered
+        thread posts (the delta) + evidence index + parent chain. Size stays
+        ~constant across long campaigns; older history via evidence handles.
+        """
+        wi = self._get_work_item(work_item_id)
+        mandate = self.store.get("mandates", "mandate_id", wi["mandate_id"] or "")
+        effects = self.store.all(
+            "effects", "work_item_id = ? AND kind = ?", (work_item_id, "campaign_run")
+        )
+        attempts = sorted(effects, key=lambda e: e["created_at"], reverse=True)[:k]
+        posts = self.store.all(
+            "thread_posts", "work_item_id = ? AND delivered = 0", (work_item_id,)
+        )
+        links = self.store.all("evidence_links", "work_item_id = ?", (work_item_id,))
+        chain, cursor = [], wi["parent_work_item_id"]
+        while cursor and len(chain) < 5:
+            chain.append(cursor)
+            parent = self.store.get("work_items", "work_item_id", cursor)
+            cursor = parent["parent_work_item_id"] if parent else None
+        if mark_delivered and posts:
+            with self.store.tx():
+                for post in posts:
+                    self.store.update(
+                        "thread_posts", "post_id", post["post_id"], {"delivered": 1}
+                    )
+        return {
+            "work_item": wi,
+            "mandate": mandate,
+            "latest_attempts": [
+                {"key": e["idempotency_key"], "state": e["state"], "receipt": e["receipt"]}
+                for e in attempts
+            ],
+            "delta": {"new_posts": posts, "current_state": wi["state"]},
+            "evidence_index": [
+                {"kind": l["kind"], "ref_id": l["ref_id"], "path": l["path"]} for l in links
+            ],
+            "parent_chain": chain,
+            "bounds": {"attempts": k, "parent_depth": 5},
+        }
 
     # ---------- internals ----------
 

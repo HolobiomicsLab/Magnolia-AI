@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS work_items (
     scope TEXT NOT NULL,
     budget TEXT NOT NULL,
     outcome TEXT,
+    thread_id TEXT,
+    parent_work_item_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -97,6 +99,14 @@ CREATE TABLE IF NOT EXISTS evidence_links (
     ref_id TEXT NOT NULL,
     path TEXT,
     hash TEXT
+);
+CREATE TABLE IF NOT EXISTS thread_posts (
+    post_id TEXT PRIMARY KEY,
+    work_item_id TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    text TEXT NOT NULL,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
 );
 """
 

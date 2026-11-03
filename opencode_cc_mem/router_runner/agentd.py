@@ -126,7 +126,7 @@ def demo_nk2r(db: str, out_root: str | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "watch":
@@ -134,10 +134,13 @@ def main() -> int:
             p.add_argument("--once", action="store_true")
         if name == "ingest":
             p.add_argument("letter", type=Path)
-        if name in ("approve", "execute"):
+        if name in ("approve", "execute", "context", "follow-up"):
             p.add_argument("work_item_id")
         if name == "approve":
             p.add_argument("nonce")
+        if name == "follow-up":
+            p.add_argument("--text", required=True)
+            p.add_argument("--actor", default="human:tao")
         if name in ("watch", "execute", "demo-nk2r"):
             p.add_argument("--out-root", default=None)
     args = parser.parse_args()
@@ -165,6 +168,14 @@ def main() -> int:
         return 0
     if args.command == "demo-nk2r":
         return demo_nk2r(args.db, args.out_root)
+    if args.command == "context":
+        engine = get_engine(args.db)
+        print(json.dumps(engine.context_package(args.work_item_id), indent=2, default=str))
+        return 0
+    if args.command == "follow-up":
+        engine = get_engine(args.db)
+        print(json.dumps(engine.follow_up(args.work_item_id, args.actor, args.text), indent=2))
+        return 0
     return 1
 
 
