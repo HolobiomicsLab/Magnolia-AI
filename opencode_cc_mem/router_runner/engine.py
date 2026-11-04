@@ -23,8 +23,10 @@ from .admission import (
     verify_approval,
 )
 from .campaign_adapter import CompositeAdapter, protocol_hash
+from .job_service import TERMINAL_JOB_STATES
 from .models import (
     ACTIVE_STATES,
+    ApprovalError,
     AssignmentState,
     IllegalTransition,
     RouterError,
@@ -61,10 +63,12 @@ class ControlEngine:
         store: ControlStore,
         policy: AdmissionPolicy,
         adapter: CompositeAdapter | None = None,
+        job_service=None,
     ):
         self.store = store
         self.policy = policy
         self.adapter = adapter or CompositeAdapter()
+        self.job_service = job_service
 
     # ---------- intake ----------
 
@@ -727,6 +731,90 @@ class ControlEngine:
         if final_only:
             rows = [r for r in rows if r["outcome_status"] in self.FINAL_STATUSES]
         return rows
+
+    def cancel_and_resubmit(
+        self,
+        work_item_id: str,
+        new_spec: WorkSpec,
+        reason: str,
+        approver: str | None,
+    ) -> dict:
+        """The authorized kill/cleanup/resubmit path for mid-wait new information.
+
+        Order of operations (each step is a recorded decision):
+          1. Requires WAITING_JOB and an operator approver — a text message by
+             itself never kills anything, and a spec change means new content.
+          2. Terminal race: if the job already finished, do NOT cancel, clean,
+             or resubmit — the results get fetched via the normal notice path.
+          3. cancel() then directory-scoped cleanup() on the OLD run only.
+          4. Record the amendment with the NEW content hash and approver.
+          5. Resubmit as a NEW run; link the old run as superseded.
+        """
+        wi = self._get_work_item(work_item_id)
+        if wi["state"] != WorkItemState.WAITING_JOB:
+            raise RouterError(
+                f"cancel_and_resubmit requires waiting_job, got {wi['state']}"
+            )
+        if approver is None:
+            raise ApprovalError(
+                "parameter change requires operator re-approval (approver=None)"
+            )
+        if self.job_service is None:
+            raise RouterError("no job service configured")
+        run_id = wi["job_run_id"]
+        service = self.job_service
+
+        if service.status(run_id) in TERMINAL_JOB_STATES:
+            with self.store.tx():
+                self._record_decision(
+                    wi["trigger_id"], "passed", "cancel_skipped",
+                    f"{run_id} already terminal; fetch instead of cancel/cleanup",
+                )
+            return {"resubmitted": False, "reason": "already_terminal", "run_id": run_id}
+
+        with self.store.tx():
+            service.cancel(run_id)
+            self._record_decision(
+                wi["trigger_id"], "passed", "cancelled", f"{run_id}: {reason}"
+            )
+            cleaned = service.cleanup(run_id)
+            self._record_decision(
+                wi["trigger_id"], "passed", "cleaned", f"{cleaned} (per-run dir only)"
+            )
+            new_hash = new_spec.content_hash()
+            self._record_decision(
+                wi["trigger_id"], "passed", "amended",
+                f"{reason}; approved by {approver}; new content hash {new_hash[:16]}",
+            )
+            self.store.update(
+                "work_items",
+                "work_item_id",
+                work_item_id,
+                {
+                    "project": new_spec.project,
+                    "protocol": new_spec.protocol,
+                    "protocol_hash": protocol_hash(new_spec.protocol),
+                    "scope": new_spec.scope,
+                    "budget": new_spec.budget,
+                },
+            )
+            new_job = service.submit(new_id("run"), spec=new_spec.as_dict())
+            new_run_id = new_job["run_id"]
+            self.store.update(
+                "work_items", "work_item_id", work_item_id, {"job_run_id": new_run_id}
+            )
+            self._link_evidence(work_item_id, "superseded_run", run_id, new_run_id)
+            self._record_decision(
+                wi["trigger_id"], "passed", "resubmitted",
+                f"{run_id} -> {new_run_id}; state=waiting_job",
+            )
+        return {
+            "resubmitted": True,
+            "cancelled": run_id,
+            "cleaned": cleaned,
+            "new_run_id": new_run_id,
+            "superseded": run_id,
+        }
 
     # ---------- internals ----------
 

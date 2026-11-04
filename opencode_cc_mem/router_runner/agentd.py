@@ -48,8 +48,14 @@ def default_policy() -> AdmissionPolicy:
 
 
 def get_engine(db: str, out_root: str | None = None) -> ControlEngine:
+    from .job_service import FakeJobService
+
+    jobs_root = Path(out_root) / "jobs" if out_root else Path("/tmp/agentd-jobs")
     engine = ControlEngine(
-        ControlStore(db), default_policy(), CompositeAdapter(out_root=out_root)
+        ControlStore(db),
+        default_policy(),
+        CompositeAdapter(out_root=out_root),
+        job_service=FakeJobService(jobs_root),
     )
     # Startup recovery sweep: interrupted attempts are requeued, never stolen
     # from a live owner. Runs on every daemon (re)start.
@@ -282,10 +288,61 @@ def demo_local(db: str, workdir: str | None = None, out_root: str | None = None)
     return 0
 
 
+def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None) -> int:
+    """The kill/cleanup/resubmit scenario from the user's example, plus the
+    terminal race (job finished before the cancel could land)."""
+    import shutil
+    import tempfile
+    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="agentd-cancel-demo-"))
+    if workdir:
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+    engine = get_engine(db, out_root or (work / "runs"))
+    service = engine.job_service
+
+    print("=== CANCEL / CLEANUP / RESUBMIT DEMO ===")
+    req = ingest_letter(engine, NK2R_LETTER)
+    wi = req["work_item_id"]
+    engine.approve(wi, req["nonce"], "human:tao (simulated)")
+    service.submit("run_A")
+    engine.park_on_job(wi, "run_A")
+    print(f"parked on run_A (state=waiting_job, dir={service.jobs['run_A']['run_dir']})")
+
+    print("--- mid-wait: new information changes the sampling parameter ---")
+    engine.follow_up(wi, "human:tao", "s10000 is too small, use s20000")
+    new_spec = WorkSpec(
+        project="nk2r_challenge", protocol="nk2r-challenge-v0.1",
+        scope="NK2R funnel with s20000", budget="local seconds",
+    )
+    outcome = engine.cancel_and_resubmit(wi, new_spec, "sampling changed by user", "human:tao (simulated)")
+    print(f"cancelled: {outcome['cancelled']}")
+    print(f"cleaned  : {outcome['cleaned']} (only that directory)")
+    print(f"resubmit : {outcome['new_run_id']} (supersedes {outcome['superseded']})")
+    wi_row = engine.store.get("work_items", "work_item_id", wi)
+    print(f"state={wi_row['state']} job_run_id={wi_row['job_run_id']}")
+    assert not (service.root / "run_A").exists(), "old run dir must be cleaned"
+    assert (service.root / outcome["new_run_id"] / ".magnolia-run").exists()
+
+    print("--- terminal race: job finished BEFORE the cancel could land ---")
+    req2 = ingest_letter(engine, {**NK2R_LETTER, "source_event_id": "letter-cancel-2"})
+    wi2 = req2["work_item_id"]
+    engine.approve(wi2, req2["nonce"], "human:tao (simulated)")
+    service.submit("run_B")
+    engine.park_on_job(wi2, "run_B")
+    service.set_state("run_B", "completed")
+    race = engine.cancel_and_resubmit(wi2, new_spec, "late parameter change", "human:tao (simulated)")
+    print(f"resubmitted={race['resubmitted']} reason={race['reason']}")
+    assert race["resubmitted"] is False
+    assert (service.root / "run_B" / ".magnolia-run").exists(), "results must be preserved"
+    print("      run_B preserved: results are fetched, not deleted")
+    print("DEMO-CANCEL OK")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name in ("watch", "consume-jobs"):
@@ -303,7 +360,9 @@ def main() -> int:
             p.add_argument("--actor", default="human:tao")
         if name == "demo-local":
             p.add_argument("--workdir", default=None)
-        if name in ("watch", "execute", "demo-nk2r", "demo-jobloop", "demo-local"):
+        if name == "demo-cancel":
+            p.add_argument("--workdir", default=None)
+        if name in ("watch", "execute", "demo-nk2r", "demo-jobloop", "demo-local", "demo-cancel"):
             p.add_argument("--out-root", default=None)
     args = parser.parse_args()
 
@@ -346,6 +405,8 @@ def main() -> int:
         return demo_jobloop(args.db, args.out_root)
     if args.command == "demo-local":
         return demo_local(args.db, args.workdir, args.out_root)
+    if args.command == "demo-cancel":
+        return demo_cancel(args.db, args.workdir, args.out_root)
     return 1
 
 
