@@ -49,6 +49,7 @@ def assemble_context(
     current_run_id: str | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
     compact_project_tier: bool = False,
+    final_only: bool = False,
 ) -> ContextAssembly:
     """compact_project_tier (2026-10-08, boot-context only): render project
     entries as one-line index records (title, type, confidence, observations,
@@ -99,6 +100,7 @@ def assemble_context(
             str(store),
             budget=min(remaining, allocation.project_budget),
             recent_tools=recent_tools,
+            final_only=final_only,
         )
         for entry in proj_entries:
             content = entry.get("content", "")

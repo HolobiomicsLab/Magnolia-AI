@@ -204,7 +204,6 @@ def dispatch_terminal(
     elif category == "deliberate":
         # check() already set lifecycle=cancelled; nothing to do.
         pass
-
     # Notify the user's session (toast via magnolia-job-notify.ts). A cancel
     # was user-initiated, so deliberate is the one silent terminal state.
     if category != "deliberate":
@@ -213,6 +212,12 @@ def dispatch_terminal(
                             state=state, category=category, job_id=job_id)
         except Exception:
             pass  # push_job_notice never raises; belt-and-braces for dispatch
+    # Job watcher (always-on agent system): durable, deduped wake-up notice.
+    # Separate from the human toast; never raises by contract.
+    from . import job_watcher
+    job_watcher.emit_job_notice(
+        project_dir, run_record, state=state, category=category, job_id=job_id,
+    )
     return category
 
 

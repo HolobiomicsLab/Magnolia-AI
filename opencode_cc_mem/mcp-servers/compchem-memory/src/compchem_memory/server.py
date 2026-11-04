@@ -337,6 +337,8 @@ def _project_switch_blocked_payload(guard) -> str:
 
 # ── v1 Tools (preserved, enhanced) ──────────────────────────────────────────
 
+_OUTCOME_STATUSES = frozenset({"intermediate", "completed_campaign", "human_validated"})
+
 
 @mcp.tool()
 @captured(source="compchem-memory")
@@ -345,11 +347,17 @@ def memory_get_context(
     project_dir: str | None = None,
     token_budget: int = 8000,
     conversation_history: list[dict[str, Any]] | None = None,
+    final_only: bool = False,
 ) -> str:
     """Multi-stage context assembly pipeline. Retrieves relevant entries from
     the session and project/staging tiers with token budget management.
     Applies semantic scoring to select the most relevant project-tier entries.
     Optionally pass conversation_history to improve tool-diversity filtering.
+
+    final_only (assessment §11.5): when True, entries explicitly stamped
+    outcome_status="intermediate" are excluded from the project/staging tiers
+    (guidance must rest on completed or human-validated outcomes). Entries
+    without a status stamp are unaffected, preserving backward compatibility.
 
     Call this when: starting a new task. First action in every session."""
     pd = _resolve_project_store(project_dir)
@@ -363,6 +371,7 @@ def memory_get_context(
         project_dir=pd,
         token_budget=token_budget,
         conversation_history=conversation_history,
+        final_only=final_only,
     )
     # R5 surfacing counter: log served entries with SERVING-STORE attribution
     # (resolved .magnolia, not the calling project path).
@@ -419,11 +428,25 @@ def memory_record_learning(
     tools: list[str] | None = None,
     confidence: float = 0.5,
     project_dir: str | None = None,
+    outcome_status: str | None = None,
+    work_item_id: str | None = None,
+    attempt: int | None = None,
 ) -> str:
     """Propose a new project-tier entry with typed frontmatter. Writes to staging
     area; entries become active after confirmation or N consistent observations.
 
+    outcome_status (assessment §11.5): optional one of "intermediate",
+    "completed_campaign", "human_validated". Intermediate observations are
+    excluded from guidance retrieval when final_only=True is passed to
+    memory_get_context. work_item_id/attempt link the entry to its origin
+    Work Item in the always-on control plane (MemoryLink provenance).
+
     Call this when: you have discovered something worth keeping — error_resolution, success_pattern, failure_pattern, or parameter_guidance. See AGENTS.md for content structure."""
+    if outcome_status is not None and outcome_status not in _OUTCOME_STATUSES:
+        raise ValueError(
+            f"outcome_status must be one of {sorted(_OUTCOME_STATUSES)}, "
+            f"got {outcome_status!r}"
+        )
     guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
@@ -462,6 +485,13 @@ def memory_record_learning(
         proj_m._update_entry_frontmatter(
             Path(result), "observed_in_sessions", [session_id]
         )
+    # Assessment §11.5: outcome status + Work Item provenance (optional).
+    if outcome_status is not None:
+        proj_m._update_entry_frontmatter(Path(result), "outcome_status", outcome_status)
+    if work_item_id is not None:
+        proj_m._update_entry_frontmatter(Path(result), "work_item_id", work_item_id)
+    if attempt is not None:
+        proj_m._update_entry_frontmatter(Path(result), "attempt", attempt)
 
     promoted = proj_m.auto_promote_staging(pd)
     return json.dumps({
