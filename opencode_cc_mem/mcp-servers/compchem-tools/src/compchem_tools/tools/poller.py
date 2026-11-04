@@ -185,6 +185,12 @@ def dispatch_terminal(
     elif category == "deliberate":
         # check() already set lifecycle=cancelled; nothing to do.
         pass
+    # Job watcher (always-on agent system): durable, deduped wake-up notice.
+    # Separate from the human toast; never raises by contract.
+    from . import job_watcher
+    job_watcher.emit_job_notice(
+        project_dir, run_record, state=state, category=category, job_id=job_id,
+    )
     return category
 
 

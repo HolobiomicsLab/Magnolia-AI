@@ -48,6 +48,7 @@ def select_relevant_entries(
     max_selections: int = 5,
     max_per_entry: int = 5000,
     recent_tools: list[str] | None = None,
+    final_only: bool = False,
 ) -> list[dict[str, Any]]:
     entries_dir = Path(project_dir) / "entries"
     headers = scan_memory_headers(entries_dir)
@@ -66,6 +67,15 @@ def select_relevant_entries(
     ]
     for h in staging_warnings:
         h["provisional"] = True
+
+    # Assessment §11.5: guidance mode excludes ONLY explicitly-intermediate
+    # observations. Entries without an outcome_status stamp pass through
+    # (backward compatible with the pre-status store).
+    if final_only:
+        headers = [h for h in headers if h.get("outcome_status") != "intermediate"]
+        staging_warnings = [
+            h for h in staging_warnings if h.get("outcome_status") != "intermediate"
+        ]
 
     task_lower = task_description.lower()
     task_words = set(task_lower.split())

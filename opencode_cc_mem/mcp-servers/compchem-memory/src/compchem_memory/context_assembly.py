@@ -48,6 +48,7 @@ def assemble_context(
     token_budget: int = 8000,
     current_run_id: str | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
+    final_only: bool = False,
 ) -> ContextAssembly:
     allocation = allocate_budget(token_budget)
     store = _memory_store(project_dir)
@@ -92,6 +93,7 @@ def assemble_context(
             str(store),
             budget=min(remaining, allocation.project_budget),
             recent_tools=recent_tools,
+            final_only=final_only,
         )
         for entry in proj_entries:
             content = entry.get("content", "")
