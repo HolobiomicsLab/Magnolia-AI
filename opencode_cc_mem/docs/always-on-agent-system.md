@@ -62,6 +62,25 @@ Expected: letter ingested -> approval -> NK2R funnel executes ->
 `outcome=completed selected=60`, all acceptance items true, candidate CSV path,
 receipted reply, `DEMO-NK2R OK`.
 
+### Full local tour (one command, no Slurm, no LLM)
+
+```sh
+cd opencode_cc_mem
+rm -f /tmp/agentd-local.db
+python3 -m router_runner.agentd demo-local --db /tmp/agentd-local.db \
+    --workdir /tmp/agentd-local-demo
+```
+
+Eight narrated stages: letter -> approval -> park on a cluster job -> mid-wait
+user follow-up -> the PRODUCTION `job_watcher.emit_job_notice` writes a real
+notice -> wake-up with the job outcome AND the user message in the delta ->
+batch 1 executes and its finding is promoted to `completed_campaign` -> a
+follow-up opens a linked round-2 Work Item and executes. Prints artifact paths
+(control DB, both candidate CSVs, the notice JSON) at the end.
+
+Also `demo-jobloop` for the shorter park/wake variant, and `demo` in
+`router_runner.cli` for the control-plane invariants demo.
+
 ### Drive it through the inbox (the always-on path)
 
 ```sh

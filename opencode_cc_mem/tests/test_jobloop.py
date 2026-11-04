@@ -109,3 +109,27 @@ def test_full_loop_demo(tmp_path):
     db = str(tmp_path / "demo.db")
     rc = agentd.demo_jobloop(db, out_root=tmp_path / "runs")
     assert rc == 0
+
+
+def test_demo_local_end_to_end(tmp_path):
+    db = str(tmp_path / "local.db")
+    rc = agentd.demo_local(db, workdir=str(tmp_path / "wd"))
+    assert rc == 0
+    # Real production notice was emitted by job_watcher, not hand-written.
+    notices = list((tmp_path / "wd" / "project" / "inbox" / "from-jobs").glob("*.json"))
+    assert len(notices) == 1
+    notice = json.loads(notices[0].read_text())
+    assert notice["kind"] == "job_notice"
+    assert notice["state"] == "COMPLETED"
+    # Two linked Work Items, each with 60 candidates and promoted findings.
+    engine = agentd.get_engine(db, out_root=tmp_path / "wd" / "runs")
+    items = engine.store.all("work_items")
+    assert len(items) == 2
+    assert all(i["state"] == "completed" for i in items)
+    child = [i for i in items if i["parent_work_item_id"]]
+    assert len(child) == 1
+    for item in items:
+        assert engine.findings(item["work_item_id"], final_only=True)
+    # Batch run directories exist and are attempt-scoped.
+    runs = list((tmp_path / "wd" / "runs").glob("*/attempt-1/ranked_candidates.csv"))
+    assert len(runs) == 2
