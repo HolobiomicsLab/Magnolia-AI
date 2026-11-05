@@ -175,6 +175,8 @@ class Router:
         if m:
             return m.group(1) if m.group(1) in self.registry else "__unknown__"
         return None
+
+    def _handoff(self, project: str, text: str, flags: list[str]) -> RouteReply:
         if project not in self.registry:
             return RouteReply("rejected", detail=f"project not allowed: {project}", flags=flags)
         lane_inbox = self.registry[project].get("inbox")
