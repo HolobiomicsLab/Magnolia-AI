@@ -62,6 +62,26 @@ Expected: letter ingested -> approval -> NK2R funnel executes ->
 `outcome=completed selected=60`, all acceptance items true, candidate CSV path,
 receipted reply, `DEMO-NK2R OK`.
 
+### Event-driven operation (`agentd run`)
+
+Wakes are only useful if something is listening. `agentd run` is the
+continuous loop (availability only — it never executes work):
+
+```sh
+cd opencode_cc_mem
+python3 -m router_runner.agentd run \
+    --project-dir projects/<project> --db <control.db> --interval 60
+```
+
+Each cycle: (1) ingest opening task letters from `<project>/inbox/*.json`,
+(2) consume terminal job notices from `<project>/inbox/from-jobs/`, (3) bridge
+every newly woken Work Item into `<project>/inbox/<wi>__<attempt>.task.md`.
+The mailbox daemon (`magnolia-agents-daemon`) already scans `*.task.md` and
+resumes the lane session, so the woken worker receives a self-contained letter
+with the job outcome, the delta, the evidence index, and the expected
+`FINAL ANSWER:` contract. The bridge is idempotent per Work Item+attempt.
+Use `--once` for a single sweep (tests/cron).
+
 ### Full local tour (one command, no Slurm, no LLM)
 
 ```sh

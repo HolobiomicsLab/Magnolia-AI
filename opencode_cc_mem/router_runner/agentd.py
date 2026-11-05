@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -40,10 +41,18 @@ from .models import RouterError, TriggerSpec, WorkSpec
 from .store import ControlStore
 
 
-def default_policy() -> AdmissionPolicy:
+def default_policy(allowed_projects: set[str] | None = None) -> AdmissionPolicy:
+    """Admission policy. Project names are deployment-specific and are NOT
+    hardcoded here: set MAGNOLIA_AGENTD_PROJECTS (comma-separated) locally.
+    The default keeps only the public/demo names used by the tests."""
+    if allowed_projects is None:
+        raw = os.environ.get(
+            "MAGNOLIA_AGENTD_PROJECTS", "xiulian,literature,nk2r_challenge"
+        )
+        allowed_projects = {p.strip() for p in raw.split(",") if p.strip()}
     return AdmissionPolicy(
         allowed_senders=frozenset({"human:tao"}),
-        allowed_projects=frozenset({"hsc70", "xiulian", "literature", "nk2r_challenge"}),
+        allowed_projects=frozenset(allowed_projects),
     )
 
 
@@ -77,7 +86,8 @@ def ingest_letter(engine: ControlEngine, letter: dict) -> dict:
     return {"trigger": trigger["trigger_id"], "created": created, **request}
 
 
-def watch(inbox: Path, db: str, once: bool = False, out_root: str | None = None) -> dict:
+def watch(inbox: Path, db: str, once: bool = False, quiet: bool = False,
+          out_root: str | None = None) -> dict:
     """Scan letter files; stage candidates for approval. Never executes."""
     engine = get_engine(db, out_root)
     staged, errors = [], []
@@ -88,7 +98,8 @@ def watch(inbox: Path, db: str, once: bool = False, out_root: str | None = None)
         except RouterError as exc:
             errors.append({"letter": path.name, "reason": str(exc)})
     summary = {"staged": staged, "rejected": errors, "executed": 0}
-    print(json.dumps(summary, indent=2))
+    if not quiet:
+        print(json.dumps(summary, indent=2))
     # A real long-running loop would sleep and rescan here; --once is the
     # testable single sweep. No LLM, no autonomous execution in either mode.
     return summary
@@ -167,6 +178,107 @@ def demo_jobloop(db: str, out_root: str | None = None) -> int:
     print(f"outcome={outcome['result']['outcome']} candidates={outcome['result']['receipt']['selected']}")
     print("DEMO-JOBLOOP OK")
     return 0
+
+
+def render_lane_letter(package: dict) -> str:
+    """Render a woken Work Item as a self-contained mailbox task letter.
+
+    The mailbox daemon scans `<inbox>/**/*.task.md`, reads the header status
+    line, and hands the letter body to the lane agent. Keep it self-contained:
+    the daemon's prompt tells helpers not to rely on memory tools.
+    """
+    wi = package["work_item"]
+    attempts = package["latest_attempts"]
+    posts = package["delta"]["new_posts"]
+    lines = [
+        "status: open",
+        f"work_item: {wi['work_item_id']}",
+        f"run: {attempts[0]['key'].split(':')[-1] if attempts else 'n/a'}",
+        "",
+        f"# Job event for Work Item {wi['work_item_id']}",
+        "",
+        "An external job reached a terminal state. The control plane woke this",
+        "Work Item and attached the delta below. Nothing has been executed yet.",
+        "",
+        "## Latest attempt",
+    ]
+    for a in attempts:
+        lines.append(f"- {a['key']} state={a['state']} receipt={a['receipt']}")
+    lines += ["", "## Delta since your last turn"]
+    for post in posts:
+        lines.append(f"- [{post['actor']}] {post['text']}")
+    lines += [
+        "",
+        "## Current state",
+        f"- work item state: {package['delta']['current_state']}",
+        f"- project: {wi['project']} protocol: {wi['protocol']}",
+        f"- scope: {wi['scope']} budget: {wi['budget']}",
+        "",
+        "## Evidence index",
+    ]
+    for link in package["evidence_index"]:
+        lines.append(f"- {link['kind']}: {link['ref_id']} {link['path'] or ''}".rstrip())
+    lines += [
+        "",
+        "## Your task",
+        "1. Read the job results from the evidence index above (raw files, not summaries).",
+        "2. Analyze them against the protocol's pre-registered acceptance criteria.",
+        "3. Decide the next step: next batch, parameter change (within mandate), or stop.",
+        "4. If you submit a new job, use submit_job and record its run_id in your reply.",
+        "5. End your reply with a line beginning 'FINAL ANSWER:' and a short summary.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def bridge_wake_to_letter(engine, work_item_id: str, lane_inbox: Path) -> dict:
+    """Write a woken Work Item's context package into the lane inbox.
+
+    Idempotent per Work Item+attempt: the filename carries the attempt key, so
+    repeated sweeps cannot duplicate the letter.
+    """
+    package = engine.context_package(work_item_id)
+    key = package["latest_attempts"][0]["key"] if package["latest_attempts"] else work_item_id
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in key)
+    path = Path(lane_inbox) / f"{work_item_id}__{safe}.task.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        return {"written": False, "reason": "duplicate", "path": str(path)}
+    path.write_text(render_lane_letter(package), encoding="utf-8")
+    return {"written": True, "path": str(path)}
+
+
+def run_loop(db: str, project_dir: str, interval: int = 60, once: bool = False,
+             max_cycles: int | None = None) -> int:
+    """The continuous event loop: ingest + wake + bridge, on a timer.
+
+    One cycle: (1) ingest opening task letters, (2) consume terminal job
+    notices, (3) bridge each newly woken Work Item into the lane inbox for
+    the mailbox daemon. Never executes work itself.
+    """
+    import time
+    project = Path(project_dir)
+    inbox = project / "inbox"
+    engine = get_engine(db, out_root=str(project / "runs"))
+    cycles = 0
+    while True:
+        cycles += 1
+        staged = watch(inbox, db, once=True, quiet=True, out_root=str(project / "runs"))
+        summary = engine.consume_job_notices(inbox)
+        bridged = [
+            {"work_item": wi, **bridge_wake_to_letter(engine, wi, inbox)}
+            for wi in summary["woken"]
+        ]
+        print(json.dumps({
+            "cycle": cycles,
+            "staged": len(staged.get("staged", [])),
+            "rejected": len(staged.get("rejected", [])),
+            "woken": summary["woken"],
+            "bridged": bridged,
+        }), flush=True)
+        if once or (max_cycles is not None and cycles >= max_cycles):
+            return 0
+        time.sleep(max(1, interval))
 
 
 def _write_demo_notice(inbox: Path, work_item_id: str) -> None:
@@ -342,9 +454,13 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
+        if name == "run":
+            p.add_argument("--project-dir", required=True)
+            p.add_argument("--interval", type=int, default=60)
+            p.add_argument("--once", action="store_true")
         if name in ("watch", "consume-jobs"):
             p.add_argument("--inbox", type=Path, required=True)
         if name == "watch":
@@ -407,6 +523,8 @@ def main() -> int:
         return demo_local(args.db, args.workdir, args.out_root)
     if args.command == "demo-cancel":
         return demo_cancel(args.db, args.workdir, args.out_root)
+    if args.command == "run":
+        return run_loop(args.db, args.project_dir, interval=args.interval, once=args.once)
     return 1
 
 
