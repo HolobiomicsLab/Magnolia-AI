@@ -42,7 +42,6 @@ from .campaign_adapter import CompositeAdapter
 from .engine import ControlEngine
 from .models import RouterError, TriggerSpec, WorkSpec
 from .store import ControlStore
-from .router import router_from_db
 
 
 def operator() -> str:
@@ -480,6 +479,7 @@ def router_chat(db: str, registry: dict | None = None) -> int:
     'exit', or 'q' leaves the REPL itself (this is not the project exit phrase
     'back to router', which only clears the handoff state).
     """
+    from .router import router_from_db
     router = router_from_db(db, registry=registry)
     print("Frontal router ready. One message per line; 'quit' to leave.")
     while True:
