@@ -473,7 +473,7 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "run":
@@ -544,6 +544,9 @@ def main() -> int:
         return demo_cancel(args.db, args.workdir, args.out_root)
     if args.command == "run":
         return run_loop(args.db, args.project_dir, interval=args.interval, once=args.once)
+    if args.command == "demo-router":
+        from .replay import demo_router
+        return demo_router(args.db)
     return 1
 
 
