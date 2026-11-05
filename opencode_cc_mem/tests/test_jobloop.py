@@ -27,7 +27,7 @@ def make_engine(tmp_path):
 def parked(engine):
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
     wi = req["work_item_id"]
-    engine.approve(wi, req["nonce"], "human:tao")
+    engine.approve(wi, req["nonce"], agentd.operator())
     engine.park_on_job(wi, "run_x1")
     return wi
 
@@ -55,7 +55,7 @@ def test_park_then_notice_wakes_owner_with_delta(tmp_path):
     assert engine.store.get("work_items", "work_item_id", wi)["state"] == WorkItemState.WAITING_JOB
 
     # Mid-wait user info is a context post, not execution.
-    engine.follow_up(wi, "human:tao", "use s20000 next round")
+    engine.follow_up(wi, agentd.operator(), "use s20000 next round")
     write_notice(tmp_path / "inbox" / "from-jobs", notice())
     summary = engine.consume_job_notices(tmp_path / "inbox", include_context=True)
 
@@ -64,7 +64,7 @@ def test_park_then_notice_wakes_owner_with_delta(tmp_path):
     assert wi_row["state"] == WorkItemState.QUEUED
     package = summary["context_packages"][wi]
     actors = {p["actor"] for p in package["delta"]["new_posts"]}
-    assert actors == {"human:tao", "system:job-watcher"}
+    assert actors == {agentd.operator(), "system:job-watcher"}
     kinds = {l["kind"] for l in package["evidence_index"]}
     assert "job_notice" in kinds
 
@@ -121,7 +121,7 @@ def test_demo_local_end_to_end(tmp_path):
     notice = json.loads(notices[0].read_text())
     assert notice["kind"] == "job_notice"
     assert notice["state"] == "COMPLETED"
-    # Two linked Work Items, each with 60 candidates and promoted findings.
+    # Two linked Work Items, both completed with promoted findings.
     engine = agentd.get_engine(db, out_root=tmp_path / "wd" / "runs")
     items = engine.store.all("work_items")
     assert len(items) == 2
@@ -130,6 +130,5 @@ def test_demo_local_end_to_end(tmp_path):
     assert len(child) == 1
     for item in items:
         assert engine.findings(item["work_item_id"], final_only=True)
-    # Batch run directories exist and are attempt-scoped.
-    runs = list((tmp_path / "wd" / "runs").glob("*/attempt-1/ranked_candidates.csv"))
-    assert len(runs) == 2
+        kinds = {l["kind"] for l in engine.store.all("evidence_links", "work_item_id = ?", (item["work_item_id"],))}
+        assert {"run_record", "gate_report"} <= kinds

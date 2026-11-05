@@ -25,10 +25,10 @@ def parked_with_notice(tmp_path):
     project = tmp_path / "project"
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
     wi = req["work_item_id"]
-    engine.approve(wi, req["nonce"], "human:tao")
+    engine.approve(wi, req["nonce"], agentd.operator())
     engine.job_service.submit("run_loop_1")
     engine.park_on_job(wi, "run_loop_1")
-    engine.follow_up(wi, "human:tao", "mid-wait note for the lane letter")
+    engine.follow_up(wi, agentd.operator(), "mid-wait note for the lane letter")
     inbox = project / "inbox"
     (inbox / "from-jobs").mkdir(parents=True)
     (inbox / "from-jobs" / "run_loop_1__completed.json").write_text(json.dumps({

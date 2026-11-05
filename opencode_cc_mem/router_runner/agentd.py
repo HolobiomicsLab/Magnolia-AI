@@ -11,7 +11,7 @@ configuration, never repo code):
 {
   "source_id": "inbox:<your-project>",
   "source_event_id": "letter-001",
-  "actor": "human:tao",
+  "actor": operator(),
   "project_hint": "<your-project>",
   "payload": {"title": "..."},
   "work_spec": {"project": "<your-project>", "protocol": "<protocol-id>",
@@ -44,6 +44,12 @@ from .models import RouterError, TriggerSpec, WorkSpec
 from .store import ControlStore
 
 
+def operator() -> str:
+    """The human operator identity, from config (MAGNOLIA_AGENTD_OPERATOR).
+    Defaults to the neutral placeholder 'operator' — never a hardcoded name."""
+    return os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator")
+
+
 def default_policy(allowed_projects: set[str] | None = None) -> AdmissionPolicy:
     """Admission policy. Project names are deployment-specific and are NEVER
     hardcoded in the repo: set MAGNOLIA_AGENTD_PROJECTS (comma-separated)
@@ -52,7 +58,7 @@ def default_policy(allowed_projects: set[str] | None = None) -> AdmissionPolicy:
         raw = os.environ.get("MAGNOLIA_AGENTD_PROJECTS", "demo")
         allowed_projects = {p.strip() for p in raw.split(",") if p.strip()}
     return AdmissionPolicy(
-        allowed_senders=frozenset({"human:tao"}),
+        allowed_senders=frozenset({operator()}),
         allowed_projects=frozenset(allowed_projects),
     )
 
@@ -106,34 +112,40 @@ def watch(inbox: Path, db: str, once: bool = False, quiet: bool = False,
     return summary
 
 
-def demo_letter(project: str = "demo", event_id: str = "letter-demo-1") -> dict:
-    """Neutral demo letter: no real project names. Demos/tests use the
-    placeholder project "demo"; real deployments pass their own names."""
+def demo_letter(project: str = "demo", protocol: str = "demo-docking-v1",
+                event_id: str = "letter-demo-1") -> dict:
+    """Neutral demo letter: no real project names and no real protocol by
+    default. The NK2R pack demo passes its protocol explicitly."""
     return {
         "source_id": "inbox:demo",
         "source_event_id": event_id,
-        "actor": "human:tao",
+        "actor": operator(),
         "project_hint": project,
         "payload": {"title": "Demo work item"},
         "work_spec": {
             "project": project,
-            "protocol": "nk2r-challenge-v0.1",
-            "scope": "one demo funnel run (60 candidates, calibrated)",
+            "protocol": protocol,
+            "scope": "one demo run",
             "budget": "local seconds, no external jobs",
         },
     }
 
 
-NK2R_LETTER = demo_letter("demo", "letter-nk2r-2026-11-03")
+# Generic demo letter (fake adapter, not tied to NK2R).
+DEMO_LETTER = demo_letter()
+# NK2R task-pack demo letter, used only by the NK2R-specific demo/tests.
+NK2R_LETTER = demo_letter(
+    project="demo", protocol="nk2r-challenge-v0.1", event_id="letter-nk2r-2026-11-03"
+)
 
 
 def demo_nk2r(db: str, out_root: str | None = None) -> int:
     engine = get_engine(db, out_root)
     print("--- ingest NK2R letter ---")
-    req = ingest_letter(engine, NK2R_LETTER)
+    req = ingest_letter(engine, DEMO_LETTER)
     print(f"work item {req['work_item_id']} awaiting approval (nonce {req['nonce'][:12]}...)")
     print("--- operator approval (simulated terminal) ---")
-    wi = engine.approve(req["work_item_id"], req["nonce"], "human:tao (simulated)")
+    wi = engine.approve(req["work_item_id"], req["nonce"], operator() + " (simulated)")
     print(f"state={wi['state']} mandate={wi['mandate_id']}")
     print("--- execute NK2R task pack ---")
     outcome = engine.execute(req["work_item_id"])
@@ -153,16 +165,16 @@ def demo_jobloop(db: str, out_root: str | None = None) -> int:
     import tempfile
     engine = get_engine(db, out_root)
     print("--- ingest + approve ---")
-    req = ingest_letter(engine, NK2R_LETTER)
+    req = ingest_letter(engine, DEMO_LETTER)
     wi = req["work_item_id"]
-    engine.approve(wi, req["nonce"], "human:tao (simulated)")
+    engine.approve(wi, req["nonce"], operator() + " (simulated)")
 
     print("--- worker submits a cluster job and PARKS (no process waits) ---")
     engine.park_on_job(wi, "run_demo_0001")
     print(f"state={engine.store.get('work_items', 'work_item_id', wi)['state']}")
 
     print("--- mid-wait user follow-up: context post, no execution ---")
-    engine.follow_up(wi, "human:tao", "while you wait: use s20000 next round")
+    engine.follow_up(wi, operator(), "while you wait: use s20000 next round")
 
     print("--- poller detects terminal; job_watcher emits the notice ---")
     with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +194,7 @@ def demo_jobloop(db: str, out_root: str | None = None) -> int:
 
     print("--- next batch executes with all knowledge present ---")
     outcome = engine.execute(wi)
-    print(f"outcome={outcome['result']['outcome']} candidates={outcome['result']['receipt']['selected']}")
+    print(f"outcome={outcome['result']['outcome']} (demo adapter)")
     print("DEMO-JOBLOOP OK")
     return 0
 
@@ -343,19 +355,19 @@ def demo_local(db: str, workdir: str | None = None, out_root: str | None = None)
     print(f"workdir: {work}\n")
 
     print("[1/8] A letter arrives; the deterministic watch stages it (no execution)")
-    req = ingest_letter(engine, NK2R_LETTER)
+    req = ingest_letter(engine, DEMO_LETTER)
     wi = req["work_item_id"]
     print(f"      work item {wi} state=candidate (awaiting YOUR approval)")
 
     print("[2/8] Operator approval (simulated terminal): Decision + Mandate")
-    engine.approve(wi, req["nonce"], "human:tao (simulated)")
+    engine.approve(wi, req["nonce"], operator() + " (simulated)")
 
     print("[3/8] Worker submits batch 1 as a cluster job and PARKS (nobody waits)")
     engine.park_on_job(wi, "run_local_demo_1")
     print("      state=waiting_job")
 
     print("[4/8] You send new information MID-WAIT (context, not authority)")
-    engine.follow_up(wi, "human:tao", "next round: prefer s20000 sampling")
+    engine.follow_up(wi, operator(), "next round: prefer s20000 sampling")
 
     print("[5/8] The job finishes; the REAL job_watcher emits the notice")
     watcher = _load_job_watcher()
@@ -379,18 +391,18 @@ def demo_local(db: str, workdir: str | None = None, out_root: str | None = None)
     package = engine.context_package(wi)
     for post in package["delta"]["new_posts"]:
         print(f"      delta[{post['actor']}]: {post['text']}")
-    engine.record_finding(wi, "scientific", "batch 1: tachykinin-motif candidates dominate the top ranks")
+    engine.record_finding(wi, "scientific", "batch 1: motif candidates dominate the top ranks")
 
-    print("[7/8] Batch 1 executes (real funnel); the finding is promoted on completion")
+    print("[7/8] Batch 1 executes (demo adapter); the finding is promoted on completion")
     first = engine.execute(wi)
-    print(f"      outcome={first['result']['outcome']} candidates={first['result']['receipt']['selected']}")
+    print(f"      outcome={first['result']['outcome']}")
     for finding in engine.findings(wi):
         print(f"      finding[{finding['outcome_status']}]: {finding['text']}")
 
     print("[8/8] Your follow-up opens a LINKED Work Item for round 2 (fresh approval)")
-    follow = engine.follow_up(wi, "human:tao", "round 2 with the new sampling")
+    follow = engine.follow_up(wi, operator(), "round 2 with the new sampling")
     wi2 = follow["work_item_id"]
-    engine.approve(wi2, follow["nonce"], "human:tao (simulated)")
+    engine.approve(wi2, follow["nonce"], operator() + " (simulated)")
     engine.record_finding(wi2, "operational", "s20000 is the right round-2 sampling (per user note)")
     second = engine.execute(wi2)
     print(f"      outcome={second['result']['outcome']} parent={follow['parent']}")
@@ -400,8 +412,8 @@ def demo_local(db: str, workdir: str | None = None, out_root: str | None = None)
 
     print("\n=== ARTIFACTS ===")
     print(f"  control store : {db}")
-    print(f"  batch 1       : {first['result']['candidate_file']}")
-    print(f"  batch 2       : {second['result']['candidate_file']}")
+    print(f"  batch 1 run   : {first['result']['run_id']}")
+    print(f"  batch 2 run   : {second['result']['run_id']}")
     print(f"  notice        : {emission['path']}")
     print("DEMO-LOCAL OK")
     return 0
@@ -420,20 +432,20 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
     service = engine.job_service
 
     print("=== CANCEL / CLEANUP / RESUBMIT DEMO ===")
-    req = ingest_letter(engine, NK2R_LETTER)
+    req = ingest_letter(engine, DEMO_LETTER)
     wi = req["work_item_id"]
-    engine.approve(wi, req["nonce"], "human:tao (simulated)")
+    engine.approve(wi, req["nonce"], operator() + " (simulated)")
     service.submit("run_A")
     engine.park_on_job(wi, "run_A")
     print(f"parked on run_A (state=waiting_job, dir={service.jobs['run_A']['run_dir']})")
 
     print("--- mid-wait: new information changes the sampling parameter ---")
-    engine.follow_up(wi, "human:tao", "s10000 is too small, use s20000")
+    engine.follow_up(wi, operator(), "s10000 is too small, use s20000")
     new_spec = WorkSpec(
-        project="demo", protocol="nk2r-challenge-v0.1",
+        project="demo", protocol="demo-docking-v1",
         scope="demo funnel with s20000", budget="local seconds",
     )
-    outcome = engine.cancel_and_resubmit(wi, new_spec, "sampling changed by user", "human:tao (simulated)")
+    outcome = engine.cancel_and_resubmit(wi, new_spec, "sampling changed by user", operator() + " (simulated)")
     print(f"cancelled: {outcome['cancelled']}")
     print(f"cleaned  : {outcome['cleaned']} (only that directory)")
     print(f"resubmit : {outcome['new_run_id']} (supersedes {outcome['superseded']})")
@@ -443,13 +455,13 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
     assert (service.root / outcome["new_run_id"] / ".magnolia-run").exists()
 
     print("--- terminal race: job finished BEFORE the cancel could land ---")
-    req2 = ingest_letter(engine, {**NK2R_LETTER, "source_event_id": "letter-cancel-2"})
+    req2 = ingest_letter(engine, {**DEMO_LETTER, "source_event_id": "letter-cancel-2"})
     wi2 = req2["work_item_id"]
-    engine.approve(wi2, req2["nonce"], "human:tao (simulated)")
+    engine.approve(wi2, req2["nonce"], operator() + " (simulated)")
     service.submit("run_B")
     engine.park_on_job(wi2, "run_B")
     service.set_state("run_B", "completed")
-    race = engine.cancel_and_resubmit(wi2, new_spec, "late parameter change", "human:tao (simulated)")
+    race = engine.cancel_and_resubmit(wi2, new_spec, "late parameter change", operator() + " (simulated)")
     print(f"resubmitted={race['resubmitted']} reason={race['reason']}")
     assert race["resubmitted"] is False
     assert (service.root / "run_B" / ".magnolia-run").exists(), "results must be preserved"
@@ -480,7 +492,7 @@ def main() -> int:
             p.add_argument("nonce")
         if name == "follow-up":
             p.add_argument("--text", required=True)
-            p.add_argument("--actor", default="human:tao")
+            p.add_argument("--actor", default=operator())
         if name == "demo-local":
             p.add_argument("--workdir", default=None)
         if name == "demo-cancel":
@@ -503,7 +515,7 @@ def main() -> int:
         return 0
     if args.command == "approve":
         engine = get_engine(args.db)
-        wi = engine.approve(args.work_item_id, args.nonce, "human:tao (operator-terminal)")
+        wi = engine.approve(args.work_item_id, args.nonce, operator() + " (operator-terminal)")
         print(json.dumps({"state": wi["state"], "mandate": wi["mandate_id"]}, indent=2))
         return 0
     if args.command == "execute":

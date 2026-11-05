@@ -30,7 +30,7 @@ def parked(engine, run_id="run_A", event=None):
         engine, {**agentd.NK2R_LETTER, "source_event_id": event or run_id}
     )
     wi = req["work_item_id"]
-    engine.approve(wi, req["nonce"], "human:tao")
+    engine.approve(wi, req["nonce"], agentd.operator())
     engine.job_service.submit(run_id)
     engine.park_on_job(wi, run_id)
     return wi
@@ -40,7 +40,7 @@ def test_happy_path_cancel_cleanup_resubmit(tmp_path):
     engine = make_engine(tmp_path)
     wi = parked(engine)
     old_dir = Path(engine.job_service.jobs["run_A"]["run_dir"])
-    outcome = engine.cancel_and_resubmit(wi, NEW_SPEC, "user changed sampling", "human:tao")
+    outcome = engine.cancel_and_resubmit(wi, NEW_SPEC, "user changed sampling", agentd.operator())
 
     assert outcome["resubmitted"] is True
     assert outcome["cancelled"] == "run_A"
@@ -75,7 +75,7 @@ def test_terminal_race_fetches_instead_of_deleting(tmp_path):
     engine = make_engine(tmp_path)
     wi = parked(engine, run_id="run_B")
     engine.job_service.set_state("run_B", "completed")
-    outcome = engine.cancel_and_resubmit(wi, NEW_SPEC, "late change", "human:tao")
+    outcome = engine.cancel_and_resubmit(wi, NEW_SPEC, "late change", agentd.operator())
     assert outcome == {"resubmitted": False, "reason": "already_terminal", "run_id": "run_B"}
     assert (engine.job_service.root / "run_B" / MARKER).exists()
     assert engine.store.get("work_items", "work_item_id", wi)["job_run_id"] == "run_B"
@@ -97,9 +97,9 @@ def test_cleanup_guard_refuses_missing_marker(tmp_path):
 def test_cancel_requires_waiting_job(tmp_path):
     engine = make_engine(tmp_path)
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     try:
-        engine.cancel_and_resubmit(req["work_item_id"], NEW_SPEC, "too early", "human:tao")
+        engine.cancel_and_resubmit(req["work_item_id"], NEW_SPEC, "too early", agentd.operator())
         assert False
     except RouterError as e:
         assert "waiting_job" in str(e)

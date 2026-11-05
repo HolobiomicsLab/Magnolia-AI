@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from router_runner import agentd
 from router_runner.admission import AdmissionPolicy
 from router_runner.engine import ControlEngine
 from router_runner.models import (
@@ -34,13 +35,13 @@ SPEC = WorkSpec(
 
 def make_engine(db_path):
     policy = AdmissionPolicy(
-        allowed_senders=frozenset({"human:tao"}),
+        allowed_senders=frozenset({agentd.operator()}),
         allowed_projects=frozenset({"demo"}),
     )
     return ControlEngine(ControlStore(str(db_path)), policy)
 
 
-def letter(event="evt-1", actor="human:tao", project="demo"):
+def letter(event="evt-1", actor=agentd.operator(), project="demo"):
     return TriggerSpec(
         source_id="inbox:test",
         source_event_id=event,
@@ -53,7 +54,7 @@ def letter(event="evt-1", actor="human:tao", project="demo"):
 def admitted_work_item(engine, event="evt-1"):
     trigger, _ = engine.ingest(letter(event))
     req = engine.request_work(trigger["trigger_id"], SPEC)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req
 
 
@@ -102,7 +103,7 @@ def test_approval_requires_correct_nonce(tmp_path):
     trigger, _ = engine.ingest(letter())
     req = engine.request_work(trigger["trigger_id"], SPEC)
     try:
-        engine.approve(req["work_item_id"], "f" * 32, "human:tao")
+        engine.approve(req["work_item_id"], "f" * 32, agentd.operator())
         assert False
     except ApprovalError:
         pass
@@ -114,7 +115,7 @@ def test_approval_is_single_use(tmp_path):
     engine = make_engine(tmp_path / "a.db")
     req = admitted_work_item(engine)
     try:
-        engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+        engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
         assert False
     except ApprovalError as e:
         assert "single-use" in str(e)
@@ -129,7 +130,7 @@ def test_approval_binds_exact_content(tmp_path):
         "work_items", "work_item_id", req["work_item_id"], {"scope": "wider scope"}
     )
     try:
-        engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+        engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
         assert False
     except ApprovalError as e:
         assert "content changed" in str(e)
@@ -195,7 +196,7 @@ def test_illegal_transition_rejected(tmp_path):
     req = admitted_work_item(engine)
     engine.execute(req["work_item_id"])
     try:
-        engine.stop(req["work_item_id"], "human:tao")
+        engine.stop(req["work_item_id"], agentd.operator())
         assert False
     except IllegalTransition:
         pass
@@ -204,7 +205,7 @@ def test_illegal_transition_rejected(tmp_path):
 def test_human_stop_prevents_resume(tmp_path):
     engine = make_engine(tmp_path / "a.db")
     req = admitted_work_item(engine)
-    engine.stop(req["work_item_id"], "human:tao")
+    engine.stop(req["work_item_id"], agentd.operator())
     try:
         engine.execute(req["work_item_id"])
         assert False

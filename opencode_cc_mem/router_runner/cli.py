@@ -11,6 +11,7 @@ and a simulated restart. No LLM, no real jobs, no network.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .admission import AdmissionPolicy
@@ -27,7 +28,7 @@ from .store import ControlStore
 
 def build_engine(db_path: str) -> ControlEngine:
     policy = AdmissionPolicy(
-        allowed_senders=frozenset({"human:tao"}),
+        allowed_senders=frozenset({os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator")}),
         allowed_projects=frozenset({"demo"}),
     )
     return ControlEngine(ControlStore(db_path), policy)
@@ -45,7 +46,7 @@ def demo(db_path: str) -> int:
     letter = TriggerSpec(
         source_id="inbox:demo",
         source_event_id="letter-2026-11-03-001",
-        actor="human:tao",
+        actor=os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator"),
         project_hint="demo",
         payload={"title": "Demo: run a docking pilot", "body": "synthetic demo"},
     )
@@ -76,7 +77,7 @@ def demo(db_path: str) -> int:
         print(f"rejected as expected: {e}")
 
     step("5. Operator-terminal approval -> Decision + Mandate -> queued")
-    wi_row = engine.approve(wi, nonce=req["nonce"], approver="human:tao (simulated)")
+    wi_row = engine.approve(wi, nonce=req["nonce"], approver=os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator") + " (simulated)")
     print(f"state={wi_row['state']} mandate={wi_row['mandate_id']}")
 
     step("6. Execute: Effect stored BEFORE the run; receipt + evidence links")
@@ -102,7 +103,7 @@ def demo(db_path: str) -> int:
 
     step("10. Illegal transition is rejected (completed -> stopped)")
     try:
-        engine2.stop(wi, by="human:tao")
+        engine2.stop(wi, by=os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator"))
     except IllegalTransition as e:
         print(f"rejected as expected: {e}")
 
@@ -110,14 +111,14 @@ def demo(db_path: str) -> int:
     letter2 = TriggerSpec(
         source_id="inbox:demo",
         source_event_id="letter-2026-11-03-002",
-        actor="human:tao",
+        actor=os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator"),
         project_hint="demo",
         payload={"title": "second idea"},
     )
     t2, _ = engine2.ingest(letter2)
     req2 = engine2.request_work(t2["trigger_id"], spec)
-    engine2.approve(req2["work_item_id"], req2["nonce"], "human:tao (simulated)")
-    engine2.stop(req2["work_item_id"], by="human:tao")
+    engine2.approve(req2["work_item_id"], req2["nonce"], os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator") + " (simulated)")
+    engine2.stop(req2["work_item_id"], by=os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator"))
     print(f"work item {req2['work_item_id']} state=stopped")
     try:
         engine2.execute(req2["work_item_id"])

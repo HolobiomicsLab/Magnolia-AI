@@ -25,7 +25,7 @@ def make_engine(tmp_path, adapter=None):
 
 def approved(engine):
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req["work_item_id"]
 
 
@@ -91,7 +91,7 @@ def test_final_only_filter_for_guidance(tmp_path):
     engine.record_finding(wi, "scientific", "intermediate observation")
     engine.record_finding(wi, "scientific", "completed result", outcome_status="completed_campaign")
     validated = engine.record_finding(wi, "operational", "human-approved lesson")
-    engine.validate_finding(validated["finding_id"], "human:tao")
+    engine.validate_finding(validated["finding_id"], agentd.operator())
     final = engine.findings(wi, final_only=True)
     assert {r["text"] for r in final} == {"completed result", "human-approved lesson"}
     assert len(engine.findings(wi)) == 3
@@ -100,7 +100,7 @@ def test_final_only_filter_for_guidance(tmp_path):
 def test_validate_finding_requires_known_id(tmp_path):
     engine = make_engine(tmp_path)
     try:
-        engine.validate_finding("fnd_nope", "human:tao")
+        engine.validate_finding("fnd_nope", agentd.operator())
         assert False
     except RouterError:
         pass

@@ -41,7 +41,7 @@ def dead_pid() -> int:
 
 def approved_nk2r(engine):
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req["work_item_id"]
 
 

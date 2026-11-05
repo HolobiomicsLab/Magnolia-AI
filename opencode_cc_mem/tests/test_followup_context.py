@@ -24,14 +24,14 @@ def make_engine(tmp_path):
 
 def approved(engine):
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req["work_item_id"]
 
 
 def test_followup_on_active_item_is_context_post_only(tmp_path):
     engine = make_engine(tmp_path)
     wi = approved(engine)
-    result = engine.follow_up(wi, "human:tao", "note: prefer s20000 later")
+    result = engine.follow_up(wi, agentd.operator(), "note: prefer s20000 later")
     assert result["kind"] == "post"
     assert len(engine.store.all("work_items")) == 1
     posts = engine.store.all("thread_posts", "work_item_id = ?", (wi,))
@@ -42,7 +42,7 @@ def test_followup_after_completion_creates_linked_work_item(tmp_path):
     engine = make_engine(tmp_path)
     wi = approved(engine)
     engine.execute(wi)
-    result = engine.follow_up(wi, "human:tao", "now run selectivity")
+    result = engine.follow_up(wi, agentd.operator(), "now run selectivity")
     assert result["kind"] == "work_item"
     child = engine.store.get("work_items", "work_item_id", result["work_item_id"])
     parent = engine.store.get("work_items", "work_item_id", wi)
@@ -52,7 +52,7 @@ def test_followup_after_completion_creates_linked_work_item(tmp_path):
     assert parent["state"] == "completed"  # never resurrected
     assert len(engine.store.all("work_items")) == 2
     # The new item has its own single-use approval path.
-    engine.approve(child["work_item_id"], result["nonce"], "human:tao")
+    engine.approve(child["work_item_id"], result["nonce"], agentd.operator())
     assert engine.store.get("work_items", "work_item_id", child["work_item_id"])["state"] == "queued"
 
 
@@ -60,7 +60,7 @@ def test_context_package_is_bounded_and_marks_delta(tmp_path):
     engine = make_engine(tmp_path)
     wi = approved(engine)
     for i in range(3):
-        engine.follow_up(wi, "human:tao", f"note {i}")
+        engine.follow_up(wi, agentd.operator(), f"note {i}")
     engine.execute(wi)
 
     package = engine.context_package(wi, k=3)
@@ -80,8 +80,8 @@ def test_context_package_caps_attempts_and_links_parent(tmp_path):
     engine = make_engine(tmp_path)
     wi = approved(engine)
     engine.execute(wi)
-    follow = engine.follow_up(wi, "human:tao", "second round")
-    engine.approve(follow["work_item_id"], follow["nonce"], "human:tao")
+    follow = engine.follow_up(wi, agentd.operator(), "second round")
+    engine.approve(follow["work_item_id"], follow["nonce"], agentd.operator())
     engine.execute(follow["work_item_id"])
 
     package = engine.context_package(follow["work_item_id"], k=1)

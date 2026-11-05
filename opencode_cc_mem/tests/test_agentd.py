@@ -38,7 +38,7 @@ def test_nk2r_protocol_is_registered_and_hashed():
 def test_nk2r_taskpack_end_to_end(tmp_path):
     engine = make_engine(tmp_path)
     req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
-    engine.approve(req["work_item_id"], req["nonce"], "human:tao")
+    engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     outcome = engine.execute(req["work_item_id"])
     result = outcome["result"]
     assert result["outcome"] == "completed"
