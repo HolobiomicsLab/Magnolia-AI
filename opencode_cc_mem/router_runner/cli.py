@@ -28,7 +28,7 @@ from .store import ControlStore
 def build_engine(db_path: str) -> ControlEngine:
     policy = AdmissionPolicy(
         allowed_senders=frozenset({"human:tao"}),
-        allowed_projects=frozenset({"hsc70", "xiulian", "literature"}),
+        allowed_projects=frozenset({"demo"}),
     )
     return ControlEngine(ControlStore(db_path), policy)
 
@@ -43,11 +43,11 @@ def demo(db_path: str) -> int:
 
     step("1. Ingest one synthetic idea letter as an immutable Trigger")
     letter = TriggerSpec(
-        source_id="inbox:literature",
+        source_id="inbox:demo",
         source_event_id="letter-2026-11-03-001",
         actor="human:tao",
-        project_hint="hsc70",
-        payload={"title": "Idea: rerun hsc70 met-proxy pilot", "body": "synthetic demo"},
+        project_hint="demo",
+        payload={"title": "Demo: run a docking pilot", "body": "synthetic demo"},
     )
     trigger, created = engine.ingest(letter)
     print(f"trigger {trigger['trigger_id']} created={created}")
@@ -59,8 +59,8 @@ def demo(db_path: str) -> int:
 
     step("3. Deterministic gate + candidate Work Item + approval request")
     spec = WorkSpec(
-        project="hsc70",
-        protocol="hsc70-met-proxy-v1",
+        project="demo",
+        protocol="demo-docking-v1",
         scope="one fake docking campaign",
         budget="0 core-hours (fake adapter)",
     )
@@ -108,10 +108,10 @@ def demo(db_path: str) -> int:
 
     step("11. Human stop prevents automatic resume (second letter)")
     letter2 = TriggerSpec(
-        source_id="inbox:literature",
+        source_id="inbox:demo",
         source_event_id="letter-2026-11-03-002",
         actor="human:tao",
-        project_hint="hsc70",
+        project_hint="demo",
         payload={"title": "second idea"},
     )
     t2, _ = engine2.ingest(letter2)

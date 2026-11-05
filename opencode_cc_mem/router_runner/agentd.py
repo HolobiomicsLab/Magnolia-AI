@@ -6,16 +6,19 @@ therefore ingests letters, applies the deterministic gate, and stages approval
 requests — it NEVER executes work on its own. Execution requires an explicit
 operator-terminal approval (Option A) followed by `agentd execute`.
 
-Letters are JSON files in an inbox directory:
+Letters are JSON files in an inbox directory (project names are DEPLOYMENT
+configuration, never repo code):
 {
-  "source_id": "inbox:literature",
+  "source_id": "inbox:<your-project>",
   "source_event_id": "letter-001",
   "actor": "human:tao",
-  "project_hint": "nk2r_challenge",
+  "project_hint": "<your-project>",
   "payload": {"title": "..."},
-  "work_spec": {"project": "nk2r_challenge", "protocol": "nk2r-challenge-v0.1",
+  "work_spec": {"project": "<your-project>", "protocol": "<protocol-id>",
                 "scope": "...", "budget": "..."}
 }
+Set MAGNOLIA_AGENTD_PROJECTS (comma-separated) to the projects this daemon may
+admit. Without it, only the placeholder project "demo" is allowed.
 
 Usage (from opencode_cc_mem/):
     python3 -m router_runner.agentd init --db /tmp/agentd.db
@@ -42,13 +45,11 @@ from .store import ControlStore
 
 
 def default_policy(allowed_projects: set[str] | None = None) -> AdmissionPolicy:
-    """Admission policy. Project names are deployment-specific and are NOT
-    hardcoded here: set MAGNOLIA_AGENTD_PROJECTS (comma-separated) locally.
-    The default keeps only the public/demo names used by the tests."""
+    """Admission policy. Project names are deployment-specific and are NEVER
+    hardcoded in the repo: set MAGNOLIA_AGENTD_PROJECTS (comma-separated)
+    locally. Without config, only the neutral placeholder "demo" is allowed."""
     if allowed_projects is None:
-        raw = os.environ.get(
-            "MAGNOLIA_AGENTD_PROJECTS", "xiulian,literature,nk2r_challenge"
-        )
+        raw = os.environ.get("MAGNOLIA_AGENTD_PROJECTS", "demo")
         allowed_projects = {p.strip() for p in raw.split(",") if p.strip()}
     return AdmissionPolicy(
         allowed_senders=frozenset({"human:tao"}),
@@ -105,19 +106,25 @@ def watch(inbox: Path, db: str, once: bool = False, quiet: bool = False,
     return summary
 
 
-NK2R_LETTER = {
-    "source_id": "inbox:literature",
-    "source_event_id": "letter-nk2r-2026-11-03",
-    "actor": "human:tao",
-    "project_hint": "nk2r_challenge",
-    "payload": {"title": "Try the NK2R peptide-design task"},
-    "work_spec": {
-        "project": "nk2r_challenge",
-        "protocol": "nk2r-challenge-v0.1",
-        "scope": "one NK2R funnel run (60 candidates, calibrated)",
-        "budget": "local seconds, no external jobs",
-    },
-}
+def demo_letter(project: str = "demo", event_id: str = "letter-demo-1") -> dict:
+    """Neutral demo letter: no real project names. Demos/tests use the
+    placeholder project "demo"; real deployments pass their own names."""
+    return {
+        "source_id": "inbox:demo",
+        "source_event_id": event_id,
+        "actor": "human:tao",
+        "project_hint": project,
+        "payload": {"title": "Demo work item"},
+        "work_spec": {
+            "project": project,
+            "protocol": "nk2r-challenge-v0.1",
+            "scope": "one demo funnel run (60 candidates, calibrated)",
+            "budget": "local seconds, no external jobs",
+        },
+    }
+
+
+NK2R_LETTER = demo_letter("demo", "letter-nk2r-2026-11-03")
 
 
 def demo_nk2r(db: str, out_root: str | None = None) -> int:
@@ -423,8 +430,8 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
     print("--- mid-wait: new information changes the sampling parameter ---")
     engine.follow_up(wi, "human:tao", "s10000 is too small, use s20000")
     new_spec = WorkSpec(
-        project="nk2r_challenge", protocol="nk2r-challenge-v0.1",
-        scope="NK2R funnel with s20000", budget="local seconds",
+        project="demo", protocol="nk2r-challenge-v0.1",
+        scope="demo funnel with s20000", budget="local seconds",
     )
     outcome = engine.cancel_and_resubmit(wi, new_spec, "sampling changed by user", "human:tao (simulated)")
     print(f"cancelled: {outcome['cancelled']}")

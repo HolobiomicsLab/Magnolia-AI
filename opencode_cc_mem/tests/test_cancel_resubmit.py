@@ -16,7 +16,7 @@ from router_runner.job_service import MARKER
 from router_runner.models import ApprovalError, RouterError, WorkItemState, WorkSpec
 
 NEW_SPEC = WorkSpec(
-    project="nk2r_challenge", protocol="nk2r-challenge-v0.1",
+    project="demo", protocol="nk2r-challenge-v0.1",
     scope="NK2R funnel with s20000", budget="local seconds",
 )
 

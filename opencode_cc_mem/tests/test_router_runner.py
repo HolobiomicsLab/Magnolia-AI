@@ -25,8 +25,8 @@ from router_runner.models import (
 from router_runner.store import ControlStore
 
 SPEC = WorkSpec(
-    project="hsc70",
-    protocol="hsc70-met-proxy-v1",
+    project="demo",
+    protocol="demo-docking-v1",
     scope="test scope",
     budget="0 (fake)",
 )
@@ -35,12 +35,12 @@ SPEC = WorkSpec(
 def make_engine(db_path):
     policy = AdmissionPolicy(
         allowed_senders=frozenset({"human:tao"}),
-        allowed_projects=frozenset({"hsc70", "xiulian"}),
+        allowed_projects=frozenset({"demo"}),
     )
     return ControlEngine(ControlStore(str(db_path)), policy)
 
 
-def letter(event="evt-1", actor="human:tao", project="hsc70"):
+def letter(event="evt-1", actor="human:tao", project="demo"):
     return TriggerSpec(
         source_id="inbox:test",
         source_event_id=event,
@@ -89,7 +89,7 @@ def test_admission_rejects_unknown_sender(tmp_path):
 
 def test_admission_rejects_unknown_project(tmp_path):
     engine = make_engine(tmp_path / "a.db")
-    trigger, _ = engine.ingest(letter(project="gpx4"))
+    trigger, _ = engine.ingest(letter(project="other_project"))
     try:
         engine.request_work(trigger["trigger_id"], SPEC)
         assert False

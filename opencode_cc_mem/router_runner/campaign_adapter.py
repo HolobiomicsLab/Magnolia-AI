@@ -4,8 +4,9 @@ Only pre-registered protocols may run (assessment section 17: the adapter
 exposes a narrow interface, never arbitrary protocol or shell execution).
 The adapter is deterministic, uses no LLM, and submits no real jobs.
 
-'hsc70-met-proxy-v1' stands in for the future live pilot protocol (decision
-#5: hsc70 with an existing approved protocol; Nle explicitly out of scope).
+'demo-docking-v1' is a placeholder protocol for control-plane demos. Real
+protocols are registered as task packs (see taskpacks.py), and project names
+come from deployment configuration — never from this file.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from .models import RouterError, canonical_hash, new_id
 from .taskpacks import TASK_PACKS, run_task_pack, task_pack_hash
 
 PROTOCOLS = {
-    "hsc70-met-proxy-v1": {
+    "demo-docking-v1": {
         "kind": "docking-campaign",
         "stages": ["setup", "dock", "score"],
         "oracle": "fake-known-answer",
