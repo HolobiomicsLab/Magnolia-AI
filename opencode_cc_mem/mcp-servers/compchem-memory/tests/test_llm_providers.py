@@ -26,6 +26,9 @@ def _clean_env(monkeypatch):
         "KIMI_PLAN_MAGNOLIA_API_KEY",
         "KIMI_API_KEY",
         "KIMI_BASE_URL",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL",
+        "OPENROUTER_CODING_API_KEY",
     ]:
         monkeypatch.delenv(k, raising=False)
 

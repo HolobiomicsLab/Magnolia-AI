@@ -291,6 +291,11 @@ class TestConfidenceDecay:
 
 
 class TestFailurePattern:
+    @pytest.fixture(autouse=True)
+    def _no_openrouter_llm(self, monkeypatch):
+        for var in ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_CODING_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+
     def test_failure_pattern_type_boost(self):
         entry = {
             "title": "failure",

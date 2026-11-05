@@ -21,6 +21,13 @@ from compchem_memory import server
 from compchem_memory.context_assembly import assemble_context
 
 
+@pytest.fixture(autouse=True)
+def _no_llm_rerank(monkeypatch):
+    """Deterministic heuristic selection: no LLM provider key in this file."""
+    for var in ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_CODING_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+
 def _frontmatter(path: str) -> dict:
     text = Path(path).read_text()
     block = text.split("---", 2)[1]

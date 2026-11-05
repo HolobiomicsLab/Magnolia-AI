@@ -62,8 +62,9 @@ PROVIDER_DEEPSEEK = "deepseek"
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI = "openai"
 PROVIDER_KIMI = "kimi"
+PROVIDER_OPENROUTER = "openrouter"
 
-_VALID_PROVIDERS = {PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI}
+_VALID_PROVIDERS = {PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI, PROVIDER_OPENROUTER}
 
 _DEFAULT_MODEL = {
     # deepseek-flash is the direct API's name for DeepSeek-V4.1-Flash (the
@@ -74,18 +75,23 @@ _DEFAULT_MODEL = {
     PROVIDER_OPENAI: "gpt-4o-mini",
     # Kimi K3 on the Kimi-for-Coding plan endpoint (models.dev id "k3").
     PROVIDER_KIMI: "k3",
+    # OpenRouter (openrouter.ai): any vendor/model id is accepted; default is
+    # DeepSeek-V4.1-Flash via the gateway, same role as the direct provider.
+    PROVIDER_OPENROUTER: "deepseek/deepseek-v4.1-flash",
 }
 
 _DEFAULT_BASE = {
     PROVIDER_DEEPSEEK: "https://api.deepseek.com/v1",
     PROVIDER_OPENAI: "https://api.openai.com/v1",
     PROVIDER_KIMI: "https://api.kimi.com/coding/v1",
+    PROVIDER_OPENROUTER: "https://openrouter.ai/api/v1",
 }
 
 _BASE_URL_ENV = {
     PROVIDER_DEEPSEEK: "DEEPSEEK_BASE_URL",
     PROVIDER_OPENAI: "OPENAI_BASE_URL",
     PROVIDER_KIMI: "KIMI_BASE_URL",
+    PROVIDER_OPENROUTER: "OPENROUTER_BASE_URL",
 }
 
 
@@ -116,6 +122,8 @@ def _autodetect_provider() -> str | None:
         return PROVIDER_OPENAI
     if os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY"):
         return PROVIDER_KIMI
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return PROVIDER_OPENROUTER
     return None
 
 
@@ -134,6 +142,8 @@ def _get_api_key(provider: str) -> str | None:
     if provider == PROVIDER_KIMI:
         # Magnolia-specific plan key first; KIMI_API_KEY is the models.dev convention.
         return os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY")
+    if provider == PROVIDER_OPENROUTER:
+        return os.environ.get("OPENROUTER_API_KEY")
     return None
 
 
@@ -162,6 +172,11 @@ _MODEL_PREFIX_PROVIDERS: tuple[tuple[str, str], ...] = (
 
 def _provider_for_model(model: str) -> str | None:
     m = model.strip().lower()
+    # OpenRouter uses vendor/model ids (e.g. deepseek/deepseek-v4.1-flash).
+    # Check the slash form BEFORE the plain-vendor prefixes so an OpenRouter
+    # id is not hijacked by the direct provider with the same prefix.
+    if "/" in m:
+        return PROVIDER_OPENROUTER
     for prefix, provider in _MODEL_PREFIX_PROVIDERS:
         if m.startswith(prefix):
             return provider
@@ -398,7 +413,14 @@ def _call_openai_compat(
         body["thinking"] = {"type": "disabled"}
     resp = httpx.post(
         url,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            **({
+                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://magnolia.local"),
+                "X-Title": os.environ.get("OPENROUTER_TITLE", "Magnolia"),
+            } if provider == PROVIDER_OPENROUTER else {}),
+        },
         json=body,
         timeout=60,
     )
