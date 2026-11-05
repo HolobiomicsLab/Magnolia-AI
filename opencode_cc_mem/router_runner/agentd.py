@@ -472,10 +472,40 @@ def demo_cancel(db: str, workdir: str | None = None, out_root: str | None = None
     return 0
 
 
+def router_chat(db: str, registry: dict | None = None) -> int:
+    """Interactive frontal-router REPL.
+
+    Reads one message per line and prints the structured RouteReply. 'quit',
+    'exit', or 'q' leaves the REPL itself (this is not the project exit phrase
+    'back to router', which only clears the handoff state).
+    """
+    router = router_from_db(db, registry=registry)
+    print("Frontal router ready. One message per line; 'quit' to leave.")
+    while True:
+        try:
+            text = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not text:
+            continue
+        if text.lower() in {"quit", "exit", "q"}:
+            break
+        reply = router.say(text)
+        print(json.dumps({
+            "kind": reply.kind,
+            "project": reply.project,
+            "work_item_id": reply.work_item_id,
+            "detail": reply.detail,
+            "flags": reply.flags,
+        }, indent=2))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "run":
@@ -549,6 +579,9 @@ def main() -> int:
     if args.command == "demo-router":
         from .replay import demo_router
         return demo_router(args.db)
+    if args.command == "router-chat":
+        from .router import load_registry
+        return router_chat(args.db, registry=load_registry())
     return 1
 
 

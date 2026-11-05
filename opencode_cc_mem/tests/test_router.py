@@ -113,6 +113,19 @@ def test_back_to_router_clears_handoff_state(tmp_path):
     assert router.say("in proj_b: new task").kind == "handoff"
 
 
+def test_router_chat_repl(tmp_path, monkeypatch, capsys):
+    inputs = iter(["in proj_a: dock the peptide", "quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    rc = agentd.router_chat(str(tmp_path / "router.db"), registry={
+        "proj_a": {"inbox": str(tmp_path / "proj_a" / "inbox")},
+        "demo": {},
+    })
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert '"kind": "handoff"' in out
+    assert '"project": "proj_a"' in out
+
+
 def test_registry_discovery_from_agent_json(tmp_path, monkeypatch):
     from router_runner.router import load_registry
     root = tmp_path / "projects"

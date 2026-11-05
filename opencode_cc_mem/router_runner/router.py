@@ -234,3 +234,6 @@ class Router:
 def router_from_db(db: str, registry: dict | None = None) -> Router:
     from .agentd import get_engine
     return Router(get_engine(db), registry=registry)
+
+
+def router_chat(db: str, registry: dict | None = None) -> int:
