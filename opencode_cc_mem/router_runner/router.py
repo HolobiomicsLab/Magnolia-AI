@@ -196,6 +196,9 @@ class Router:
             path.write_text(letter, encoding="utf-8")
             self._last_project = project
             return RouteReply("handoff", project=project, detail=str(path), flags=flags)
+        except OSError as exc:
+            return RouteReply("rejected", project=project, detail=f"handoff failed: {exc}", flags=flags)
+
     def _follow_up(self, work_item_id: str, text: str, flags: list[str]) -> RouteReply:
         try:
             wi = self.engine.store.get("work_items", "work_item_id", work_item_id)
