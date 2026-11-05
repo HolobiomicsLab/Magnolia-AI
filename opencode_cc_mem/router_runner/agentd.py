@@ -42,6 +42,7 @@ from .campaign_adapter import CompositeAdapter
 from .engine import ControlEngine
 from .models import RouterError, TriggerSpec, WorkSpec
 from .store import ControlStore
+from .router import router_from_db
 
 
 def operator() -> str:
