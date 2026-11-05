@@ -55,6 +55,8 @@ _BOOT_T0 = time.monotonic()  # anchor for server-import latency in the boot-timi
 
 from fastmcp import FastMCP
 
+from . import project_context
+
 from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager
 from compchem_memory.tiers.project import ProjectManager
@@ -294,8 +296,11 @@ def _get_extractor(project_dir: str | None = None) -> AutomaticMemoryExtractor:
     return _extractor
 
 
+from . import project_context
+
+
 def _resolve_project_store(project_dir: str | None = None) -> str:
-    pd = resolve_project_dir(project_dir, PROJECT_DIR)
+    pd = resolve_project_dir(project_dir, project_context.effective_project_dir())
     ensure_project_store(pd)
     return pd
 
@@ -409,7 +414,8 @@ def memory_record_session(
     data should contain: tool_name, args, result_summary, error (if any).
 
     Call this when: logging an observation the auto-capture decorator cannot infer (e.g., user-stated intent, a design decision, a hypothesis)."""
-    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
@@ -447,7 +453,8 @@ def memory_record_learning(
             f"outcome_status must be one of {sorted(_OUTCOME_STATUSES)}, "
             f"got {outcome_status!r}"
         )
-    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
@@ -568,7 +575,8 @@ def memory_record_run(
     """Append a new run record to the project's run history index.
 
     Call this when: a scientific run has completed and you want to record its metadata + status alongside the run history (magnolia-run already does this for recognized tools)."""
-    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
     pd = _resolve_project_store(project_dir)
@@ -648,7 +656,8 @@ def post_run_assess(
     existing record for run_dir is reused, else basename(run_dir).
 
     Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
-    guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=True)
+    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
     from compchem_memory.learning.orchestrator import assess_and_record
