@@ -47,6 +47,14 @@ and terminal follow-ups, stop/resume, progress, unknown Work Item) and reports:
 
 Use it before trusting any routing change.
 
+## Leaving a project (`back to router`)
+
+Exit is a user signal, never an automatic redirect. Saying **"back to router"**
+(or "switch to", "new topic", "done here", "leave project") returns a
+`return_to_router` reply and clears the handoff state, so your next message
+routes fresh. It does **not** stop any running job: Work Items, lane sessions,
+and memory persist. The router session itself is never closed.
+
 ## Using it with your project
 
 The Router is project-agnostic; any project is supplied by configuration, not

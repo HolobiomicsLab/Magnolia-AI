@@ -33,6 +33,10 @@ AT_PROJECT = re.compile(r"@([A-Za-z0-9_-]+)")
 IN_PROJECT = re.compile(r"^\s*(?:in|on|about|for)\s+([A-Za-z0-9_-]+)\s*[:,;]", re.I)
 HOW_IS_PROJECT = re.compile(r"\bhow\s+(?:is|are)\s+([A-Za-z0-9_-]+)\s+doing\b", re.I)
 STOP_CMD = re.compile(r"^\s*(?:stop|cancel|kill)\s+(wi_[a-f0-9]{12})\b", re.I)
+BACK_TO_ROUTER = re.compile(
+    r"^\s*(?:back to router|return to router|switch to|new topic|done here|leave project|exit project)\b",
+    re.I,
+)
 STATUS_WORDS = re.compile(r"\b(progress|status|how is|how's|where are we|update)\b", re.I)
 INJECTION = re.compile(
     r"\b(ignore (the )?(gate|rules|policy|previous|above)|bypass|override|jailbreak|"
@@ -119,6 +123,18 @@ class Router:
 
     def say(self, text: str) -> RouteReply:
         flags = ["untrusted_text"] if INJECTION.search(text) else []
+        if BACK_TO_ROUTER.search(text):
+            previous = getattr(self, "_last_project", None)
+            self._last_project = None
+            return RouteReply(
+                "return_to_router",
+                project=previous,
+                detail=(
+                    f"Leaving {previous or 'the project'}; the router session is still open. "
+                    "Your next message routes fresh. Work items, memory, and lane sessions persist."
+                ),
+                flags=flags,
+            )
         if STOP_CMD.search(text):
             wi = STOP_CMD.search(text).group(1)
             try:
@@ -178,34 +194,8 @@ class Router:
             from .models import new_id
             path = Path(lane_inbox) / f"{new_id('route')}.task.md"
             path.write_text(letter, encoding="utf-8")
+            self._last_project = project
             return RouteReply("handoff", project=project, detail=str(path), flags=flags)
-        except OSError as exc:
-            return RouteReply("rejected", project=project, detail=f"handoff failed: {exc}", flags=flags)
-
-    def _handoff(self, project: str, text: str, flags: list[str]) -> RouteReply:
-        if project not in self.registry:
-            return RouteReply("rejected", detail=f"project not allowed: {project}", flags=flags)
-        lane_inbox = self.registry[project].get("inbox")
-        if not lane_inbox:
-            return RouteReply("clarify", project=project,
-                              detail=f"no lane inbox configured for {project}", flags=flags)
-        letter = (
-            "status: open\n"
-            f"project: {project}\n\n"
-            "# Routed message\n\n"
-            f"{text}\n\n"
-            "## Router note\n"
-            "Continue the discussion here. If you later submit jobs, report run_ids.\n"
-        )
-        try:
-            Path(lane_inbox).mkdir(parents=True, exist_ok=True)
-            from .models import new_id
-            path = Path(lane_inbox) / f"{new_id('route')}.task.md"
-            path.write_text(letter, encoding="utf-8")
-            return RouteReply("handoff", project=project, detail=str(path), flags=flags)
-        except OSError as exc:
-            return RouteReply("rejected", project=project, detail=f"handoff failed: {exc}", flags=flags)
-
     def _follow_up(self, work_item_id: str, text: str, flags: list[str]) -> RouteReply:
         try:
             wi = self.engine.store.get("work_items", "work_item_id", work_item_id)

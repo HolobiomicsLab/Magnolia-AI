@@ -101,6 +101,18 @@ def test_replay_corpus_all_green(tmp_path):
     assert metrics["resumed_after_stop"] is False
 
 
+def test_back_to_router_clears_handoff_state(tmp_path):
+    router = make_router(tmp_path)
+    router.say("in proj_a: dock the peptide")
+    assert router._last_project == "proj_a"
+    reply = router.say("back to router")
+    assert reply.kind == "return_to_router"
+    assert reply.project == "proj_a"
+    assert router._last_project is None
+    # The next message routes fresh again.
+    assert router.say("in proj_b: new task").kind == "handoff"
+
+
 def test_registry_discovery_from_agent_json(tmp_path, monkeypatch):
     from router_runner.router import load_registry
     root = tmp_path / "projects"
