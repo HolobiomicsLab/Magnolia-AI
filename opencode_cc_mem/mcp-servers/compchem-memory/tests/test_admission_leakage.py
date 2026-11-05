@@ -28,13 +28,13 @@ def test_passes_durable_titles_with_numbers_and_paths_in_content():
     assert leakage_screen({"title": "v6 bake-off recall 72% vs >=95% gate"}) is None
     assert leakage_screen({"title": "Arm3 volume 43.6% vs <=40% gate"}) is None
     c = {"title": "PEPTIDE_X docking pose 2 binds pocket",
-         "content": "see /home/tjiang/repos/project_magnolia-exp/runs/x/out.pdb"}
+         "content": "see /home/user/repos/project_magnolia-exp/runs/x/out.pdb"}
     assert leakage_screen(c) is None
 
 
 def test_flags_session_ids_and_absolute_path_titles():
     assert leakage_screen({"title": "ses_f612d4af5ffe4SAG showed k3 judge drift"}) is not None
-    assert leakage_screen({"title": "/home/tjiang/repos/ad_verum/start-adverum.sh fixed"}) is not None
+    assert leakage_screen({"title": "/home/user/repos/project_x/start-project.sh fixed"}) is not None
 
 
 def test_flags_bare_run_id_only_without_domain_noun():

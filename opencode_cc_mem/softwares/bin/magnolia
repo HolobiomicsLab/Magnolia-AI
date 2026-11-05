@@ -802,7 +802,7 @@ OPENCODE_VERSION="$("$OPENCODE_BIN" --version 2>/dev/null | head -1)"
 echo "opencode: ${OPENCODE_VERSION:-unknown}  db: ${OPENCODE_DB:-default (v1 shared)}" >&2
 if [ "${PRINT_ENV:-0}" = "1" ]; then
     echo "binary:  $OPENCODE_BIN"
-    echo "db:      ${OPENCODE_DB:-/home/tjiang/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
+    echo "db:      ${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
     echo "project: $PROJECT -> $MAGNOLIA_PROJECT_DIR"
     echo "profile: ${PROFILE:-plain}"
     exit 0

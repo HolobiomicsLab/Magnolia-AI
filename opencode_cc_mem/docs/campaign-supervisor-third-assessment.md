@@ -1,7 +1,7 @@
 # Campaign supervisor: third assessment
 
 Date: 2026-10-24
-Target tree: `/home/tjiang/repos/project_magnolia-v2`
+Target tree: `~/repos/project_magnolia-v2`
 Branch: `exp/opencode-v2`
 
 > Status after fixes: the defects in this assessment are fixed in the working

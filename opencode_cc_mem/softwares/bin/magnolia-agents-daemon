@@ -24,7 +24,24 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-AGENTS = ("literature", "xiulian")
+AGENTS: tuple[str, ...] = ()
+
+
+def _default_lanes() -> tuple[str, ...]:
+    """Deployment lane names from local config — never hardcoded.
+
+    Order: MAGNOLIA_AGENTD_AGENTS env, then
+    ~/.config/magnolia/agents-daemon-lanes.txt (comma/newline separated).
+    Empty means discovery-only (projects with agent.json)."""
+    raw = os.environ.get("MAGNOLIA_AGENTD_AGENTS")
+    if raw is None:
+        cfg = Path.home() / ".config" / "magnolia" / "agents-daemon-lanes.txt"
+        if cfg.is_file():
+            raw = cfg.read_text(encoding="utf-8", errors="replace")
+    return tuple(x.strip() for x in (raw or "").replace("\n", ",").split(",") if x.strip())
+
+
+AGENTS = _default_lanes()
 AGENT_REGISTRY_NAME = "agent.json"
 SCAN_INTERVAL_S = 10
 TASK_TIMEOUT_S = 30 * 60
