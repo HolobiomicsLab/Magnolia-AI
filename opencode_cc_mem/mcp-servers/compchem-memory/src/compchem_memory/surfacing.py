@@ -10,7 +10,7 @@ Channels:
 
 Attribution is by SERVING STORE (the resolved .magnolia dir that actually
 served the entries), not by the calling project — a symlinked store
-(ad_verum serving project_b reads) is credited to the store that served.
+(<project A> serving project B reads) is credited to the store that served.
 
 Row shape (one JSON line per surfaced ENTRY; goal/session/run context
 sections are not entries and are not logged):

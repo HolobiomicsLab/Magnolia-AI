@@ -1,7 +1,7 @@
 # NK2R peptide-design challenge — project scaffold
 
 **Status: PROVISIONAL v0.1.** Attempts the NK2R design task from the FRCBS
-(Tsinghua) Peptide Design Competition (Science/AAAS feature), reusing hsc70
+(Tsinghua) Peptide Design Competition (Science/AAAS feature), reusing existing
 peptide-docking machinery. All choices subject to change.
 
 ## What runs today

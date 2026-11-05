@@ -35,4 +35,4 @@
 - Competition submission format, rules, and round status.
 - Whether a membrane-mimetic environment is required for meaningful docking
   scores (HADDOCK3 default is aqueous; this is a real transferability risk from
-  the hsc70 SBD setup, not a detail).
+  an established SBD docking setup, not a detail).

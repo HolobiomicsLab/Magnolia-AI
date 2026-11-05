@@ -36,7 +36,7 @@
 - **RC note (`v0.1.0-rc1`)** — PARKED pending Tao's approval.
 - **P3 campaign rail** — telemetry opener merged; rest not started.
 - **Agents daemon follow-ups.** `from-unknown` fixed via registry; per-project config rendering (MCP-pin race) still open.
-- **ad_verum consolidation** — deferred by user.
+- **project_a consolidation** — deferred by user.
 
 ## To do
 
@@ -52,7 +52,7 @@
 - **Complete the literature paper check:** second letter to ingest arXiv:2609.27334 into the right `_bge` KB.
 - **arXiv API etiquette section** in `projects/literature/inbox/README.md`.
 - **project_a_new revisit (15 min):** 1 promotion proposal, 8 dup sets, 45 confirmable entries.
-- **project_b revisit (ad_verum):** 2 dup sets, 11 confirmable; wrong `--covalent_rec_res` flag correction.
+- **project_b revisit (project_a):** 2 dup sets, 11 confirmable; wrong `--covalent_rec_res` flag correction.
 - **Review 9 duplicate sets pending in xiulian (live tree)** + ~37 remaining obs≥3 confirmables.
 - **Decide fate of TWO stray stores** — `opencode_cc_mem/.magnolia/` (73 files) and repo-root `.magnolia/` (2,848 files, phantom store). #25 rejection keeps them as separate entries; investigation open.
 - **P1 follow-up slices:** retire mandatory AGENTS.md self-report; coverage heartbeat; A2 historical backfill (script done, execution at phase gate).
@@ -89,7 +89,7 @@
 - `~/repos/project_magnolia-exp/opencode_cc_mem/projects/xiulian/.magnolia/reflex/labels.jsonl` — 33 rows.
 - `~/repos/project_magnolia-exp/opencode_cc_mem/projects/xiulian/.magnolia/admission-log.jsonl` — 58 rows.
 - `~/repos/project_magnolia-exp/opencode_cc_mem/projects/xiulian/.magnolia/action-retrieval.jsonl` — 58 new-schema rows.
-- `~/repos/ad_verum` — Ad Verum repo; ASTRA Run schema at commit `891c5cd` (`feat/astra-run-provenance`, PR #2); `indicium/` package; `scripts/sync-magnolia.sh`.
+- `~/repos/project_a` — project A repo; ASTRA Run schema at commit `891c5cd` (`feat/astra-run-provenance`, PR #2); `indicium/` package; `scripts/sync-magnolia.sh`.
 - `~/.local/share/magnolia-v2/bin/opencode` — pinned v2.0.6 binary.
 - `~/.local/share/opencode/opencode-v2.db` — v2's own DB (never the shared v1 DB).
 - `~/.local/share/opencode/opencode.db` — 1.2 GB, SHARED by v1.18.34 and v2.0.6 (v2 probe must set `OPENCODE_DB`).

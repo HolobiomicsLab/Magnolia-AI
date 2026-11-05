@@ -813,8 +813,8 @@ fi
 # and fails two ways: the proxy is dead when the VPN is off (Connect Timeout on
 # the managed:kimi-code OAuth refresh), and even when on, Clash drops Kimi's
 # long-lived streaming socket. Kimi is a directly-reachable CN edge that does
-# NOT need the proxy; overseas hosts still do. Idempotent — mirrors
-# start-adverum.sh. Applies to opencode, its MCP servers, and the OAuth refresh.
+# NOT need the proxy; overseas hosts still do. Idempotent — mirrors the other
+# project launcher wrapper. Applies to opencode, its MCP servers, and the OAuth refresh.
 if [ -n "${HTTPS_PROXY:-}${https_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]; then
   case "${NO_PROXY:-}${no_proxy:-}" in
     *kimi.com*|*127.0.0.1*|*localhost*) ;;  # already exempt

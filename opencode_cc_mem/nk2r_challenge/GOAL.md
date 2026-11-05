@@ -3,12 +3,12 @@
 ## One-line summary
 
 Attempt the FRCBS (Tsinghua) Peptide Design Competition task on NK2R with an
-auditable, calibrated peptide-design funnel, reusing hsc70 docking machinery.
+auditable, calibrated peptide-design funnel, reusing the existing peptide-docking machinery.
 
 ## Inputs
 
 - Science/AAAS feature "The peptide design challenge" (target NK2R; rules not included)
-- hsc70_new project: HADDOCK3 peptide-docking pipeline, peptide builder, scoring conventions
+- existing peptide-docking project: HADDOCK3 pipeline, peptide builder, scoring conventions
 - Tachykinin reference pharmacology (NKB/NKA/Substance P) as positive controls
 
 ## Approach

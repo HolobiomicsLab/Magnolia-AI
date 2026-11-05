@@ -13,14 +13,14 @@ neurokinin B (NKB), `DMHDFFVGLM-NH2`. Selectivity family: NK1R, NK3R.
 
 **Objective.** Produce a ranked list of peptide candidates (8–12 aa, C-terminal
 amide) predicted to bind NK2R, with an auditable funnel from generation to
-docking to selectivity, reusing the hsc70 peptide-docking machinery.
+docking to selectivity, reusing existing peptide-docking machinery.
 
 **Success criteria (numbers, pre-registered).**
 1. Funnel instrument check: calibration passes (NKB wild-type outranks all
    decoys), ≥3 generators, none >50% of the final set, 60 ranked candidates.
 2. Docking stage (when ungated): NKB positive-control docking reproduces a
    plausible NK2R binding mode before any candidate docking runs; candidates
-   ranked by HADDOCK AIR-free score with the same weights as hsc70 late runs
+   ranked by HADDOCK AIR-free score with the same weights as established late runs
    (w_vdw=1.0, w_elec=0.2, w_desolv=1.0, w_air=0.1) unless re-registered.
 3. Selectivity stage: report NK2R score minus max(NK1R, NK3R) score per candidate.
 4. Honest-negative clause: if the positive control fails, or no candidate beats
@@ -29,22 +29,22 @@ docking to selectivity, reusing the hsc70 peptide-docking machinery.
 **Calibration obligations.** (a) Funnel heuristic calibrated on NKB/NKA/Substance
 P vs scrambled/reversed/unrelated negatives (implemented). (b) Docking
 instrument calibrated on an NKB–NK2R positive control before candidate ranking
-(gated). (c) hsc70 machinery reuse is a *tooling* decision, not evidence of
+(gated). (c) existing-machinery reuse is a *tooling* decision, not evidence of
 transferability to a GPCR target — the membrane environment and binding site
-differ fundamentally from Hsc70's SBD groove.
+differ fundamentally from a soluble SBD groove.
 
 ## Operations (2/3)
 
 **Budgets.** Funnel stage: local, seconds, no cost. Docking stage (pre-registered
 cap): ≤60 candidates × 1 HADDOCK3 run each, sampling s10000, ssh-slurm azzurra,
-2 GB/core, wall-time per run as in hsc70 late runs; no optimization rounds until
+2 GB/core, wall-time per run as in established late runs; no optimization rounds until
 round-1 results exist. No real submission spend without human approval.
 
 **Pacing.** One stage at a time; a stage opens only when its predecessor's gate
 passes. No docking before calibration of the docking instrument.
 
 **Tool rule.** Only public-source tools, each validated on a known answer in
-its first hour: HADDOCK3 (hsc70 pipeline), peptide builder (hsc70
+its first hour: HADDOCK3 (existing pipeline), peptide builder (existing
 `_peptide_build`), p2rank or literature-defined orthosteric site for the GPCR.
 
 **Funnel order.** Composition/liability filters → motif heuristic → docking →

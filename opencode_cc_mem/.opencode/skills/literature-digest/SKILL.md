@@ -1,6 +1,6 @@
 ---
 name: literature-digest
-description: "Writing a literature digest note for one paper or report: fetch full text, extract evidence with character offsets, assess relevance and implementation value for our projects, and place the note in digests/<kb>/ (canonical) with an optional KB copy. Use when the user asks to digest, summarize, or assess a paper, arXiv ID, DOI, or report against Magnolia/Mimosa/xiulian. Do NOT use for broad field surveys across many papers (that is the perspicacite skill's agentic mode) or for pure retrieval without a written note."
+description: "Writing a literature digest note for one paper or report: fetch full text, extract evidence with character offsets, assess relevance and implementation value for our projects, and place the note in digests/<kb>/ (canonical) with an optional KB copy. Use when the user asks to digest, summarize, or assess a paper, arXiv ID, DOI, or report against Magnolia and its project stores. Do NOT use for broad field surveys across many papers (that is the perspicacite skill's agentic mode) or for pure retrieval without a written note."
 metadata:
   version: "0.2"
   last_verified: "2026-09-25"
@@ -77,7 +77,7 @@ venue: "arXiv preprint arXiv:2609.24972v1 [cs.LG], 21 Sep 2026"
 kb: self_evolving_agents                # which digests/<kb>/ dir it lives in
 verdict: relevant                        # relevant | marginal | not_relevant
 implementation_verdict: cherry-pick      # adopt | cherry-pick | watch | skip
-targets: [magnolia, mimosa, xiulian]     # projects §7–§8 assess
+targets: [magnolia]     # projects §7–§8 assess
 assessor: "model name (project session, date)"
 verified_by: "single-pass digest over one delegated full-text traversal; no independent panel"
 confidence: medium                       # low | medium | high
@@ -112,7 +112,7 @@ normalized file the offsets point into.
 - **§8 Implementation assessment** — verdict + an action table:
   `| ID | Target | Action | Cost | Status |`. Action IDs are stable and
   cross-paper: `ACT-<TARGET>-<SLUG>`, targets so far: `MEM` (Magnolia
-  memory/harness), `MIM` (Mimosa), `BRIDGE`/`xiulian`, `CAMP` (science
+  memory/harness), `PROJ` (other projects), `CAMP` (science
   campaigns), `PERSP`. Close with **Not worth implementing** and a
   **Revisit trigger**.
 - **§8.5 Comparative importance** — tier (T1–T4) + rank against all
