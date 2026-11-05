@@ -70,7 +70,9 @@ Options:
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
                    (~/.local/share/opencode/opencode-v2.db) and its OWN
-                   compchem-tools daemon port (8012). v2 must never open the
+                   compchem-tools daemon port (8012). DEFAULT in this tree
+                   (experimental-v2 line); set MAGNOLIA_OPENCODE_V2=0 to force
+                   the v1 runtime. v2 must never open the
                    shared v1 DB: gate-1 (2026-10-06) showed v2 restructures
                    it. Config is rendered in v2 shape (mcp.servers,
                    permissions rules; plugins/instructions dropped — v1
@@ -649,6 +651,13 @@ fi
 # (2026-10-06) showed that v2 opening the shared default opencode.db
 # restructures it (adds session_v2/kv/worktree, drops v1 tables) — v1 and v2
 # must never share a DB file. Override with OPENCODE_DB=/path at any time.
+#
+# TREE DEFAULT (2026-11-05, experimental-v2 line): this tree defaults to the
+# v2 runtime. Explicit opt-outs still win: MAGNOLIA_OPENCODE_V2=0 forces the
+# v1 binary/DB, and --opencode-v2 / =1 stays idempotent.
+if [ -z "${MAGNOLIA_OPENCODE_V2:-}" ]; then
+    export MAGNOLIA_OPENCODE_V2=1
+fi
 OPENCODE_BIN="opencode"
 if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
     V2_BIN="${MAGNOLIA_OPENCODE_V2_BIN:-$HOME/.local/share/magnolia-v2/bin/opencode}"
