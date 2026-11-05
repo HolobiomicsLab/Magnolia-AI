@@ -45,9 +45,11 @@ from .store import ControlStore
 
 
 def operator() -> str:
-    """The human operator identity, from config (MAGNOLIA_AGENTD_OPERATOR).
-    Defaults to the neutral placeholder 'operator' — never a hardcoded name."""
-    return os.environ.get("MAGNOLIA_AGENTD_OPERATOR", "operator")
+    """Operator identity, from config or the OS account — no name required.
+
+    MAGNOLIA_AGENTD_OPERATOR if set, else the OS username, else 'operator'."""
+    import getpass
+    return os.environ.get("MAGNOLIA_AGENTD_OPERATOR") or getpass.getuser() or "operator"
 
 
 def default_policy(allowed_projects: set[str] | None = None) -> AdmissionPolicy:

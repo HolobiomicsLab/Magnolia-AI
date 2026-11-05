@@ -42,21 +42,63 @@ INJECTION = re.compile(
 
 
 def load_registry() -> dict[str, dict]:
-    """Project registry from config only. No names in code.
+    """Project registry: explicit env > config file > auto-discovery.
 
-    Optional ~/.config/magnolia/router-projects.json for descriptions:
-    [{"id": "proj_a", "description": "..."}]. Without it,
-    MAGNOLIA_AGENTD_PROJECTS (comma list) supplies ids; empty -> {"demo": {}}.
+    - MAGNOLIA_AGENTD_PROJECTS (comma list) is an explicit allow-list override.
+    - ~/.config/magnolia/router-projects.json optionally supplies descriptions.
+    - Otherwise discover project dirs (with optional agent.json) under
+      MAGNOLIA_PROJECTS_ROOT (default: the repo projects/ and the shared
+      project_magnolia-data/projects/). agent.json with enabled:false skips a
+      lane. Every discovered project gets <dir>/inbox as its lane inbox.
+    - Fallback: {"demo": {}}.
     """
+    env = os.environ.get("MAGNOLIA_AGENTD_PROJECTS")
+    if env:
+        return {p.strip(): {"description": ""} for p in env.split(",") if p.strip()}
+
+    registry = _discover_projects()
     cfg = Path.home() / ".config" / "magnolia" / "router-projects.json"
     if cfg.is_file():
         try:
-            entries = json.loads(cfg.read_text())
-            return {e["id"]: {"description": e.get("description", "")} for e in entries}
+            for entry in json.loads(cfg.read_text()):
+                pid = entry["id"]
+                registry.setdefault(pid, {})
+                registry[pid].update({k: v for k, v in entry.items() if k != "id"})
         except Exception:
             pass
-    raw = os.environ.get("MAGNOLIA_AGENTD_PROJECTS", "demo")
-    return {p.strip(): {"description": ""} for p in raw.split(",") if p.strip()}
+    return registry or {"demo": {}}
+
+
+def _discover_projects() -> dict[str, dict]:
+    roots: list[Path] = []
+    env_root = os.environ.get("MAGNOLIA_PROJECTS_ROOT")
+    if env_root:
+        roots.append(Path(env_root))
+    else:
+        roots.append(Path("/home/tjiang/repos/project_magnolia-exp/opencode_cc_mem/projects"))
+        roots.append(Path("/home/tjiang/repos/project_magnolia-data/projects"))
+    registry: dict[str, dict] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for d in sorted(root.iterdir()):
+            if not d.is_dir():
+                continue
+            cfg = d / "agent.json"
+            if cfg.is_file():
+                try:
+                    info = json.loads(cfg.read_text())
+                except Exception:
+                    info = {}
+                if info.get("enabled") is False:
+                    continue
+                registry[d.name] = {
+                    "description": info.get("note", info.get("description", "")),
+                    "inbox": str(d / "inbox"),
+                }
+            else:
+                registry.setdefault(d.name, {"description": "", "inbox": str(d / "inbox")})
+    return registry
 
 
 @dataclass

@@ -101,6 +101,43 @@ def test_replay_corpus_all_green(tmp_path):
     assert metrics["resumed_after_stop"] is False
 
 
+def test_registry_discovery_from_agent_json(tmp_path, monkeypatch):
+    from router_runner.router import load_registry
+    root = tmp_path / "projects"
+    (root / "proj_a").mkdir(parents=True)
+    (root / "proj_b").mkdir()
+    (root / "disabled").mkdir()
+    (root / "disabled" / "agent.json").write_text('{"enabled": false}')
+    (root / "proj_a" / "agent.json").write_text('{"enabled": true, "note": "docking project"}')
+    monkeypatch.setenv("MAGNOLIA_PROJECTS_ROOT", str(root))
+    monkeypatch.delenv("MAGNOLIA_AGENTD_PROJECTS", raising=False)
+    registry = load_registry()
+    assert "proj_a" in registry
+    assert registry["proj_a"]["description"] == "docking project"
+    assert registry["proj_a"]["inbox"].endswith("proj_a/inbox")
+    assert "proj_b" in registry
+    assert "disabled" not in registry
+
+
+def test_registry_env_overrides_discovery(tmp_path, monkeypatch):
+    from router_runner.router import load_registry
+    root = tmp_path / "projects"
+    (root / "proj_a").mkdir(parents=True)
+    monkeypatch.setenv("MAGNOLIA_PROJECTS_ROOT", str(root))
+    monkeypatch.setenv("MAGNOLIA_AGENTD_PROJECTS", "other_project")
+    registry = load_registry()
+    assert list(registry) == ["other_project"]
+
+
+def test_operator_defaults_to_os_user(monkeypatch):
+    import getpass
+    from router_runner.agentd import operator
+    monkeypatch.delenv("MAGNOLIA_AGENTD_OPERATOR", raising=False)
+    assert operator() == getpass.getuser()
+    monkeypatch.setenv("MAGNOLIA_AGENTD_OPERATOR", "custom")
+    assert operator() == "custom"
+
+
 def _ingest(router, event):
     from router_runner.replay import _ingest as ingest
     return ingest(router, event)
