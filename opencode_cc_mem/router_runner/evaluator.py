@@ -25,6 +25,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import re
+
 import httpx
 
 # The memory server's llm.py lives in a different package tree; load it by path.
@@ -99,20 +101,62 @@ class GenerativeEvaluator:
     def available(self) -> bool:
         return llm.is_llm_available()
 
+    def _call_go_model(self, system: str, user: str) -> dict | None:
+        """Call an opencode-go model headlessly and parse a JSON Decision."""
+        model = self.model or "opencode-go/deepseek-v4.1-flash"
+        binary = os.environ.get(
+            "MAGNOLIA_OPENCODE_V2_BIN",
+            os.path.expanduser("~/.local/share/magnolia-v2/bin/opencode"),
+        )
+        db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
+        prompt = f"{system}\n\n{user}"
+        try:
+            out = subprocess.run(
+                [binary, "run", "--model", model, prompt],
+                env={**os.environ, "OPENCODE_DB": db},
+                capture_output=True, text=True, timeout=90, check=False,
+            )
+        except Exception:
+            return None
+        if out.returncode != 0:
+            return None
+        text = (out.stdout or "").strip()
+        if not text:
+            return None
+        # Accept either a pure JSON object or JSON with a small preamble.
+        start = text.find("{")
+        if start < 0:
+            return None
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except Exception:
+                        return None
+        return None
+
     def evaluate(self, text: str, context: dict | None = None) -> EvalDecision | None:
         if not self.available():
             return None
-        system = (
-            "You are an admission evaluator. Given a user message and optional "
-            "context, return ONLY a JSON object with keys: action "
-            "(accept|attach|stop|ignore), project (string or null), work_item_id "
-            "(string or null), confidence (0..1), reason (short). "
-            "accept means create/route new work to the named project; attach "
-            "means follow up an existing Work Item; stop means stop it; ignore "
-            "means no action. Never invent project names not present in context."
-        )
-        user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
-        out = llm.call_llm_json(system, user, max_tokens=400, disable_thinking=True)
+        if (self.model or "").startswith("opencode-go/"):
+            out = self._call_go_model(system="", user=json.dumps({"message": text, "context": context or {}}))
+        else:
+            system = (
+                "You are an admission evaluator. Given a user message and optional "
+                "context, return ONLY a JSON object with keys: action "
+                "(accept|attach|stop|ignore), project (string or null), work_item_id "
+                "(string or null), confidence (0..1), reason (short). "
+                "accept means create/route new work to the named project; attach "
+                "means follow up an existing Work Item; stop means stop it; ignore "
+                "means no action. Never invent project names not present in context."
+            )
+            user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
+            out = llm.call_llm_json(system, user, max_tokens=400, disable_thinking=True)
         if not isinstance(out, dict):
             return None
         action = out.get("action")

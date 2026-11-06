@@ -178,6 +178,35 @@ def test_make_evaluator_prefers_jev_when_configured(monkeypatch):
     assert type(make_evaluator()).__name__ == "GenerativeEvaluator"
 
 
+def test_go_generative_path_parses_json_with_preamble(monkeypatch):
+    class Out:
+        returncode = 0
+        stdout = '> build · deepseek-v4.1-flash\n{"action":"accept","project":"proj_a","confidence":0.92,"reason":"dock"}'
+        stderr = ""
+
+    monkeypatch.setattr("router_runner.evaluator.subprocess.run",
+                        lambda *a, **k: Out())
+    ev = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash")
+    d = ev.evaluate("dock the peptide", {"projects": ["proj_a"]})
+    assert d is not None
+    assert d.action == "accept"
+    assert d.project == "proj_a"
+    assert d.confidence == 0.92
+    assert d.evaluator == "generative"
+
+
+def test_go_generative_path_returns_none_on_bad_json(monkeypatch):
+    class Out:
+        returncode = 0
+        stdout = "no json here"
+        stderr = ""
+
+    monkeypatch.setattr("router_runner.evaluator.subprocess.run",
+                        lambda *a, **k: Out())
+    ev = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash")
+    assert ev.evaluate("dock", {}) is None
+
+
 def _ingest(tmp_path):
     engine = agentd.get_engine(str(tmp_path / "agentd.db"), out_root=tmp_path / "runs")
     from router_runner.replay import _ingest as ingest
