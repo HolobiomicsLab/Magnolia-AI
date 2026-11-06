@@ -181,25 +181,37 @@ class JevEvaluator(GenerativeEvaluator):
     def evaluate(self, text: str, context: dict | None = None) -> EvalDecision | None:
         if not self.available():
             return None
-        system = (
-            "You are Jev, an admission decision model. Given a user message and "
-            "context, return a JSON object with keys: action (accept|attach|stop|"
-            "ignore), project (string or null), work_item_id (string or null), "
-            "confidence (0..1), reason (short). Do not invent project names."
-        )
+        projects = (context or {}).get("projects", [])
+        project_criteria = {p: p for p in projects} or None
+        questions = {
+            "action": {
+                "type": "choice",
+                "instructions": "Which action fits the user request?",
+                "criteria": {
+                    "accept": "Create or route new work to a project",
+                    "attach": "Follow up an existing Work Item",
+                    "stop": "Stop an existing Work Item",
+                    "ignore": "No action"
+                },
+            }
+        }
+        if project_criteria:
+            questions["project"] = {
+                "type": "choice",
+                "instructions": "Which project should handle this work?",
+                "criteria": project_criteria,
+            }
         body = {
             "model": self.jev_model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps({"message": text, "context": context or {}})},
-            ],
-            "max_tokens": 400,
+            "state": json.dumps({"message": text, "context": context or {}}, ensure_ascii=False),
+            "questions": questions,
         }
         try:
             resp = httpx.post(
                 self.ENDPOINT,
                 headers={"Authorization": f"Bearer {self._api_key()}",
-                         "Content-Type": "application/json"},
+                         "Content-Type": "application/json",
+                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"},
                 json=body,
                 timeout=30,
             )
@@ -207,31 +219,26 @@ class JevEvaluator(GenerativeEvaluator):
             data = resp.json()
         except Exception:
             return None
-        # Accept both chat-completions-style and System One structured responses.
-        if isinstance(data.get("choices"), list) and data["choices"]:
-            content = (data["choices"][0].get("message") or {}).get("content")
-            try:
-                parsed = json.loads(content) if isinstance(content, str) else content
-            except Exception:
-                return None
-        else:
-            parsed = data
-        if not isinstance(parsed, dict):
+        answers = data.get("answers") or {}
+        if not isinstance(answers, dict):
             return None
-        action = parsed.get("action")
+        action_answer = answers.get("action") or {}
+        action = action_answer.get("choice")
         if action not in ACTIONS:
             return None
         try:
-            conf = float(parsed.get("confidence", parsed.get("probability", 0.0)))
+            conf = float(action_answer.get("confidence", 0.0))
         except (TypeError, ValueError):
             conf = 0.0
+        project_answer = answers.get("project") or {}
+        project = project_answer.get("choice") if isinstance(project_answer, dict) else None
         return EvalDecision(
             action=action,
-            project=parsed.get("project"),
+            project=project,
             confidence=conf,
-            reason=str(parsed.get("reason", "")),
+            reason=action_answer.get("reason", action_answer.get("rationale", "")),
             evaluator=self.kind,
-            work_item_id=parsed.get("work_item_id"),
+            work_item_id=action_answer.get("work_item_id"),
         )
 
 

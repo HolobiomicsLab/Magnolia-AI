@@ -140,11 +140,13 @@ def test_jev_evaluator_uses_console_endpoint(monkeypatch, tmp_path):
 
         def json(self):
             return {
-                "choices": [{
-                    "message": {
-                        "content": '{"action":"accept","project":"proj_a","confidence":0.88,"reason":"ok"}'
-                    }
-                }]
+                "model": "jev-1.13-free",
+                "answers": {
+                    "action": {"type": "choice", "choice": "accept", "confidence": 0.88,
+                               "probabilities": {"accept": 0.88, "ignore": 0.12},
+                    "project": {"type": "choice", "choice": "proj_a", "confidence": 0.91,
+                                "probabilities": {"proj_a": 0.91, "proj_b": 0.09},
+                },
             }
 
     def fake_post(url, headers=None, json=None, timeout=None):
@@ -164,6 +166,9 @@ def test_jev_evaluator_uses_console_endpoint(monkeypatch, tmp_path):
     assert calls["url"] == JevEvaluator.ENDPOINT
     assert calls["json"]["model"] == "jev-1.13-free"
     assert calls["headers"]["Authorization"] == "Bearer console-key"
+    assert calls["json"]["questions"]["action"]["type"] == "choice"
+    assert "accept" in calls["json"]["questions"]["action"]["criteria"]
+    assert decision.project == "proj_a"
 
 
 def test_make_evaluator_prefers_jev_when_configured(monkeypatch):
