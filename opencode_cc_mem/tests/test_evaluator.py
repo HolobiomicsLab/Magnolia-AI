@@ -143,9 +143,9 @@ def test_jev_evaluator_uses_console_endpoint(monkeypatch, tmp_path):
                 "model": "jev-1.13-free",
                 "answers": {
                     "action": {"type": "choice", "choice": "accept", "confidence": 0.88,
-                               "probabilities": {"accept": 0.88, "ignore": 0.12},
+                               "probabilities": {"accept": 0.88, "ignore": 0.12}},
                     "project": {"type": "choice", "choice": "proj_a", "confidence": 0.91,
-                                "probabilities": {"proj_a": 0.91, "proj_b": 0.09},
+                                "probabilities": {"proj_a": 0.91, "proj_b": 0.09}},
                 },
             }
 
