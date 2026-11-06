@@ -114,6 +114,17 @@ CREATE TABLE IF NOT EXISTS consumed_notices (
     run_id TEXT NOT NULL,
     consumed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS eval_decisions (
+    eval_id TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    action TEXT NOT NULL,
+    project TEXT,
+    work_item_id TEXT,
+    confidence REAL NOT NULL,
+    reason TEXT NOT NULL,
+    evaluator TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS findings (
     finding_id TEXT PRIMARY KEY,
     work_item_id TEXT NOT NULL,

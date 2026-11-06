@@ -23,7 +23,12 @@ def make_router(tmp_path):
         "proj_b": {"inbox": str(tmp_path / "proj_b" / "inbox")},
         "demo": {},
     }
-    return Router(engine, registry=registry)
+    class _NoEval:
+        def available(self):
+            return False
+        def evaluate(self, text, context=None):
+            return None
+    return Router(engine, registry=registry, evaluator=_NoEval())
 
 
 def test_explicit_project_handoff(tmp_path):

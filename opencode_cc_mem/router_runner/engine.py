@@ -636,6 +636,27 @@ class ControlEngine:
     OUTCOME_STATUSES = frozenset({"intermediate", "completed_campaign", "human_validated"})
     FINAL_STATUSES = frozenset({"completed_campaign", "human_validated"})
 
+    def record_eval_decision(self, text: str, decision) -> None:
+        """Persist an LLM/Jev Eval proposal for later accuracy measurement.
+
+        Proposals are records, never authority: they are only acted on when
+        they clear confidence_threshold()."""
+        with self.store.tx():
+            self.store.insert(
+                "eval_decisions",
+                {
+                    "eval_id": new_id("eval"),
+                    "text": text,
+                    "action": decision.action,
+                    "project": decision.project,
+                    "work_item_id": decision.work_item_id,
+                    "confidence": decision.confidence,
+                    "reason": decision.reason,
+                    "evaluator": decision.evaluator,
+                    "created_at": _now(),
+                },
+            )
+
     def record_finding(
         self,
         work_item_id: str,

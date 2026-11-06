@@ -22,6 +22,11 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .evaluator import (
+    EvalDecision,
+    confidence_threshold,
+    make_evaluator,
+)
 from .agentd import operator
 from .engine import ControlEngine
 from .models import RouterError, TriggerSpec, WorkItemState, WorkSpec
@@ -115,9 +120,11 @@ class RouteReply:
 
 
 class Router:
-    def __init__(self, engine: ControlEngine, registry: dict[str, dict] | None = None):
+    def __init__(self, engine: ControlEngine, registry: dict[str, dict] | None = None,
+                 evaluator=None):
         self.engine = engine
         self.registry = registry or load_registry()
+        self.evaluator = evaluator if evaluator is not None else make_evaluator()
 
     # ---------- public API ----------
 
@@ -156,13 +163,56 @@ class Router:
                                   detail=self._progress(project_ref), flags=flags)
             return self._handoff(project_ref, text, flags)
 
-        # No explicit project: use a single non-demo registry entry, else clarify.
+        # No explicit project: try the LLM Eval (Jev or generative fallback).
+        decision = self._eval(text)
+        if decision is not None:
+            return self._apply_eval(decision, text, flags)
         candidates = [p for p in self.registry if p != "demo"]
         if len(candidates) == 1:
             return self._handoff(candidates[0], text, flags)
         return RouteReply("clarify", detail="which project should this go to?", flags=flags)
 
     # ---------- internals ----------
+
+    def _eval(self, text: str) -> EvalDecision | None:
+        if self.evaluator is None or not self.evaluator.available():
+            return None
+        context = {
+            "projects": sorted(self.registry),
+            "last_project": getattr(self, "_last_project", None),
+        }
+        decision = self.evaluator.evaluate(text, context)
+        if decision is not None:
+            self.engine.record_eval_decision(text, decision)
+        return decision
+
+    def _apply_eval(self, decision: EvalDecision, text: str, flags: list[str]) -> RouteReply:
+        if decision.confidence < confidence_threshold():
+            return RouteReply(
+                "clarify",
+                project=decision.project,
+                detail=f"eval low confidence {decision.confidence:.2f} ({decision.evaluator}): {decision.reason}",
+                flags=flags,
+            )
+        if decision.action == "stop":
+            if decision.work_item_id:
+                try:
+                    self.engine.stop(decision.work_item_id, by=operator())
+                    return RouteReply("stopped", work_item_id=decision.work_item_id,
+                                      detail=f"{decision.work_item_id} stopped by eval", flags=flags)
+                except RouterError as exc:
+                    return RouteReply("rejected", work_item_id=decision.work_item_id,
+                                      detail=str(exc), flags=flags)
+            return RouteReply("rejected", detail="eval stop without a work item", flags=flags)
+        if decision.action == "ignore":
+            return RouteReply("ignored", detail=f"eval ignored: {decision.reason}", flags=flags)
+        if decision.action == "attach" and decision.work_item_id:
+            return self._follow_up(decision.work_item_id, text, flags)
+        if not decision.project or decision.project not in self.registry:
+            return RouteReply("clarify",
+                              detail=f"eval proposed unknown project {decision.project}: not allowed",
+                              flags=flags)
+        return self._handoff(decision.project, text, flags + ["eval"])
 
     def _explicit_project(self, text: str) -> str | None:
         m = AT_PROJECT.search(text)
