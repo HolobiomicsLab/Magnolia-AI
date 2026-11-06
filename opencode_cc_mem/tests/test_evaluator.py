@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from router_runner import agentd
-from router_runner.evaluator import EvalDecision, JevEvaluator, make_evaluator
+from router_runner.evaluator import EvalDecision, GenerativeEvaluator, JevEvaluator, make_evaluator
 from router_runner.router import Router
 
 
