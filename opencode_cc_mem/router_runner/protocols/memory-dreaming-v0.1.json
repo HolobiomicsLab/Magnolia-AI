@@ -1,0 +1,26 @@
+{
+  "kind": "memory-dreaming",
+  "version": "0.1",
+  "description": "Offline re-check of memory entries against their source session transcripts. Bounded, hash-guarded, append-only corrections with receipts. Model proposes, deterministic code applies.",
+  "bounds": {
+    "max_entries": 20,
+    "max_sessions_per_entry": 3,
+    "max_transcript_chars": 60000,
+    "max_entry_chars": 12000,
+    "max_apply": 10,
+    "recheck_days": 7
+  },
+  "apply_policy": {
+    "confirmed": "receipt_only",
+    "unverifiable": "receipt_only",
+    "stale": "frontmatter_status_stamp",
+    "wrong": "append_correction_section_with_evidence"
+  },
+  "invariants": [
+    "entries_without_transcript_anchor_are_skipped",
+    "every_mutation_rechecks_the_proposal_time_content_hash",
+    "corrections_require_corrected_text_and_evidence",
+    "no_unverifiable_verdict_mutates_an_entry",
+    "per_pass_receipt_in_reflex/dreaming-log.jsonl"
+  ]
+}

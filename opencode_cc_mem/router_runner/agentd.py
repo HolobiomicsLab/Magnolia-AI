@@ -139,6 +139,11 @@ DEMO_LETTER = demo_letter()
 NK2R_LETTER = demo_letter(
     project="demo", protocol="nk2r-challenge-v0.1", event_id="letter-nk2r-2026-11-03"
 )
+# Dreaming task-pack demo letter (offline, throwaway store).
+from .taskpacks import DREAMING_PROTOCOL
+DREAMING_LETTER = demo_letter(
+    project="demo", protocol=DREAMING_PROTOCOL, event_id="letter-dreaming-2026-11-10"
+)
 
 
 def demo_nk2r(db: str, out_root: str | None = None) -> int:
@@ -159,6 +164,60 @@ def demo_nk2r(db: str, out_root: str | None = None) -> int:
     print(engine.reply(req["work_item_id"], "NK2R funnel completed"))
     print("DEMO-NK2R OK")
     return 0 if result["outcome"] == "completed" else 2
+
+
+def demo_dreaming(db: str, out_root: str | None = None) -> int:
+    """End-to-end dreaming demo on a throwaway project store.
+
+    The LLM judge is forced off (MAGNOLIA_DREAMING_JUDGE=off), so the pass is
+    fully offline and deterministic: the one anchored entry comes back
+    unverifiable and nothing is mutated. Run against a real project by
+    ingesting DREAMING_LETTER with --out-root <project>/runs instead.
+    """
+    import os
+    import tempfile
+    workdir = Path(tempfile.mkdtemp(prefix="dreaming-demo-"))
+    store = workdir / ".magnolia"
+    (store / "staging").mkdir(parents=True)
+    (store / "sessions").mkdir()
+    (store / "staging" / "20261110_000000_000001_demo_entry.md").write_text(
+        "---\n"
+        "id: '20261110_000000_000001'\n"
+        "title: Demo entry\n"
+        "type: workflow_note\n"
+        "opencode_session_id: '2026-11-10_000000'\n"
+        "---\n\nThe demo run completed.\n"
+    )
+    (store / "sessions" / "2026-11-10_000000.jsonl").write_text(
+        json.dumps({
+            "timestamp": "2026-11-10T00:00:00+00:00",
+            "event_type": "tool_call",
+            "tool": "demo",
+            "result_summary": "run completed",
+        }) + "\n"
+    )
+
+    previous = os.environ.get("MAGNOLIA_DREAMING_JUDGE")
+    os.environ["MAGNOLIA_DREAMING_JUDGE"] = "off"
+    try:
+        runs = out_root or str(workdir / "runs")
+        engine = get_engine(db, runs)
+        print("--- ingest + approve dreaming work item ---")
+        req = ingest_letter(engine, DREAMING_LETTER)
+        engine.approve(req["work_item_id"], req["nonce"], operator() + " (simulated)")
+        print("--- execute dreaming pass (judge off) ---")
+        outcome = engine.execute(req["work_item_id"])
+        result = outcome["result"]
+        print(f"outcome={result['outcome']} checked={result['receipt']['checked']}")
+        print(f"verdicts={result['gate_report']['verdicts']}")
+        print(f"report: {result['candidate_file']}")
+        print("DEMO-DREAMING OK")
+        return 0 if result["outcome"] == "completed" else 2
+    finally:
+        if previous is None:
+            os.environ.pop("MAGNOLIA_DREAMING_JUDGE", None)
+        else:
+            os.environ["MAGNOLIA_DREAMING_JUDGE"] = previous
 
 
 def demo_jobloop(db: str, out_root: str | None = None) -> int:
@@ -506,7 +565,7 @@ def router_chat(db: str, registry: dict | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "demo-dreaming", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "run":
@@ -530,7 +589,7 @@ def main() -> int:
             p.add_argument("--workdir", default=None)
         if name == "demo-cancel":
             p.add_argument("--workdir", default=None)
-        if name in ("watch", "execute", "demo-nk2r", "demo-jobloop", "demo-local", "demo-cancel"):
+        if name in ("watch", "execute", "demo-nk2r", "demo-dreaming", "demo-jobloop", "demo-local", "demo-cancel"):
             p.add_argument("--out-root", default=None)
     args = parser.parse_args()
 
@@ -557,6 +616,8 @@ def main() -> int:
         return 0
     if args.command == "demo-nk2r":
         return demo_nk2r(args.db, args.out_root)
+    if args.command == "demo-dreaming":
+        return demo_dreaming(args.db, args.out_root)
     if args.command == "context":
         engine = get_engine(args.db)
         print(json.dumps(engine.context_package(args.work_item_id), indent=2, default=str))
