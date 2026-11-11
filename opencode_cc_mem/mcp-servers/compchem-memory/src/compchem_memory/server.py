@@ -7,6 +7,7 @@ former .magnolia/skills skill tier was retired; protocols live in
 
 import json
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,7 +59,7 @@ from fastmcp import FastMCP
 from . import project_context
 
 from compchem_memory.capture import captured, get_session_manager
-from compchem_memory.tiers.session import SessionManager
+from compchem_memory.tiers.session import SessionManager, init_session_identity
 from compchem_memory.tiers.project import ProjectManager
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.context_assembly import assemble_context, _memory_store
@@ -174,18 +175,19 @@ def _run_startup_scan_background():
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
             else:
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
-        t0 = time.monotonic()
-        try:
-            session_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H%M%S")
-            current = Path(PROJECT_DIR) / ".magnolia" / ".current-session-id"
-            current.parent.mkdir(parents=True, exist_ok=True)
-            current.write_text(session_id)
-        except Exception as e:
-            print(f"[session_id] error: {e}")
         _log_boot_step("total", (time.monotonic() - t_all) * 1000)
 
     threading.Thread(target=_worker, daemon=True).start()
 
+
+# Bind the session id BEFORE the boot thread starts: startup_scan reads
+# .current-session-id to decide which file is live, and magnolia-run reads it
+# for every shell call. Writing it at the end of the 70-170 s boot pipeline let
+# early calls inherit the previous session's id (2026-11-10 "Nov 5" ghost file).
+if _claim_once("session_identity"):
+    _BOOT_SESSION_ID = init_session_identity(PROJECT_DIR)
+    if _BOOT_SESSION_ID is None:
+        print("[session_id] error: could not initialize session identity", file=sys.stderr)
 
 _run_startup_scan_background()
 
@@ -340,6 +342,27 @@ def _project_switch_blocked_payload(guard) -> str:
     })
 
 
+def _write_guard(project_dir: str | None, allow_cross_project: bool) -> str | None:
+    """Return a blocked payload, or None when the write may proceed.
+
+    The default stays fail-closed. An explicit allow_cross_project=True is the
+    caller's assertion that project_dir is intentional — needed when opencode
+    v2's shared service has pinned this server to another project (2026-11-10).
+    """
+    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
+    if guard.kind != "cross_write":
+        return None
+    if not allow_cross_project:
+        return _project_switch_blocked_payload(guard)
+    print(
+        f"[memory] explicit cross-project write: requested={guard.requested} "
+        f"pinned={guard.pinned}",
+        file=sys.stderr,
+    )
+    return None
+
+
 # ── v1 Tools (preserved, enhanced) ──────────────────────────────────────────
 
 _OUTCOME_STATUSES = frozenset({"intermediate", "completed_campaign", "human_validated"})
@@ -409,15 +432,18 @@ def memory_record_session(
     event_type: str,
     data: dict[str, Any],
     project_dir: str | None = None,
+    allow_cross_project: bool = False,
 ) -> str:
     """Append a structured entry to the current session log (JSONL).
     data should contain: tool_name, args, result_summary, error (if any).
 
+    allow_cross_project: explicit override when a shared-service server is
+    pinned to another project; use only when project_dir is intentional.
+
     Call this when: logging an observation the auto-capture decorator cannot infer (e.g., user-stated intent, a design decision, a hypothesis)."""
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
-    if guard.kind == "cross_write":
-        return _project_switch_blocked_payload(guard)
+    blocked = _write_guard(project_dir, allow_cross_project)
+    if blocked:
+        return blocked
     pd = _resolve_project_store(project_dir)
     sess_m = _get_session_mgr(pd)
     return sess_m.record(event_type, data, pd)
@@ -437,6 +463,7 @@ def memory_record_learning(
     outcome_status: str | None = None,
     work_item_id: str | None = None,
     attempt: int | None = None,
+    allow_cross_project: bool = False,
 ) -> str:
     """Propose a new project-tier entry with typed frontmatter. Writes to staging
     area; entries become active after confirmation or N consistent observations.
@@ -447,16 +474,18 @@ def memory_record_learning(
     memory_get_context. work_item_id/attempt link the entry to its origin
     Work Item in the always-on control plane (MemoryLink provenance).
 
+    allow_cross_project: explicit override when a shared-service server is
+    pinned to another project; use only when project_dir is intentional.
+
     Call this when: you have discovered something worth keeping — error_resolution, success_pattern, failure_pattern, or parameter_guidance. See AGENTS.md for content structure."""
     if outcome_status is not None and outcome_status not in _OUTCOME_STATUSES:
         raise ValueError(
             f"outcome_status must be one of {sorted(_OUTCOME_STATUSES)}, "
             f"got {outcome_status!r}"
         )
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
-    if guard.kind == "cross_write":
-        return _project_switch_blocked_payload(guard)
+    blocked = _write_guard(project_dir, allow_cross_project)
+    if blocked:
+        return blocked
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
 
@@ -571,14 +600,17 @@ def memory_record_run(
     metrics: dict[str, Any] | None = None,
     errors_solved: list[str] | None = None,
     project_dir: str | None = None,
+    allow_cross_project: bool = False,
 ) -> str:
     """Append a new run record to the project's run history index.
 
+    allow_cross_project: explicit override when a shared-service server is
+    pinned to another project; use only when project_dir is intentional.
+
     Call this when: a scientific run has completed and you want to record its metadata + status alongside the run history (magnolia-run already does this for recognized tools)."""
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
-    if guard.kind == "cross_write":
-        return _project_switch_blocked_payload(guard)
+    blocked = _write_guard(project_dir, allow_cross_project)
+    if blocked:
+        return blocked
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()
     return proj_m.record_run(pd, run_id, tool, status, metrics=metrics, errors_solved=errors_solved)
@@ -648,6 +680,7 @@ def post_run_assess(
     exit_code: int = 0,
     project_dir: str | None = None,
     run_id: str | None = None,
+    allow_cross_project: bool = False,
 ) -> str:
     """After a computation completes: check exit code, verify output files exist,
     extract metrics, flag quality issues. Records run in memory automatically.
@@ -655,11 +688,13 @@ def post_run_assess(
     run_id: optional canonical id from the submit_job result; when omitted, an
     existing record for run_dir is reused, else basename(run_dir).
 
+    allow_cross_project: explicit override when a shared-service server is
+    pinned to another project; use only when project_dir is intentional.
+
     Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
-    if guard.kind == "cross_write":
-        return _project_switch_blocked_payload(guard)
+    blocked = _write_guard(project_dir, allow_cross_project)
+    if blocked:
+        return blocked
     from compchem_memory.learning.orchestrator import assess_and_record
     pd = _resolve_project_store(project_dir)
     proj_m = _get_project_mgr()

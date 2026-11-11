@@ -886,18 +886,24 @@ def generate_handover(
     worker contains by wrapping each step in try/except.
     """
     from compchem_memory.opencode_ingest import (
-        export_session, reconstruct_transcript, scrub_secrets,
+        plugin_dump_exporter, reconstruct_transcript, scrub_secrets,
         _read_mapping_ids, _messages_after_cursor, _last_message_id,
     )
     from compchem_memory.llm import call_llm
 
-    exporter = exporter or export_session
     llm = llm or call_llm
 
     store = Path(project_dir) / ".magnolia"
     mapping = store / "opencode-sessions.jsonl"
     if not mapping.exists():
         return None
+
+    # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
+    # resolved from PATH is v1.18.35 in the memory-server process, so
+    # `opencode export` cannot read v2 sessions and the handover silently
+    # merged nothing after the v2 switch. plugin_dump_exporter falls back to
+    # the CLI for v1 sessions, so this is backward-compatible.
+    exporter = exporter or plugin_dump_exporter(str(store))
 
     _migrate_legacy_cursor(store)
 

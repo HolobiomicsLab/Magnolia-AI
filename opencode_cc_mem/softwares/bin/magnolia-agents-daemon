@@ -326,6 +326,115 @@ def _opencode_bin() -> str:
     return "opencode"
 
 
+def _tools_port(agent: str, root: str) -> int:
+    """Same deterministic per-project port as the magnolia wrapper.
+
+    Base: master v1 8001, non-master v1 8101, v2 8201. Hash is POSIX cksum so
+    the daemon's port matches the interactive launcher's port.
+    """
+    try:
+        branch = subprocess.run(
+            ["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip() or "master"
+    except Exception:
+        branch = "master"
+    base = 8001 if branch == "master" else 8101
+    if _opencode_bin() != "opencode":
+        base = 8201
+    out = subprocess.run(
+        ["cksum"], input=agent.encode(), stdout=subprocess.PIPE, check=True,
+    ).stdout.decode().split()[0]
+    return base + int(out) % 90
+
+
+def _render_project_config(root: str, agent: str) -> None:
+    """Render projects/<agent>/opencode.json from the workspace template.
+
+    The lane daemon runs opencode with cwd = the project directory, so the
+    config must live there. Rendering is idempotent and never touches the
+    shared workspace config or the workspace .active-project marker.
+    """
+    opencode_dir = Path(root) / "opencode_cc_mem"
+    template_path = opencode_dir / "opencode.json.template"
+    if not template_path.exists():
+        return
+    project_dir = opencode_dir / "projects" / agent
+    setup = {}
+    setup_path = opencode_dir / ".magnolia" / "llm-setup.json"
+    if setup_path.exists():
+        try:
+            setup = json.loads(setup_path.read_text())
+        except Exception:
+            setup = {}
+    mem_on = bool(setup.get("memory_enabled")) and bool(setup.get("memory_model"))
+    text = (
+        template_path.read_text()
+        .replace("@@PROJECT@@", agent)
+        .replace("@@MAGNOLIA_ROOT@@", root)
+        .replace("@@PYTHON@@", str(Path(root) / ".venv" / "bin" / "python3"))
+        .replace("@@MEMORY_ENABLED@@", "true" if mem_on else "false")
+        .replace("@@COMPCHEM_TOOLS_PORT@@", str(_tools_port(agent, root)))
+    )
+    cfg = json.loads(text)
+    if setup.get("main_model"):
+        cfg["model"] = setup["main_model"]
+    if mem_on:
+        env = cfg["mcp"]["compchem-memory"].setdefault("environment", {})
+        env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
+        if setup.get("memory_provider"):
+            env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+    if _opencode_bin() != "opencode":
+        servers = {}
+        for name, server in cfg.pop("mcp", {}).items():
+            server = dict(server)
+            if "enabled" in server:
+                server["disabled"] = not server.pop("enabled")
+            if isinstance(server.get("timeout"), int):
+                t = server["timeout"]
+                server["timeout"] = {"startup": t, "catalog": t, "execution": t}
+            servers[name] = server
+        cfg["mcp"] = {"servers": servers}
+        cfg.pop("plugin", None)
+        cfg.pop("instructions", None)
+        perms = []
+        ext = (cfg.pop("permission", {}) or {}).get("external_directory", {})
+        for pattern, verdict in ext.items():
+            if verdict == "allow":
+                perms.append({"action": "edit", "resource": pattern, "effect": "allow"})
+        tools = cfg.pop("tools", {}) or {}
+        if tools.get("bash") is False:
+            perms.append({"action": "shell", "resource": "*", "effect": "deny"})
+        if perms:
+            cfg["permissions"] = perms
+    else:
+        # v1 project-root launch: absolute instructions, otherwise the
+        # template's projects/<agent> prefix would point inside the project.
+        cfg["instructions"] = [
+            str(Path(root) / "opencode_cc_mem" / "rules" / "*.md"),
+            str(Path(root) / "opencode_cc_mem" / "AGENTS.md"),
+            str(project_dir / ".magnolia" / "boot-context.md"),
+            str(project_dir / ".magnolia" / "audit-report.md"),
+        ]
+    (project_dir / ".magnolia").mkdir(parents=True, exist_ok=True)
+    (project_dir / ".magnolia" / ".active-project").write_text(agent)
+    (project_dir / "opencode.json").write_text(json.dumps(cfg, indent=2) + "\n")
+
+
+def _ensure_tools_daemon(root: str, env: dict) -> None:
+    """Start the per-project compchem-tools daemon if it is not already up."""
+    script = Path(root) / "opencode_cc_mem" / "softwares" / "bin" / "compchem-tools-daemon.sh"
+    if not script.exists():
+        return
+    try:
+        subprocess.run(
+            ["bash", str(script), "start"], env=env, timeout=60,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+    except Exception:
+        pass
+
+
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                    timeout_s: int, model: str | None = None) -> str:
     """Real headless run with the answer gate. Separate function so tests
@@ -354,11 +463,17 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                                     "deepseek/deepseek-flash")
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
-    env["MAGNOLIA_PROJECT_DIR"] = f"projects/{agent}"
+    env["MAGNOLIA_PROJECT_DIR"] = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
+    # Project-root mode: opencode runs with cwd = the project store, so the
+    # location, memory server, and config are per lane.
+    env["MAGNOLIA_PROJECT_WORKSPACE"] = "1"
+    env["MAGNOLIA_WORKSPACE_ROOT"] = str(Path(root) / "opencode_cc_mem")
     if _opencode_bin() != "opencode":
         env.setdefault(
             "OPENCODE_DB",
             str(Path.home() / ".local/share/opencode/opencode-v2.db"))
+    _render_project_config(root, agent)
+    _ensure_tools_daemon(root, env)
     # Lane session: the lane keeps ONE session across letters — each letter
     # resumes it (`opencode run --session`), so the lane retains its ticket
     # history. First letter starts a fresh session; the resulting session id

@@ -29,7 +29,7 @@
  * limited ctx — guarded. v2 has no server-side TUI domain: flagged verdicts
  * degrade to stderr (the JSONL log is the primary record either way).
  */
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
@@ -63,8 +63,19 @@ const SYSTEM =
   '"unsupported_claims": [string], "why": string}.'
 
 function criticDir(directory: string): string {
-  // MAGNOLIA_PROJECT_DIR is exported by the magnolia wrapper (e.g. "projects/xiulian").
+  // Project-root mode: cwd is the project store itself.
+  if (
+    process.env.MAGNOLIA_PROJECT_WORKSPACE === "1" ||
+    existsSync(join(directory, ".magnolia", "GOAL.md")) ||
+    existsSync(join(directory, ".magnolia", "boot-context.md"))
+  ) {
+    return join(directory, ".magnolia", "claim-critic")
+  }
+  // Workspace mode: MAGNOLIA_PROJECT_DIR may be absolute or relative.
   const projectDir = process.env.MAGNOLIA_PROJECT_DIR
+  if (projectDir && projectDir.startsWith("/")) {
+    return join(projectDir, ".magnolia", "claim-critic")
+  }
   return projectDir
     ? join(directory, projectDir, ".magnolia", "claim-critic")
     : join(directory, ".magnolia", "claim-critic")

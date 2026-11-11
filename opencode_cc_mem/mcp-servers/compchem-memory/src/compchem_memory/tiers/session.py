@@ -8,6 +8,47 @@ from typing import Any
 SCHEMA_VERSION = 2
 
 
+def _today_prefix() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _session_header(session_id: str, project_id: str, project_dir: str) -> dict:
+    return {
+        "event_type": "session_start",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "session_id": session_id,
+        "project_id": project_id,
+        "project_dir": project_dir,
+        "schema_version": SCHEMA_VERSION,
+    }
+
+
+def init_session_identity(project_dir: str | Path) -> str | None:
+    """Bind this process to one session id before any boot work runs.
+
+    Writes ``.magnolia/.current-session-id`` and creates the session JSONL
+    header. ``magnolia-run`` reads the marker for every shell call and
+    ``SessionManager`` adopts the same file, so both layers share one id from
+    the first event. The old code wrote the marker only after the 70-170 s
+    boot pipeline, which let early shell calls inherit the previous session's
+    id and made the live file look closed to ``startup_scan``.
+    """
+    try:
+        pd = Path(project_dir)
+        store = pd / ".magnolia"
+        sessions = store / "sessions"
+        sessions.mkdir(parents=True, exist_ok=True)
+        session_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+        (store / ".current-session-id").write_text(session_id)
+        session_file = sessions / f"{session_id}.jsonl"
+        if not session_file.exists():
+            header = _session_header(session_id, pd.name, str(pd.resolve()))
+            session_file.write_text(json.dumps(header) + "\n")
+        return session_id
+    except OSError:
+        return None
+
+
 class SessionManager:
     def __init__(
         self,
@@ -23,11 +64,28 @@ class SessionManager:
         self._current_session_id: str | None = None
         self._discover_todays_session()
 
+    @property
+    def _marker_path(self) -> Path:
+        return self.sessions_dir.parent / ".current-session-id"
+
     def _discover_todays_session(self) -> None:
-        """If a session file for today exists for this project, adopt it.
-        Otherwise stay unset; first record() will create a new one.
-        Survives MCP server restarts within a single user-session."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        """Adopt the id this server bound at import, else the newest file today.
+
+        The marker is the authoritative per-process id: ``init_session_identity``
+        writes it before the boot pipeline, and ``magnolia-run`` uses the same
+        value. Falling back to the newest today file is only for code paths that
+        construct a SessionManager without the marker (tests, legacy callers).
+        """
+        today = _today_prefix()
+        try:
+            sid = self._marker_path.read_text().strip()
+        except OSError:
+            sid = ""
+        if sid.startswith(today + "_"):
+            self._current_session = self.sessions_dir / f"{sid}.jsonl"
+            self._current_session_id = sid
+            return
+
         candidates = sorted(self.sessions_dir.glob(f"{today}_*.jsonl"), reverse=True)
         for cand in candidates:
             try:
@@ -41,7 +99,9 @@ class SessionManager:
                 return
 
     def _get_session_path(self) -> Path:
-        if self._current_session and self._current_session.exists():
+        if self._current_session is not None:
+            if not self._current_session.exists():
+                self._write_header()
             return self._current_session
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
         self._current_session_id = ts
@@ -51,14 +111,11 @@ class SessionManager:
         return self._current_session
 
     def _write_header(self) -> None:
-        header = {
-            "event_type": "session_start",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "session_id": self._current_session_id,
-            "project_id": self.project_id,
-            "project_dir": self.project_dir,
-            "schema_version": SCHEMA_VERSION,
-        }
+        header = _session_header(
+            self._current_session_id or "",
+            self.project_id,
+            self.project_dir,
+        )
         with open(self._current_session, "a") as f:
             f.write(json.dumps(header) + "\n")
 

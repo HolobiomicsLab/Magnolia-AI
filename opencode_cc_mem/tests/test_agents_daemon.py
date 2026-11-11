@@ -528,7 +528,8 @@ def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
     d.save_state(root, state)
     calls = []
 
-    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log):
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log,
+                      binary="opencode"):
         calls.append(list(extra_args))
         if "--session" in extra_args:
             return {"rc": 1, "session_id": None, "final_text": "",

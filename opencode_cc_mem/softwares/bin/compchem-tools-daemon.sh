@@ -30,18 +30,25 @@ set -u
 # subdir paths below would then double up (bug fixed 2026-08-19).
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PY="$ROOT/.venv/bin/python3"
-# Per-tree port (2026-10-05): a single shared 8001 let an exp-worktree launch
-# silently reuse a daemon started by a live-tree session — inheriting that
-# session's baked-in project env (shell telemetry then misrouted across
-# trees). Non-master trees get 8011; master keeps 8001. Must match the
-# render_config() port in the `magnolia` wrapper. COMPCHEM_TOOLS_PORT still
-# overrides for special cases.
-DAEMON_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
-DEFAULT_PORT=8001
-[ "$DAEMON_BRANCH" = "master" ] || DEFAULT_PORT=8011
-PORT="${COMPCHEM_TOOLS_PORT:-$DEFAULT_PORT}"
-HOST="127.0.0.1"
 PROJECT_DIR="${MAGNOLIA_PROJECT_DIR:-projects/communication}"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+# Deterministic per-project port. The daemon bakes MAGNOLIA_PROJECT_DIR into a
+# long-lived supervisor, so two projects must never share a port (2026-10-05
+# cross-tree mix, 2026-11-10 cross-project mix). Bases: master v1 8001,
+# non-master v1 8101, v2 8201. Keep in sync with tools_port_for_project() in
+# the `magnolia` wrapper. COMPCHEM_TOOLS_PORT still overrides.
+project_port() {
+  local project="$1" base="$2" hash
+  hash="$(printf '%s' "$project" | cksum | awk '{print $1}')"
+  echo $((base + hash % 90))
+}
+DAEMON_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
+BASE_PORT=8001
+[ "$DAEMON_BRANCH" = "master" ] || BASE_PORT=8101
+[ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ] && BASE_PORT=8201
+PORT="${COMPCHEM_TOOLS_PORT:-$(project_port "$PROJECT_NAME" "$BASE_PORT")}"
+HOST="127.0.0.1"
 LOG_DIR="$ROOT/opencode_cc_mem/logs"
 OUT_LOG="$LOG_DIR/compchem-tools-http.log"
 PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/compchem-tools-daemon-${PORT}.pid"

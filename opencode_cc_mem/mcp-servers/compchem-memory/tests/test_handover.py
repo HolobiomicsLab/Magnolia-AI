@@ -255,6 +255,34 @@ def _session_cursor(store, sid):
     return json.loads((store / _CURSORS_DIR / f"{sid}.json").read_text())["cursor"]
 
 
+def test_generate_default_exporter_prefers_v2_pipeline(store, monkeypatch):
+    """The default exporter must be the v2-aware DB/dump reader, not the CLI.
+
+    2026-11-10: the memory server's PATH resolves opencode to v1.18.35, so
+    `opencode export` returns nothing for v2 sessions and the handover silently
+    merges nothing. plugin_dump_exporter reads OPENCODE_DB first and falls back
+    to the CLI for v1, so it is the correct default.
+    """
+    _write_mapping(store, ["ses_a"])
+    called = []
+
+    def fake_exporter(store_dir):
+        called.append(store_dir)
+        return lambda sid: {
+            "info": {"id": sid},
+            "messages": [_msg("a1", "user", "v2 session survived")],
+        }
+
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.plugin_dump_exporter", fake_exporter
+    )
+    path = hv.generate_handover(str(store.parent), llm=_merge_echo)
+
+    assert path is not None
+    assert called, "generate_handover did not use plugin_dump_exporter by default"
+    assert "v2 session survived" in (store / hv.HANDOVER_STATE_FILE).read_text()
+
+
 def test_generate_multi_session_both_merged(store):
     _write_mapping(store, ["ses_a", "ses_b"])
     exports = {

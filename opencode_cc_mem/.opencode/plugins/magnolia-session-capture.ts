@@ -26,37 +26,77 @@
  * same recorder, so the JSONL contract the Python side reads is unchanged.
  */
 import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { join, dirname, basename } from "node:path"
 
-function projectMapPath(directory: string): string | null {
+function isProjectRoot(directory: string): boolean {
+  return (
+    process.env.MAGNOLIA_PROJECT_WORKSPACE === "1" ||
+    existsSync(join(directory, ".magnolia", "GOAL.md")) ||
+    existsSync(join(directory, ".magnolia", "boot-context.md"))
+  )
+}
+
+function activeProject(directory: string): string | null {
   // magnolia writes the active project name to .magnolia/.active-project
   // before exec-ing opencode, because opencode does not pass shell env vars
   // to plugin code. This marker file is the only reliable channel.
+  if (isProjectRoot(directory)) return basename(directory)
   try {
-    const marker = join(directory, ".magnolia", ".active-project")
-    const proj = readFileSync(marker, "utf8").trim()
-    if (!proj) return null
-    return join(directory, "projects", proj, ".magnolia", "opencode-sessions.jsonl")
+    const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
+    return proj || null
   } catch { return null }
 }
 
-function makeRecorder(directory: string, worktree: string | undefined) {
-  // per-project mapping — the one scan_and_distill reads
-  const projPath = projectMapPath(directory)
-  // shared root mapping — kept for the migration buffer; can be removed once
-  // all projects have project-specific files and the scan fallback is gone
-  const rootPath = join(directory, ".magnolia", "opencode-sessions.jsonl")
+function projectStore(directory: string, project: string): string {
+  return isProjectRoot(directory)
+    ? join(directory, ".magnolia")
+    : join(directory, "projects", project, ".magnolia")
+}
 
-  // session ids already recorded (so we append once per session, not per message)
+function readSeen(path: string): Set<string> {
   const seen = new Set<string>()
   try {
-    if (existsSync(rootPath)) {
-      for (const line of readFileSync(rootPath, "utf8").split("\n")) {
-        if (!line.trim()) continue
-        try { seen.add(JSON.parse(line).opencode_session_id) } catch { /* skip */ }
-      }
+    if (!existsSync(path)) return seen
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (!line.trim()) continue
+      try { seen.add(JSON.parse(line).opencode_session_id) } catch { /* skip */ }
     }
-  } catch { /* first run / unreadable — start empty */ }
+  } catch { /* first run / unreadable */ }
+  return seen
+}
+
+type Recorder = ((sessionID: string) => void) & {
+  isKnown: (sessionID: string) => boolean
+  projectOf: (sessionID: string) => string | null
+}
+
+function makeRecorder(directory: string, worktree: string | undefined): Recorder {
+  // Shared root mapping: migration buffer only. It must NOT be the dedup set
+  // for project mappings — that made the first plugin instance claim every
+  // session on the shared v2 service (2026-11-10 cross-project mapping mix).
+  const rootPath = join(directory, ".magnolia", "opencode-sessions.jsonl")
+  const seenRoot = readSeen(rootPath)
+
+  // Bind a session to the project active at its FIRST event and keep it there.
+  // A later .active-project flip must not move an existing session.
+  const projectBySession = new Map<string, string | null>()
+  const seenByProject = new Map<string, Set<string>>()
+
+  const projectFor = (sessionID: string): string | null => {
+    if (!projectBySession.has(sessionID)) {
+      projectBySession.set(sessionID, activeProject(directory))
+    }
+    return projectBySession.get(sessionID) ?? null
+  }
+
+  const projectSeen = (path: string): Set<string> => {
+    let seen = seenByProject.get(path)
+    if (!seen) {
+      seen = readSeen(path)
+      seenByProject.set(path, seen)
+    }
+    return seen
+  }
 
   const recordOne = (path: string, sessionID: string) => {
     try {
@@ -71,26 +111,37 @@ function makeRecorder(directory: string, worktree: string | undefined) {
     } catch { /* never throw into opencode */ }
   }
 
-  return (sessionID: string) => {
-    if (!sessionID || seen.has(sessionID)) return
-    // Write to the project-specific file (primary); also to the root
-    // (migration buffer, so existing projects with no per-project file yet
-    // don't silently lose new sessions before the scan fallback is removed).
-    try {
-      if (projPath) recordOne(projPath, sessionID)
-      recordOne(rootPath, sessionID)
+  const record = ((sessionID: string) => {
+    if (!sessionID) return
+    const proj = projectFor(sessionID)
+    if (!proj) return
+    const projPath = join(
+      projectStore(directory, proj),
+      "opencode-sessions.jsonl",
+    )
+    // Dedup per project mapping. The root is written separately so two
+    // plugin instances cannot make the first project own every session.
+    const seen = projectSeen(projPath)
+    if (!seen.has(sessionID)) {
+      recordOne(projPath, sessionID)
       seen.add(sessionID)
-    } catch { /* never throw into opencode */ }
-  }
+    }
+    // In project-root mode the project mapping IS the root; write once.
+    if (projPath !== rootPath && !seenRoot.has(sessionID)) {
+      recordOne(rootPath, sessionID)
+      seenRoot.add(sessionID)
+    }
+  }) as Recorder
+
+  record.isKnown = (sessionID: string) => projectBySession.has(sessionID)
+  record.projectOf = (sessionID: string) => projectBySession.get(sessionID) ?? null
+  return record
 }
 
 /** Directory for the v2 in-process transcript dumps (next to the mapping). */
-function transcriptsDir(directory: string): string {
-  try {
-    const marker = join(directory, ".magnolia", ".active-project")
-    const proj = readFileSync(marker, "utf8").trim()
-    if (proj) return join(directory, "projects", proj, ".magnolia", "opencode-transcripts")
-  } catch { /* fall through to root */ }
+function transcriptsDir(directory: string, project?: string | null): string {
+  const proj = project ?? activeProject(directory)
+  if (proj) return join(projectStore(directory, proj), "opencode-transcripts")
   return join(directory, ".magnolia", "opencode-transcripts")
 }
 
@@ -143,7 +194,6 @@ export default {
     // session id at durable.aggregateID (data.sessionID on usage events).
     // Accept both vocabularies.
     const controller = new AbortController()
-    const dumpDir = transcriptsDir(directory)
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
@@ -155,14 +205,23 @@ export default {
             ev?.data?.sessionID ??
             ev?.sessionID
           if (!sid) continue
-          record(String(sid))
+          const sidStr = String(sid)
+          // The service event stream is global. Only sessions this plugin saw
+          // through the location-scoped prompt hook belong to this workspace's
+          // project; skip API/test sessions and other locations entirely.
+          if (!record.isKnown(sidStr)) continue
+          record(sidStr)
+          const proj = record.projectOf(sidStr)
+          if (!proj) continue
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           if (turnEnd && ctx?.session?.context) {
             const messages = await ctx.session
-              .context({ sessionID: String(sid) })
+              .context({ sessionID: sidStr })
               .catch(() => null)
-            if (messages) dumpTranscript(dumpDir, String(sid), messages)
+            if (messages) {
+              dumpTranscript(transcriptsDir(directory, proj), sidStr, messages)
+            }
           }
         }
       } catch { /* aborted or stream error — never break the session */ }

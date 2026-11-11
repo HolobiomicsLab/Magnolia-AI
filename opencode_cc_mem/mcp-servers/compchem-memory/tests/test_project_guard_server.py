@@ -54,3 +54,21 @@ def test_record_learning_allows_pinned_project_write(two_projects):
     )
     payload = json.loads(result)
     assert payload["status"] in ("created", "bumped")
+
+
+def test_record_learning_allows_explicit_cross_project_override(two_projects):
+    """A shared-service session pinned to proj_a can still record proj_b work
+    when the caller explicitly asserts project_dir (2026-11-10)."""
+    from compchem_memory import server
+    pinned, other = two_projects
+    record_learning = _record_learning(server)
+
+    result = record_learning(
+        title="Explicit cross-project learning",
+        content="belongs to proj_b and is intentional",
+        project_dir=str(other),
+        allow_cross_project=True,
+    )
+    payload = json.loads(result)
+    assert payload["status"] in ("created", "bumped")
+    assert list((other / ".magnolia" / "staging").glob("*.md"))

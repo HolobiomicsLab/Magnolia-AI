@@ -25,17 +25,38 @@
  * agents need no code edit — registering the project is enough.
  */
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { join, dirname, basename } from "node:path"
 
 const DISABLED = String(process.env.MAGNOLIA_DOORBELL ?? "").toLowerCase() === "0"
 const DEFAULT_AGENTS = ["literature", "xiulian"]
 
+function isProjectRoot(directory: string): boolean {
+  return (
+    process.env.MAGNOLIA_PROJECT_WORKSPACE === "1" ||
+    existsSync(join(directory, ".magnolia", "GOAL.md")) ||
+    existsSync(join(directory, ".magnolia", "boot-context.md"))
+  )
+}
+
+function workspaceRoot(directory: string): string {
+  if (!isProjectRoot(directory)) return directory
+  let cur = directory
+  while (cur !== "/") {
+    if (existsSync(join(cur, "mcp-servers", "compchem-memory")) || existsSync(join(cur, "rules"))) {
+      return cur
+    }
+    cur = dirname(cur)
+  }
+  return directory
+}
+
 function registryAgents(directory: string): string[] {
   const names = new Set(DEFAULT_AGENTS)
+  const root = workspaceRoot(directory)
   try {
-    for (const d of readdirSync(join(directory, "projects"), { withFileTypes: true })) {
+    for (const d of readdirSync(join(root, "projects"), { withFileTypes: true })) {
       if (!d.isDirectory()) continue
-      const cfgPath = join(directory, "projects", d.name, "agent.json")
+      const cfgPath = join(root, "projects", d.name, "agent.json")
       if (!existsSync(cfgPath)) continue
       try {
         const cfg = JSON.parse(readFileSync(cfgPath, "utf8"))
@@ -58,6 +79,7 @@ function buildMentionRes(agents: string[]): { mention: RegExp; check: RegExp } {
 type Toast = (message: string) => void
 
 function sourceProjectOf(directory: string): string {
+  if (isProjectRoot(directory)) return basename(directory)
   try {
     const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
     if (proj) return proj
@@ -74,7 +96,7 @@ function slug(text: string): string {
 }
 
 function deliver(directory: string, sourceProject: string, agent: string, request: string): string {
-  const taskDir = join(directory, "projects", agent, "inbox", `from-${sourceProject}`)
+  const taskDir = join(workspaceRoot(directory), "projects", agent, "inbox", `from-${sourceProject}`)
   mkdirSync(taskDir, { recursive: true })
   const file = join(taskDir, `${slug(request)}.task.md`)
   const letter = [

@@ -108,6 +108,13 @@ pinned to. Do not retry. Relay the payload's `message` to the user plainly — t
 need to start a new opencode session for the other project. One session works on
 one project.
 
+**Exception (2026-11-10):** when the user explicitly confirms the target project
+and a new session is not possible — typically opencode v2's shared service has
+pinned this server to another project — call the write tool again with an
+explicit `project_dir` **and** `allow_cross_project=True`. The write is logged to
+stderr and goes to the requested store. The other project's boot pipeline
+(handover, boot-context, audit) runs on its next launch.
+
 Reading another project's memory is fine and is not blocked — only writing is.
 
 ## When a tool returns review_required

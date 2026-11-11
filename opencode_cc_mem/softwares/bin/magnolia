@@ -34,6 +34,16 @@ VENV_PY="$REPO_ROOT/.venv/bin/python3"
 LLM_SETUP="$OPENCODE_DIR/.magnolia/llm-setup.json"
 ACTIVE_PROJECT_FILE="$OPENCODE_DIR/.magnolia/.active-project"
 
+# Deterministic per-project compchem-tools daemon port. The daemon bakes
+# MAGNOLIA_PROJECT_DIR into a long-lived supervisor, so two projects must never
+# share a port (2026-11-10 cross-project tool/session mix). Keep this function
+# in sync with project_port() in compchem-tools-daemon.sh.
+tools_port_for_project() {
+    local project="$1" base="$2" hash
+    hash="$(printf '%s' "$project" | cksum | awk '{print $1}')"
+    echo $((base + hash % 90))
+}
+
 # Python for config rendering + LLM probes (venv preferred, PATH fallback).
 if [ -x "$VENV_PY" ]; then
     PYTHON_CMD="$VENV_PY"
@@ -70,7 +80,7 @@ Options:
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
                    (~/.local/share/opencode/opencode-v2.db) and its OWN
-                   compchem-tools daemon port (8012). DEFAULT in this tree
+                   per-project compchem-tools daemon port (base 8201). DEFAULT in this tree
                    (experimental-v2 line); set MAGNOLIA_OPENCODE_V2=0 to force
                    the v1 runtime. v2 must never open the
                    shared v1 DB: gate-1 (2026-10-06) showed v2 restructures
@@ -344,17 +354,19 @@ PY
 # Echoes "on"/"off" so callers can report the resulting memory state.
 render_config() {
     local project="$1"
-    # Per-tree daemon port — must match compchem-tools-daemon.sh (2026-10-05):
-    # a single shared default port let an exp-worktree session pin the daemon
-    # started by a live-tree session, inheriting that session's project env.
-    # Non-master trees get 8011; master keeps the historical 8001.
-    local branch default_port
+    # Per-tree + per-project daemon port — must match compchem-tools-daemon.sh.
+    # A single shared default let a session pin a daemon started by another
+    # tree/project and inherit its env (2026-10-05 cross-tree, 2026-11-10
+    # cross-project). Bases: master v1 8001, non-master v1 8101, v2 8201.
+    local branch base project_port
     branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
-    default_port=8001
-    [ "$branch" = "master" ] || default_port=8011
+    base=8001
+    [ "$branch" = "master" ] || base=8101
+    [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ] && base=8201
+    project_port="$(tools_port_for_project "${project:-unknown}" "$base")"
     MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
     MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
-    MAG_PORT="${COMPCHEM_TOOLS_PORT:-$default_port}" \
+    MAG_PORT="${COMPCHEM_TOOLS_PORT:-$project_port}" \
     "$PYTHON_CMD" - <<'PY'
 import json, os, pathlib
 setup = {}
@@ -421,6 +433,21 @@ if os.environ.get("MAGNOLIA_OPENCODE_V2") == "1":
     if perms:
         cfg["permissions"] = perms
 
+# Project-root launch: opencode runs with cwd = projects/<name>. In v1 the
+# instructions paths must be absolute (the template's projects/<name> prefix
+# would otherwise point inside the project directory itself). v2 drops the
+# array above, so this only affects the v1 render.
+if (os.environ.get("MAGNOLIA_PROJECT_WORKSPACE") == "1"
+        and os.environ.get("MAGNOLIA_OPENCODE_V2") != "1"):
+    _proj_dir = pathlib.Path(os.environ["MAG_CFG"]).parent
+    _root = pathlib.Path(os.environ["MAG_ROOT"])
+    cfg["instructions"] = [
+        str(_root / "opencode_cc_mem" / "rules" / "*.md"),
+        str(_root / "opencode_cc_mem" / "AGENTS.md"),
+        str(_proj_dir / ".magnolia" / "boot-context.md"),
+        str(_proj_dir / ".magnolia" / "audit-report.md"),
+    ]
+
 out = pathlib.Path(os.environ["MAG_CFG"])
 tmp = out.with_name(out.name + ".tmp")
 tmp.write_text(json.dumps(cfg, indent=2) + "\n")
@@ -455,7 +482,13 @@ PY
 # Re-render for the active project if one is known (best-effort).
 render_active_project() {
     [ -s "$ACTIVE_PROJECT_FILE" ] || return 0
-    render_config "$(cat "$ACTIVE_PROJECT_FILE")" >/dev/null
+    local active
+    active="$(cat "$ACTIVE_PROJECT_FILE")"
+    if [ -d "$PROJECTS_DIR/$active" ]; then
+        CONFIG="$PROJECTS_DIR/$active/opencode.json"
+        export MAGNOLIA_PROJECT_WORKSPACE=1
+    fi
+    render_config "$active" >/dev/null
 }
 
 cmd_memory_set() {
@@ -582,6 +615,14 @@ if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     exit 0
 fi
 
+# TREE DEFAULT (2026-11-05, experimental-v2 line): this tree defaults to the
+# v2 runtime. Set it before `magnolia memory` renders opencode.json so the
+# tools port and memory MCP shape match the runtime that is actually used.
+# Explicit opt-outs still win: MAGNOLIA_OPENCODE_V2=0 forces v1.
+if [ -z "${MAGNOLIA_OPENCODE_V2:-}" ]; then
+    export MAGNOLIA_OPENCODE_V2=1
+fi
+
 # Subcommand dispatch: `magnolia memory …` configures and exits (no launch).
 if [ "${1:-}" = "memory" ]; then
     shift
@@ -641,6 +682,13 @@ if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
     prompt_create_project "$PROJECT"
 fi
 
+# Project-root launch: opencode runs with cwd = projects/<name>, so the
+# location, memory server, tools daemon, and config are per project. The
+# ancestor opencode_cc_mem/.opencode and AGENTS.md are still discovered.
+export MAGNOLIA_PROJECT_WORKSPACE=1
+PROJECT_WORKSPACE="$PROJECTS_DIR/$PROJECT"
+CONFIG="$PROJECT_WORKSPACE/opencode.json"
+
 if [ ! -f "$TEMPLATE" ]; then
     echo "error: template missing at $TEMPLATE" >&2
     exit 1
@@ -671,13 +719,23 @@ if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
         mkdir -p "$(dirname "$OPENCODE_DB")"
         export OPENCODE_DB
     fi
-    # v2 worktree gets its OWN daemon port (8012): the branch-based default
-    # gives every non-master tree 8011, which would let a v2 session pin the
-    # exp tree's compchem-tools daemon (the 2026-10-05 MCP-pin race class).
-    # FORCE it (dedicated override var): an inherited COMPCHEM_TOOLS_PORT
-    # (e.g. 8011 exported by another tree's daemon into a shell) must not
-    # bleed a v2 session onto the wrong daemon.
-    export COMPCHEM_TOOLS_PORT="${MAGNOLIA_V2_PORT:-8012}"
+    # Per-project v2 daemon port (base 8201). The old fixed 8012 let every v2
+    # project reuse the first project's daemon env (2026-11-10 cross-project
+    # shell telemetry + session mix). MAGNOLIA_V2_PORT stays an explicit
+    # override; COMPCHEM_TOOLS_PORT from the caller is the lower-level one.
+    if [ -n "${MAGNOLIA_V2_PORT:-}" ]; then
+        export COMPCHEM_TOOLS_PORT="$MAGNOLIA_V2_PORT"
+    elif [ -z "${COMPCHEM_TOOLS_PORT:-}" ]; then
+        export COMPCHEM_TOOLS_PORT="$(tools_port_for_project "$PROJECT" 8201)"
+    fi
+fi
+# v1: same per-project rule, with the tree-level base (master 8001,
+# non-master 8101). Keeps two projects in one tree from sharing a daemon.
+if [ -z "${COMPCHEM_TOOLS_PORT:-}" ]; then
+    _branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
+    _base=8001
+    [ "$_branch" = "master" ] || _base=8101
+    export COMPCHEM_TOOLS_PORT="$(tools_port_for_project "$PROJECT" "$_base")"
 fi
 if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
     echo "error: opencode binary not found: $OPENCODE_BIN" >&2
@@ -725,8 +783,10 @@ export MAGNOLIA_PROJECT_DIR="$REPO_ROOT/opencode_cc_mem/projects/$PROJECT"
 
 # Let the capture plugin (and any other opencode plugin) know which project
 # is active. opencode does not pass shell env vars to plugin code; this file
-# is the only reliable channel.
+# is the only reliable channel. The workspace marker is kept for legacy; the
+# project-store marker is the authoritative one in project-root mode.
 echo "$PROJECT" > "$OPENCODE_DIR/.magnolia/.active-project"
+echo "$PROJECT" > "$PROJECT_WORKSPACE/.magnolia/.active-project"
 
 # Activate the project venv for THIS process — and thus opencode, its MCP
 # servers, and any tool subprocesses (p2rank, haddock3, …) they spawn, so
@@ -804,6 +864,9 @@ if [ "${PRINT_ENV:-0}" = "1" ]; then
     echo "binary:  $OPENCODE_BIN"
     echo "db:      ${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
     echo "project: $PROJECT -> $MAGNOLIA_PROJECT_DIR"
+    echo "workspace: $PROJECT_WORKSPACE"
+    echo "config:  $CONFIG"
+    echo "tools:   http://127.0.0.1:${COMPCHEM_TOOLS_PORT:-unset}/mcp"
     echo "profile: ${PROFILE:-plain}"
     exit 0
 fi
@@ -844,5 +907,10 @@ if [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemo
     disown || true
 fi
 
-cd "$OPENCODE_DIR"
-exec "$OPENCODE_BIN"
+# Run opencode with the project directory as its location. MAGNOLIA_PROJECT_DIR
+# stays absolute for the MCP server env and the tools daemon; plugins see "."
+# so their relative store paths resolve against the project workspace.
+export MAGNOLIA_PROJECT_WORKSPACE=1
+export MAGNOLIA_WORKSPACE_ROOT="$OPENCODE_DIR"
+cd "$PROJECT_WORKSPACE"
+MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"

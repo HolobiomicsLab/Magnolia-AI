@@ -27,7 +27,7 @@
  *
  * Toggle: on by default (read-only, desired). Opt out with MAGNOLIA_AUTORETRIEVE=0|off.
  */
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join, dirname } from "node:path"
 
 const DISABLED = ["0", "off", "false", "no"].includes(
@@ -49,6 +49,13 @@ const DIRECTIVE =
 // magnolia writes the active project name to .magnolia/.active-project before
 // exec-ing opencode (plugins don't receive shell env vars reliably).
 function logPath(directory: string): string {
+  if (
+    process.env.MAGNOLIA_PROJECT_WORKSPACE === "1" ||
+    existsSync(join(directory, ".magnolia", "GOAL.md")) ||
+    existsSync(join(directory, ".magnolia", "boot-context.md"))
+  ) {
+    return join(directory, ".magnolia", "auto-retrieval.jsonl")
+  }
   try {
     const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
     if (proj) return join(directory, "projects", proj, ".magnolia", "auto-retrieval.jsonl")

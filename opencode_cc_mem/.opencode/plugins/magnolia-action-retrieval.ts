@@ -137,23 +137,58 @@ const partsOf = (m: any): any[] => m?.parts ?? []
  * Shared core: retrieval pipeline + C1 noise control + logging + P3 probe.
  * readMessages(sessionID) abstracts the version-specific message API.
  */
+function isProjectRoot(directory: string): boolean {
+  return (
+    process.env.MAGNOLIA_PROJECT_WORKSPACE === "1" ||
+    existsSync(join(directory, ".magnolia", "GOAL.md")) ||
+    existsSync(join(directory, ".magnolia", "boot-context.md"))
+  )
+}
+
+function workspaceRoot(directory: string): string {
+  if (!isProjectRoot(directory)) return directory
+  let cur = directory
+  while (cur !== "/") {
+    if (existsSync(join(cur, "mcp-servers", "compchem-memory"))) return cur
+    cur = dirname(cur)
+  }
+  return directory
+}
+
 function makeCore(directory: string, readMessages: (sessionID: string) => Promise<any[]>) {
+  const rootMode = isProjectRoot(directory)
+  const root = workspaceRoot(directory)
   let projectDir = ""
   try {
     const proj = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
     if (proj) projectDir = join("projects", proj)
   } catch { /* fall through: MAGNOLIA_PROJECT_DIR env decides in python */ }
 
+  // Absolute store path for the Python child: its cwd is the service process,
+  // not necessarily the location directory.
+  const envProject = process.env.MAGNOLIA_PROJECT_DIR
+  const projectAbs = rootMode
+    ? directory
+    : projectDir
+      ? join(directory, projectDir)
+      : envProject
+        ? envProject.startsWith("/")
+          ? envProject
+          : join(directory, envProject)
+        : join(root, "projects", "xiulian")
+
   const childEnv = {
     ...process.env,
-    MAGNOLIA_ROOT: directory,
-    MAGNOLIA_PROJECT_DIR: projectDir || process.env.MAGNOLIA_PROJECT_DIR || "projects/xiulian",
-    PYTHONPATH: join(directory, "mcp-servers/compchem-memory/src"),
+    MAGNOLIA_ROOT: root,
+    MAGNOLIA_PROJECT_DIR: projectAbs,
+    PYTHONPATH: join(root, "mcp-servers/compchem-memory/src"),
   }
 
-  const logFile = projectDir
-    ? join(directory, projectDir, ".magnolia", "action-retrieval.jsonl")
-    : join(directory, ".magnolia", "action-retrieval.jsonl")
+  const logFile = rootMode
+    ? join(directory, ".magnolia", "action-retrieval.jsonl")
+    : projectDir
+      ? join(directory, projectDir, ".magnolia", "action-retrieval.jsonl")
+      : join(directory, ".magnolia", "action-retrieval.jsonl")
 
   const log = (row: Record<string, unknown>) => {
     try {
