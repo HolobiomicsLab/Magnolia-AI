@@ -49,6 +49,7 @@ CLUSTER_DEFAULTS: dict[str, Any] = {
     "tunnel_script": "",
     "modulefiles_use": "",
     "requires_control_master": True,
+    "transport": "ssh",
     "default": False,
 }
 
