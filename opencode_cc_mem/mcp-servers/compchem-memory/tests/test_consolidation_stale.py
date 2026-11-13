@@ -79,6 +79,7 @@ def test_retirement_dismisses_pending_proposal(tmp_path, monkeypatch):
          "surfaced": 0, "opportunities": 12, "days": 4, "created": None},
     ])
     monkeypatch.setattr("compchem_memory.canary.is_frozen", lambda pd: False)
+    monkeypatch.setenv("MAGNOLIA_RETIREMENT_PROPOSAL_GRACE_DAYS", "0")
 
     res = rt.retire_eligible(str(tmp_path))
 
