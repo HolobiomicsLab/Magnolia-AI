@@ -145,6 +145,10 @@ score [X] − w_air × air [Y] = [RESULT]
 - Subtracting full `air` instead of `w_air × air`. This produces values ~10× too negative when w_air=0.1. Always write the intermediate product explicitly.
 - Using w_air=0.01 for refinement-stage scores. The correct value for flexref/emref/mdref output is 0.1, not 0.01.
 
+## Cluster Population and Convergence
+
+`capri_clt.tsv` cluster size `n` is **capped at 20** by `seletopclusts` (20 models per cluster are carried into final caprieval), so `n=20` says nothing about convergence. Read the true population from `output/10_clustfcc/clustfcc.txt` — header form `Cluster <id> (#<rank>, n=<N>, top4_avg_score = ...)` — and gate main comparisons on `clustfcc n >= 50/200`. Also note that `capri_clt.tsv` rows are sorted by raw `score`, not AIR-free; re-sort all clusters yourself before ranking.
+
 ## Sampling Guidelines
 
 | Scenario | Sampling |
