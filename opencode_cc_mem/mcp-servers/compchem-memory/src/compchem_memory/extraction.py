@@ -536,7 +536,8 @@ class AutomaticMemoryExtractor:
 
         saved = []
         for candidate in candidates:
-            path = self._save_to_staging(store, candidate)
+            candidate["run_ids"] = _link_run_ids(store, candidate)
+            path = self._save_to_staging(store, candidate, session_id=session_path.stem)
             saved.append(path)
 
         if saved:
@@ -653,10 +654,14 @@ class AutomaticMemoryExtractor:
             failures.append(info)
         return failures
 
-    def _save_to_staging(self, store: Path, candidate: dict[str, Any]) -> str:
+    def _save_to_staging(self, store: Path, candidate: dict[str, Any], session_id: str | None = None) -> str:
         from compchem_memory.staging_io import save_candidate
 
-        return save_candidate(store, candidate, source="auto_extraction")
+        return save_candidate(
+            store, candidate, source="auto_extraction",
+            opencode_session_id=session_id,
+        )
+
 
     def _read_events(self, session_path: Path) -> list[dict[str, Any]]:
         events = []
@@ -672,3 +677,22 @@ class AutomaticMemoryExtractor:
         except OSError:
             pass
         return events
+
+
+def _link_run_ids(store: Path, candidate: dict[str, Any]) -> list[str]:
+    """Link a distilled candidate to run records by exact run_id mention.
+
+    Deterministic: no LLM involvement. A run_id is linked only when its literal
+    string appears in the candidate title or body."""
+    runs_dir = store / "runs"
+    if not runs_dir.exists():
+        return []
+    text = f"{candidate.get('title', '')}\n{candidate.get('content', '')}"
+    run_ids: list[str] = []
+    for f in sorted(runs_dir.glob("*.yaml")):
+        # runs/<date>_<run_id>.yaml — date is %Y%m%d (8 chars) + underscore.
+        stem = f.stem
+        run_id = stem[9:] if len(stem) > 9 and stem[:8].isdigit() else stem
+        if run_id and run_id in text:
+            run_ids.append(run_id)
+    return run_ids

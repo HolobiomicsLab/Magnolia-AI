@@ -84,13 +84,27 @@ def _cfg(cluster: str) -> dict[str, Any]:
         ) from None
 
 
+def _transport(cluster: str) -> str:
+    """Transport backend for this cluster: plain ssh (default) or hpc-session."""
+    return _cfg(cluster).get("transport", "ssh")
+
+
 def _ssh(cluster: str, command: str, *, timeout: int = 60) -> CompletedProcess:
     """Run a single command on the cluster's login node via ssh.
 
     Uses BatchMode=yes so failures (no auth, host-key change) surface
-    instead of hanging on a password prompt.
+    instead of hanging on a password prompt. With transport=hpc-session,
+    delegates to `hpc-session run` so the hpc-session master (and its TOTP
+    handling) is used instead of a second, separate ControlMaster.
     """
     cfg = _cfg(cluster)
+    if _transport(cluster) == "hpc-session":
+        return subprocess.run(
+            ["hpc-session", "run", "--", command],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     return subprocess.run(
         ["ssh", "-o", "BatchMode=yes", cfg["ssh_host"], command],
         capture_output=True,
@@ -103,8 +117,18 @@ def _rsync_push(local: Path, cluster: str, remote: str, *, timeout: int = 600) -
     """rsync the local directory to the remote path on the cluster.
 
     --mkpath creates the remote path components if they don't exist.
+    With transport=hpc-session, uses `hpc-session local rsync` so the transfer
+    shares the hpc-session master rather than opening a new SSH connection.
     """
     cfg = _cfg(cluster)
+    if _transport(cluster) == "hpc-session":
+        return subprocess.run(
+            ["hpc-session", "local", "rsync", "-az", "--mkpath",
+             f"{local}/", f"{cfg['ssh_host']}:{remote}/"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     return subprocess.run(
         ["rsync", "-az", "--mkpath", f"{local}/", f"{cfg['ssh_host']}:{remote}/"],
         capture_output=True,
@@ -118,8 +142,17 @@ def _rsync_pull(cluster: str, remote: str, local: Path, *, timeout: int = 600) -
 
     --stats yields a summary block at the end of stdout (Number of files,
     Total bytes, etc.) which fetch() parses to count files fetched.
+    With transport=hpc-session, uses `hpc-session local rsync`.
     """
     cfg = _cfg(cluster)
+    if _transport(cluster) == "hpc-session":
+        return subprocess.run(
+            ["hpc-session", "local", "rsync", "-az", "--stats",
+             f"{cfg['ssh_host']}:{remote}/", f"{local}/"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
     return subprocess.run(
         ["rsync", "-az", "--stats", f"{cfg['ssh_host']}:{remote}/", f"{local}/"],
         capture_output=True,
@@ -160,8 +193,25 @@ def _ensure_master(cluster: str) -> None:
     `ssh -O check` talks only to the local control socket — no auth, no
     2FA prompt, returns instantly (measured: exit 0 when alive, exit 255
     in ~6 ms when no socket). Safe to call on every remote operation.
+
+    With transport=hpc-session, asks `hpc-session status` instead: the
+    hpc-session master (and its TOTP backend) owns the connection.
     """
     cfg = _cfg(cluster)
+    if _transport(cluster) == "hpc-session":
+        result = subprocess.run(
+            ["hpc-session", "status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"No live hpc-session master for {cluster}. Open one with "
+                f"`hpc-session open` (TOTP is handled by the configured backend), "
+                f"then retry."
+            )
+        return
     result = subprocess.run(
         ["ssh", "-o", "BatchMode=yes", "-O", "check", cfg["ssh_host"]],
         capture_output=True,

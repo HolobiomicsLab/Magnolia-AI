@@ -136,6 +136,7 @@ class ProjectManager:
         related_entries: list[str] | None = None,
         references: list[str] | None = None,
         notebook_section: str | None = None,
+        run_ids: list[str] | None = None,
     ) -> str:
         if entry_type not in ENTRY_TYPES:
             entry_type = "note"
@@ -171,6 +172,8 @@ class ProjectManager:
             frontmatter["references"] = references
         if notebook_section:
             frontmatter["notebook_section"] = notebook_section
+        if run_ids:
+            frontmatter["run_ids"] = list(run_ids)
         fm_str = "---\n" + yaml.dump(frontmatter, default_flow_style=False) + "---\n"
         fpath.write_text(fm_str + "\n" + content + "\n")
         if not staging:
@@ -394,6 +397,33 @@ class ProjectManager:
         )
         return "\n".join(lines)
 
+    def _verified_run_ids(self, project_dir: str, run_ids: list[str]) -> bool:
+        """True when every cited run record exists and is technically verified.
+
+        Verification means status pass/warning AND (when present) a zero exit
+        code AND (for ssh-slurm runs) Slurm COMPLETED with exit_code 0:0. This
+        is technical verification only — not scientific correctness."""
+        if not run_ids:
+            return False
+        runs_dir = self._runs_dir(project_dir)
+        for rid in run_ids:
+            matches = sorted(runs_dir.glob(f"*_{rid}.yaml"))
+            if not matches:
+                return False
+            try:
+                rec = yaml.safe_load(matches[0].read_text()) or {}
+            except Exception:
+                return False
+            if rec.get("status") not in ("pass", "warning"):
+                return False
+            if rec.get("exit_code") not in (None, 0):
+                return False
+            slurm = (rec.get("remote") or {}).get("slurm") or {}
+            if slurm and (slurm.get("state") != "COMPLETED"
+                          or slurm.get("exit_code") != "0:0"):
+                return False
+        return True
+
     def auto_promote_staging(self, project_dir: str) -> list[str]:
         """Auto-promote staging entries with observation_count >= 2, confidence >= 0.85,
         AND observed_in_sessions containing >= 2 distinct session_ids.
@@ -421,7 +451,16 @@ class ProjectManager:
             conf = meta.get("confidence", 0.5)
             sessions = meta.get("observed_in_sessions", []) or []
             distinct_sessions = len(set(sessions))
-            if obs >= 2 and conf >= 0.85 and distinct_sessions >= 2:
+            # Verified one-shot result: a completed, assessed run record is the
+            # evidence, not repetition. Result-like types only; intermediate
+            # observations and plain notes still need the repetition gate.
+            verified = self._verified_run_ids(project_dir, meta.get("run_ids", []) or [])
+            result_typed = meta.get("type") in (
+                "success_pattern", "parameter_guidance", "scientific_finding")
+            not_intermediate = meta.get("outcome_status") != "intermediate"
+            if (obs >= 2 and conf >= 0.85 and distinct_sessions >= 2) or (
+                verified and result_typed and not_intermediate
+            ):
                 try:
                     dest = self.confirm_staging(project_dir, f.stem)
                     promoted.append(f.name)
@@ -661,6 +700,7 @@ class ProjectManager:
         remote: dict[str, Any] | None = None,
         resources: dict[str, Any] | None = None,
         system_tags: list[str] | None = None,
+        exit_code: int | None = None,
     ) -> str:
         runs_dir = self._runs_dir(project_dir)
         record: dict[str, Any] = {
@@ -679,6 +719,8 @@ class ProjectManager:
             record["lifecycle"] = lifecycle
         if remote is not None:
             record["remote"] = remote
+        if exit_code is not None:
+            record["exit_code"] = exit_code
         ts = datetime.now(timezone.utc).strftime("%Y%m%d")
         fname = f"{ts}_{run_id}.yaml"
         fpath = runs_dir / fname
@@ -722,6 +764,7 @@ class ProjectManager:
         *,
         lifecycle: str | None = None,
         remote: dict[str, Any] | None = None,
+        exit_code: int | None = None,
     ) -> str:
         """Write the run record for ``run_id`` to ONE file: deep-merge into the
         existing record if present, else create it.
@@ -739,6 +782,7 @@ class ProjectManager:
                 project_dir, run_id, tool, status,
                 metrics=metrics, quality_flags=quality_flags,
                 errors_solved=errors_solved, lifecycle=lifecycle, remote=remote,
+                exit_code=exit_code,
             )
         patch: dict[str, Any] = {}
         if status is not None:
@@ -753,6 +797,8 @@ class ProjectManager:
             patch["lifecycle"] = lifecycle
         if remote:
             patch["remote"] = remote
+        if exit_code is not None:
+            patch["exit_code"] = exit_code
         if not patch:
             return str(matches[0])
         return self.update_run(project_dir, run_id, patch)

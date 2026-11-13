@@ -21,7 +21,7 @@ def test_post_run_assess_still_records_and_returns_json(tmp_path, monkeypatch):
     for mod in list(saved):
         del sys.modules[mod]
     try:
-        server = importlib.import_module("compchem_memory.server")
+        server = importlib.import_module("compchem_tools.server")
         out = server.post_run_assess(str(run_dir), "xtb", 0, project_dir=str(pd))
         payload = json.loads(out)
         assert payload["overall"] in ("pass", "warning", "fail")
@@ -65,7 +65,7 @@ def test_post_run_assess_joins_existing_run_record(tmp_path, monkeypatch):
     for mod in list(saved):
         del sys.modules[mod]
     try:
-        server = importlib.import_module("compchem_memory.server")
+        server = importlib.import_module("compchem_tools.server")
         out = server.post_run_assess(str(run_dir), "xtb", 0, project_dir=str(pd))
         payload = json.loads(out)
         assert payload["overall"] in ("pass", "warning", "fail")
