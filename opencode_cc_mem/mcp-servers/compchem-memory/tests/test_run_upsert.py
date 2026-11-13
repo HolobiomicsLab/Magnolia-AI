@@ -81,7 +81,7 @@ def test_upsert_empty_values_do_not_erase(store):
 def test_assess_and_record_preserves_remote(store, monkeypatch):
     """The real bug path: poller assesses a same-day-completed job and must NOT
     destroy the remote block."""
-    from compchem_memory.learning import orchestrator
+    from compchem_tools.analysis import orchestrator
     pm = _pm()
     pm.record_run(store, "haddock3_R", "haddock3", None, lifecycle="fetched",
                   remote={"job_id": "77", "slurm": {"state": "COMPLETED"}})

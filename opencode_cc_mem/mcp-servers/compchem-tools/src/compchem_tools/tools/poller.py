@@ -100,7 +100,7 @@ def capture_failure(
     # genuine lesson from a failure comes from the distillation / assess paths.
 
 
-from compchem_memory.learning.orchestrator import assess_and_record  # noqa: E402
+from compchem_tools.analysis.orchestrator import assess_and_record  # noqa: E402
 from compchem_memory.job_notices import push_job_notice  # noqa: E402
 
 

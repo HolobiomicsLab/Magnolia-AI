@@ -463,6 +463,7 @@ def memory_record_learning(
     outcome_status: str | None = None,
     work_item_id: str | None = None,
     attempt: int | None = None,
+    run_ids: list[str] | None = None,
     allow_cross_project: bool = False,
 ) -> str:
     """Propose a new project-tier entry with typed frontmatter. Writes to staging
@@ -473,6 +474,9 @@ def memory_record_learning(
     excluded from guidance retrieval when final_only=True is passed to
     memory_get_context. work_item_id/attempt link the entry to its origin
     Work Item in the always-on control plane (MemoryLink provenance).
+    run_ids: optional list of run records this result is tied to; verified
+    run records allow one-shot results to auto-promote (see
+    docs/verified-run-promotion.md).
 
     allow_cross_project: explicit override when a shared-service server is
     pinned to another project; use only when project_dir is intentional.
@@ -514,6 +518,7 @@ def memory_record_learning(
         entry_type=entry_type,
         tools=tools,
         confidence=confidence,
+        run_ids=run_ids,
     )
 
     # Stamp the new entry with the current session_id
@@ -672,57 +677,8 @@ def memory_verify_claim(
     return json.dumps(verify_claim(claim, merged), indent=2)
 
 
-@mcp.tool()
-@captured(source="compchem-memory")
-def post_run_assess(
-    run_dir: str,
-    tool: str,
-    exit_code: int = 0,
-    project_dir: str | None = None,
-    run_id: str | None = None,
-    allow_cross_project: bool = False,
-) -> str:
-    """After a computation completes: check exit code, verify output files exist,
-    extract metrics, flag quality issues. Records run in memory automatically.
-
-    run_id: optional canonical id from the submit_job result; when omitted, an
-    existing record for run_dir is reused, else basename(run_dir).
-
-    allow_cross_project: explicit override when a shared-service server is
-    pinned to another project; use only when project_dir is intentional.
-
-    Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
-    blocked = _write_guard(project_dir, allow_cross_project)
-    if blocked:
-        return blocked
-    from compchem_memory.learning.orchestrator import assess_and_record
-    pd = _resolve_project_store(project_dir)
-    proj_m = _get_project_mgr()
-    assessment = assess_and_record(
-        run_dir=run_dir,
-        tool=tool,
-        exit_code=exit_code,
-        project_dir=pd,
-        project_mgr=proj_m,
-        run_id=run_id,
-    )
-    sess_m = _get_session_mgr(pd)
-    sess_m.record(
-        "post_run_assess",
-        {"run_dir": run_dir, "tool": tool, "assessment": assessment},
-        pd,
-    )
-    # Negative confidence feedback: if run failed, decrement confidence
-    # on success_pattern entries for this tool.
-    if assessment.get("overall") in ("fail", "failed"):
-        count = proj_m.decrement_confidence_for_tool(pd, tool)
-        if count > 0:
-            sess_m.record(
-                "confidence_decrement",
-                {"tool": tool, "run_dir": run_dir, "entries_adjusted": count},
-                pd,
-            )
-    return json.dumps(assessment, indent=2)
+# post_run_assess moved to compchem-tools (assessment is a tools concern).
+# See docs/verified-run-promotion.md and compchem_tools.analysis.orchestrator.
 
 
 @mcp.tool()

@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 import pytest
 
-from compchem_memory.learning import orchestrator
+from compchem_tools.analysis import orchestrator
 from compchem_memory.storage import ensure_project_store
 from compchem_memory.tiers.project import ProjectManager
 
@@ -123,7 +123,7 @@ def test_cli_assess_reuses_submit_record(store, monkeypatch):
     run_dir.mkdir(parents=True)
     _submit_record(store, run_dir)
     monkeypatch.setattr(
-        "compchem_memory.learning.assessor.assess_run",
+        "compchem_tools.analysis.orchestrator.assess_run",
         lambda run_dir, tool, exit_code: {
             "overall": "pass", "metrics": {}, "quality_flags": [],
         },
@@ -146,7 +146,7 @@ def test_cli_assess_mints_canonical_id_without_run_dir(store, monkeypatch):
 
     monkeypatch.setattr(cli, "_detect_run_dir", lambda command, tool: None)
     monkeypatch.setattr(
-        "compchem_memory.learning.assessor.assess_run",
+        "compchem_tools.analysis.orchestrator.assess_run",
         lambda run_dir, tool, exit_code: {
             "overall": "pass", "metrics": {}, "quality_flags": [],
         },

@@ -241,6 +241,54 @@ def check_run_status(run_dir: str) -> str:
     return json.dumps(_check_run_status(run_dir), indent=2)
 
 
+@mcp.tool()
+@captured(source="compchem-tools")
+def post_run_assess(
+    run_dir: str,
+    tool: str,
+    exit_code: int = 0,
+    project_dir: str | None = None,
+    run_id: str | None = None,
+) -> str:
+    """After a computation completes: check exit code, verify output files exist,
+    extract metrics, flag quality issues. Records run in memory automatically.
+
+    run_id: optional canonical id from the submit_job result; when omitted, an
+    existing record for run_dir is reused, else basename(run_dir).
+
+    Call this when: a run completed but magnolia-run did not assess it (e.g., manual invocation outside the wrapper)."""
+    from compchem_tools.analysis.orchestrator import assess_and_record
+    from compchem_memory.capture import get_session_manager
+    from compchem_memory.tiers.project import ProjectManager
+
+    pd = Path(project_dir or os.environ.get("MAGNOLIA_PROJECT_DIR", ".")).resolve()
+    proj_m = ProjectManager(Path.home() / ".magnolia")
+    assessment = assess_and_record(
+        run_dir=run_dir,
+        tool=tool,
+        exit_code=exit_code,
+        project_dir=str(pd),
+        project_mgr=proj_m,
+        run_id=run_id,
+    )
+    sess_m = get_session_manager(str(pd))
+    sess_m.record(
+        "post_run_assess",
+        {"run_dir": run_dir, "tool": tool, "assessment": assessment},
+        str(pd),
+    )
+    # Negative confidence feedback on failure, same as the old memory tool.
+    if assessment.get("overall") in ("fail", "failed"):
+        count = proj_m.decrement_confidence_for_tool(str(pd), tool)
+        if count > 0:
+            sess_m.record(
+                "confidence_decrement",
+                {"tool": tool, "run_dir": run_dir, "entries_adjusted": count},
+                str(pd),
+            )
+    return json.dumps(assessment, indent=2)
+
+
 # ── Phase 3: Gnina / Covalent / xTB Tools ───────────────────────────────────
 
 
