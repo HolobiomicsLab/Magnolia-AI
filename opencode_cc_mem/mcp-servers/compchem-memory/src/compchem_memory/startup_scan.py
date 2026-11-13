@@ -161,7 +161,11 @@ def _maybe_consolidate(store: Path) -> None:
         # otherwise high-confidence duplicates pile up behind an untouched human
         # review. Without the variable this call returns "disabled" immediately,
         # so the guard below still fully controls regeneration and [i] stability.
-        from compchem_memory.consolidation import auto_apply_band
+        from compchem_memory.consolidation import auto_apply_band, dismiss_stale_proposals
+        # Clear proposals whose sources were retired/promoted/merged since they
+        # were generated; otherwise they stay pending forever and block both
+        # regeneration and the pending-review notice.
+        dismiss_stale_proposals(str(store))
         auto_apply_band(str(store))
         if _has_pending_review(store / "reflex" / "consolidation-proposal.json"):
             return  # don't regenerate while a review is pending — keeps [i] stable
@@ -224,13 +228,19 @@ def _maybe_retire(project_dir: str, store: Path) -> None:
         if not res["retired"]:
             return
         from compchem_memory import distill_log
+        summary = (
+            f"Retired {len(res['retired'])} staging entry(ies) "
+            f"({res['candidates']} eligible, cap {res['cap']}): "
+            + "; ".join(res["retired"][:8]))
+        if res.get("dismissed_proposals"):
+            summary += (
+                f" | Dismissed {len(res['dismissed_proposals'])} stale "
+                "consolidation proposal(s) whose sources were retired.")
         distill_log.push_distill_notice(
             project_dir,
             "Retirement moved staging entries to .magnolia/retired/ "
             "(git-reversible); details in reflex/retirement-log.jsonl.",
-            f"Retired {len(res['retired'])} staging entry(ies) "
-            f"({res['candidates']} eligible, cap {res['cap']}): "
-            + "; ".join(res["retired"][:8]))
+            summary)
     except Exception as e:  # noqa: BLE001 - retirement must never break the sweep
         print(f"[retirement] skipped: {e}")
 
@@ -249,6 +259,8 @@ def _surface_pending_consolidation(project_dir: str, store: Path) -> None:
         artifact = store / "reflex" / "consolidation-proposal.json"
         if not artifact.exists():
             return
+        from compchem_memory.consolidation import dismiss_stale_proposals
+        dismiss_stale_proposals(str(store))
         from compchem_memory.reflex_common import pending_indices
         data = json.loads(artifact.read_text())
         n = len(pending_indices(data))

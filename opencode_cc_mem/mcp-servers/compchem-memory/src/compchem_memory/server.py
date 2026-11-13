@@ -1047,11 +1047,14 @@ def memory_review_consolidation(project_dir: str | None = None) -> str:
 
     Call this at session start when a consolidation proposal exists, or when the
     user asks to review proposed merges."""
-    from compchem_memory.consolidation import render_review_markdown, _pending_indices
+    from compchem_memory.consolidation import (
+        render_review_markdown, _pending_indices, dismiss_stale_proposals)
     pd = _resolve_project_store(project_dir)
     store = Path(pd) / ".magnolia"
+    dismiss_stale_proposals(str(store))
     review_file = render_review_markdown(str(store))
     if not review_file:
+        _drop_review_file(pd, "proposals.md")
         return json.dumps({"status": "no_pending_proposals", "pending": 0})
     data = json.loads((store / "reflex" / "consolidation-proposal.json").read_text())
     proposals = data.get("proposals", [])

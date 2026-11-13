@@ -153,8 +153,10 @@ def retirement_candidates(store: Path) -> list[dict]:
 
 def retire_eligible(project_dir: str) -> dict:
     """Move retirement candidates out of staging under the velocity cap
-    (oldest first), writing one receipt row per retired entry. Returns
-    {"retired": [names], "candidates": int, "cap": int, "skipped_reason"?: str}.
+    (oldest first), writing one receipt row per retired entry. Also dismisses
+    consolidation proposals whose sources just left staging. Returns
+    {"retired": [names], "candidates": int, "cap": int,
+    "dismissed_proposals": [indices], "skipped_reason"?: str}.
     Never raises beyond the caller's guard."""
     from compchem_memory import canary
 
@@ -189,4 +191,12 @@ def retire_eligible(project_dir: str) -> dict:
                 }) + "\n")
     except OSError as e:
         print(f"[retirement] partially applied, receipt skipped: {e}")
-    return {"retired": moved, "candidates": len(cands), "cap": cap}
+    dismissed: list[int] = []
+    if moved:
+        try:
+            from compchem_memory.consolidation import dismiss_stale_proposals
+            dismissed = dismiss_stale_proposals(str(store), via="retirement")
+        except Exception as e:  # noqa: BLE001 - cleanup must never break retirement
+            print(f"[retirement] stale-proposal cleanup skipped: {e}")
+    return {"retired": moved, "candidates": len(cands), "cap": cap,
+            "dismissed_proposals": dismissed}

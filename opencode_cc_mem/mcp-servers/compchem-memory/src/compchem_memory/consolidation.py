@@ -811,6 +811,61 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     return {"merged": canonical, "removed": removed, "skipped": False}
 
 
+def dismiss_stale_proposals(
+    store_dir: str, *, via: str = "auto", evidence: str = ""
+) -> list[int]:
+    """Durably dismiss pending proposals whose sources no longer exist on disk.
+
+    A proposal is stale when ANY source path is missing: its merged preview was
+    computed from all sources, so applying it after a retirement, promotion, or
+    earlier merge would silently drop or resurrect content. Marks the index in
+    `dismissed` and records the cluster's pair keys so the grouping cannot
+    re-surface. Returns the newly dismissed indices. Idempotent; writes the
+    artifact only when something changed."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return []
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    proposals = data.get("proposals", [])
+    dismissed_set = set(data.get("dismissed", []))
+    rejected_keys: set[tuple[str, ...]] = set()
+    for k in data.get("rejected_keys", []):
+        if isinstance(k, list) and len(k) >= 2:
+            rejected_keys.add(tuple(sorted(k)))
+    newly: list[int] = []
+    label_rows: list[dict[str, Any]] = []
+    for i in _pending_indices(data):
+        sources = proposals[i].get("sources", []) or []
+        if len(sources) >= 2 and all(Path(s).exists() for s in sources):
+            continue
+        key = _cluster_key(sources)
+        dismissed_set.add(i)
+        rejected_keys |= _key_pairs(key)
+        newly.append(i)
+        label_rows.append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": "dismiss_stale",
+            "via": via,
+            "session": _current_session(store),
+            "cluster_key": list(key),
+            "confidence": proposals[i].get("confidence"),
+            "rationale": proposals[i].get("rationale", ""),
+            "sources": sorted(Path(s).name for s in sources),
+            **({"evidence": evidence} if evidence else {}),
+        })
+    if not newly:
+        return []
+    data["dismissed"] = sorted(dismissed_set)
+    data["rejected_keys"] = _serialize_keys(rejected_keys)
+    artifact.write_text(json.dumps(data, indent=2))
+    _append_labels(store, label_rows)
+    return sorted(newly)
+
+
 def _first_paragraph(body: str) -> str:
     """Short plain-text excerpt of an entry body, skipping heading lines."""
     for chunk in re.split(r"\n\s*\n", body or ""):
