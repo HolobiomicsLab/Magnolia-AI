@@ -16,12 +16,28 @@ from compchem_memory.startup_scan import (
 
 
 def _write_proposals(store: Path, proposals, applied=None, rejected=None):
+    staging = store / "staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    enriched = []
+    for p in proposals:
+        p = dict(p)
+        if "sources" not in p:
+            # Live proposals need real source files on disk; otherwise the
+            # stale-proposal cleanup dismisses them before surfacing.
+            idx = p.get("i", len(enriched))
+            names = [f"s{idx}a.md", f"s{idx}b.md"]
+            for n in names:
+                (staging / n).write_text("---\ntitle: placeholder\n---\n\nbody\n")
+            p["sources"] = [str(staging / n) for n in names]
+            p.setdefault("confidence", 0.9)
+            p.setdefault("merged_preview", {"title": f"proposal {idx}", "body": "body"})
+        enriched.append(p)
     reflex = store / "reflex"
     reflex.mkdir(parents=True, exist_ok=True)
     (reflex / "consolidation-proposal.json").write_text(
         json.dumps(
             {
-                "proposals": proposals,
+                "proposals": enriched,
                 "applied": applied or [],
                 "rejected": rejected or [],
             }

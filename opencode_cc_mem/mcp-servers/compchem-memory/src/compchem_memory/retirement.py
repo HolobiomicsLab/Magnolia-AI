@@ -20,7 +20,7 @@ mode this project distrusts.
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from compchem_memory.reflex_common import parse_frontmatter_file
@@ -153,8 +153,14 @@ def retirement_candidates(store: Path) -> list[dict]:
 
 def retire_eligible(project_dir: str) -> dict:
     """Move retirement candidates out of staging under the velocity cap
-    (oldest first), writing one receipt row per retired entry. Returns
-    {"retired": [names], "candidates": int, "cap": int, "skipped_reason"?: str}.
+    (oldest first), writing one receipt row per retired entry. The first time a
+    candidate is found in a pending consolidation proposal it gets ONE deferral
+    of MAGNOLIA_RETIREMENT_PROPOSAL_GRACE_DAYS days (default 7), recorded in
+    reflex/retirement-deferrals.json. The deferral is never renewed: after it
+    expires the entry retires normally and the proposal is dismissed. Returns
+    {"retired": [names], "candidates": int, "cap": int,
+    "deferred": [names], "next_deadline": iso|None,
+    "dismissed_proposals": [indices], "skipped_reason"?: str}.
     Never raises beyond the caller's guard."""
     from compchem_memory import canary
 
@@ -164,11 +170,50 @@ def retire_eligible(project_dir: str) -> dict:
         return {"retired": [], "candidates": 0, "cap": 0,
                 "skipped_reason": "canary_frozen"}
     cands = retirement_candidates(store)
+    from compchem_memory.consolidation import (
+        _load_deferrals, _parse_deadline, _save_deferrals,
+        pending_proposal_sources, proposal_grace_days)
+    grace_days = proposal_grace_days()
+    records = _load_deferrals(store)
+    pending_sources = pending_proposal_sources(str(store)) if grace_days > 0 else set()
+    now = datetime.now(timezone.utc)
+    deferred: list[dict] = []
+    eligible: list[dict] = []
+    deadlines: list[datetime] = []
+    changed = False
+    for c in cands:
+        key = str(c["path"].resolve())
+        if key not in pending_sources:
+            # No longer in a pending proposal (accepted/rejected/dismissed):
+            # clear any stale deferral so the entry retires on its own merits.
+            if records.pop(key, None) is not None:
+                changed = True
+            eligible.append(c)
+            continue
+        deadline = _parse_deadline(records.get(key))
+        if deadline is None:
+            # First time this entry hits the gate while in a pending proposal:
+            # create its ONE deferral. It is never renewed.
+            deadline = now + timedelta(days=grace_days)
+            records[key] = deadline.isoformat()
+            changed = True
+        if deadline > now:
+            deferred.append(c)
+            deadlines.append(deadline)
+            continue
+        # Deferral expired: eligible now. Keep the expired record until the
+        # entry is actually moved so a later sweep cannot re-defer it.
+        eligible.append(c)
     staging_n = len(list((store / "staging").glob("*.md")))
     cap = min(VELOCITY_CAP_DEFAULT, max(1, int(staging_n * VELOCITY_SHARE)))
-    chosen = cands[:cap]
+    chosen = eligible[:cap]
+    if changed:
+        _save_deferrals(store, records)
+    base = {"candidates": len(cands), "cap": cap,
+            "deferred": [c["path"].name for c in deferred],
+            "next_deadline": min(deadlines).isoformat() if deadlines else None}
     if not chosen:
-        return {"retired": [], "candidates": 0, "cap": cap}
+        return {"retired": [], **base}
     retired_dir = store / RETIRED_DIR
     retired_dir.mkdir(parents=True, exist_ok=True)
     moved: list[str] = []
@@ -189,4 +234,15 @@ def retire_eligible(project_dir: str) -> dict:
                 }) + "\n")
     except OSError as e:
         print(f"[retirement] partially applied, receipt skipped: {e}")
-    return {"retired": moved, "candidates": len(cands), "cap": cap}
+    if moved:
+        for name in moved:
+            records.pop(str((store / "staging" / name).resolve()), None)
+        _save_deferrals(store, records)
+    dismissed: list[int] = []
+    if moved:
+        try:
+            from compchem_memory.consolidation import dismiss_stale_proposals
+            dismissed = dismiss_stale_proposals(str(store), via="retirement")
+        except Exception as e:  # noqa: BLE001 - cleanup must never break retirement
+            print(f"[retirement] stale-proposal cleanup skipped: {e}")
+    return {"retired": moved, **base, "dismissed_proposals": dismissed}

@@ -294,17 +294,24 @@ def test_dismissed_stale_key_survives_regeneration(tmp_path):
 def test_apply_tool_dismisses_stale_and_cleans_review_dir(tmp_path, monkeypatch):
     from compchem_memory import server
     store, a, b, c = _store_with_proposal(tmp_path)
-    Path(a).unlink(); Path(b).unlink()
     pd = str(tmp_path); monkeypatch.setattr(server, "PROJECT_DIR", pd)
     review = getattr(server.memory_review_consolidation, "fn", server.memory_review_consolidation)
     apply = getattr(server.memory_apply_consolidation, "fn", server.memory_apply_consolidation)
 
-    review(project_dir=pd)
+    out = json.loads(review(project_dir=pd))
+    assert out["status"] == "review_ready"
     assert (tmp_path / "magnolia-review").exists()
-    out = json.loads(apply(accept=[0], project_dir=pd))
 
-    assert out["dismissed"] == [0]
-    assert not (tmp_path / "magnolia-review").exists()      # all handled -> cleaned
+    Path(a).unlink(); Path(b).unlink()
+    # The review itself now dismisses the stale proposal and cleans up.
+    out = json.loads(review(project_dir=pd))
+    assert out == {"status": "no_pending_proposals", "pending": 0}
+    assert not (tmp_path / "magnolia-review").exists()
+
+    # A later accept is a safe no-op: the proposal is already dismissed.
+    out = json.loads(apply(accept=[0], project_dir=pd))
+    assert out["applied"] == 0
+    assert not (tmp_path / "magnolia-review").exists()
 
 
 # ---- Pair-level rejection memory (the 2026-09-30 fig7 regression) ----

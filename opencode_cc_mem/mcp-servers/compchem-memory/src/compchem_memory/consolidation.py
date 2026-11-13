@@ -12,7 +12,7 @@ import functools
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
@@ -370,12 +370,14 @@ def consolidate_project_findings(
         if seed:
             clusterer = functools.partial(_default_clusterer, reject_hint=seed)
     clusters = cluster_findings(entries, clusterer)
+    proposed_at = datetime.now(timezone.utc).isoformat()
     proposals = []
     for c in clusters:
         preview = merge_entries(c["members"])
         proposals.append({
             "confidence": c["confidence"],
             "rationale": c["rationale"],
+            "proposed_at": proposed_at,
             "sources": preview["sources"],
             "canonical": preview["canonical"],
             "merged_preview": {
@@ -811,6 +813,168 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     return {"merged": canonical, "removed": removed, "skipped": False}
 
 
+def dismiss_stale_proposals(
+    store_dir: str, *, via: str = "auto", evidence: str = ""
+) -> list[int]:
+    """Durably dismiss pending proposals whose sources no longer exist on disk.
+
+    A proposal is stale when ANY source path is missing: its merged preview was
+    computed from all sources, so applying it after a retirement, promotion, or
+    earlier merge would silently drop or resurrect content. Marks the index in
+    `dismissed` and records the cluster's pair keys so the grouping cannot
+    re-surface. Returns the newly dismissed indices. Idempotent; writes the
+    artifact only when something changed."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return []
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    proposals = data.get("proposals", [])
+    dismissed_set = set(data.get("dismissed", []))
+    rejected_keys: set[tuple[str, ...]] = set()
+    for k in data.get("rejected_keys", []):
+        if isinstance(k, list) and len(k) >= 2:
+            rejected_keys.add(tuple(sorted(k)))
+    newly: list[int] = []
+    label_rows: list[dict[str, Any]] = []
+    for i in _pending_indices(data):
+        sources = proposals[i].get("sources", []) or []
+        if len(sources) >= 2 and all(Path(s).exists() for s in sources):
+            continue
+        key = _cluster_key(sources)
+        dismissed_set.add(i)
+        rejected_keys |= _key_pairs(key)
+        newly.append(i)
+        label_rows.append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": "dismiss_stale",
+            "via": via,
+            "session": _current_session(store),
+            "cluster_key": list(key),
+            "confidence": proposals[i].get("confidence"),
+            "rationale": proposals[i].get("rationale", ""),
+            "sources": sorted(Path(s).name for s in sources),
+            **({"evidence": evidence} if evidence else {}),
+        })
+    if not newly:
+        return []
+    data["dismissed"] = sorted(dismissed_set)
+    data["rejected_keys"] = _serialize_keys(rejected_keys)
+    artifact.write_text(json.dumps(data, indent=2))
+    _append_labels(store, label_rows)
+    return sorted(newly)
+
+
+def proposal_grace_days() -> int:
+    """Days a fresh consolidation proposal protects its sources from retirement."""
+    try:
+        return int(os.environ.get("MAGNOLIA_RETIREMENT_PROPOSAL_GRACE_DAYS", 7))
+    except (TypeError, ValueError):
+        return 7
+
+
+def _deferral_path(store: Path) -> Path:
+    return store / "reflex" / "retirement-deferrals.json"
+
+
+def _load_deferrals(store: Path) -> dict[str, str]:
+    try:
+        return json.loads(_deferral_path(store).read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_deferrals(store: Path, records: dict[str, str]) -> None:
+    path = _deferral_path(store)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(records, indent=2, sort_keys=True))
+
+
+def _parse_deadline(raw) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def pending_proposal_sources(store_dir: str) -> set[str]:
+    """Resolved paths of sources referenced by pending consolidation proposals."""
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return set()
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return set()
+    proposals = data.get("proposals", [])
+    out: set[str] = set()
+    for i in _pending_indices(data):
+        for s in proposals[i].get("sources", []) or []:
+            out.add(str(Path(s).resolve()))
+    return out
+
+
+def proposal_retirement_status(store_dir: str, grace_days: int | None = None) -> dict[str, Any]:
+    """Read the one-shot deferral sidecar for review/notice display.
+
+    Deadlines are recorded per source entry the first time that entry hits the
+    retirement gate while in a pending proposal (see retirement.retire_eligible).
+    A proposal is protected while any of its sources has a future deadline; it
+    is overdue when a source's deferral has expired but the entry has not been
+    retired yet. No deadline is recorded before the first retirement sweep.
+
+    Returns {"pending": int, "protected": {path: deadline_iso},
+    "expired": [indices], "deadlines": {index: deadline_iso},
+    "next_deadline": iso|None, "grace_days": int}."""
+    if grace_days is None:
+        grace_days = proposal_grace_days()
+    empty = {"pending": 0, "protected": {}, "expired": [], "deadlines": {},
+             "next_deadline": None, "grace_days": grace_days}
+    store = Path(store_dir)
+    artifact = store / "reflex" / "consolidation-proposal.json"
+    if not artifact.exists():
+        return empty
+    try:
+        data = json.loads(artifact.read_text())
+    except (json.JSONDecodeError, OSError):
+        return empty
+    pending = _pending_indices(data)
+    records = _load_deferrals(store)
+    now = datetime.now(timezone.utc)
+    pending_sources = pending_proposal_sources(store_dir)
+    protected = {p: d for p, d in records.items()
+                 if p in pending_sources and (_parse_deadline(d) or now) > now}
+    deadlines: dict[int, str] = {}
+    expired: list[int] = []
+    proposals = data.get("proposals", [])
+    for i in pending:
+        future: list[datetime] = []
+        has_expired = False
+        for s in proposals[i].get("sources", []) or []:
+            dt = _parse_deadline(records.get(str(Path(s).resolve())))
+            if dt is None:
+                continue
+            if dt > now:
+                future.append(dt)
+            else:
+                has_expired = True
+        if future:
+            deadlines[i] = min(future).isoformat()
+        elif has_expired:
+            expired.append(i)
+    next_deadline = min(deadlines.values()) if deadlines else None
+    return {"pending": len(pending), "protected": protected, "expired": expired,
+            "deadlines": deadlines, "next_deadline": next_deadline,
+            "grace_days": grace_days}
+
+
 def _first_paragraph(body: str) -> str:
     """Short plain-text excerpt of an entry body, skipping heading lines."""
     for chunk in re.split(r"\n\s*\n", body or ""):
@@ -871,9 +1035,17 @@ def render_review_markdown(store_dir: str) -> str | None:
         "- Nothing is applied until you tell the agent.",
         "",
     ]
+    status = proposal_retirement_status(store_dir)
     for i in pending:
         p = proposals[i]
         mp = p.get("merged_preview", {})
+        if i in status["expired"]:
+            review_by = "- review by: OVERDUE — sources may be retired on the next sweep"
+        elif i in status["deadlines"]:
+            review_by = (f"- review by: {status['deadlines'][i][:10]} "
+                         "(sources protected from retirement until then)")
+        else:
+            review_by = "- review by: no deferral recorded yet (set on the next retirement sweep)"
         try:
             conf = float(p.get("confidence") or 0.0)
         except (TypeError, ValueError):
@@ -889,6 +1061,7 @@ def render_review_markdown(store_dir: str) -> str | None:
             "- action: reject",
             f"- confidence: {conf} — {conf_words}  |  distinct sessions: {mp.get('observation_count')}",
             f"- why: {p.get('rationale', '')}",
+            review_by,
             "- sources (read each before accepting):",
         ]
         for s in p.get("sources", []):

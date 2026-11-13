@@ -787,6 +787,11 @@ export MAGNOLIA_PROJECT_DIR="$REPO_ROOT/opencode_cc_mem/projects/$PROJECT"
 # project-store marker is the authoritative one in project-root mode.
 echo "$PROJECT" > "$OPENCODE_DIR/.magnolia/.active-project"
 echo "$PROJECT" > "$PROJECT_WORKSPACE/.magnolia/.active-project"
+# Absolute workspace path for compchem-memory's stale-server override. The
+# name-only marker above is ambiguous under project-root launch (cwd is
+# already projects/<name>), which created nested <name>/<name> stores.
+echo "$PROJECT_WORKSPACE" > "$OPENCODE_DIR/.magnolia/.active-project-dir"
+echo "$PROJECT_WORKSPACE" > "$PROJECT_WORKSPACE/.magnolia/.active-project-dir"
 
 # Activate the project venv for THIS process — and thus opencode, its MCP
 # servers, and any tool subprocesses (p2rank, haddock3, …) they spawn, so
