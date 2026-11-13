@@ -8,8 +8,9 @@ into the wrong project store. Resolve per REQUEST instead:
 1. explicit project_dir argument (honored, after allow-list validation);
 2. a request-scoped hint if the transport supplies one (X-Project-Dir header
    or a Context attribute carrying a directory);
-3. .active-project ONLY when it is newer than the server start AND differs
-   from the startup env pin — i.e. the server is provably stale. Otherwise
+3. .active-project-dir (absolute workspace path) or .active-project (project
+   name) ONLY when it is newer than the server start AND differs from the
+   startup env pin — i.e. the server is provably stale. Otherwise
    the startup env pin (correct for a per-session server).
 
 Never silently resolves to a different project than the startup pin without
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 
 _STARTUP_ENV = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 _ACTIVE_REL = ".magnolia/.active-project"
+_ACTIVE_DIR_REL = ".magnolia/.active-project-dir"
 
 
 def _startup_project_dir() -> str:
@@ -53,17 +55,59 @@ def _request_hint() -> str | None:
     return None
 
 
+def _dir_if_exists(path: Path) -> str | None:
+    """Resolved path when it is an existing directory, else None."""
+    try:
+        if path.is_dir():
+            return str(path.resolve())
+    except OSError:
+        pass
+    return None
+
+
 def _active_project_hint(startup_env: str) -> str | None:
-    """.active-project, but only as a STALE-SERVER override."""
+    """.active-project-dir / .active-project, but only as a STALE-SERVER override.
+
+    The launcher writes the project NAME to .active-project for the TS plugins.
+    Treating that name as a cwd-relative path is wrong under project-root launch
+    (cwd is already projects/<name>): it resolves to projects/<name>/<name>, an
+    empty nested store. Prefer the absolute .active-project-dir marker, resolve
+    the legacy name against the projects root, and never return a directory that
+    does not exist."""
     try:
         pin = os.environ.get("MAGNOLIA_OPENCODE_DIR") or os.getcwd()
-        active = Path(pin) / _ACTIVE_REL
+        base = Path(pin)
+
+        # Preferred: absolute workspace path written by the launcher.
+        dir_marker = base / _ACTIVE_DIR_REL
+        if dir_marker.is_file():
+            value = dir_marker.read_text(encoding="utf-8", errors="replace").strip()
+            if value:
+                resolved = _dir_if_exists(Path(value))
+                if resolved:
+                    return resolved
+
+        active = base / _ACTIVE_REL
         if not active.is_file():
             return None
         value = active.read_text(encoding="utf-8", errors="replace").strip()
         if not value:
             return None
-        return value
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return _dir_if_exists(candidate)
+        # Legacy name marker: resolve against the projects root, not cwd. The
+        # candidates are ordered so a real projects/<name> store wins over a
+        # stray <name>/ child directory left by an earlier bad resolution.
+        candidates = [base / "projects" / value, base.parent / value]
+        if base.name == value:
+            candidates.append(base)
+        candidates.append(base / value)
+        for path in candidates:
+            resolved = _dir_if_exists(path)
+            if resolved:
+                return resolved
+        return None
     except Exception:
         return None
 
