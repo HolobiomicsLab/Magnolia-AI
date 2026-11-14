@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -12,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from .process import stop_process_group
 from .security import redact_file
@@ -57,17 +58,96 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _healthy(port: int, password: str) -> bool:
-    credentials = base64.b64encode(f"opencode:{password}".encode()).decode()
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{port}/",
-        headers={"Authorization": f"Basic {credentials}"},
-    )
+def _get(port: int, path: str, password: str | None) -> tuple[int, bytes]:
+    """GET a local service path; (HTTP status, body), or (0, b"") when unreachable."""
+    headers = {}
+    if password is not None:
+        credentials = base64.b64encode(f"opencode:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {credentials}"
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=2) as response:
-            return response.status == 200
-    except (urllib.error.URLError, TimeoutError, ValueError):
+            return response.status, response.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, b""
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return 0, b""
+
+
+def _healthy(port: int, password: str) -> bool:
+    """The service answers an API path with the password and refuses it without.
+
+    Observed on OpenCode 2.3.0: `GET /` serves the web interface with status 200
+    whatever the credentials, so it cannot tell a healthy, password-protected
+    service apart. `/api/session` answers 401 without the right password."""
+    if _get(port, "/api/session", password)[0] != 200:
         return False
+    return _get(port, "/api/session", None)[0] == 401
+
+
+def _listed_agents(port: int, password: str) -> set[str]:
+    status, body = _get(port, "/api/agent", password)
+    if status != 200:
+        return set()
+    try:
+        data = json.loads(body.decode("utf-8")).get("data")
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {str(a["id"]) for a in data if isinstance(a, dict) and a.get("id")}
+
+
+def _wait_for_agents(
+    port: int,
+    password: str,
+    names: Sequence[str],
+    timeout_seconds: float,
+    interval: float = 0.5,
+) -> bool:
+    """Wait until every named agent is listed by the service.
+
+    Observed on OpenCode 2.3.0: right after `serve` answers, `/api/agent` lists
+    no agent; the full list follows about two seconds later."""
+    wanted = set(names)
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if wanted <= _listed_agents(port, password):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
+
+
+def _config_digest(config_content: str | None) -> str | None:
+    if config_content is None:
+        return None
+    return hashlib.sha256(config_content.encode("utf-8")).hexdigest()
+
+
+def merge_agent_steps(config_content: str | None, steps: dict[str, int]) -> str:
+    """OPENCODE_CONFIG_CONTENT with `agents.<name>.steps` set for each agent.
+
+    Observed on OpenCode 2.3.0: a dedicated service reads this override only
+    from its own environment at start; set on a client attached with --server
+    it has no effect. Other keys of the given configuration are kept."""
+    try:
+        config = json.loads(config_content or "{}")
+    except json.JSONDecodeError:
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        agents = {}
+        config["agents"] = agents
+    for name, limit in steps.items():
+        entry = agents.get(name)
+        if not isinstance(entry, dict):
+            entry = {}
+            agents[name] = entry
+        entry["steps"] = limit
+    return json.dumps(config, sort_keys=True)
 
 
 def _port_available(port: int) -> bool:
@@ -109,8 +189,17 @@ def ensure_service(
     binary: str,
     db_path: str,
     timeout_seconds: float = 30.0,
+    config_content: str | None = None,
+    required_agents: Sequence[str] = (),
 ) -> dict[str, Any]:
+    """Start (or reuse) the project's dedicated service.
+
+    `config_content`, when given, is the service's OPENCODE_CONFIG_CONTENT; a
+    running service started with a different one is refused, like one with a
+    different database. `required_agents` must all be listed by the service
+    before it is returned."""
     project = Path(project_dir).resolve()
+    digest = _config_digest(config_content)
     record = read_service(project)
     if record is not None:
         status = service_status(project)
@@ -126,6 +215,11 @@ def ensure_service(
                 raise ServiceError(
                     "the running dedicated service uses a different database or "
                     "project; run magnolia-campaign service stop before switching"
+                )
+            if digest is not None and record.get("config_sha256") != digest:
+                raise ServiceError(
+                    "the running dedicated service uses a different configuration "
+                    "(agent step limits); run magnolia-campaign service stop first"
                 )
             return {**record, "running": True}
         try:
@@ -152,6 +246,8 @@ def ensure_service(
             "PWD": str(project),
         }
     )
+    if config_content is not None:
+        environment["OPENCODE_CONFIG_CONTENT"] = config_content
     with log_path.open("ab") as log:
         process = subprocess.Popen(
             [
@@ -178,6 +274,8 @@ def ensure_service(
         "started_at": time.time(),
         "log": str(log_path),
     }
+    if digest is not None:
+        record["config_sha256"] = digest
     _write_service(project, record)
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -185,6 +283,21 @@ def ensure_service(
             _write_service(project, record)
             raise ServiceError(f"service exited early; inspect {log_path}")
         if _healthy(port, password):
+            remaining = max(deadline - time.monotonic(), 0.0)
+            if required_agents and not _wait_for_agents(
+                port, password, required_agents, timeout_seconds=remaining
+            ):
+                _stop_process(record)
+                try:
+                    _record_path(project).unlink()
+                except FileNotFoundError:
+                    pass
+                raise ServiceError(
+                    "service did not list the agents "
+                    f"{', '.join(required_agents)} within {timeout_seconds}s; "
+                    "check that the project directory is a real directory under "
+                    f"projects/ (inspect {log_path})"
+                )
             redact_file(log_path)
             record["running"] = True
             return record

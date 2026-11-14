@@ -210,3 +210,28 @@ def test_run_command_executes_script_stage(tmp_path, capsys):
     assert output["state"]["state"] == "waiting_human"
     assert output["state"]["stage"] == "review"
     assert (run_dir / "work" / "out.txt").is_file()
+
+
+def test_dedicated_service_gets_step_limits_and_agents(monkeypatch):
+    # Observed on OpenCode 2.3.0: `agents.<name>.steps` reaches a dedicated
+    # service only from the service's own environment at start.
+    from campaign_runner.cli import _service_settings
+    from campaign_runner.models import Protocol
+
+    payload = protocol_payload()
+    payload["worker"]["max_steps"] = 12
+    payload["reviewer"] = {"enabled": True, "model": "m/x", "max_steps": 4}
+    monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", json.dumps({"logLevel": "INFO"}))
+    config, agents = _service_settings(Protocol.from_dict(payload))
+    assert json.loads(config) == {
+        "logLevel": "INFO",
+        "agents": {"campaign-worker": {"steps": 12},
+                   "campaign-reviewer": {"steps": 4}},
+    }
+    assert agents == ["campaign-worker", "campaign-reviewer"]
+
+    payload["reviewer"] = {"enabled": False}
+    monkeypatch.delenv("OPENCODE_CONFIG_CONTENT")
+    config, agents = _service_settings(Protocol.from_dict(payload))
+    assert json.loads(config) == {"agents": {"campaign-worker": {"steps": 12}}}
+    assert agents == ["campaign-worker"]
