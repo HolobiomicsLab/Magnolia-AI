@@ -52,6 +52,14 @@ def _isolate_llm_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_opencode_runtime_env(monkeypatch):
+    """Tests run as v1 unless they opt in: a developer shell inside a v2
+    Magnolia session carries these, and they switch the OpenCode calls."""
+    for var in ("MAGNOLIA_OPENCODE_V2", "MAGNOLIA_OPENCODE_V2_BIN", "OPENCODE_DB"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_session_list(monkeypatch):
     """Never shell out to `opencode session list` from the test suite.
 

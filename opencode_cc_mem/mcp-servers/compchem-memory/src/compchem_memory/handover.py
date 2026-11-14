@@ -449,15 +449,26 @@ def _list_session_updates() -> dict[str, int] | None:
     captured through a temp file for the same reason as export_session: some
     opencode subcommands truncate piped stdout at one 64 KB buffer, and a
     regular file gets the full text. Returns None on any failure — the caller
-    then exports every session, exactly as before this optimization existed."""
+    then exports every session, exactly as before this optimization existed.
+
+    Under v2 the session database is read directly when OPENCODE_DB exists, so
+    no OpenCode process is started from inside the session; otherwise the CLI
+    is the v2 binary with --standalone (see opencode_cli)."""
+    from compchem_memory import opencode_cli
+
+    if opencode_cli.is_v2():
+        db = opencode_cli.v2_db_path()
+        if db:
+            return _list_session_updates_v2_db(db)
     try:
         fd, tmp = tempfile.mkstemp(prefix="oc_sessions_", suffix=".json")
         os.close(fd)
         try:
             with open(tmp, "w") as out:
                 proc = subprocess.run(
-                    ["opencode", "session", "list", "--format", "json",
-                     "-n", str(HANDOVER_SESSION_LIST_LIMIT)],
+                    opencode_cli.command(
+                        "session", "list", "--format", "json",
+                        "-n", str(HANDOVER_SESSION_LIST_LIMIT)),
                     stdout=out, stderr=subprocess.DEVNULL,
                     stdin=subprocess.DEVNULL,
                     timeout=HANDOVER_SESSION_LIST_TIMEOUT,
@@ -472,6 +483,30 @@ def _list_session_updates() -> dict[str, int] | None:
                 pass
     except Exception:
         return None
+
+
+def _list_session_updates_v2_db(db_path: str) -> dict[str, int] | None:
+    """sid -> last-updated epoch ms, read from the v2 database's `session_v2`.
+
+    Observed on OpenCode 2.3.0: `session_v2.time_updated` is epoch ms and equals
+    the `updated` field of `session list --format json`. The CLI lists only the
+    current directory's project; this read covers every session, which is
+    harmless because the caller looks sessions up by id. Read-only connection;
+    None on any failure."""
+    import sqlite3
+
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            rows = con.execute("SELECT id, time_updated FROM session_v2").fetchall()
+        finally:
+            con.close()
+    except Exception:
+        return None
+    out = {sid: int(upd) for sid, upd in rows
+           if isinstance(sid, str) and isinstance(upd, (int, float))
+           and not isinstance(upd, bool)}
+    return out or None
 
 
 def _read_cursor_record(store: Path, sid: str) -> dict | None:
@@ -892,8 +927,15 @@ def generate_handover(
     )
     from compchem_memory.llm import call_llm
 
+    from compchem_memory import opencode_cli
+
     llm = llm or call_llm
-    v2 = v2_mode()
+    # The environment looks like v2 (OPENCODE_DB) but the v2 runtime is not
+    # declared: the bare `opencode` on PATH may be the v1 CLI, which cannot read
+    # the v2 DB and has taken down the stdio MCP connection (2026-11-16). Do not
+    # list sessions through it. With MAGNOLIA_OPENCODE_V2 set, the listing reads
+    # session_v2 directly or calls the v2 binary with --standalone.
+    v1_cli_unsafe = v2_mode() and not opencode_cli.is_v2()
 
     store = Path(project_dir) / ".magnolia"
     mapping = store / "opencode-sessions.jsonl"
@@ -903,8 +945,9 @@ def generate_handover(
     # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
     # resolved from PATH is v1.18.35 in the memory-server process, so
     # `opencode export` cannot read v2 sessions. In v2 mode the exporter never
-    # falls back to that CLI (2026-11-16: it could take down the MCP connection);
-    # v1-only setups still use the CLI as before.
+    # falls back to that v1 CLI (2026-11-16: it could take down the MCP
+    # connection); under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with
+    # --standalone; v1-only setups still use the CLI as before.
     exporter = exporter or plugin_dump_exporter(str(store))
 
     _migrate_legacy_cursor(store)
@@ -920,14 +963,14 @@ def generate_handover(
     # scope change), yields None -> export every session (the legacy behavior).
     if session_updates is not None:
         updates = session_updates()
-    elif _skip_export_enabled() and not v2:
+    elif _skip_export_enabled() and not v1_cli_unsafe:
         updates = _list_session_updates()
     else:
         updates = None
     if updates is not None and latest_sid not in updates:
         updates = None
     if (updates is None and session_updates is None and _skip_export_enabled()
-            and not v2):
+            and not v1_cli_unsafe):
         print(f"[handover] session list unavailable or untrusted — exporting "
               f"all {len(sids)} sessions", file=sys.stderr)
 

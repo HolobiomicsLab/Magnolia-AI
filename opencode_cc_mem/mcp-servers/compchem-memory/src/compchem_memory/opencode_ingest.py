@@ -187,7 +187,10 @@ def export_session(ses_id: str) -> Optional[dict]:
     when stdout is a pipe — so `capture_output=True` silently yields invalid
     (cut-off) JSON for any session larger than 64 KB, which are exactly the
     content-rich sessions worth distilling. Writing to a regular FILE gets the
-    full output, so we redirect to a temp file and read it back."""
+    full output, so we redirect to a temp file and read it back.
+
+    Under v2 only `session export` is tried, with the v2 binary and
+    --standalone (see opencode_cli)."""
     import os
     import tempfile
 
@@ -215,6 +218,12 @@ def export_session(ses_id: str) -> Optional[dict]:
         except Exception:
             return None
 
+    from compchem_memory import opencode_cli
+
+    if opencode_cli.is_v2():
+        # Observed on OpenCode 2.3.0: `opencode export <id>` is not a command
+        # (exit 1, "Unexpected positional argument"). v2 binary, --standalone.
+        return _try(opencode_cli.command("session", "export", ses_id))
     out = _try(["opencode", "export", ses_id])
     if out is not None:
         return out
@@ -307,11 +316,13 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
     (full content: assistant reasoning + tool parts); (2) the capture plugin's
     ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat,
     user text + system — a fallback, NOT a content source); (3) the export CLI
-    (v1 form first, then v2 `session export`) for v1 sessions.
+    (v1 form first, then v2 `session export`) for v1 sessions; under v2 only
+    `session export` with --standalone (see export_session).
 
-    In v2 mode (OPENCODE_DB or MAGNOLIA_OPENCODE_V2) the CLI fallback is
-    deliberately skipped: the v1 binary cannot read the v2 DB, and invoking it
-    from the stdio MCP server can kill the connection."""
+    When the environment looks like v2 (OPENCODE_DB set) but the v2 runtime is
+    not declared (MAGNOLIA_OPENCODE_V2 unset), the CLI fallback is skipped: the
+    bare `opencode` from PATH can be the v1 binary, which cannot read the v2 DB,
+    and invoking it from the stdio MCP server can kill the connection."""
     store = Path(store_dir)
 
     def exporter(ses_id: str) -> Optional[dict]:
@@ -328,11 +339,16 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
                     return d
             except (OSError, ValueError, TypeError):
                 pass  # corrupt dump — fall through
-        if v2_mode():
-            # v2 mode: the v1 `opencode export` CLI cannot read the v2 DB and
+        from compchem_memory import opencode_cli
+
+        if v2_mode() and not opencode_cli.is_v2():
+            # v2 mode without the declared v2 runtime: the bare `opencode`
+            # from PATH may be the v1 CLI, which cannot read the v2 DB, and
             # spawning it from the stdio MCP server has taken down the MCP
             # connection. A missing session is retried next boot after the v2
             # DB/transcript dump appears; never shell out to the wrong CLI.
+            # With MAGNOLIA_OPENCODE_V2 set, export_session uses the v2 binary
+            # with --standalone (see opencode_cli).
             return None
         return export_session(ses_id)
 
