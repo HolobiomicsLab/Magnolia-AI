@@ -24,6 +24,11 @@
  * v2 setup(ctx) uses the prompt-admission hook (carries sessionID readonly)
  * plus an event-stream subscription as belt-and-suspenders — both feeding the
  * same recorder, so the JSONL contract the Python side reads is unchanged.
+ *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn the prompt hook
+ * wrote the session mapping and the turn-end handler wrote
+ * opencode-transcripts/<sid>.json. Which turn-end event name 2.3.0 delivers
+ * is not established, so both names stay accepted (see setup()).
  */
 import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join, dirname, basename } from "node:path"
@@ -192,6 +197,8 @@ export default {
     // v2 event vocabulary (logged 2026-10-07): there is NO session.idle in the
     // stream; the turn-terminal signal is session.execution.succeeded with the
     // session id at durable.aggregateID (data.sessionID on usage events).
+    // The 2.3.0 binary defines both session.idle and session.execution.*;
+    // which one this stream delivers is not established (2026-11-14).
     // Accept both vocabularies.
     const controller = new AbortController()
     void (async () => {

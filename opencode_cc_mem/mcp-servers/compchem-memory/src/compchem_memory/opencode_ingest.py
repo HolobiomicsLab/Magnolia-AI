@@ -270,9 +270,12 @@ _V2_NON_DIALOGUE_TYPES = frozenset({"idle", "synthetic"})
 def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
     """Exporter reading opencode v2's event-sourced `session_message` table.
 
-    THE v2 content source (2026-10-07 smoke findings): the export CLI AND
-    ctx.session.context() both return flat user-text-only messages (assistant
-    turns empty), and the event table stays empty for --standalone runs — but
+    THE v2 content source (2026-10-07 smoke findings, OpenCode 2.0.6): the
+    export CLI AND ctx.session.context() both returned flat user-text-only
+    messages (assistant turns empty), and the event table stays empty for
+    --standalone runs. Observed on OpenCode 2.3.0: ctx.session.context() does
+    return assistant messages with `content` (text, tool parts), `tokens` and
+    `cost`, each message keyed by `type` rather than `info.role`. Either way
     session_message.data holds the full payload: user {text}, assistant
     {content: [reasoning/text/tool parts], model, cost, tokens}. Mapped to the
     v1 {info:{role,id}, parts:[...]} family so reconstruct_transcript (with
@@ -330,8 +333,9 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
 
     Order (2026-10-07): (1) opencode v2's session_message table via OPENCODE_DB
     (full content: assistant reasoning + tool parts); (2) the capture plugin's
-    ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat,
-    user text + system — a fallback, NOT a content source); (3) the export CLI
+    ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat;
+    user text + system only on 2.0.6, assistant content too on 2.3.0 — a
+    fallback, NOT the primary content source); (3) the export CLI
     (v1 form first, then v2 `session export`) for v1 sessions; under v2 only
     `session export` with --standalone (see export_session).
 

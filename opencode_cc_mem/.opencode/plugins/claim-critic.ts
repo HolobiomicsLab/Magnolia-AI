@@ -28,6 +28,9 @@
  * (event + client.session.messages). v1.18.34 also calls setup() with a
  * limited ctx — guarded. v2 has no server-side TUI domain: flagged verdicts
  * degrade to stderr (the JSONL log is the primary record either way).
+ *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
+ * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
 import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
@@ -205,6 +208,8 @@ export default {
           const ev: any = event
           // v2 vocabulary has no session.idle; the turn-terminal signal is
           // session.execution.succeeded with the id at durable.aggregateID.
+          // (2.0.6. The 2.3.0 binary defines both names; which one the
+          // stream delivers is not established — keep both.)
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID

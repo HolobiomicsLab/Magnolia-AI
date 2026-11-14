@@ -33,6 +33,25 @@ npm install -g opencode-ai
 opencode --version
 ```
 
+The launcher runs the OpenCode v2 runtime by default (`MAGNOLIA_OPENCODE_V2=0` selects
+v1). It expects the v2 binary at `~/.local/share/magnolia-v2/bin/opencode`, or at the
+path in `MAGNOLIA_OPENCODE_V2_BIN`, and stops if the file is missing; nothing in Magnolia
+downloads it. The supported v2 version is **OpenCode 2.3.0**. Its release archives are
+published on the OpenCode releases page; for Linux arm64:
+
+```bash
+curl -fsSL -o opencode-linux-arm64.tar.gz \
+  https://github.com/sst/opencode/releases/download/v2.3.0/opencode-linux-arm64.tar.gz
+echo "3207fb5cdec448d479242c0f1a14f4f7bdfcad3a79209b5eb8f9003725e93711  opencode-linux-arm64.tar.gz" \
+  | sha256sum --check -
+mkdir -p ~/.local/share/magnolia-v2/bin
+tar -xzf opencode-linux-arm64.tar.gz -C ~/.local/share/magnolia-v2/bin opencode
+~/.local/share/magnolia-v2/bin/opencode --version   # opencode v2.3.0
+```
+
+The checksum above is that of the Linux arm64 archive. For another platform, take the
+matching archive from the same release and record its SHA-256 when you install it.
+
 Check the shell utilities before launching:
 
 ```bash
@@ -307,7 +326,8 @@ opencode --version
 .venv/bin/python3 -m pip freeze
 ```
 
-Requirements have lower bounds, not a complete lockfile; OpenCode is also unpinned.
+Requirements have lower bounds, not a complete lockfile. The supported OpenCode v2
+version is 2.3.0 (step 1); an OpenCode installed through npm is not pinned.
 Record the working combination. Before updating, preserve local changes, back up the
 project and review upstream changes. Reinstall both editable packages and repeat step 6.
 Rolling back source does not roll back packages, client versions or project data.

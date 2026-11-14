@@ -39,6 +39,9 @@
  * ACTION_TOOLS match may never fire; the v2 smoke decides (fallback:
  * codemode:false on the compchem servers, or parse the code text).
  *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn execute.before and
+ * execute.after fired and wrote action-retrieval rows (callID, outcome ok).
+ *
  * Toggle: MAGNOLIA_ACTION_RETRIEVE=0|off|false|no disables it.
  * Log: <project>/.magnolia/action-retrieval.jsonl (one line per injection).
  */
@@ -474,6 +477,8 @@ export default {
           const ev: any = event
           // v2 vocabulary has no session.idle; the turn-terminal signal is
           // session.execution.succeeded with the id at durable.aggregateID.
+          // (2.0.6. The 2.3.0 binary defines both names; which one the
+          // stream delivers is not established — keep both.)
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID

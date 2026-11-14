@@ -20,6 +20,9 @@
  * the canonical persisted input (migrate-v1 maps chat.message -> prompt).
  * v1.18.34 also calls setup() with a limited ctx — guarded.
  *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
+ * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
+ *
  * REGISTRY (2026-10-07): the mention set is the default pair UNION every
  * project that declares projects/<name>/agent.json (enabled != false). New
  * agents need no code edit — registering the project is enough.

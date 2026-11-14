@@ -23,6 +23,9 @@
  * No static @opencode/plugin import (v1 cannot resolve it; Plugin.define is
  * not required by either runtime — verified by /tmp/dualshape-test probes).
  * v2 ctx has no TUI domain server-side: toasts degrade to stderr logs.
+ *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
+ * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"

@@ -25,6 +25,9 @@
  * chat.message -> prompt). v1.18.34 also calls setup() with a limited ctx —
  * guarded.
  *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn the prompt hook
+ * injected the retrieval directive.
+ *
  * Toggle: on by default (read-only, desired). Opt out with MAGNOLIA_AUTORETRIEVE=0|off.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
