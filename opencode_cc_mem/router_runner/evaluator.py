@@ -66,7 +66,8 @@ def _catalog_has_model(model: str) -> bool:
     db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
     try:
         out = subprocess.run(
-            [v2, "api", "get", "/api/model"],
+            # --standalone: see _call_go_model.
+            [v2, "--standalone", "api", "get", "/api/model"],
             env={**os.environ, "OPENCODE_DB": db},
             capture_output=True, text=True, timeout=15, check=False,
         )
@@ -110,9 +111,14 @@ class GenerativeEvaluator:
         )
         db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
         prompt = f"{system}\n\n{user}"
+        # Observed on OpenCode 2.3.0: without --standalone or --server the CLI
+        # starts (or reuses) one shared background service per user account,
+        # which outlives this call and keeps the first caller's OPENCODE_DB and
+        # environment, so the OPENCODE_DB set here would be ignored once it
+        # runs. --standalone gives this one-shot call its own private server.
         try:
             out = subprocess.run(
-                [binary, "run", "--model", model, prompt],
+                [binary, "--standalone", "run", "--model", model, prompt],
                 env={**os.environ, "OPENCODE_DB": db},
                 capture_output=True, text=True, timeout=90, check=False,
             )
