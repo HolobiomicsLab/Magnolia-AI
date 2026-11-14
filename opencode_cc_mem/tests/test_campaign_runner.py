@@ -603,3 +603,23 @@ def test_halt_file_cancels_active_jobs(tmp_path):
     result = runner.run_once()
     assert result["state"]["state"] == "halted"
     assert runner.fake_backend.cancelled == ["fake-1"]
+
+
+class ErrorWorker(FakeWorker):
+    def run(self, *args, **kwargs):
+        result = super().run(*args, **kwargs)
+        result.errors = [{"type": "provider.no-route", "message": "no route"}]
+        return result
+
+
+def test_worker_error_lines_are_kept_in_the_receipt(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    runner = make_runner(store, ErrorWorker(store.run_dir), FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+    receipts = list(store.attempts_dir.rglob("worker_result.json"))
+    assert receipts
+    payload = json.loads(receipts[0].read_text())
+    assert payload["errors"] == [{"type": "provider.no-route", "message": "no route"}]

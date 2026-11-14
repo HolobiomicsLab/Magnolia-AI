@@ -42,6 +42,11 @@ if mode == "timeout":
     print(json.dumps({"type": "step_start", "sessionID": session, "part": {"type": "step-start"}}), flush=True)
     time.sleep(30)
     raise SystemExit(0)
+if mode == "error":
+    print(json.dumps({"type": "step_start", "sessionID": session, "part": {"type": "step-start"}}))
+    print(json.dumps({"type": "text", "sessionID": session, "part": {"type": "text", "messageID": "m1", "text": "partial"}}))
+    print(json.dumps({"type": "error", "sessionID": session, "error": {"type": "provider.no-route", "message": "no route"}}))
+    raise SystemExit(0)
 if mode == "review":
     text = '{"issues":[],"followups":[]}'
 elif mode == "secret":
@@ -191,3 +196,41 @@ def test_executor_kills_process_group_on_timeout(tmp_path):
     child_pid = int(child_pid_path.read_text())
     with pytest.raises(ProcessLookupError):
         os.kill(child_pid, 0)
+
+
+# Observed on OpenCode 2.3.0: `run --format json` reports a failed turn as a
+# top-level line {"type": "error", ..., "error": {...}} with no `part`.
+
+def test_parse_passes_top_level_error_lines():
+    body = "\n".join(
+        [
+            json.dumps({"type": "text", "sessionID": "s1", "part": {"type": "text", "messageID": "m1", "text": "one"}}),
+            json.dumps({"type": "error", "sessionID": "s1", "error": {"type": "provider.no-route", "message": "x"}}),
+            json.dumps({"type": "error", "sessionID": "s1", "error": "plain text"}),
+        ]
+    )
+    parsed = parse_run_events(body)
+    assert parsed.final_text == "one"
+    assert parsed.errors == [
+        {"type": "provider.no-route", "message": "x"},
+        {"message": "plain text"},
+    ]
+
+
+def test_parse_without_error_lines_has_no_errors():
+    body = json.dumps({"type": "text", "sessionID": "s1", "part": {"type": "text", "messageID": "m1", "text": "one"}})
+    assert parse_run_events(body).errors == []
+
+
+def test_executor_returns_error_lines(tmp_path):
+    binary = fake_binary(tmp_path)
+    executor = OpenCodeExecutor(
+        binary=str(binary),
+        model="opencode-go/deepseek-v4.1-flash",
+        agent="campaign-worker",
+        environment={"FAKE_MODE": "error"},
+        timeout_seconds=10,
+    )
+    result = executor.run("do work", tmp_path, tmp_path / "attempt")
+    assert result.final_text == "partial"
+    assert result.errors == [{"type": "provider.no-route", "message": "no route"}]
