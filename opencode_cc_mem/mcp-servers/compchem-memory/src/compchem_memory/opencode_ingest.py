@@ -233,8 +233,16 @@ def export_session(ses_id: str) -> Optional[dict]:
 def _normalize_v2_part(p: dict) -> dict:
     """session_message content items -> the v1 part family reconstruct reads:
     tool parts carry their result at state.output (v2 items may use flat
-    output/input keys instead)."""
+    output/input keys instead) and their tool name under `tool`. Observed on
+    OpenCode 2.3.0: a tool part has `state` and its name under `name` only
+    (Code Mode: `execute`)."""
     if not isinstance(p, dict):
+        return p
+    if p.get("type") == "tool" and "state" in p:
+        if "tool" not in p and "name" in p:
+            q = dict(p)
+            q["tool"] = q["name"]
+            return q
         return p
     if p.get("type") == "tool" and "state" not in p:
         state: dict = {}
@@ -251,6 +259,12 @@ def _normalize_v2_part(p: dict) -> dict:
             q["tool"] = q["name"]
         return q
     return p
+
+
+# Observed on OpenCode 2.3.0: session_message rows of type `idle` (end of a
+# turn: outcome succeeded/failed, with error) and `synthetic` (notices such as
+# "The server restarted while you were working...") are not dialogue.
+_V2_NON_DIALOGUE_TYPES = frozenset({"idle", "synthetic"})
 
 
 def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
@@ -280,6 +294,8 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
             return None
         msgs = []
         for mid, typ, data in rows:
+            if typ in _V2_NON_DIALOGUE_TYPES:
+                continue
             try:
                 d = json.loads(data) if isinstance(data, (str, bytes, bytearray)) else (data or {})
             except Exception:  # noqa: BLE001 - one bad row must not kill the export

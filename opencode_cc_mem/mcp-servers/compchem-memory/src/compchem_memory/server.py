@@ -25,14 +25,23 @@ def _newest_session_main_model(db_path: str | None = None) -> dict | None:
     boot timing must not depend on this probe."""
     try:
         import sqlite3
+        from compchem_memory import opencode_cli
+        if not db_path and opencode_cli.is_v2():
+            db_path = opencode_cli.v2_db_path()
         db = Path(db_path) if db_path else (
             Path.home() / ".local" / "share" / "opencode" / "opencode.db")
         if not db.exists():
             return None
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
         try:
+            # Observed on OpenCode 2.3.0: no `session` table; sessions live in
+            # `session_v2`, whose `model` is JSON {"id", "providerID"}.
+            table = "session"
+            if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                           "AND name='session_v2'").fetchone():
+                table = "session_v2"
             row = con.execute(
-                "SELECT model FROM session ORDER BY time_updated DESC LIMIT 1"
+                f"SELECT model FROM {table} ORDER BY time_updated DESC LIMIT 1"
             ).fetchone()
         finally:
             con.close()
