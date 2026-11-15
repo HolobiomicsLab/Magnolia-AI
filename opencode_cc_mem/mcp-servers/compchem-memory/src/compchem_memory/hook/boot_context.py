@@ -1,4 +1,7 @@
-"""Build the project boot-context payload for a harness model request."""
+"""Build the project boot-context payload for a harness model request.
+
+Deliberate change: a high surrogate left alone at the UTF-16 truncation cut is dropped.
+"""
 
 from pathlib import Path
 
@@ -10,7 +13,7 @@ _TRUNCATION_SUFFIX = "\n\n[truncated at 256k chars]"
 
 def _section(name: str, path: Path) -> str | None:
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        text = path.read_bytes().decode("utf-8", errors="replace").strip()
     except OSError:
         return None
     return f"--- {name} ---\n{text}" if text else None
@@ -37,7 +40,7 @@ def build_boot_payload(paths: ProjectPaths) -> str:
             parts.append(section)
     parts.extend(_rule_sections(paths))
     payload = "\n\n".join(parts)
-    if len(payload) > MAX_PAYLOAD_CHARS:
-        return payload[:MAX_PAYLOAD_CHARS] + _TRUNCATION_SUFFIX
+    encoded = payload.encode("utf-16-le")
+    if len(encoded) > 2 * MAX_PAYLOAD_CHARS:
+        return encoded[: 2 * MAX_PAYLOAD_CHARS].decode("utf-16-le", errors="ignore") + _TRUNCATION_SUFFIX
     return payload
-

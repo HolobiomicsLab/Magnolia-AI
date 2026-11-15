@@ -46,3 +46,13 @@ def test_directive_kill_switch(tmp_path, monkeypatch, value):
     assert state.data == {}
     assert not (paths.store / "auto-retrieval.jsonl").exists()
 
+
+def test_directive_is_returned_when_ledger_append_fails(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    paths = _project(tmp_path)
+    paths.store.chmod(0o500)
+    state = SimpleNamespace(data={})
+
+    assert retrieval_directive(paths, state, "session-1") == DIRECTIVE
+    assert state.data["directive_sent"] is True
+    assert retrieval_directive(paths, state, "session-1") is None

@@ -51,7 +51,6 @@ def retrieval_directive(paths: ProjectPaths, state: _DirectiveState, session_id:
     try:
         _append_ledger(paths, session_id)
     except OSError:
-        return None
+        pass
     state.data["directive_sent"] = True
     return DIRECTIVE
-
