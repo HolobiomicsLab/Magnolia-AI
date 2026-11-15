@@ -351,6 +351,9 @@ def test_cli_stdout_failure_logs_error_without_exposure(tmp_path):
     ]
     assert rows[0]["error"].startswith("BrokenPipeError:")
     assert not (project / ".magnolia" / "surfacing.jsonl").exists()
+    with SessionState.open(project / ".magnolia", "json", "closed-stdout") as state:
+        assert state.data.get("injections", 0) == 0
+        assert state.data.get("entry_counts", {}) == {}
 
 
 def test_cli_post_tool_exits_within_deadline(tmp_path):

@@ -40,6 +40,19 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
         commit_notices(paths, event.harness, event.session_id, notices)
 
 
+def _release_unsettled(handled: Any) -> None:
+    """Release an action note a failure left unsettled; never raise."""
+    pending = getattr(handled, "pending", None)
+    if pending is None:
+        return
+    try:
+        from compchem_memory.hook.action_retrieval import discard_note
+
+        discard_note(pending)
+    except Exception:  # noqa: BLE001 - the error row is already written
+        pass
+
+
 def _write_rendered(rendered: Any, handled: Any, event: Any) -> None:
     """Write UTF-8 output, then commit what was delivered."""
     sys.stdout.buffer.write(rendered.stdout.encode("utf-8"))
@@ -100,6 +113,7 @@ def main() -> None:
     if event_name == "post-tool":
         deadline -= POST_TOOL_EXIT_RESERVE_SECONDS
     event = None
+    handled = None
     try:
         adapter, event = _parse_stdin(harness, event_name)
         from compchem_memory.hook.dispatch import handle
@@ -109,6 +123,7 @@ def main() -> None:
         _write_rendered(rendered, handled, event)
     except Exception as error:  # noqa: BLE001 - every hook failure is fail-open
         _log_error(error, harness, event_name, event, os.environ)
+        _release_unsettled(handled)
         os._exit(0)
     os._exit(rendered.exit_code)
 

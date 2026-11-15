@@ -454,3 +454,84 @@ def test_no_exposure_before_commit(tmp_path, monkeypatch) -> None:
 
     assert note is not None
     assert not (paths.store / "surfacing.jsonl").exists()
+
+
+def test_overlapping_hooks_respect_the_per_entry_cap(tmp_path, monkeypatch) -> None:
+    """Parallel post-tool hooks of one session reserve slots at selection (N1)."""
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "shared.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    notes = [
+        _call(_event(paths, call_id=f"p{index}", tool_input={"cmd": f"run {index}"}), paths)
+        for index in range(4)
+    ]
+
+    assert [note is not None for note in notes] == [True, True, False, False]
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["entry_counts"] == {hit["path"]: 2}
+        assert state.data["injections"] == 2
+
+
+def test_overlapping_hooks_respect_the_session_budget(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hits = [_hit(paths.store, f"e{index}.md", title=f"Entry {index}") for index in range(12)]
+    current: list[dict] = []
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: list(current))
+
+    notes = []
+    for index in range(10):
+        current[:] = [hits[index]]
+        notes.append(
+            _call(_event(paths, call_id=f"b{index}", tool_input={"cmd": f"step {index}"}), paths)
+        )
+
+    assert sum(note is not None for note in notes) == 8
+
+
+def test_commit_after_reservation_counts_once(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "once.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    note = _deliver(_event(paths), paths)
+
+    assert note is not None
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["injections"] == 1
+        assert state.data["entry_counts"] == {hit["path"]: 1}
+        assert len(state.data["pending_application"]) == 1
+
+
+def test_discard_releases_the_reservation_for_another_hook(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "released.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    first = _call(_event(paths, call_id="r1", tool_input={"cmd": "one"}), paths)
+    second = _call(_event(paths, call_id="r2", tool_input={"cmd": "two"}), paths)
+    assert first is not None and second is not None
+    assert _call(_event(paths, call_id="r3", tool_input={"cmd": "three"}), paths) is None
+
+    discard_note(first)
+
+    assert _call(_event(paths, call_id="r4", tool_input={"cmd": "four"}), paths) is not None
+
+
+def test_a_note_is_settled_once(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "settled.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    delivered = _call(_event(paths, call_id="s1", tool_input={"cmd": "one"}), paths)
+    assert delivered is not None
+    commit_exposure(delivered, "s1")
+    discard_note(delivered)
+    commit_exposure(delivered, "s1")
+
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["injections"] == 1
+        assert state.data["entry_counts"] == {hit["path"]: 1}
+        assert len(state.data["pending_application"]) == 1
+    assert sum(row.get("injected", 0) > 0 for row in _rows(paths.store)) == 1
+    assert sum(row.get("injected") == 0 for row in _rows(paths.store)) == 0

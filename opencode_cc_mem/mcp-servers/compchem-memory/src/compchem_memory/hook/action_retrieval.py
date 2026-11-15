@@ -88,7 +88,13 @@ _STOP = frozenset(
 
 @dataclass
 class _Delivery:
-    """What a delivered note spends and records; applied by ``commit_exposure``."""
+    """A selected note's reservation and the rows it records once settled.
+
+    Selection reserves one unit of the session budget and one use of each entry
+    under the state lock, so overlapping post-tool hooks of one session cannot
+    exceed the caps. ``commit_exposure`` keeps the reservation; ``discard_note``
+    releases it. Whichever runs first settles the note; later calls do nothing.
+    """
 
     paths: ProjectPaths
     harness: str
@@ -97,6 +103,7 @@ class _Delivery:
     pending: dict
     coarse_row: dict
     hits_row: dict
+    settled: bool = False
 
 
 @dataclass
@@ -139,30 +146,32 @@ def _cache_key(tool_name: str, args: object) -> str:
     return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
 
-def commit_exposure(note: ActionNote, session_id: str) -> None:
-    """Commit a delivered note: budget, latch, pending probe, ledger, exposure.
-
-    Called only once the client emitted the note, so a dropped note spends no
-    budget, latches no entry and is not reported as injected.
-    """
+def _settle(note: ActionNote) -> _Delivery | None:
+    """Mark a note settled; return its delivery only the first time."""
     delivery = note.delivery
-    if delivery is not None:
-        with SessionState.open(delivery.paths.store, delivery.harness, delivery.session_id) as current:
-            used = current.data.get("injections", 0)
-            current.data["injections"] = (used if isinstance(used, int) else 0) + 1
-            entry_counts = current.data.get("entry_counts")
-            if not isinstance(entry_counts, dict):
-                entry_counts = {}
-                current.data["entry_counts"] = entry_counts
-            for entry in delivery.entry_paths:
-                entry_counts[entry] = entry_counts.get(entry, 0) + 1
-            pending = current.data.get("pending_application")
-            if not isinstance(pending, list):
-                pending = []
-                current.data["pending_application"] = pending
-            pending.append(delivery.pending)
-        _log(delivery.paths, delivery.coarse_row)
-        _log(delivery.paths, delivery.hits_row)
+    if delivery is None or delivery.settled:
+        return None
+    delivery.settled = True
+    return delivery
+
+
+def commit_exposure(note: ActionNote, session_id: str) -> None:
+    """Commit a delivered note: keep its reservation, record probe, ledger, exposure.
+
+    Called only once the client emitted the note. The budget and entry uses
+    were reserved at selection; a dropped note releases them in ``discard_note``.
+    """
+    delivery = _settle(note)
+    if delivery is None:
+        return
+    with SessionState.open(delivery.paths.store, delivery.harness, delivery.session_id) as current:
+        pending = current.data.get("pending_application")
+        if not isinstance(pending, list):
+            pending = []
+            current.data["pending_application"] = pending
+        pending.append(delivery.pending)
+    _log(delivery.paths, delivery.coarse_row)
+    _log(delivery.paths, delivery.hits_row)
     for store, sources in note.sources_by_store.items():
         surfacing.log_surfacing(
             store,
@@ -173,9 +182,24 @@ def commit_exposure(note: ActionNote, session_id: str) -> None:
 
 
 def discard_note(note: ActionNote) -> None:
-    """Record a note the client did not emit: one ledger row with ``injected: 0``."""
-    delivery = note.delivery
-    if delivery is not None:
+    """Release a note the client did not emit and log it with ``injected: 0``."""
+    delivery = _settle(note)
+    if delivery is None:
+        return
+    try:
+        with SessionState.open(delivery.paths.store, delivery.harness, delivery.session_id) as current:
+            used = current.data.get("injections", 0)
+            if isinstance(used, int) and used > 0:
+                current.data["injections"] = used - 1
+            entry_counts = current.data.get("entry_counts")
+            if isinstance(entry_counts, dict):
+                for entry in delivery.entry_paths:
+                    count = entry_counts.get(entry, 0)
+                    if isinstance(count, int) and count > 1:
+                        entry_counts[entry] = count - 1
+                    else:
+                        entry_counts.pop(entry, None)
+    finally:
         _log(delivery.paths, {**delivery.coarse_row, "injected": 0})
 
 
@@ -394,6 +418,9 @@ def on_post_tool(
             skip_reason = "budget"
         else:
             selected = fresh[:MAX_HITS]
+            current.data["injections"] = used + 1
+            for hit in selected:
+                entry_counts[hit["path"]] = entry_counts.get(hit["path"], 0) + 1
 
     if skip_reason is not None:
         _log_skip(event, paths, ledger_tool, skip_reason)
