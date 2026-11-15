@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -50,20 +49,17 @@ def _write_rendered(rendered: Any, handled: Any, event: Any) -> None:
     sys.stderr.buffer.flush()
 
 
-def _error_destination(event: Any, env: Mapping[str, str]) -> Path:
-    """Return the bound store, or Magnolia's state home when unbound."""
-    from compchem_memory.hook.project import bind_project, state_home
+def _bound_store(event: Any, env: Mapping[str, str]) -> Path | None:
+    """Return the event's bound store, or ``None`` when unbound or unbindable."""
+    from compchem_memory.hook.project import bind_project
 
-    if event is not None:
-        try:
-            paths = bind_project(
-                event.harness, event.session_id, Path(event.cwd), env,
-            )
-        except Exception:  # noqa: BLE001 - error logging must retain its fallback
-            return state_home(env)
-        if paths is not None:
-            return paths.store
-    return state_home(env)
+    if event is None:
+        return None
+    try:
+        paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
+    except Exception:  # noqa: BLE001 - error logging must retain its fallback
+        return None
+    return None if paths is None else paths.store
 
 
 def _log_error(
@@ -73,27 +69,12 @@ def _log_error(
     event: Any,
     env: Mapping[str, str],
 ) -> None:
-    """Append one payload-free error row without raising."""
+    """Append one payload-free error row to the store, else the state home; never raise."""
     try:
-        destination = _error_destination(event, env)
-        destination.mkdir(parents=True, exist_ok=True)
-        row = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "harness": harness,
-            "event": event_name,
-            "error": f"{type(error).__name__}: {error}",
-        }
-        data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-        descriptor = os.open(
-            destination / "hook-errors.jsonl",
-            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-            0o600,
-        )
-        try:
-            os.write(descriptor, data)
-        finally:
-            os.close(descriptor)
-    except Exception:
+        from compchem_memory.hook.errors import log_error
+
+        log_error(error, harness, event_name, _bound_store(event, env), env)
+    except Exception:  # noqa: BLE001 - logging is the last resort
         pass
 
 

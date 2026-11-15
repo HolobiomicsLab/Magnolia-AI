@@ -2,13 +2,19 @@
 
 Turn-end deliberately runs the critic last and may therefore be slow. Client
 adapters may run that event asynchronously; Claude Code supports ``async: true``.
+
+Behaviours are isolated from each other, as the OpenCode plugins are: each runs
+under its own guard, a failure leaves one row in ``hook-errors.jsonl`` (in the
+store, or in Magnolia's state home when the store is unwritable) and the other
+behaviours still run, so a failing transcript or directive ledger never costs
+the boot context.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from compchem_memory.hook.events import HookEvent, HookResponse
 from compchem_memory.hook.project import bind_project
@@ -33,14 +39,35 @@ class Handled:
     paths: ProjectPaths | None = field(default=None)
 
 
-def _record(paths: ProjectPaths, event: HookEvent) -> None:
-    """Record the session idempotently, then append the current event."""
+class _Guard:
+    """Run one behaviour; log its failure and return a default instead of raising."""
+
+    def __init__(self, paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> None:
+        self.paths = paths
+        self.event = event
+        self.env = env
+
+    def __call__(self, behaviour: str, function: Callable[..., Any], *args: Any, default: Any = None) -> Any:
+        try:
+            return function(*args)
+        except Exception as error:  # noqa: BLE001 - one behaviour must not stop the others
+            from compchem_memory.hook.errors import log_error
+
+            log_error(error, self.event.harness, self.event.event, self.paths.store, self.env, behaviour)
+            return default
+
+
+def _record_session(paths: ProjectPaths, event: HookEvent) -> None:
     from compchem_memory.hook.sessions import record_session
-    from compchem_memory.hook.transcript import append_event
 
     record_session(
         paths.store, event.harness, event.session_id, event.cwd, event.transcript_ref,
     )
+
+
+def _append_transcript(paths: ProjectPaths, event: HookEvent) -> None:
+    from compchem_memory.hook.transcript import append_event
+
     append_event(paths.store, event)
 
 
@@ -62,11 +89,15 @@ def _notices(paths: ProjectPaths, event: HookEvent) -> Notices | None:
         return peek_notices(paths, state)
 
 
-def _session_start(paths: ProjectPaths, event: HookEvent) -> Handled:
+def _boot_payload(paths: ProjectPaths) -> str | None:
     from compchem_memory.hook.boot_context import build_boot_payload
 
-    response = HookResponse(context=build_boot_payload(paths))
-    response = response.merge(HookResponse(context=_directive(paths, event)))
+    return build_boot_payload(paths)
+
+
+def _session_start(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
+    response = HookResponse(context=guard("boot-context", _boot_payload, paths))
+    response = response.merge(HookResponse(context=guard("directive", _directive, paths, event)))
     return Handled(response, None)
 
 
@@ -91,45 +122,49 @@ def is_person_prompt(event: HookEvent) -> bool:
     return not (event.prompt or "").lstrip().startswith(_HARNESS_PROMPT_PREFIXES)
 
 
-def _prompt(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> Handled:
+def _doorbell(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> str | None:
     from compchem_memory.hook.doorbell import process_prompt
 
+    result = process_prompt(event.prompt or "", paths, env)
+    if not result.sent:
+        return None
+    mentions = ", ".join(result.sent)
+    return (
+        "The following @mentions were already sent to helper agents; "
+        f"do not act on them: {mentions}"
+    )
+
+
+def _prompt(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str], guard: _Guard) -> Handled:
     if not is_person_prompt(event):
         return Handled(HookResponse(), None)
-    result = process_prompt(event.prompt or "", paths, env)
-    context = None
-    if result.sent:
-        mentions = ", ".join(result.sent)
-        context = (
-            "The following @mentions were already sent to helper agents; "
-            f"do not act on them: {mentions}"
-        )
-    response = HookResponse(context=context)
-    response = response.merge(HookResponse(context=_directive(paths, event)))
-    notices = _notices(paths, event)
+    response = HookResponse(context=guard("doorbell", _doorbell, paths, event, env))
+    response = response.merge(HookResponse(context=guard("directive", _directive, paths, event)))
+    notices = guard("notices", _notices, paths, event)
     response = response.merge(HookResponse(notice=None if notices is None else notices.text))
     return Handled(response, None, notices)
 
 
-def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float) -> Handled:
+def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float, guard: _Guard) -> Handled:
     from compchem_memory.hook.action_retrieval import on_post_tool
 
-    pending = on_post_tool(event, paths, deadline)
+    pending = guard("action-retrieval", on_post_tool, event, paths, deadline)
     response = HookResponse(tool_note=None if pending is None else pending.text)
-    notices = _notices(paths, event) if event.agent is None else None
+    notices = guard("notices", _notices, paths, event) if event.agent is None else None
     response = response.merge(HookResponse(notice=None if notices is None else notices.text))
     return Handled(response, pending, notices)
 
 
-def _turn_end(paths: ProjectPaths, event: HookEvent) -> Handled:
+def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
     from compchem_memory.hook.action_retrieval import probe_application
     from compchem_memory.hook.critic import run_critic
 
-    probe_application(
+    guard(
+        "application-probe", probe_application,
         paths, event.harness, event.session_id, event.assistant_text or "",
     )
     agent_id = None if event.agent is None else event.agent.id
-    run_critic(paths, event.harness, event.session_id, agent_id)
+    guard("critic", run_critic, paths, event.harness, event.session_id, agent_id)
     return Handled(HookResponse(), None)
 
 
@@ -138,17 +173,18 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
     if paths is None:
         return Handled(HookResponse(), None)
-    _record(paths, event)
+    guard = _Guard(paths, event, env)
+    guard("session-map", _record_session, paths, event)
+    guard("transcript", _append_transcript, paths, event)
     if event.event == "session-start":
-        handled = _session_start(paths, event)
+        handled = _session_start(paths, event, guard)
     elif event.event == "prompt":
-        handled = _prompt(paths, event, env)
+        handled = _prompt(paths, event, env, guard)
     elif event.event == "post-tool":
-        handled = _post_tool(paths, event, deadline)
+        handled = _post_tool(paths, event, deadline, guard)
     elif event.event == "turn-end":
-        handled = _turn_end(paths, event)
+        handled = _turn_end(paths, event, guard)
     else:
         handled = Handled(HookResponse(), None)
     handled.paths = paths
     return handled
-

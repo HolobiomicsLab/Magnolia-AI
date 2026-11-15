@@ -241,6 +241,58 @@ def test_error_log_falls_back_to_state_home_when_binding_raises(tmp_path, monkey
     assert rows[0]["error"] == "ValueError: dispatch failed"
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_cli_read_only_store_still_returns_boot_context(tmp_path):
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    (store / "boot-context.md").write_text("Remember the read-only project.\n", encoding="utf-8")
+    state = tmp_path / "state"
+    env = dict(os.environ)
+    env.update(HOME=str(tmp_path / "home"), XDG_STATE_HOME=str(state), MAGNOLIA_JOB_NOTIFY="0")
+    env.pop("MAGNOLIA_AUTORETRIEVE", None)
+    store.chmod(0o555)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "compchem_memory.hook", "json", "session-start"],
+            input=json.dumps(_payload(project, "read-only", "session-start")),
+            capture_output=True, text=True, timeout=30, env=env,
+        )
+    finally:
+        store.chmod(0o755)
+
+    assert proc.returncode == 0 and proc.stderr == ""
+    assert "Remember the read-only project." in json.loads(proc.stdout)["context"]
+    assert not (store / "hook-errors.jsonl").exists()
+    rows = [json.loads(line) for line in (state / "magnolia" / "hook-errors.jsonl").read_text().splitlines()]
+    assert {row["behaviour"] for row in rows} >= {"session-map", "transcript", "directive"}
+    assert all(row["event"] == "session-start" and row["harness"] == "json" for row in rows)
+
+
+def test_one_failing_behaviour_does_not_stop_the_others(tmp_path, monkeypatch):
+    from compchem_memory.hook import doorbell
+    from compchem_memory.hook.directive import DIRECTIVE
+
+    project = _workspace(tmp_path)
+    env = {"HOME": str(tmp_path / "home"), "XDG_STATE_HOME": str(tmp_path / "state")}
+    monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("doorbell broke")
+
+    monkeypatch.setattr(doorbell, "process_prompt", broken)
+    with SessionState.open(project / ".magnolia", "json", "s1") as state:
+        state.data["unshown_notices"] = ["critic flag"]
+
+    handled = handle(HookEvent("json", "prompt", "s1", str(project), prompt="@literature go"),
+                     env, time.monotonic() + 8)
+
+    assert handled.response.context == DIRECTIVE
+    assert handled.response.notice == "critic flag"
+    rows = [json.loads(line) for line in (project / ".magnolia" / "hook-errors.jsonl").read_text().splitlines()]
+    assert [(row["behaviour"], row["error"]) for row in rows] == [("doorbell", "RuntimeError: doorbell broke")]
+
+
 def test_cli_writes_utf8_bytes_with_ascii_python_io_encoding(tmp_path):
     project = _workspace(tmp_path)
     state = tmp_path / "state"
