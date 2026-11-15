@@ -11,7 +11,10 @@ import pytest
 
 from compchem_memory.hook.boot_context import MAX_PAYLOAD_CHARS, build_boot_payload
 from compchem_memory.hook.directive import DIRECTIVE, retrieval_directive
+from compchem_memory.hook.action_retrieval import on_post_tool
+from compchem_memory.hook.events import HookEvent, ToolCall
 from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.hook.state import SessionState
 
 PLUGIN_DIR = Path(__file__).resolve().parents[4] / ".opencode" / "plugins"
 NODE = shutil.which("node") or "node"
@@ -181,3 +184,89 @@ def test_doorbell_matches_plugin(tmp_path, monkeypatch):
     assert without_date(python_result.letters[0].read_text(encoding="utf-8")) == without_date(
         plugin_result["letters"][0]
     )
+
+
+ACTION_DRIVER = r"""
+const [pluginPath, directory] = process.argv.slice(2)
+const { readFile, writeFile } = await import("node:fs/promises")
+// Bun exposes import.meta.dir; Node exposes the equivalent import.meta.dirname.
+const nodePlugin = new URL("./magnolia-action-retrieval-node.ts", import.meta.url)
+await writeFile(nodePlugin, (await readFile(new URL(pluginPath), "utf8")).replaceAll("import.meta.dir", "import.meta.dirname"))
+const mod = await import(nodePlugin)
+const hooks = {}
+await mod.default.setup({
+  location: { directory },
+  tool: { hook: async (name, callback) => { hooks[name] = callback } },
+})
+await hooks["execute.before"]({
+  tool: "compchem-tools_run_shell", id: "c1", sessionID: "s1",
+  input: { cmd: "haddock3 run workflow" },
+})
+const event = {
+  tool: "compchem-tools_run_shell", id: "c1", sessionID: "s1",
+  result: { output: "RESULT" },
+}
+await hooks["execute.after"](event)
+process.stdout.write(JSON.stringify(event.result.output.slice(0, -"RESULT".length)))
+"""
+
+
+def test_action_retrieval_block_matches_plugin_v2(tmp_path, monkeypatch):
+    plugin_workspace = tmp_path / "plugin"
+    plugin_store = plugin_workspace / ".magnolia"
+    plugin_store.mkdir(parents=True)
+    (plugin_store / "GOAL.md").write_text("goal\n", encoding="utf-8")
+    hit_path = plugin_store / "staging" / "parity.md"
+    hit_path.parent.mkdir()
+    hit_path.write_text("entry\n", encoding="utf-8")
+    hits = [
+        {
+            "title": "Haddock timeout recovery",
+            "type": "error_resolution",
+            "tier": "staging",
+            "score": 4,
+            "provisional": True,
+            "confidence": 0.9,
+            "path": str(hit_path),
+            "gist": "Retry with the saved workflow parameters.",
+        }
+    ]
+    fake_python = tmp_path / "fake-quick-search"
+    fake_python.write_text(
+        "#!/bin/sh\nprintf '%s\\n' " + json.dumps(json.dumps(hits[0])) + "\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    monkeypatch.setenv("MAGNOLIA_PYTHON", str(fake_python))
+    plugin_block = json.loads(
+        run_plugin(
+            "magnolia-action-retrieval.ts",
+            ACTION_DRIVER,
+            tmp_path,
+            plugin_workspace,
+        )
+    )
+
+    python_project = tmp_path / "python"
+    python_store = python_project / ".magnolia"
+    python_store.mkdir(parents=True)
+    monkeypatch.setattr("compchem_memory.quick_search.search", lambda query, project_dir, k=5: hits)
+    paths = ProjectPaths(tmp_path, python_project, python_store, "python", True)
+    event = HookEvent(
+        harness="claude",
+        event="post-tool",
+        session_id="s1",
+        cwd=str(python_project),
+        tool=ToolCall(
+            name="run_shell",
+            server="compchem-tools",
+            raw_name="mcp__compchem-tools__run_shell",
+            call_id="c1",
+            input={"cmd": "haddock3 run workflow"},
+            output="RESULT",
+        ),
+    )
+    note = on_post_tool(event, paths, SessionState, __import__("time").monotonic() + 10)
+
+    assert note is not None
+    assert note.text == plugin_block
