@@ -38,7 +38,7 @@ def _truncate(s: str | bytes | None) -> str:
     kept = s[start:]
     first_line_cut = False
     if start and s[start - 1] != "\n":
-        boundary = kept.find("\n")
+        boundary = kept.rstrip("\r\n").find("\n")
         if boundary >= 0:
             kept = kept[boundary + 1:]
         else:

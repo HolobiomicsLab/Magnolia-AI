@@ -190,6 +190,30 @@ def test_ingest_marks_even_with_zero_candidates(store):
     assert (store / "opencode-distilled" / "ses_empty.json").exists()  # don't re-export forever
 
 
+def test_manual_distill_skips_provider_when_no_new_dialogue(store, monkeypatch):
+    from compchem_memory.transcript_source import SessionRef
+
+    calls = []
+    ref = SessionRef("vibe", "s1", "vibe-s1", None, None, True)
+    monkeypatch.setattr(
+        oi, "_session_exporter",
+        lambda store_dir, legacy: (
+            lambda current: {
+                "messages": [],
+                "known_entry_ids": ["/HOME/x/.magnolia/entries/a.md"],
+            }
+        ),
+    )
+
+    result = oi.distill_session_transcript(
+        str(store), ref, commit=False,
+        distiller=lambda text: calls.append(text) or [],
+    )
+
+    assert result == {"status": "preview", "candidates": []}
+    assert calls == []
+
+
 def test_ingest_does_not_mark_on_export_failure(store):
     _write_mapping(store, ["ses_fail"])
     oi.ingest_opencode_sessions(str(store), exporter=lambda s: None, distiller=lambda t: [{"title": "x", "content": "c"}])

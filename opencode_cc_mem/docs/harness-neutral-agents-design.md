@@ -114,7 +114,7 @@ Anti-goals (a failure even if it works)
 | Rules + boot context + audit report | `session-start` | context hook (v2) | static rules through `--append-system-prompt-file`; capped dynamic SessionStart `additionalContext` | rules in `.codex/config.toml` `developer_instructions`; Codex reads `AGENTS.md` natively; capped dynamic SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
 | Session-start retrieval directive | `session-start` | prompt rewrite | SessionStart `additionalContext` | same | `session_start` `additional_context` |
 | Doorbell `@agent` letters | `prompt` | prompt rewrite | letter written + `additionalContext` "already sent, do not act" (no rewrite possible) | same | same, on `pre_agent` (carries the prompt) |
-| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | `post_tool` `additional_context` |
+| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | built-ins use `post_tool` `additional_context`; MCP notes are carried to the same agent's next built-in event, or the main agent's next prompt |
 | Tool-call capture | MCP `@captured` (unchanged) + `pre-tool`/`post-tool` ledger | yes | yes | yes | yes |
 | Session mapping + Magnolia transcript | all events | yes | yes | yes | yes; assistant text only from the client transcript (`post_agent` carries none) |
 | Claim critic | `turn-end` | yes | synchronous Stop recovers replies and starts a detached worker | Stop hook | `post_agent` defers recovery; the next main prompt or session end starts a detached worker |
@@ -243,8 +243,9 @@ the client in the project directory.
   `magnolia-hook` in P6 if Tao agrees.
 - **Claude Code.** `claude --setting-sources project,local --settings <rendered hooks>
   --mcp-config <rendered> --strict-mcp-config --disallowedTools Bash` started in the
-  project directory. The rendered settings contain only Magnolia's hooks; the member's
-  user settings keep their login. Never `--bare`.
+  project directory. The rendered settings contain Magnolia's hooks and the MCP
+  `permissions.allow` entries they require; the member's user settings keep their login.
+  Never `--bare`.
 - **Codex.** A project layer `projects/<p>/.codex/` with `config.toml` (MCP servers,
   sandbox) and `hooks.json`; the member trusts the project and reviews the hooks once
   (`/hooks`), which `magnolia setup` explains. No separate `CODEX_HOME`, so the login in
@@ -378,9 +379,9 @@ Status after Plan 2 (branch `feat/harness-adapters-p2`, stacked on P0/P1, nothin
   1473 passed, 4 skipped.
 - Live acceptance on 15 November 2026: `opencode_cc_mem/docs/harness-acceptance-2026-11.md`.
   Boot context, action notes, session rows and the member's own hook were seen in all three
-  clients. Open: Claude Code's asynchronous Stop does not finish in `-p` runs; the critic judge
-  returned no JSON object in two of three calls; distillation can re-learn an injected action
-  note; Vibe's model did not acknowledge the note Vibe appended to the tool result.
+  clients. Open: the critic judge returned no JSON object in two of three calls. Claude's Stop
+  now launches a detached worker, injected action notes are excluded from distillation, and Vibe
+  carries MCP action notes to a later deliverable event.
 - Not done: P4 (executors, governor), the Vibe executor, OpenCode itself live (not installed on
   the test Mac).
 

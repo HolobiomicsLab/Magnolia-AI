@@ -541,11 +541,14 @@ def distill_session_transcript(
         return None  # unavailable — let caller fall back
 
     new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
-    transcript = scrub_secrets(reconstruct_transcript({
-        "messages": new_msgs,
-        "known_entry_ids": export.get("known_entry_ids", []),
-    }))
-    candidates = distiller(transcript) if transcript.strip() else []
+    if new_msgs:
+        transcript = scrub_secrets(reconstruct_transcript({
+            "messages": new_msgs,
+            "known_entry_ids": export.get("known_entry_ids", []),
+        }))
+        candidates = distiller(transcript) if transcript.strip() else []
+    else:
+        candidates = []
     if candidates is None:
         candidates = []
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]

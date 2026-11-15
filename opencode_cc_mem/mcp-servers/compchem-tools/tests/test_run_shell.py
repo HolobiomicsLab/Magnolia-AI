@@ -219,6 +219,32 @@ def test_truncation_keeps_full_tail_when_no_line_boundary(monkeypatch):
     )
 
 
+def test_truncation_keeps_long_single_line_with_trailing_newline(monkeypatch):
+    stdout = "x" * 5000 + "\n"
+    _patch(monkeypatch, FakeProc(stdout=stdout))
+
+    marker, shown = run_shell("anything")["stdout"].split("\n", 1)
+
+    assert shown == stdout[-4096:]
+    assert marker == (
+        "[output truncated: showing the last 4096 of 5001 characters; "
+        "first line cut]"
+    )
+
+
+def test_truncation_keeps_long_single_line_with_trailing_crlf(monkeypatch):
+    stdout = "line1\n" + "z" * 6000 + "\r\n"
+    _patch(monkeypatch, FakeProc(stdout=stdout))
+
+    marker, shown = run_shell("anything")["stdout"].split("\n", 1)
+
+    assert shown == stdout[-4096:]
+    assert marker == (
+        "[output truncated: showing the last 4096 of 6008 characters; "
+        "first line cut]"
+    )
+
+
 def test_build_local_redirect_shape_and_content():
     out = _build_local_redirect("python analyze.py", "/runs/dock1", _DEFAULT_TIMEOUT)
     # actionable error mentions the limit and the right tools, and warns off re-running

@@ -124,11 +124,41 @@ def test_catchup_reads_at_most_two_journals_and_drops_expired(tmp_path, monkeypa
         "vibe", "prompt", "s1", str(project), prompt="next", turn_id="next",
     ), env, time.monotonic() + 8)
 
-    assert len(reads) == 2
+    assert reads == [str(tmp_path / "j4")]
     with SessionState.open(store, "vibe", "s1") as state:
         kept = state.data["catchup_pending"]
     assert all(row["id"] != "main--old" for row in kept)
-    assert [row["attempts"] for row in kept] == [1, 1, 0, 0, 0]
+    assert [row["attempts"] for row in kept] == [0, 0, 0, 0, 1]
+
+
+def test_catchup_prioritises_latest_main_then_newest_idle_child(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    now = time.time()
+    pending = [
+        {"id": "c1--ct1", "turn_id": "ct1", "transcript_ref": str(tmp_path / "c1"),
+         "agent_id": "c1", "agent_type": "worker", "created": now, "attempts": 0},
+        {"id": "c2--ct2", "turn_id": "ct2", "transcript_ref": str(tmp_path / "c2"),
+         "agent_id": "c2", "agent_type": "worker", "created": now + 1, "attempts": 0},
+        {"id": "main--mt1", "turn_id": "mt1", "transcript_ref": str(tmp_path / "main"),
+         "agent_id": None, "agent_type": None, "created": now + 2, "attempts": 0},
+    ]
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["catchup_pending"] = pending
+        state.data["background_turns"] = {
+            "c2--ct2": {"status": "running", "started": now, "attempts": 1},
+        }
+    reads = []
+    monkeypatch.setattr(
+        dispatch, "_recover_assistant_transcript",
+        lambda paths, event: reads.append((event.agent.id if event.agent else None, event.turn_id))
+        or False,
+    )
+
+    handle(HookEvent("vibe", "session-end", "s1", str(project)),
+           env, time.monotonic() + 8)
+
+    assert reads == [(None, "mt1"), ("c1", "ct1")]
 
 
 def test_dispatch_session_start_context(tmp_path, monkeypatch):
@@ -773,9 +803,7 @@ def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journa
 ):
     project, env = _workspace(tmp_path)
     child = AgentRef(id="child-1", type="reviewer")
-    source = _vibe_journal(
-        tmp_path / "vibe-child-session", "child-turn", "child reply",
-    )
+    source = _vibe_journal(tmp_path / "vibe-child-session", "child-turn")
     scheduled = []
     monkeypatch.setattr(
         dispatch, "_schedule_background",
@@ -788,7 +816,10 @@ def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journa
     ), env, time.monotonic() + 8)
 
     path = project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl"
+    # Vibe's child final reply is not yet visible when post_agent fires.
     assert not path.exists()
+
+    _vibe_journal(source, "child-turn", "child reply")
 
     handle(HookEvent(
         harness="vibe", event="session-end", session_id="session-1", cwd=str(project),
@@ -800,3 +831,35 @@ def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journa
         ("child reply", "child-turn", "child-1"),
     ]
     assert scheduled == [("child-turn", "child-1", "child reply")]
+
+
+def test_vibe_one_shot_with_two_children_catches_up_main_reply(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append(
+            (None if event.agent is None else event.agent.id, event.turn_id, reply)
+        ) or True,
+    )
+    main_journal = _vibe_journal(tmp_path / "main", "T1", "partial")
+    common = dict(harness="vibe", session_id="session-1", cwd=str(project))
+    handle(HookEvent(event="prompt", prompt="go", turn_id="T1",
+                     transcript_ref=str(main_journal), **common), env, time.monotonic() + 8)
+    for child_id in ("c1", "c2"):
+        child_journal = _vibe_journal(
+            tmp_path / child_id, f"{child_id}:turn:1", f"{child_id} reply",
+        )
+        handle(HookEvent(event="turn-end", agent=AgentRef(child_id, "worker"),
+                         transcript_ref=str(child_journal), **common),
+               env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", transcript_ref=str(main_journal), **common),
+           env, time.monotonic() + 8)
+    _vibe_journal(main_journal, "T1", "partial", "final main reply")
+
+    handle(HookEvent(event="session-end", transcript_ref=str(main_journal), **common),
+           env, time.monotonic() + 8)
+
+    assert scheduled[0] == (None, "T1", "final main reply")
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    assert "final main reply" in [row.get("text") for row in rows]

@@ -355,9 +355,85 @@ def test_build_trace_parent_and_child_apart(tmp_path):
     parent_report, parent_trace = critic.build_trace(rows, None)
     child_report, child_trace = critic.build_trace(rows, "child-1")
     assert parent_report == "parent report"
-    assert [item["call_id"] for item in json.loads(parent_trace)] == ["parent", "child"]
+    parent_items = json.loads(parent_trace)
+    assert [item["call_id"] for item in parent_items if item["call_id"]] == ["parent", "child"]
+    assert parent_items[-1]["tool"] == "SUB-AGENT REPORT"
+    assert parent_items[-1]["agent"] == "[child child-1]"
     assert child_report == "child report"
     assert [item["call_id"] for item in json.loads(child_trace)] == ["child"]
+
+
+def test_vibe_parent_trace_includes_time_linked_child_tool_and_reply(tmp_path):
+    store = tmp_path / ".magnolia"
+    child = AgentRef("child-1", "worker")
+    append_event(store, HookEvent(
+        "vibe", "prompt", "s1", "/project", turn_id="T1", prompt="go",
+    ))
+    append_event(store, HookEvent(
+        "vibe", "post-tool", "s1", "/project", agent=child,
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell",
+                      "child-call", {"cmd": "x"}, "energy -12.3"),
+    ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="child-turn", agent=child,
+        assistant_text="The child measured energy -12.3",
+    ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="T1",
+        assistant_text="The child found energy -12.3",
+    ))
+
+    report, trace_text, count = critic._trace(
+        read_turns(transcript_path(store, "vibe", "s1")), None, "T1",
+    )
+    trace = json.loads(trace_text)
+
+    assert report == "The child found energy -12.3"
+    assert count == 2
+    assert trace[0]["call_id"] == "child-call"
+    assert trace[0]["agent"] == "[child child-1]"
+    assert trace[0]["output"] == "energy -12.3"
+    assert trace[1]["tool"] == "SUB-AGENT REPORT"
+    assert trace[1]["agent"] == "[child child-1]"
+    assert trace[1]["output"] == "The child measured energy -12.3"
+
+
+def test_large_boot_injection_keeps_every_current_tool_output(tmp_path):
+    from compchem_memory.hook.transcript import append_injected
+
+    store = tmp_path / ".magnolia"
+    start = HookEvent("vibe", "session-start", "s1", "/project")
+    append_injected(
+        store, start, channel="boot", text="BOOT HEADER\n" + "A" * 60_000,
+        entry_ids=[], tool_call_id=None,
+    )
+    append_event(store, HookEvent(
+        "vibe", "prompt", "s1", "/project", turn_id="T1", prompt="go",
+    ))
+    for index in range(12):
+        append_event(store, HookEvent(
+            "vibe", "post-tool", "s1", "/project", turn_id="T1",
+            tool=ToolCall("read_file", None, "read_file", f"call-{index}",
+                          {"path": "x"}, f"output-{index}-" + "B" * 1980),
+        ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="T1",
+        assistant_text="report " * 50,
+    ))
+
+    _, trace_text, _ = critic._trace(
+        read_turns(transcript_path(store, "vibe", "s1")), None, "T1",
+    )
+    trace = json.loads(trace_text)
+
+    boot = next(item for item in trace if item.get("channel") == "boot")
+    assert len(boot["output"]) <= 2000
+    assert boot["output"].endswith("... [boot context truncated]")
+    assert [item["call_id"] for item in trace if item.get("call_id")] == [
+        f"call-{index}" for index in range(12)
+    ]
+    for index in range(12):
+        assert f"output-{index}-" in trace_text
 
 
 def test_build_trace_includes_delivered_notes_and_denials(tmp_path):
@@ -581,3 +657,40 @@ def test_run_critic_malformed_verdict_logs_finish_reason_and_length(tmp_path, mo
     assert error["error"] == "judge reply has no JSON object"
     assert error["finish_reason"] == "length" and error["reply_chars"] == len(truncated)
     assert error["upstream_provider"] == "DeepInfra"
+
+
+def _naive_fit_trace(items):
+    """The previous quadratic implementation, kept as the reference result."""
+    kept = list(items)
+    text = json.dumps(kept, ensure_ascii=False, indent=1)
+    while len(text) > critic.MAX_TRACE_CHARS and len(kept) > 1:
+        kept.pop(0)
+        text = json.dumps(kept, ensure_ascii=False, indent=1)
+    if len(text) > critic.MAX_TRACE_CHARS and kept:
+        kept[0] = {**kept[0], "output": (
+            "... [trace item truncated]\n" + str(kept[0].get("output", ""))[-40_000:]
+        )}
+        text = json.dumps(kept, ensure_ascii=False, indent=1)
+    return text
+
+
+def test_fit_trace_matches_the_reference_on_varied_inputs():
+    import random
+
+    rng = random.Random(7)
+    for size in (0, 1, 2, 5, 40, 200):
+        items = [{"tool": f"t{i}", "input": {"q": "é" * rng.randint(0, 300)},
+                  "output": "x\n" * rng.randint(0, 3000)} for i in range(size)]
+        assert critic._fit_trace(items) == _naive_fit_trace(items)
+    huge = [{"tool": "big", "output": "y" * 200_000}]
+    assert critic._fit_trace(huge) == _naive_fit_trace(huge)
+
+
+def test_fit_trace_is_linear_on_thousands_of_items():
+    import time
+
+    items = [{"tool": "Read", "input": {"path": "x" * 50}, "output": "B" * 2000}
+             for _ in range(4000)]
+    started = time.monotonic()
+    critic._fit_trace(items)
+    assert time.monotonic() - started < 2.0

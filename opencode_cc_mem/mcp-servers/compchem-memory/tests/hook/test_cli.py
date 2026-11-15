@@ -19,7 +19,7 @@ from compchem_memory.hook.__main__ import _commit_delivered, _log_error, _render
 from compchem_memory.hook.adapters import Rendered
 from compchem_memory.hook.adapters import json_adapter
 from compchem_memory.hook.dispatch import handle
-from compchem_memory.hook.events import Block, HookEvent, HookResponse, ToolCall
+from compchem_memory.hook.events import AgentRef, Block, HookEvent, HookResponse, ToolCall
 from compchem_memory.hook import project as project_module
 from compchem_memory.hook.state import SessionState
 from compchem_memory.job_notices import push_job_notice
@@ -192,16 +192,132 @@ def test_vibe_mcp_note_is_carried_to_next_prompt_once(tmp_path, monkeypatch):
     rendered = vibe.render(first.response, event)
     assert rendered.stdout == ""
     _commit_delivered(rendered, first, event)
+    transcript = store / "transcripts" / "vibe" / "s1.jsonl"
+    assert not transcript.exists() or not [
+        row for row in map(json.loads, transcript.read_text().splitlines())
+        if row["kind"] == "injected"
+    ]
 
     prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
     carried = handle(prompt, env, time.monotonic() + 8)
     assert carried.response.context.startswith("After your earlier `run_shell` call:")
     _commit_delivered(Rendered("ok", "", 0, frozenset({"context"})), carried, prompt)
 
+    injected = [
+        row for row in map(json.loads, transcript.read_text().splitlines())
+        if row["kind"] == "injected" and row["channel"] == "action_memory"
+    ]
+    assert len(injected) == 1
+    assert injected[0]["turn_id"] == "t2" and injected[0]["tool_call_id"] == "c1"
+
     assert "After your earlier" not in (handle(
         HookEvent("vibe", "prompt", "s1", str(project), prompt="later", turn_id="t3"),
         env, time.monotonic() + 8,
     ).response.context or "")
+
+
+def test_vibe_carried_note_is_reserved_for_the_same_agent(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    child = AgentRef("child-1", "worker")
+    child_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("read_file", None, "read_file", "child-read", {"path": "x"}, "text"),
+    )
+    assert "After your earlier" not in (
+        handle(child_builtin, env, time.monotonic() + 8).response.tool_note or ""
+    )
+
+    main_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("read_file", None, "read_file", "main-read", {"path": "x"}, "text"),
+    )
+    carried = handle(main_builtin, env, time.monotonic() + 8)
+    assert "After your earlier `run_shell` call" in carried.response.tool_note
+    _commit_delivered(vibe.render(carried.response, main_builtin), carried, main_builtin)
+
+
+def test_vibe_child_note_is_dropped_when_child_ends(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    child = AgentRef("child-1", "worker")
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
+    assert "After your earlier" not in (handle(prompt, env, time.monotonic() + 8).response.context or "")
+    handle(HookEvent("vibe", "turn-end", "s1", str(project), agent=child),
+           env, time.monotonic() + 8)
+
+    rows = [json.loads(line) for line in (store / "action-retrieval.jsonl").read_text().splitlines()]
+    dropped = [row for row in rows if row.get("injected") == 0]
+    assert len(dropped) == 1
+    assert dropped[0]["reason"] == "child ended before a deliverable post-tool event"
+    with SessionState.open(store, "vibe", "s1") as state:
+        assert state.data.get("carried_action_notes") == []
+
+
+def test_vibe_overlapping_post_tools_deliver_carried_note_once(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    def builtin(call_id):
+        return HookEvent(
+            "vibe", "post-tool", "s1", str(project),
+            tool=ToolCall("read_file", None, "read_file", call_id, {"path": "x"}, "text"),
+        )
+
+    events = [builtin("a"), builtin("b")]
+    handled = [handle(event, env, time.monotonic() + 8) for event in events]
+    assert sum("After your earlier" in (item.response.tool_note or "") for item in handled) == 1
+    for event, item in zip(events, handled):
+        _commit_delivered(vibe.render(item.response, event), item, event)
+    rows = [json.loads(line) for line in (store / "action-retrieval.jsonl").read_text().splitlines()]
+    assert sum(row.get("injected") == 1 for row in rows) == 1
 
 
 def test_block_rendered_by_adapter():
@@ -384,6 +500,7 @@ def test_unparseable_named_bash_payload_is_blocked(
 
     assert code == 2
     assert "Magnolia disables" in capfd.readouterr().err
+    assert not (project / ".magnolia" / "transcripts").exists()
 
 
 def test_ignored_named_bash_payload_is_blocked(

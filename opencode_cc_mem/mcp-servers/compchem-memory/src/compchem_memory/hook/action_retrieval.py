@@ -245,7 +245,7 @@ def _release(paths: ProjectPaths, harness: str, session_id: str, entry_paths: li
                     entry_counts.pop(entry, None)
 
 
-def discard_note(note: ActionNote) -> None:
+def discard_note(note: ActionNote, *, reason: str | None = None) -> None:
     """Release a note the client did not emit and log it with ``injected: 0``.
 
     The note is marked settled before the release, so a failed state write
@@ -257,7 +257,10 @@ def discard_note(note: ActionNote) -> None:
     try:
         _release(delivery.paths, delivery.harness, delivery.session_id, delivery.entry_paths)
     finally:
-        _log(delivery.paths, {**delivery.coarse_row, "injected": 0})
+        row = {**delivery.coarse_row, "injected": 0}
+        if reason is not None:
+            row["reason"] = reason
+        _log(delivery.paths, row)
 
 
 def _canonical_key(event: HookEvent) -> str | None:
