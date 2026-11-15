@@ -10,12 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
+from .executors.contracts import RunOutcome
+
 
 @dataclass
 class ProcessControl:
     should_stop: Callable[[], str | None] | None = None
     on_start: Callable[[int, int], None] | None = None
     on_heartbeat: Callable[[], None] | None = None
+    observe: Callable[[Path, Path], RunOutcome | None] | None = None
     poll_interval: float = 0.2
 
 
@@ -27,6 +30,7 @@ class ProcessOutcome:
     stdout_path: Path
     stderr_path: Path
     stopped_reason: str | None = None
+    outcome: RunOutcome | None = None
 
 
 def run_process(
@@ -45,6 +49,7 @@ def run_process(
     started = time.monotonic()
     timed_out = False
     stopped_reason: str | None = None
+    typed_outcome: RunOutcome | None = None
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         try:
             process = subprocess.Popen(
@@ -67,9 +72,10 @@ def run_process(
         while True:
             returncode = process.poll()
             if control:
-                reason = _check_control(control)
+                reason, observed = _check_control(control, stdout_path, stderr_path)
                 if reason:
                     stopped_reason = reason
+                    typed_outcome = observed or RunOutcome("cancelled")
                     if returncode is None:
                         _terminate_tree(process)
                         returncode = process.wait()
@@ -79,10 +85,13 @@ def run_process(
             elapsed = time.monotonic() - started
             if elapsed >= timeout_seconds:
                 timed_out = True
+                typed_outcome = RunOutcome("timeout")
                 _terminate_tree(process)
                 returncode = process.wait()
                 break
             time.sleep(control.poll_interval if control else 0.2)
+    if typed_outcome is None:
+        typed_outcome = RunOutcome("success" if returncode == 0 else "failure")
     return ProcessOutcome(
         returncode=returncode,
         timed_out=timed_out,
@@ -90,23 +99,34 @@ def run_process(
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         stopped_reason=stopped_reason,
+        outcome=typed_outcome,
     )
 
 
-def _check_control(control: ProcessControl) -> str | None:
+def _check_control(
+    control: ProcessControl, stdout_path: Path, stderr_path: Path
+) -> tuple[str | None, RunOutcome | None]:
+    if control.observe:
+        try:
+            outcome = control.observe(stdout_path, stderr_path)
+        except Exception as exc:
+            return f"observation failed: {exc}", RunOutcome("cancelled")
+        if outcome is not None:
+            reason = outcome.limit.reason if outcome.limit else outcome.kind
+            return reason, outcome
     if control.should_stop:
         try:
             reason = control.should_stop()
         except Exception as exc:
-            return f"stop check failed: {exc}"
+            return f"stop check failed: {exc}", RunOutcome("cancelled")
         if reason:
-            return reason
+            return reason, RunOutcome("cancelled")
     if control.on_heartbeat:
         try:
             control.on_heartbeat()
         except Exception as exc:
-            return f"heartbeat failed: {exc}"
-    return None
+            return f"heartbeat failed: {exc}", RunOutcome("cancelled")
+    return None, None
 
 
 def _terminate_tree(process: subprocess.Popen) -> None:
