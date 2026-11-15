@@ -261,3 +261,21 @@ def test_response_merge_joins_three_texts():
               .merge(HookResponse(context="b"))
               .merge(HookResponse(context="c")))
     assert merged.context == "a\n\nb\n\nc"
+
+
+def test_lone_surrogates_are_replaced_at_the_boundary():
+    event = HookEvent.from_json({
+        "harness": "json", "event": "post-tool", "session_id": "s1", "cwd": "/p",
+        "prompt": "ask \ud800 me", "assistant_text": "done \udc00",
+        "tool": {"raw_name": "Read", "input": {"path": "x\ud83d"},
+                 "output": [{"type": "text", "text": "out \ud83d"}, {"type": "text", "text": "\ud83d\ude00"}]},
+    })
+
+    assert event.prompt == "ask \ufffd me"
+    assert event.assistant_text == "done \ufffd"
+    assert event.tool.output == "out \ufffd\n\U0001f600"
+    assert event.tool.input == {"path": "x\ufffd"}
+    for text in (event.prompt, event.assistant_text, event.tool.output):
+        text.encode("utf-8")
+    assert normalise_output("a\ud800") == "a\ufffd"
+    assert normalise_output({"k": "\udfff"}) == '{"k": "\ufffd"}'

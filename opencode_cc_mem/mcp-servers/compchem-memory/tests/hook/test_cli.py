@@ -354,6 +354,35 @@ def test_cli_garbage_payloads_exit_zero(stdin, tmp_path):
     assert proc.returncode == 0 and proc.stdout == ""
 
 
+@pytest.mark.parametrize(
+    ("event", "field", "expected_kind"),
+    [("prompt", "prompt", "prompt"), ("post-tool", "tool", "tool"), ("turn-end", "assistant_text", "assistant")],
+)
+def test_cli_lone_surrogate_keeps_the_row(tmp_path, event, field, expected_kind):
+    project = _workspace(tmp_path)
+    payload = _payload(project, "surrogate", event)
+    if field == "tool":
+        payload["tool"]["output"] = "emoji cut \ud83d here"
+    else:
+        payload[field] = "text cut \ud800 here" + ("A" * 300 if event == "turn-end" else "")
+    env = dict(os.environ)
+    env.update(HOME=str(tmp_path / "home"), XDG_STATE_HOME=str(tmp_path / "state"),
+               MAGNOLIA_JOB_NOTIFY="0", MAGNOLIA_CRITIC="")
+    proc = subprocess.run(
+        [sys.executable, "-m", "compchem_memory.hook", "json", event],
+        input=json.dumps(payload), capture_output=True, text=True, timeout=30, env=env,
+    )
+
+    assert proc.returncode == 0
+    store = project / ".magnolia"
+    assert not (store / "hook-errors.jsonl").exists()
+    rows = [json.loads(line) for line in
+            (store / "transcripts" / "json" / "surrogate.jsonl").read_text(encoding="utf-8").splitlines()]
+    [row] = [row for row in rows if row["kind"] == expected_kind]
+    text = row["output"] if expected_kind == "tool" else row["text"]
+    assert "\ufffd" in text
+
+
 def test_cli_cold_start_under_budget(tmp_path):
     project = _workspace(tmp_path)
     state = tmp_path / "state"

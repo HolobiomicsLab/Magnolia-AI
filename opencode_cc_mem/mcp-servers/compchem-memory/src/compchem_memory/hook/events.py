@@ -10,6 +10,10 @@ native payload. Two consequences worth stating:
 * ``ToolCall.output`` is text or ``None``. Adapters call ``normalise_output``
   before building the call, so a native list of content blocks or a JSON
   object does not leak into the transcript or the critic.
+* Every string is well-formed Unicode once it crosses this boundary:
+  ``from_json`` and ``normalise_output`` replace a lone UTF-16 surrogate
+  (what a client that cuts strings in UTF-16 units leaves behind) with U+FFFD,
+  so no later UTF-8 encode can drop the event.
 
 Tool names arrive in several shapes. ``canonical_tool`` reduces them to
 ``(server, name)`` so the policy layer can match one spelling per tool. Only
@@ -20,6 +24,7 @@ are added with their probe report rather than guessed.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 SCHEMA_VERSION = 1
@@ -65,6 +70,26 @@ def canonical_tool(raw: str) -> tuple[str | None, str]:
     return None, raw.lower()
 
 
+_SURROGATE = re.compile(r"[\ud800-\udfff]")
+
+
+def well_formed(value: object) -> object:
+    """Return ``value`` with every lone surrogate in its strings replaced by U+FFFD.
+
+    Walks dicts (keys and values) and lists; a surrogate pair split into two
+    code points is joined back into its character.
+    """
+    if isinstance(value, str):
+        if _SURROGATE.search(value) is None:
+            return value
+        return value.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+    if isinstance(value, dict):
+        return {well_formed(key): well_formed(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [well_formed(item) for item in value]
+    return value
+
+
 def normalise_output(value: object) -> str | None:
     """Reduce a native tool output to text.
 
@@ -73,12 +98,14 @@ def normalise_output(value: object) -> str | None:
     dropped). Any other JSON value is serialised compactly but with its
     non-ASCII characters intact.
     """
-    if value is None or isinstance(value, str):
-        return value
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return well_formed(value)
     if isinstance(value, list):
         texts = [text for text in (_block_text(block) for block in value) if text is not None]
-        return "\n".join(texts)
-    return json.dumps(value, ensure_ascii=False)
+        return well_formed("\n".join(texts))
+    return well_formed(json.dumps(value, ensure_ascii=False))
 
 
 def _block_text(block: object) -> str | None:
@@ -144,6 +171,7 @@ class HookEvent:
         """
         if not isinstance(d, dict):
             raise ValueError(f"hook payload must be an object, got {type(d).__name__}")
+        d = well_formed(d)
         return cls(
             harness=_required_text(d, "harness"),
             event=_required_text(d, "event"),
