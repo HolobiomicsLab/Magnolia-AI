@@ -14,12 +14,11 @@ from compchem_memory.hook.directive import DIRECTIVE, retrieval_directive
 from compchem_memory.hook.action_retrieval import on_post_tool
 from compchem_memory.hook.events import HookEvent, ToolCall
 from compchem_memory.hook.project import ProjectPaths
-from compchem_memory.hook.state import SessionState
 
 PLUGIN_DIR = Path(__file__).resolve().parents[4] / ".opencode" / "plugins"
-NODE = shutil.which("node") or "node"
+NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(not Path(NODE).exists(), reason="node is not installed")
+pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 
 def run_plugin(plugin_file, driver_body, *args) -> str:

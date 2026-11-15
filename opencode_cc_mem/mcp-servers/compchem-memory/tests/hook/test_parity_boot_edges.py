@@ -7,7 +7,9 @@ import pytest
 
 from compchem_memory.hook.boot_context import MAX_PAYLOAD_CHARS, build_boot_payload
 from compchem_memory.hook.project import ProjectPaths
-from test_parity_plugins import BOOT_DRIVER, run_plugin
+from .test_parity_plugins import BOOT_DRIVER, NODE, run_plugin
+
+pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 
 def _workspace(tmp_path: Path) -> ProjectPaths:
