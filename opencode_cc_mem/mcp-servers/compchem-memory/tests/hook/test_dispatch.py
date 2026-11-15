@@ -117,9 +117,9 @@ def test_dispatch_turn_end_runs_critic_last(tmp_path, monkeypatch):
     project, env = _workspace(tmp_path)
     observed = []
 
-    def record_critic(paths, harness, session_id, agent_id):
+    def record_critic(paths, harness, session_id, agent_id, turn_id):
         rows = _rows(paths.store / "transcripts" / harness / f"{session_id}.jsonl")
-        observed.append((rows[-1]["text"], harness, session_id, agent_id))
+        observed.append((rows[-1]["text"], harness, session_id, agent_id, turn_id))
 
     monkeypatch.setattr(critic, "run_critic", record_critic)
     event = _event(
@@ -132,7 +132,43 @@ def test_dispatch_turn_end_runs_critic_last(tmp_path, monkeypatch):
     handled = handle(event, env, time.monotonic() + 8)
 
     assert handled.response.context is None
-    assert observed == [("The completed report.", "json", "session-1", "agent-7")]
+    assert observed == [("The completed report.", "json", "session-1", "agent-7", None)]
+
+
+def test_dispatch_turn_end_passes_turn_id_to_critic_and_probe(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    observed = []
+
+    monkeypatch.setattr(
+        action_retrieval,
+        "probe_application",
+        lambda paths, harness, session_id, reply, turn_id: observed.append(
+            ("probe", harness, session_id, reply, turn_id)
+        ),
+    )
+    monkeypatch.setattr(
+        critic,
+        "run_critic",
+        lambda paths, harness, session_id, agent_id, turn_id: observed.append(
+            ("critic", harness, session_id, agent_id, turn_id)
+        ),
+    )
+    event = _event(
+        project,
+        "turn-end",
+        turn_id="turn-7",
+        assistant_text="The completed report.",
+        agent=AgentRef("agent-7", "worker"),
+    )
+
+    handle(event, env, time.monotonic() + 8)
+
+    assert observed == [
+        ("probe", "json", "session-1", "The completed report.", "turn-7"),
+        ("critic", "json", "session-1", "agent-7", "turn-7"),
+    ]
 
 
 def test_dispatch_binds_on_first_event_of_any_kind(tmp_path, monkeypatch):

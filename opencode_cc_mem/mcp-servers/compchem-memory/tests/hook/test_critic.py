@@ -12,6 +12,7 @@ import pytest
 
 from compchem_memory import llm
 from compchem_memory.hook import critic
+from compchem_memory.hook.action_retrieval import probe_application
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState
@@ -356,6 +357,75 @@ def test_build_trace_parent_and_child_apart(tmp_path):
     assert [item["call_id"] for item in json.loads(child_trace)] == ["child"]
 
 
+def test_late_stop_judges_its_own_turn(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    captured = []
+    monkeypatch.setattr(
+        critic,
+        "call_route",
+        lambda route, system, user, **kwargs: (
+            captured.append(user)
+            or CallResult('{"flag":false,"severity":"none","unsupported_claims":[],"why":"ok"}',
+                          "stop", "judge", None, 200)
+        ),
+    )
+    first = "FIRST TURN REPORT " + "a" * 200
+    second = "SECOND TURN REPORT " + "b" * 200
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text=first))
+    append_event(paths.store, _event("turn-end", turn_id="t2", assistant_text=second))
+
+    critic.run_critic(paths, "claude", "s1", None, "t1")
+
+    assert len(captured) == 1
+    assert first in captured[0]
+    assert second not in captured[0]
+
+
+def test_turn_trace_excludes_other_turn_rows_after_judged_turn(tmp_path):
+    paths = _paths(tmp_path)
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t1", tool=_tool("read", "t1-tool", output="first")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text="first report"))
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t2", tool=_tool("read", "t2-tool", output="second")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t2", assistant_text="second report"))
+
+    _, trace_text, _ = critic._trace(
+        read_turns(transcript_path(paths.store, "claude", "s1")), None, "t1",
+    )
+
+    assert [item["call_id"] for item in json.loads(trace_text)] == ["t1-tool"]
+
+
+def test_application_probe_keeps_other_turn_pending(tmp_path):
+    paths = _paths(tmp_path)
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        state.data["pending_application"] = [
+            {"callID": "c1", "tool": "read", "turn_id": "t1",
+             "titles": ["Alpha catalyst"], "paths": ["alpha.md"]},
+            {"callID": "c2", "tool": "read", "turn_id": "t2",
+             "titles": ["Beta solvent"], "paths": ["beta.md"]},
+        ]
+
+    probe_application(paths, "claude", "s1", "I used the alpha catalyst.", "t1")
+
+    rows = [json.loads(line) for line in (paths.store / "action-retrieval.jsonl").read_text().splitlines()]
+    assert [row["callID"] for row in rows if row.get("event") == "application"] == ["c1"]
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert [item["callID"] for item in state.data["pending_application"]] == ["c2"]
+
+
 def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     paths = _paths(tmp_path)
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
@@ -439,3 +509,26 @@ def test_route_repr_hides_the_key():
     route = Route("deepseek", "judge", "https://judge/chat", "sk-fabricated-route-key", "openai")
     assert "sk-fabricated-route-key" not in repr(route)
     assert route.key == "sk-fabricated-route-key"
+
+
+def test_late_stop_trace_excludes_the_next_turns_tools(tmp_path):
+    """Real late order: turn 2's tools are recorded before turn 1's report."""
+    paths = _paths(tmp_path)
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t1", tool=_tool("read", "t1-tool", output="first")),
+    )
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t2", tool=_tool("read", "t2-tool", output="second")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text="first report"))
+
+    report, trace_text, _ = critic._trace(
+        read_turns(transcript_path(paths.store, "claude", "s1")), None, "t1",
+    )
+
+    assert report == "first report"
+    assert [item["call_id"] for item in json.loads(trace_text)] == ["t1-tool"]

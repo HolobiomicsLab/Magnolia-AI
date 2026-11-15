@@ -51,6 +51,18 @@ def test_canonical_tool_extra_forms(raw, expected):
     assert canonical_tool(raw) == expected
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("mcp_compchem-tools.run_shell", ("compchem-tools", "run_shell")),
+    ("file_system.bash", (None, "bash")),
+    ("file_system.write_file", (None, "write")),
+    ("file_system.edit", (None, "edit")),
+    ("agents.spawn", (None, "agents.spawn")),
+    ("Bash", (None, "bash")),
+])
+def test_canonical_tool_vibe_forms(raw, expected):
+    assert canonical_tool(raw) == expected
+
+
 def test_canonical_tool_rejects_empty_name():
     with pytest.raises(ValueError):
         canonical_tool("")

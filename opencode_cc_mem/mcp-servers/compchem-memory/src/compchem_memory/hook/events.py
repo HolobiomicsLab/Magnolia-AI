@@ -17,8 +17,7 @@ native payload. Two consequences worth stating:
 
 Tool names arrive in several shapes. ``canonical_tool`` reduces them to
 ``(server, name)`` so the policy layer can match one spelling per tool. Only
-the forms observed in the task 0 probes are handled here; Codex and Vibe forms
-are added with their probe report rather than guessed.
+forms observed in the client probes are handled here.
 """
 
 from __future__ import annotations
@@ -44,15 +43,15 @@ EVENTS = (
 # is not enough evidence of a server: an unknown prefix stays a built-in name.
 _KNOWN_SERVERS = ("compchem-tools", "compchem-memory", "perspicacite")
 _MCP_PREFIX = "mcp__"
+_VIBE_MCP_PREFIX = "mcp_"
 
 
 def canonical_tool(raw: str) -> tuple[str | None, str]:
     """Return ``(server, name)`` for a client's raw tool name.
 
-    Handles Claude Code's ``mcp__<server>__<tool>``, OpenCode's
-    ``<server>_<tool>`` for the known servers, and built-in names, which are
-    lower-cased with ``server=None`` (clients differ in their casing:
-    ``Edit``/``edit``).
+    Handles Claude Code's ``mcp__<server>__<tool>``, Vibe's
+    ``mcp_<server>.<tool>`` and ``file_system.<tool>``, OpenCode's known-server
+    form, and lower-cased built-ins.
     """
     if not isinstance(raw, str) or not raw:
         raise ValueError(f"tool name must be a non-empty string, got {raw!r}")
@@ -61,6 +60,16 @@ def canonical_tool(raw: str) -> tuple[str | None, str]:
         server, separator, tool = raw[len(_MCP_PREFIX):].partition("__")
         if separator and server and tool:
             return server, tool
+
+    if raw.startswith(_VIBE_MCP_PREFIX):
+        server, separator, tool = raw[len(_VIBE_MCP_PREFIX):].partition(".")
+        if separator and server and tool:
+            return server, tool
+
+    if raw.startswith("file_system."):
+        tool = raw.removeprefix("file_system.").lower()
+        if tool:
+            return None, "write" if tool == "write_file" else tool
 
     for server in _KNOWN_SERVERS:
         prefix = f"{server}_"
