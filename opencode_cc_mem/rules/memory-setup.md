@@ -63,7 +63,7 @@ Two triggers lead here — the flow below is the same for both:
    key, network) before retrying. Do not bypass it by editing files.
 5. **Confirm activation**:
    - `magnolia memory status` must show `memory enabled = True | model = <model>`.
-   - Tell the user: **"Restart opencode to activate."** The running memory
+   - Tell the user: **"Restart the agent client to activate."** The running memory
      server keeps its launch-time settings until restarted — this is the one
      manual step that cannot be skipped.
 
