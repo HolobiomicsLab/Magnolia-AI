@@ -113,3 +113,71 @@ def test_directive_matches_plugin_and_second_prompt_is_unchanged(tmp_path, monke
     assert retrieval_directive(paths, state, "s1") == DIRECTIVE
     assert plugin_parts == [DIRECTIVE, ""]
     assert retrieval_directive(paths, state, "s1") is None
+
+
+DOORBELL_DRIVER = r"""
+const [pluginPath, directory, promptFile] = process.argv.slice(2)
+const { readFileSync, readdirSync, statSync } = await import("node:fs")
+const { join } = await import("node:path")
+const mod = await import(pluginPath)
+let hook
+await mod.default.setup({
+  location: { directory },
+  session: { hook: async (name, callback) => { if (name === "prompt") hook = callback } },
+})
+const event = { sessionID: "s1", prompt: { text: readFileSync(promptFile, "utf8") } }
+await hook(event)
+function walk(dir) {
+  let out = []
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name)
+    if (statSync(path).isDirectory()) out = out.concat(walk(path))
+    else out.push(path)
+  }
+  return out
+}
+const letters = []
+try { letters.push(...walk(join(directory, "projects")).filter((p) => p.endsWith(".task.md"))) } catch {}
+process.stdout.write(JSON.stringify({
+  text: event.prompt.text,
+  letters: letters.map((p) => readFileSync(p, "utf8")),
+}))
+"""
+
+
+def test_doorbell_matches_plugin(tmp_path, monkeypatch):
+    from compchem_memory.hook.doorbell import process_prompt
+    from compchem_memory.hook.project import ProjectPaths
+
+    monkeypatch.delenv("MAGNOLIA_DOORBELL", raising=False)
+    prompt = "Please @literature find three recent papers on spatial metabolomics.\nthanks"
+    prompt_file = tmp_path / "prompt.txt"
+    prompt_file.write_text(prompt, encoding="utf-8")
+
+    plugin_workspace = tmp_path / "plugin"
+    store = plugin_workspace / "projects" / "alpha" / ".magnolia"
+    store.mkdir(parents=True)
+    (plugin_workspace / ".magnolia").mkdir()
+    (plugin_workspace / ".magnolia" / ".active-project").write_text("alpha\n", encoding="utf-8")
+    plugin_result = json.loads(
+        run_plugin("magnolia-agent-doorbell.ts", DOORBELL_DRIVER, tmp_path, plugin_workspace, prompt_file)
+    )
+
+    python_workspace = tmp_path / "python"
+    (python_workspace / "projects" / "alpha").mkdir(parents=True)
+    paths = ProjectPaths(
+        python_workspace, python_workspace / "projects" / "alpha",
+        python_workspace / "projects" / "alpha" / ".magnolia", "alpha", False,
+    )
+    python_result = process_prompt(prompt, paths)
+
+    assert plugin_result["letters"], "the plugin wrote no letter"
+    assert len(python_result.letters) == len(plugin_result["letters"])
+
+    def without_date(text):
+        return [line for line in text.splitlines() if not line.startswith("- date: ")]
+
+    assert python_result.text == plugin_result["text"]
+    assert without_date(python_result.letters[0].read_text(encoding="utf-8")) == without_date(
+        plugin_result["letters"][0]
+    )
