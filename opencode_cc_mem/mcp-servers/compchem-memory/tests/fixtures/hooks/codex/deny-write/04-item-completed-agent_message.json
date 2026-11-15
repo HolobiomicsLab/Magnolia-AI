@@ -1,8 +1,0 @@
-{
- "item": {
-  "id": "item_1",
-  "text": "I\u2019ll run the command as requested and report the shell exit status.",
-  "type": "agent_message"
- },
- "type": "item.completed"
-}

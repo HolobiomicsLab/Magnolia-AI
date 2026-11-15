@@ -1,0 +1,33 @@
+{
+ "agent_id": "01a1ded9-d62b-7e60-8d9c-40ea94f3ab27",
+ "agent_type": "default",
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "PostToolUse",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-5",
+ "tool_input": {
+  "text": "sub"
+ },
+ "tool_name": "mcp__probe__echo",
+ "tool_response": {
+  "_meta": {
+   "fastmcp": {
+    "wrap_result": true
+   }
+  },
+  "content": [
+   {
+    "text": "sub",
+    "type": "text"
+   }
+  ],
+  "isError": false,
+  "structuredContent": {
+   "result": "sub"
+  }
+ },
+ "tool_use_id": "exec-d9208484-b29f-4056-b4fd-46eaf41857bd",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-56-20-01a1ded9-d62b-7e60-8d9c-40ea94f3ab27.jsonl",
+ "turn_id": "01a1ded9-d66b-73f3-be51-de7f52ffde1c"
+}

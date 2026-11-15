@@ -1,0 +1,8 @@
+{
+ "item": {
+  "id": "item_3",
+  "text": "I\u2019ll make the two probe calls in the requested order, with the second performed by a single subagent.",
+  "type": "agent_message"
+ },
+ "type": "item.completed"
+}

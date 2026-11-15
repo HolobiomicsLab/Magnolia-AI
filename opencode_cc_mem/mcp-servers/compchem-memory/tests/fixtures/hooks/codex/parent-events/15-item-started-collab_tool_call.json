@@ -1,0 +1,15 @@
+{
+ "item": {
+  "agents_states": {},
+  "id": "item_8",
+  "prompt": null,
+  "receiver_thread_ids": [
+   "01a1ded9-d62b-7e60-8d9c-40ea94f3ab27"
+  ],
+  "sender_thread_id": "ses-fixture-5",
+  "status": "in_progress",
+  "tool": "wait",
+  "type": "collab_tool_call"
+ },
+ "type": "item.started"
+}

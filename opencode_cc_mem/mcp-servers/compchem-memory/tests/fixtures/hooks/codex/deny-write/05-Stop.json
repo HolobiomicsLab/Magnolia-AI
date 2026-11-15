@@ -1,0 +1,11 @@
+{
+ "cwd": "/TMPDIR/probe-codex-deny-write",
+ "hook_event_name": "Stop",
+ "last_assistant_message": "Command failed: permission denied creating the requested directory and file.",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-7",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-05-10-ses-fixture-7.jsonl",
+ "turn_id": "01a1dee1-ec28-7001-a450-ad01e1ce0b85"
+}

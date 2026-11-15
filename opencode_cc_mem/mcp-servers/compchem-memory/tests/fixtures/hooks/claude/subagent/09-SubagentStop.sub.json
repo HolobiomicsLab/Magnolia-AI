@@ -1,6 +1,6 @@
 {
  "agent_id": "a5d2e2e2b28d1e668",
- "agent_transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-parent/ses-fixture-1/subagents/agent-a5d2e2e2b28d1e668.jsonl",
+ "agent_transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1/subagents/agent-a5d2e2e2b28d1e668.jsonl",
  "agent_type": "general-purpose",
  "background_tasks": [
   {
@@ -22,5 +22,5 @@
  "session_crons": [],
  "session_id": "ses-fixture-1",
  "stop_hook_active": false,
- "transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-parent/ses-fixture-1.jsonl"
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
 }

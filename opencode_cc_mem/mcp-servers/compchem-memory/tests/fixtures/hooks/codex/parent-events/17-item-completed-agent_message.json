@@ -1,7 +1,7 @@
 {
  "item": {
-  "id": "item_3",
-  "text": "Exit status: `0`",
+  "id": "item_9",
+  "text": "done",
   "type": "agent_message"
  },
  "type": "item.completed"

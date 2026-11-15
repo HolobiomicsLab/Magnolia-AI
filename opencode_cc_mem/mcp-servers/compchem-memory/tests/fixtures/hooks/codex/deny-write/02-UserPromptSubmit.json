@@ -1,0 +1,10 @@
+{
+ "cwd": "/TMPDIR/probe-codex-deny-write",
+ "hook_event_name": "UserPromptSubmit",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "prompt": "Use the shell to run exactly: mkdir -p /private/var/tmp/magnolia-probe-deny && echo hi > /private/var/tmp/magnolia-probe-deny/x.txt . Do not retry another way. Reply with the outcome in ten words.",
+ "session_id": "ses-fixture-7",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-05-10-ses-fixture-7.jsonl",
+ "turn_id": "01a1dee1-ec28-7001-a450-ad01e1ce0b85"
+}

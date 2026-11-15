@@ -1,6 +1,6 @@
 {
  "item": {
-  "id": "item_0",
+  "id": "item_2",
   "message": "Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.",
   "type": "error"
  },

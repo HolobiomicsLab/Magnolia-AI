@@ -1,0 +1,14 @@
+{
+ "cwd": "/TMPDIR/probe-codex-deny-write",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-7",
+ "tool_input": {
+  "command": "mkdir -p /private/var/tmp/magnolia-probe-deny && echo hi > /private/var/tmp/magnolia-probe-deny/x.txt"
+ },
+ "tool_name": "Bash",
+ "tool_use_id": "exec-26e6d156-5388-45a6-8f88-a1e081801598",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-05-10-ses-fixture-7.jsonl",
+ "turn_id": "01a1dee1-ec28-7001-a450-ad01e1ce0b85"
+}

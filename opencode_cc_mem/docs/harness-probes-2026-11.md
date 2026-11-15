@@ -5,8 +5,7 @@ Fixtures: `mcp-servers/compchem-memory/tests/fixtures/hooks/<client>/<scenario>/
 Scripts: `scripts/probes/{probe_mcp.py,log_hook.py,second_hook.py,run_probes.sh,make_fixtures.py}`.
 Fixture paths below are relative to `fixtures/hooks/`.
 
-Status: Claude Code fully probed. Codex: MCP and event stream probed, **hooks NOT probed** (project hooks need
-persisted hook trust; blocked, see below). Vibe: not probed (awaiting the owner's go to install mistral-vibe).
+Status: Claude Code and Codex probed (Codex hooks via `--dangerously-bypass-hook-trust` on temp projects at the owner's request, 15 Nov). Vibe: not probed (awaiting the owner's go to install mistral-vibe).
 Anything not observed is "unknown", not "absent".
 
 ## Executables
@@ -67,29 +66,43 @@ Not observed (unknown): PreToolUse `deny` in Claude (not required by the brief);
 
 ## Codex 0.154.0
 
-Hook part BLOCKED. A project `.codex/config.toml` with `[mcp_servers.probe]` loaded and worked without trust prompts, but the project
-`.codex/hooks.json` did not load: `log.jsonl` was never created and `codex exec` printed nothing about hooks. `codex exec --help` documents
-`--dangerously-bypass-hook-trust` ("Run enabled hooks without requiring persisted hook trust for this invocation. DANGEROUS."); not used.
-The owner must review/trust the hooks once (see the task report for the proposed command). Until then, no Codex hook payload,
-no `agent_id` finding, no denial-by-hook finding.
+Project hooks do not load by default: with only `.codex/hooks.json` in a temp project, `codex exec` ran the MCP tool but wrote no hook log and
+printed nothing about hooks (hooks need persisted hook trust). On 15 Nov, at the owner's explicit request, the lead re-ran the probes with
+`--dangerously-bypass-hook-trust` **on throwaway `$TMPDIR/probe-codex-*` projects only** (our own logging hooks and the probe MCP server, never any
+other directory or config file). The agent that wrote this report ran no Codex call in this round; it processed the lead's logs.
+All runs: `codex exec --json -C <tmp> -s workspace-write --dangerously-bypass-hook-trust -m gpt-5.6-luna "<prompt>"`, stdin closed
+(`-m gpt-5.6-luna` because the default model `gpt-6-sol` is refused by the account, `codex/turn-failed/`). Codex prints the bypass warning as two `item.type: error` items.
+Hooks registered: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, plus a second independent PostToolUse command.
 
-Observed without hooks (event streams, `codex/<scenario>/`):
-
-| Item | Finding | Fixture |
+| Event | Fields seen | Fixture |
 |---|---|---|
-| MCP tool call | `item.started`/`item.completed` with `item.type: mcp_tool_call`, `server: "probe"`, `tool: "echo"` (separate fields, not `mcp__probe__echo`), `arguments`, `result{content, structured_content}`, `status` | `codex/parent/05-*`, `06-*` |
-| MCP tool failure | `status: "failed"`, `error: null`, error text inside `result.content[0].text`; the turn still ends `turn.completed` | `codex/tool-error/` |
-| Shell | `item.type: command_execution`, `command: "/bin/zsh -lc '...'"`, `exit_code`, `aggregated_output` | `codex/deny-write/` |
-| Model refused | `{"type":"error"}` then `turn.failed` with `error.message` = JSON string (status 400, `model_not_found`) | `codex/turn-failed/` |
-| Usage | `turn.completed.usage{input_tokens, cached_input_tokens, ...}` (dropped in the fixtures) | |
-| Noise | `item.type: error` items carry non-fatal warnings (skills budget, model metadata) | |
+| SessionStart | `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `model`, `permission_mode`, `source` | `codex/parent/01-SessionStart.json` |
+| UserPromptSubmit | + `prompt`, `turn_id` | `codex/parent/02-UserPromptSubmit.json` |
+| PreToolUse | + `tool_name`, `tool_input`, `tool_use_id`, `turn_id` | `codex/parent/03-PreToolUse.json` |
+| PostToolUse | PreToolUse fields + `tool_response` (no `duration_ms`) | `codex/parent/04-PostToolUse.json` |
+| Stop | `last_assistant_message`, `stop_hook_active`, `turn_id`, `model`, `permission_mode` | last file of `codex/parent/` |
+| SubagentStart / SubagentStop / SessionEnd / PostToolUseFailure | not registered, not observed: unknown | |
 
-Environment surprise: the owner's `~/.codex/config.toml` default model changed to `gpt-6-sol` during the session (file mtime 11:44) and the
-ChatGPT account refuses it (`codex/turn-failed/`); two runs were wasted. Runs after that pass `-m gpt-5.6-luna` per invocation (config untouched).
+Answers:
+- **Tool name form**: `Bash` (built-in shell; `tool_input.command`), `mcp__probe__echo` (same `mcp__<server>__<tool>` form as Claude, but no separate `mcp_server` field), `spawn_agent`, `multi_agent_v1wait_agent`. In the `--json` stream the same MCP call is `item.type: mcp_tool_call` with separate `server`/`tool` fields (`codex/parent-events/`).
+- **`agent_id` in a subagent** (`codex/subagent/`, spawn_agent): UserPromptSubmit, PreToolUse and PostToolUse inside the subagent carry `agent_id` (its thread id; also in the `spawn_agent` `tool_response` as `agent_id` plus `nickname`) and `agent_type` ("default"); parent events carry neither. No SubagentStart/Stop hook was registered, so unknown. The subagent's own Stop was not seen in the log (16 hook lines in total): unknown whether it fires.
+- **Two PostToolUse hooks** (`codex/two-hooks/`): both ran; the second hook wrote six lines for six PostToolUse events. Relative order not tested.
+- **Stop**: carries `last_assistant_message` and `stop_hook_active`; one Stop in the run.
+- **Tool failure**: in the `--json` stream (no hooks) a failing MCP tool is `status: "failed"`, `error: null`, text in `result.content[0].text`, then `turn.completed` (`codex/tool-error/`). Hook-side failure event: unknown.
+- **Model refused**: `error` then `turn.failed` (`codex/turn-failed/`). Usage fields are dropped from fixtures.
 
-Sandbox baseline (`deny-write`, `-s workspace-write`, no hook): a write to `$TMPDIR/probe-outside/x.txt`, outside the project, **succeeded**
-(exit 0) because `$TMPDIR` is a default writable root of `workspace-write` on macOS. So that target cannot separate hook from sandbox; a
-sandbox-refusal probe needs a user-writable path outside `$TMPDIR` and `/tmp`, and the only candidates are under the home directory or a repo (forbidden here). Unknown.
+Denial (`-s workspace-write`; the `--json` stream contains no `command_execution` item for either probe, so the mechanism is inferred from the hook log, the agent's reply and the file system):
+- **(a) `deny-shell`** (`PROBE_DENY=Bash`, `codex/deny-shell/`): PreToolUse(Bash, `echo hi > shell-ran.txt`) logged, hook printed `permissionDecision: "deny"`; **no PostToolUse followed**, the agent replied "Security hook blocked the shell command; no file was created", and the file did not exist. Mechanism: **hook**. The denial held.
+- **(b) `deny-write`** (no deny hook, `codex/deny-write/`): command `mkdir -p /private/var/tmp/magnolia-probe-deny && echo hi > .../x.txt`; PreToolUse and PostToolUse both fired (no hook decision), the agent reported "permission denied", and neither the directory nor the file existed afterwards. Mechanism: **sandbox**. The earlier probe (before hooks loaded) showing that a write under `$TMPDIR` is allowed in `workspace-write` (`$TMPDIR` is a writable root) is from console output; its run was overwritten and has no fixture.
+
+Context size (`codex/context-small/`, `codex/context-max/`, SessionStart `additionalContext`, same payloads as Claude):
+
+| | bytes emitted | hook output accepted | model reported marker | turn `input_tokens` |
+|---|---|---|---|---|
+| control | 2 000 | yes | yes (`MAGNOLIA-END-7Q`) | 20 671 |
+| max | 256 043 | yes | yes (`MAGNOLIA-END-7Q`) | 22 989 |
+
+Caveat: 256 000 identical letters tokenise very compactly (about 2.3 k extra tokens), so this shows that the end of the payload reached the model, not that every character did, and only a realistic text payload can measure a limit. The same caveat applies to the Claude result, where the model reported seeing only a preview. Codex accepted and delivered the tail of a 256 KB payload; Claude did not.
 
 ## Vibe
 
@@ -104,16 +117,16 @@ No limit was hit. Not recorded from documentation either: no client help text or
 | Client | Tool | Mechanism | Denial seen holding? |
 |---|---|---|---|
 | Claude Code | MCP tool | PreToolUse hook `permissionDecision` / `--allowedTools` | not probed |
-| Codex | built-in shell | PreToolUse hook deny (design 8.1) | not probed (hooks not loaded) |
-| Codex | write outside project | sandbox `workspace-write` | no: allowed under `$TMPDIR` (writable root); sandbox refusal not observed |
+| Codex | built-in shell (`Bash`) | PreToolUse hook `deny` | yes, hook (`codex/deny-shell/`) |
+| Codex | write outside project, outside `$TMPDIR` and `/tmp` | sandbox `workspace-write` | yes, sandbox (`codex/deny-write/`) |
 | Vibe | shell | config | not probed |
 
 ## Consequences for design sections 5 and 7
 
 - Section 5 (hook core): normalise Claude `mcp__server__tool` and Codex `{server, tool}` separately; treat `agent_id` as the subagent discriminator on Claude; ignore `ToolSearch`/`SubagentHandback`; subscribe to PostToolUseFailure; accept multiple Stop and UserPromptSubmit events per run; never assume async hook ordering.
-- Section 7 (boot context): do not ship the boot payload through SessionStart `additionalContext` beyond a short pointer; the 256 KB maximum was accepted by Claude but the model saw about 2 KB. Codex transport unknown until hooks are trusted.
-- Section 8.1 (Codex worker denial): unverified; needs the trusted-hook run first.
+- Section 7 (boot context): do not ship the boot payload through SessionStart `additionalContext` beyond a short pointer; the 256 KB maximum was accepted by Claude but the model saw about 2 KB. Codex delivered the tail of a 256 KB payload (marker seen), with the tokenisation caveat above.
+- Section 8.1 (Codex worker denial): verified for the built-in shell (hook deny holds, no PostToolUse) and for writes outside the writable roots (sandbox). Hooks must be trusted for the campaign worker project; the bypass flag is not to be baked into any config.
 
 ## Calls spent
 
-Claude: 5 headless calls (parent 1, tool-error 2, context small 1, context max 1; two earlier invocations aborted on a script bug before launching claude). Codex: 5 (MCP probe 1, tool-error 1, deny-write 3 of which 2 were refused by the model setting).
+Claude: 5 headless calls (parent 1, tool-error 2, context small 1, context max 1; two earlier invocations aborted on a script bug before launching claude). Codex: 10 by the agent and the lead together, plus one run that hung on stdin with no model call. Earlier round (agent): 5 (MCP probe 1, tool-error 1, deny-write 3 of which 2 refused by the model setting). This round (lead, with the bypass flag): 5 (parent+subagent+two-hooks, deny-shell, deny-write, context-small, context-max).

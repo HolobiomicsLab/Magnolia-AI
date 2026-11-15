@@ -105,16 +105,38 @@ for k in ("small", "max"):
 write("claude", "deny-shell", [], meta("not run for Claude", "not probed (Task 0 only requires Codex denial probes)"))
 write("claude", "deny-write", [], meta("not run for Claude", "not probed (Task 0 only requires Codex denial probes)"))
 
-# Codex: event streams (hooks did not load, see report)
-for run, scen in (("first", "parent"), ("tool-error", "tool-error"), ("deny-write", "deny-write")):
-    ev = [json.loads(l) for l in open(f"{T}/probe-codex-{run}/events.jsonl")]
-    write("codex", scen, [(e["type"].replace(".", "-") + (("-" + e["item"]["type"]) if "item" in e else ""), e) for e in ev],
-          {"client": "codex", "version": "0.154.0",
-           "command": f"run_probes.sh codex_run {run} <prompt> [-m gpt-5.6-luna]  (codex exec --json -C <dir> -s workspace-write)",
-           "observed": "event stream only; project .codex/hooks.json did NOT load (no hook trust), so there are no hook payloads"})
-for scen in ("subagent", "context-small", "context-max", "deny-shell", "two-hooks"):
-    write("codex", scen, [], {"client": "codex", "version": "0.154.0", "command": "not run",
-                              "observed": "not probed: project hooks need persisted hook trust (see report)"})
+# Codex: hook payloads (hooks loaded with the owner-approved bypass flag on temp projects, run by the lead)
+def codex_items(run):
+    out = []
+    for line in open(f"{T}/probe-codex-{run}/log.jsonl"):
+        s = json.loads(line)["stdin"]
+        out.append((s["hook_event_name"] + (".sub" if s.get("agent_id") else ""), s))
+    return out
+
+
+def codex_events(run):
+    return [(e["type"].replace(".", "-") + (("-" + e["item"]["type"]) if "item" in e else ""), e)
+            for e in (json.loads(l) for l in open(f"{T}/probe-codex-{run}/events.jsonl"))]
+
+
+CX = "codex exec --json -C <tmp> -s workspace-write --dangerously-bypass-hook-trust -m gpt-5.6-luna <prompt> (temp project only, owner's request 15 Nov)"
+cm = lambda obs: {"client": "codex", "version": "0.154.0", "command": CX, "observed": obs}
+hp = codex_items("hooks-parent")
+write("codex", "parent", hp, cm("full ordered hook run; .sub = events carrying agent_id"))
+write("codex", "subagent", [x for x in hp if ".sub" in x[0]], cm("tool events inside the spawn_agent subagent carry agent_id (= its thread id) and agent_type"))
+write("codex", "two-hooks", [x for x in hp if x[0] == "PostToolUse"], cm("six PostToolUse events; second independent hook wrote six marker lines"))
+write("codex", "parent-events", codex_events("hooks-parent"), cm("the codex --json stream of the same run"))
+write("codex", "deny-shell", codex_items("deny-shell") + codex_events("deny-shell"),
+      cm("PROBE_DENY=Bash: PreToolUse deny; no PostToolUse; the --json stream has no command_execution item; agent reported the block; file not created"))
+write("codex", "deny-write", codex_items("deny-write") + codex_events("deny-write"),
+      cm("no deny hook; write to /private/var/tmp/magnolia-probe-deny/x.txt; PostToolUse fired, agent reported permission denied, no file/dir existed: sandbox"))
+for k, n in (("small", 2000), ("max", 256043)):
+    write("codex", f"context-{k}", codex_items(f"ctx-{k}") + codex_events(f"ctx-{k}"),
+          cm(f"SessionStart additionalContext of {n} bytes; model answered MAGNOLIA-END-7Q"))
+for run, scen in (("first", "mcp-events-no-hooks"), ("tool-error", "tool-error")):
+    write("codex", scen, codex_events(run), {"client": "codex", "version": "0.154.0",
+          "command": f"codex exec --json -C <tmp> -s workspace-write -m gpt-5.6-luna (hooks not loaded: no trust bypass)",
+          "observed": "event stream only"})
 
 # Codex turn.failed shape seen when the configured model is refused (captured text, run not retained)
 write("codex", "turn-failed", [

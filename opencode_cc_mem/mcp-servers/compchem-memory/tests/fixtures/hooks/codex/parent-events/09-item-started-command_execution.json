@@ -1,9 +1,9 @@
 {
  "item": {
   "aggregated_output": "",
-  "command": "/bin/zsh -lc 'echo x > /TMPDIR/probe-outside/x.txt'",
+  "command": "/bin/zsh -lc \"sed -n '1,240p' <redacted: owner's local agent configuration>\"",
   "exit_code": null,
-  "id": "item_2",
+  "id": "item_5",
   "status": "in_progress",
   "type": "command_execution"
  },

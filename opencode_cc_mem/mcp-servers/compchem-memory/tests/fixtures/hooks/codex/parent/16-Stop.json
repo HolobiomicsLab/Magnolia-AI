@@ -1,0 +1,11 @@
+{
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "Stop",
+ "last_assistant_message": "done",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-5",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-55-55-ses-fixture-5.jsonl",
+ "turn_id": "01a1ded9-75f1-7e93-aec8-19119f3d6509"
+}

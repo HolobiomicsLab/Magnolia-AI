@@ -1,6 +1,6 @@
 {
  "client": "codex",
  "version": "0.154.0",
- "command": "not run",
- "observed": "not probed: project hooks need persisted hook trust (see report)"
+ "command": "codex exec --json -C <tmp> -s workspace-write --dangerously-bypass-hook-trust -m gpt-5.6-luna <prompt> (temp project only, owner's request 15 Nov)",
+ "observed": "SessionStart additionalContext of 2000 bytes; model answered MAGNOLIA-END-7Q"
 }

@@ -19,5 +19,5 @@
  "tool_name": "mcp__probe__echo",
  "tool_response": "{\"result\":\"top\"}",
  "tool_use_id": "toolu_01JaB5rGohwj9zD1YePrSc5h",
- "transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-parent/ses-fixture-1.jsonl"
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
 }

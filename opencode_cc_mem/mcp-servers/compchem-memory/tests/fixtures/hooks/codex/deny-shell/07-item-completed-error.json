@@ -1,0 +1,8 @@
+{
+ "item": {
+  "id": "item_1",
+  "message": "`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation.",
+  "type": "error"
+ },
+ "type": "item.completed"
+}

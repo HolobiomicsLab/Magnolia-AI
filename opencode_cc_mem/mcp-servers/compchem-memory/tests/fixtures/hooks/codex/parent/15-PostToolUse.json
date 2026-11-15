@@ -1,0 +1,18 @@
+{
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "PostToolUse",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-5",
+ "tool_input": {
+  "targets": [
+   "01a1ded9-d62b-7e60-8d9c-40ea94f3ab27"
+  ],
+  "timeout_ms": 120000
+ },
+ "tool_name": "multi_agent_v1wait_agent",
+ "tool_response": "{\"status\":{\"01a1ded9-d62b-7e60-8d9c-40ea94f3ab27\":{\"completed\":\"The probe returned: `sub`.\"}},\"timed_out\":false}",
+ "tool_use_id": "exec-81a80ec3-cb5f-4652-8d97-335b7669dc3c",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-55-55-ses-fixture-5.jsonl",
+ "turn_id": "01a1ded9-75f1-7e93-aec8-19119f3d6509"
+}
