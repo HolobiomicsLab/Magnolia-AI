@@ -407,6 +407,30 @@ def test_vibe_parent_trace_includes_time_linked_child_tool_and_reply(tmp_path):
     assert trace[1]["output"] == "The child measured energy -12.3"
 
 
+def test_consecutive_child_turn_windows_use_post_agent_boundaries():
+    rows = [
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "turn1-call", "input": {}, "output": "1" * 1000},
+        {"kind": "turn-boundary", "turn_id": "t1", "agent": {"id": "c1"}},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "turn2-call", "input": {}, "output": "2" * 1000},
+        {"kind": "turn-boundary", "turn_id": "t2", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "t2", "agent": {"id": "c1"}, "text": "second"},
+        {"kind": "assistant", "turn_id": "t1", "agent": {"id": "c1"}, "text": "first"},
+    ]
+
+    _, first_trace, _ = critic._trace(rows, "c1", "t1")
+    first_items = {item["call_id"]: item for item in json.loads(first_trace)}
+    assert "turn" not in first_items["turn1-call"]
+    assert "turn2-call" not in first_items
+
+    _, second_trace, _ = critic._trace(rows, "c1", "t2")
+    second_items = {item["call_id"]: item for item in json.loads(second_trace)}
+    assert second_items["turn1-call"]["turn"] == "earlier"
+    assert len(second_items["turn1-call"]["output"]) == 500
+    assert "turn" not in second_items["turn2-call"]
+
+
 def test_large_boot_injection_keeps_every_current_tool_output(tmp_path):
     from compchem_memory.hook.transcript import append_injected
 

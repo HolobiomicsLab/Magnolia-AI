@@ -135,7 +135,7 @@ and fires auto-assessment for recognized scientific tools.
 
 ## Tool names in other clients
 
-These rules spell tools the OpenCode way (compchem-tools_run_shell). In Claude Code and Codex the same tool is mcp__compchem-tools__run_shell; in Mistral Vibe it is mcp_compchem-tools.run_shell. Skills are loaded with the skill tool in OpenCode and are listed as skills in the other clients.
+These rules spell tools the OpenCode way (compchem-tools_run_shell). In Claude Code the same tool is mcp__compchem-tools__run_shell; in Codex it is mcp__compchem_tools__run_shell; in Mistral Vibe it is mcp_compchem-tools.run_shell. Skills are loaded with the skill tool in OpenCode and are listed as skills in the other clients.
 
 ## Periodically
 

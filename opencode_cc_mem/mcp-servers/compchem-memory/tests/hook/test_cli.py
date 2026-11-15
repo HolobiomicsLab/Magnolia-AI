@@ -299,27 +299,58 @@ def test_vibe_child_note_is_dropped_when_child_ends(tmp_path, monkeypatch):
 def test_commit_failure_after_stdout_does_not_requeue_emitted_carried_note(
     tmp_path, monkeypatch,
 ):
+    from compchem_memory.hook import action_retrieval
     from compchem_memory.hook import __main__ as cli
     from compchem_memory.hook import dispatch
 
     project = _workspace(tmp_path)
+    store = project / ".magnolia"
     event = HookEvent("vibe", "prompt", "s1", str(project), prompt="next")
+    payload = {"id": "n1", "tool": "run_shell", "call_id": "c1",
+               "agent_id": None, "note": {"entry": "e1"}}
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["carried_action_notes_in_flight"] = {
+            "n1": {"ts": time.time(), "payload": payload},
+        }
     handled = SimpleNamespace(
         pending=None, notices=None,
-        paths=SimpleNamespace(store=project / ".magnolia"),
+        paths=SimpleNamespace(store=store),
         carried=[SimpleNamespace(id="n1")], carried_field="context", injections=[],
     )
-    released = []
     monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
     monkeypatch.setattr(cli, "_log_error", lambda *args: None)
-    monkeypatch.setattr(
-        dispatch, "release_carried_notes",
-        lambda *args: released.append(args),
-    )
+    monkeypatch.setattr(action_retrieval, "restore_note", lambda data, paths: SimpleNamespace(text="note"))
 
     _write_rendered(Rendered("delivered", "", 0, frozenset({"context"})), handled, event, {})
 
-    assert released == []
+    real_time = time.time
+    monkeypatch.setattr(
+        dispatch.time, "time",
+        lambda: real_time() + dispatch._CARRIED_RESERVATION_TTL_SECONDS + 1,
+    )
+    assert dispatch._carried_notes(handled.paths, event) == []
+
+
+def test_commit_failure_after_stdout_commits_emitted_notice(tmp_path, monkeypatch):
+    from compchem_memory.hook import __main__ as cli
+    from compchem_memory.hook import notices
+
+    project = _workspace(tmp_path)
+    event = HookEvent("vibe", "prompt", "s1", str(project), prompt="next")
+    notice = SimpleNamespace(text="notice")
+    handled = SimpleNamespace(
+        pending=None, notices=notice, paths=SimpleNamespace(store=project / ".magnolia"),
+        carried=[], carried_field=None, injections=[],
+    )
+    settled = []
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    monkeypatch.setattr(cli, "_log_error", lambda *args: None)
+    monkeypatch.setattr(notices, "commit_notices", lambda *args: settled.append("committed"))
+    monkeypatch.setattr(notices, "release_notices", lambda *args: settled.append("released"))
+
+    _write_rendered(Rendered("delivered", "", 0, frozenset({"notice"})), handled, event, {})
+
+    assert settled == ["committed"]
 
 
 def test_carried_reservation_ttl_exceeds_hook_timeout():

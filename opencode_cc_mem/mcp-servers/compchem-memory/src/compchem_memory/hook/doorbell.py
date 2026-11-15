@@ -91,9 +91,10 @@ def _title(request: str) -> str:
 
 def _letter(request: str, source: str, now: datetime) -> str:
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+    title = _title(request) if request.strip() else _FALLBACK_REQUEST
     return "\n".join(
         [
-            f"# Task: {_title(request)}",
+            f"# Task: {title}",
             "",
             f"- from: {source}",
             f"- date: {stamp}",
@@ -127,30 +128,42 @@ def process_prompt(
     paths: ProjectPaths,
     env: Mapping[str, str] | None = None,
 ) -> DoorbellResult:
-    """Rewrite agent mentions and write one letter per delivered request."""
+    """Rewrite agent mentions and write one merged letter per target."""
     if doorbell_disabled(env):
         return DoorbellResult(text, [], [])
     mention, check = _mention_patterns(registry_agents(paths.root))
     if not check.search(text):
         return DoorbellResult(text, [], [])
     now = datetime.now(timezone.utc)
+    requests: dict[str, list[str]] = {}
+    labels: dict[str, str] = {}
+    for match in mention.finditer(text):
+        agent, request = match.group(1), (match.group(2) or "").strip()
+        if not request:
+            continue
+        target = agent.lower()
+        requests.setdefault(target, []).append(request)
+        labels.setdefault(target, agent)
+
+    delivered: set[str] = set()
     sent: list[str] = []
     letters: list[Path] = []
-    delivered: set[str] = set()
+    for target, target_requests in requests.items():
+        request = "\n\n".join(target_requests)
+        try:
+            letters.append(_deliver(paths, target, request, now))
+        except OSError:
+            continue
+        delivered.add(target)
+        sent.append(f"@{labels[target]}")
 
     def replace(match: re.Match[str]) -> str:
         agent, request = match.group(1), (match.group(2) or "").strip()
         if not request:
             return match.group(0)
         target = agent.lower()
-        if target in delivered:
-            return _REPLACEMENT.format(agent=agent)
-        try:
-            letters.append(_deliver(paths, target, request, now))
-        except OSError:
+        if target not in delivered:
             return match.group(0)
-        delivered.add(target)
-        sent.append(f"@{agent}")
         return _REPLACEMENT.format(agent=agent)
 
     rewritten = mention.sub(replace, text)

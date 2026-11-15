@@ -40,6 +40,12 @@ with one of those names is kept and reported as a conflict.
 Vibe and Codex list the member's own global skills next to Magnolia's project links. This is by design in
 those clients; Magnolia does not hide or replace the member's skills.
 
+Magnolia links project skill files into Claude Code, Codex and Vibe unchanged. The rule renderer adapts
+tool names in delivered `AGENTS.md` and `rules/*.md`, but it does not rewrite `SKILL.md` files; all three
+clients read those skill bodies natively. A skill that names an OpenCode-form tool such as
+`compchem-tools_run_shell` therefore keeps that spelling until the skill itself documents client-specific
+names.
+
 The hook command is `python -m compchem_memory.hook <harness> <event>`. It never breaks the
 client: a failure is logged to `.magnolia/hook-errors.jsonl` and the event passes, except that a
 configured shell policy still denies the built-in shell.

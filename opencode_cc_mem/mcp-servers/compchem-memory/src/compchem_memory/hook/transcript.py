@@ -85,6 +85,13 @@ def append_denied(store: Path, event: HookEvent, reason: str) -> bool:
         return False
 
 
+def append_turn_boundary(store: Path, event: HookEvent) -> None:
+    """Append a resolved child post-agent boundary for turn attribution."""
+    path = transcript_path(store, event.harness, event.session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _append_jsonl(path, _base_row(event, "turn-boundary"))
+
+
 def read_turns(path: Path) -> list[dict]:
     """Read transcript objects in order, skipping malformed JSONL lines."""
     try:

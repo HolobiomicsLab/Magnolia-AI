@@ -78,7 +78,11 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
 
 
 def _release_unsettled(
-    handled: Any, event: Any = None, *, release_carried: bool = True,
+    handled: Any,
+    event: Any = None,
+    *,
+    release_carried: bool = True,
+    release_notice: bool = True,
 ) -> None:
     """Release action-note and notice reservations after a failure; never raise."""
     pending = getattr(handled, "pending", None)
@@ -99,12 +103,43 @@ def _release_unsettled(
             release_carried_notes(paths, event, [item.id for item in carried])
         except Exception:  # noqa: BLE001 - the error row is already written
             pass
-    if notices is not None:
+    if release_notice and notices is not None:
         try:
             from compchem_memory.hook.notices import release_notices
 
             release_notices(notices)
         except Exception:  # noqa: BLE001 - process exit also permits stale recovery
+            pass
+
+
+def _settle_emitted_after_commit_failure(rendered: Any, handled: Any, event: Any) -> None:
+    """Best-effort settle context that already reached the client."""
+    paths = getattr(handled, "paths", None)
+    carried = getattr(handled, "carried", [])
+    carried_field = getattr(handled, "carried_field", None)
+    carried_was_emitted = carried_field in rendered.emitted
+    _release_unsettled(
+        handled, event,
+        release_carried=not carried_was_emitted,
+        release_notice=False,
+    )
+    if carried and paths is not None and carried_was_emitted:
+        try:
+            from compchem_memory.hook.dispatch import clear_carried_notes
+
+            clear_carried_notes(paths, event, [item.id for item in carried])
+        except Exception:  # noqa: BLE001 - stdout delivery already happened
+            pass
+    notices = getattr(handled, "notices", None)
+    if notices is not None:
+        try:
+            from compchem_memory.hook.notices import commit_notices, release_notices
+
+            if paths is not None and "notice" in rendered.emitted:
+                commit_notices(paths, event.harness, event.session_id, notices)
+            else:
+                release_notices(notices)
+        except Exception:  # noqa: BLE001 - stdout delivery already happened
             pass
 
 
@@ -124,7 +159,7 @@ def _write_rendered(
             _log_error(error, event.harness, event.event, event, env or os.environ)
             # stdout already reached the client. Re-queueing this context can
             # deliver it twice; keep the at-most-once direction on commit failure.
-            _release_unsettled(handled, event, release_carried=False)
+            _settle_emitted_after_commit_failure(rendered, handled, event)
     sys.stderr.buffer.write(rendered.stderr.encode("utf-8"))
     sys.stderr.buffer.flush()
 

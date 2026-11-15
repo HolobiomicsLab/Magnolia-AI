@@ -166,6 +166,84 @@ def test_session_end_appends_one_row_for_claude_and_vibe(tmp_path):
         assert rows[0]["ts"].endswith("Z")
 
 
+def test_vibe_session_end_records_late_child_before_closing_row(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    child = AgentRef("c1", "worker")
+    source = _vibe_journal(tmp_path / "child", "c1:turn:1", "Calling a tool.")
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+    )
+    common = dict(harness="vibe", session_id="s1", cwd=str(project))
+
+    handle(HookEvent(event="turn-end", agent=child, transcript_ref=str(source), **common),
+           env, time.monotonic() + 8)
+    _vibe_journal(source, "c1:turn:1", "Calling a tool.", "The tool returned sub.")
+    handle(HookEvent(event="session-end", **common), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "s1.jsonl")
+    assert rows[-1]["kind"] == "session-end"
+    assert sum(row["kind"] == "session-end" for row in rows) == 1
+    assert scheduled == [("c1:turn:1", "The tool returned sub.")]
+
+
+def test_claude_session_end_records_late_child_before_closing_row(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    child = AgentRef("c1", "Explore")
+    transcript = tmp_path / "child.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    monkeypatch.setattr(dispatch, "_schedule_background", lambda *args: True)
+    common = dict(harness="claude", session_id="s1", cwd=str(project))
+
+    handle(HookEvent(event="agent-end", agent=child, turn_id="T1",
+                     transcript_ref=str(transcript), **common), env, time.monotonic() + 8)
+    transcript.write_text(
+        json.dumps({"type": "user", "promptId": "T1", "agentId": "c1"}) + "\n"
+        + json.dumps({"type": "assistant", "agentId": "c1", "message": {
+            "role": "assistant", "content": [{"type": "text", "text": "child reply"}],
+        }}) + "\n",
+        encoding="utf-8",
+    )
+    handle(HookEvent(event="session-end", **common), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "claude" / "s1.jsonl")
+    assert rows[-1]["kind"] == "session-end"
+    assert sum(row["kind"] == "session-end" for row in rows) == 1
+    assert any(row["kind"] == "assistant" and row["agent"]["id"] == "c1" for row in rows)
+
+
+def test_child_session_end_neither_closes_parent_nor_drops_parent_notes(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    payload = {"id": "n1", "agent_id": None, "note": {"entry": "e1"}}
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["carried_action_notes"] = [payload]
+    discarded = []
+    note = object()
+    monkeypatch.setattr(action_retrieval, "restore_note", lambda data, paths: note)
+    monkeypatch.setattr(
+        action_retrieval, "discard_note",
+        lambda candidate, reason=None: discarded.append((candidate, reason)),
+    )
+
+    handle(HookEvent("vibe", "session-end", "s1", str(project), agent=AgentRef("c1", "worker")),
+           env, time.monotonic() + 8)
+    with SessionState.open(store, "vibe", "s1") as state:
+        assert state.data["carried_action_notes"] == [payload]
+    assert discarded == []
+    assert not (store / "transcripts" / "vibe" / "s1.jsonl").exists()
+
+    handle(HookEvent("vibe", "session-end", "s1", str(project)),
+           env, time.monotonic() + 8)
+    with SessionState.open(store, "vibe", "s1") as state:
+        assert state.data["carried_action_notes"] == []
+    assert discarded == [(note, "session ended before a deliverable event")]
+    assert _rows(store / "transcripts" / "vibe" / "s1.jsonl")[-1]["kind"] == "session-end"
+
+
 def test_vibe_consecutive_child_turns_keep_distinct_turn_ids(tmp_path, monkeypatch):
     project, env = _workspace(tmp_path)
     child = AgentRef("c1", "worker")
@@ -202,6 +280,31 @@ def test_vibe_consecutive_child_turns_keep_distinct_turn_ids(tmp_path, monkeypat
            env, time.monotonic() + 8)
 
     assert sorted(scheduled) == [("t1", "first"), ("t2", "second")]
+
+
+def test_vibe_partial_child_turn_is_caught_up_after_final_reply_lands(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    child = AgentRef("c1", "worker")
+    source = _vibe_journal(tmp_path / "child", "c1:turn:1", "Calling the echo tool.")
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+    )
+    common = dict(harness="vibe", session_id="s1", cwd=str(project))
+
+    handle(HookEvent(event="turn-end", agent=child, transcript_ref=str(source), **common),
+           env, time.monotonic() + 8)
+    _vibe_journal(
+        source, "c1:turn:1", "Calling the echo tool.", "The tool returned sub.",
+    )
+    handle(HookEvent(event="session-end", **common), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "s1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == [
+        "Calling the echo tool.", "The tool returned sub.",
+    ]
+    assert scheduled == [("c1:turn:1", "The tool returned sub.")]
 
 
 def test_catchup_prioritises_latest_main_then_newest_idle_child(tmp_path, monkeypatch):
@@ -260,7 +363,7 @@ def test_dispatch_prompt_doorbell_context(tmp_path, monkeypatch):
     )
 
     assert "@literature" in handled.response.context
-    assert "already sent to helper agents" in handled.response.context
+    assert "One letter containing all requests" in handled.response.context
     assert DIRECTIVE in handled.response.context
     letters = list((project.parent / "literature" / "inbox" / "from-alpha").glob("*.task.md"))
     assert len(letters) == 1
@@ -933,6 +1036,9 @@ def test_vibe_one_shot_with_two_children_catches_up_main_reply(tmp_path, monkeyp
     handle(HookEvent(event="session-end", transcript_ref=str(main_journal), **common),
            env, time.monotonic() + 8)
 
-    assert scheduled[0] == (None, "T1", "final main reply")
+    assert scheduled == [
+        (None, "T1", "final main reply"),
+        ("c2", "c2:turn:1", "c2 reply"),
+    ]
     rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
     assert "final main reply" in [row.get("text") for row in rows]
