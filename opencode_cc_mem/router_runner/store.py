@@ -140,8 +140,10 @@ CREATE TABLE IF NOT EXISTS findings (
 class ControlStore:
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
-        self.conn = sqlite3.connect(self.db_path)
+        self.conn = sqlite3.connect(self.db_path, timeout=5.0)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+        self._tx_depth = 0
         self.conn.executescript(SCHEMA)
         self.conn.commit()
 
@@ -150,13 +152,38 @@ class ControlStore:
 
     @contextmanager
     def tx(self):
-        """One transaction per control-engine operation (single writer)."""
+        """Atomic operation, with real nested-transaction composition.
+
+        The outermost transaction starts IMMEDIATE so cross-process read/check/
+        write sequences are serialized. Nested engine/runtime operations use
+        savepoints and cannot independently commit their caller's work. Existing
+        single-operation callers retain the same public interface.
+        """
+        depth = self._tx_depth
+        savepoint = f"control_sp_{depth}"
+        if depth == 0 and not self.conn.in_transaction:
+            self.conn.execute("BEGIN IMMEDIATE")
+        else:
+            # Legacy callers may use insert/update directly before tx(). Join
+            # that implicit transaction; the depth-zero exit still commits it.
+            self.conn.execute(f"SAVEPOINT {savepoint}")
+        self._tx_depth = depth + 1
         try:
             yield self.conn
-            self.conn.commit()
         except Exception:
-            self.conn.rollback()
+            if depth == 0:
+                self.conn.rollback()
+            else:
+                self.conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                self.conn.execute(f"RELEASE SAVEPOINT {savepoint}")
             raise
+        else:
+            if depth == 0:
+                self.conn.commit()
+            else:
+                self.conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        finally:
+            self._tx_depth = depth
 
     def insert(self, table: str, row: dict) -> None:
         cols = ", ".join(row)

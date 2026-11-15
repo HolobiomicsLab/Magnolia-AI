@@ -20,6 +20,14 @@ PROTOCOLS = {
         "stages": ["setup", "dock", "score"],
         "oracle": "fake-known-answer",
     },
+    # Approval identity for the additive always-on mailbox runtime. Execution
+    # stays with magnolia-agents-daemon; CompositeAdapter refuses this protocol
+    # rather than manufacturing a fake campaign result for it.
+    "legacy-mailbox-v0.1": {
+        "kind": "legacy-mailbox",
+        "stages": ["batched-agent-run"],
+        "oracle": "legacy-final-answer-contract",
+    },
 }
 
 
@@ -86,7 +94,16 @@ class CompositeAdapter:
         self.fake = FakeCampaignAdapter()
         self.packs = TaskPackAdapter(out_root)
 
+    def validate(self, work_item: dict) -> None:
+        """Reject misrouted work before ControlEngine mutates attempt state."""
+        if work_item["protocol"] == "legacy-mailbox-v0.1":
+            raise RouterError(
+                "legacy mailbox Work Items execute through router_runner.always_on, "
+                "not the campaign adapter"
+            )
+
     def run(self, work_item: dict, mandate: dict, attempt: int = 1) -> dict:
+        self.validate(work_item)
         if work_item["protocol"] in PROTOCOLS:
             return self.fake.run(work_item, mandate, attempt=attempt)
         return self.packs.run(work_item, mandate, attempt=attempt)

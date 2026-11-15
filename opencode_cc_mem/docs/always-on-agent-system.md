@@ -6,6 +6,10 @@ decision 2026-11-03: the deliverable is the SYSTEM, not a challenge project).
 All design choices are provisional and subject to change — see
 `router-prototype-decisions.md` and `dsh-magnolia-v2-router-assessment.md`.
 
+For the separate, opt-in conversation runtime that bridges durable Work Items
+to the existing mailbox executor, see `always-on-runtime.md`. It does not change
+this document's availability-versus-autonomy boundary or task-pack execution.
+
 ## What the system is
 
 Three cooperating pieces, each with a distinct authority boundary:
