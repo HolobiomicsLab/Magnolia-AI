@@ -375,7 +375,7 @@ Status after Plan 2 (branch `feat/harness-adapters-p2`, stacked on P0/P1, nothin
 
 - P2, P3 and the Vibe part of P5 (adapters, `magnolia --harness claude|codex|vibe`, `setup
   --harness`, distillation and handover from every client) are built and tested: package suite
-  1465 passed, 4 skipped.
+  1473 passed, 4 skipped.
 - Live acceptance on 15 November 2026: `opencode_cc_mem/docs/harness-acceptance-2026-11.md`.
   Boot context, action notes, session rows and the member's own hook were seen in all three
   clients. Open: Claude Code's asynchronous Stop does not finish in `-p` runs; the critic judge

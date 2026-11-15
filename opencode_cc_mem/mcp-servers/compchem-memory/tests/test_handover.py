@@ -584,3 +584,7 @@ def test_handover_opencode_only_keeps_mapping_order(store):
     hv.generate_handover(str(store.parent), exporter=lambda sid: exports[sid], llm=record)
 
     assert order == ["A", "B"]
+    cursor_a = json.loads((store / _CURSORS_DIR / "ses-a.json").read_text())
+    cursor_b = json.loads((store / _CURSORS_DIR / "ses-b.json").read_text())
+    assert "sealed_at_ms" in cursor_a
+    assert "sealed_at_ms" not in cursor_b

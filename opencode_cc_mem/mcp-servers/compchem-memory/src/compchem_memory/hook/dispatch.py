@@ -85,7 +85,8 @@ def _normalise_reply(text: str) -> str:
 
 def _reply_candidates(event: HookEvent, recovered: list[str]) -> list[str]:
     """Return recovered blocks followed by the native final reply, if any."""
-    if event.harness == "vibe" and event.assistant_text is None:
+    fills_native_reply = event.harness == "vibe" or event.event == "agent-end"
+    if fills_native_reply and event.assistant_text is None:
         event.assistant_text = recovered[-1]
 
     candidates = list(recovered)
@@ -301,17 +302,18 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     if paths is None:
         return Handled(HookResponse(), None)
     guard = _Guard(paths, event, env)
-    if event.event == "turn-end" and not event.turn_id:
+    completion_event = event.event in {"turn-end", "agent-end"}
+    if completion_event and not event.turn_id:
         turn_id = guard("turn-id", _last_prompt_turn, paths, event, default=None)
         if turn_id:
             event = replace(event, turn_id=turn_id)
     guard("session-map", _record_session, paths, event)
     transcript_handled = False
-    if event.event == "turn-end":
+    if completion_event:
         transcript_handled = guard(
             "client-transcript", _recover_assistant_transcript, paths, event, default=False,
         )
-    if not transcript_handled:
+    if not transcript_handled or event.event == "agent-end":
         guard("transcript", _append_transcript, paths, event)
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
@@ -319,7 +321,7 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         handled = _prompt(paths, event, env, guard)
     elif event.event == "post-tool":
         handled = _post_tool(paths, event, deadline, guard)
-    elif event.event == "turn-end":
+    elif completion_event:
         handled = _turn_end(paths, event, guard)
     else:
         handled = Handled(HookResponse(), None)

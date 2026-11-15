@@ -206,6 +206,50 @@ def test_launch_escapes_real_template_substitutions(tmp_path, monkeypatch, capsy
     )
 
 
+@pytest.mark.parametrize("escape", ["file", "parent", "backup"])
+def test_launch_rejects_project_paths_resolving_outside_before_any_write(
+    tmp_path, monkeypatch, capsysbinary, escape,
+):
+    from compchem_memory.harness.render_codex import render as render_codex
+
+    root = _root(tmp_path)
+    project = root / "projects" / "demo"
+    external = tmp_path / "external"
+    external.mkdir()
+    original = b'{"hooks": {}}\n'
+    (external / "hooks.json").write_bytes(original)
+    project.mkdir(parents=True)
+    if escape == "parent":
+        (project / ".codex").symlink_to(external, target_is_directory=True)
+    else:
+        folder = project / ".codex"
+        folder.mkdir()
+        if escape == "file":
+            (folder / "hooks.json").symlink_to(external / "hooks.json")
+        else:
+            (folder / "config.toml").write_text(
+                '# member note\n[mcp_servers.compchem-tools]\ncommand = "old"\n',
+                encoding="utf-8",
+            )
+            (folder / "config.toml.magnolia-backup").symlink_to(
+                external / "escaped-backup.toml"
+            )
+    monkeypatch.setitem(RENDERERS, "codex", render_codex)
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    args = _args(root)
+    args[args.index("claude")] = "codex"
+
+    assert launch_cli.main(args) == 1
+    captured = capsysbinary.readouterr()
+
+    assert captured.out == b""
+    assert captured.err.count(b"\n") == 1
+    assert b"leaves the project" in captured.err
+    assert (external / "hooks.json").read_bytes() == original
+    assert not (external / "escaped-backup.toml").exists()
+    assert not (project / ".magnolia").exists()
+
+
 @pytest.mark.parametrize(
     ("argv", "env", "message"),
     [

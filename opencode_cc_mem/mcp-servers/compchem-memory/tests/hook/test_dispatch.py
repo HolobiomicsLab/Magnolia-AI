@@ -173,6 +173,62 @@ def test_dispatch_turn_end_passes_turn_id_to_critic_and_probe(tmp_path, monkeypa
     ]
 
 
+def test_claude_native_subagent_stop_recovers_and_judges_child_reply(
+    tmp_path, monkeypatch,
+):
+    from compchem_memory.harness.render_claude import EVENTS
+    from compchem_memory.hook import action_retrieval
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project, env = _workspace(tmp_path)
+    raw = json.loads(
+        (FIXTURES / "claude" / "subagent" / "09-SubagentStop.sub.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    raw.update({
+        "cwd": str(project),
+        "session_id": "session-1",
+        "agent_id": "a18415b0acfbb69d4",
+        "prompt_id": "4bb02dbd-650d-4e13-a0bc-9511d9c860cb",
+        "agent_transcript_path": str(
+            CLIENT_TRANSCRIPTS / "claude" / "subagents" / "agent-a18415b0acfbb69d4.jsonl"
+        ),
+    })
+    observed = []
+    monkeypatch.setattr(
+        action_retrieval,
+        "probe_application",
+        lambda paths, harness, session_id, reply, turn_id: observed.append(
+            ("probe", harness, session_id, reply, turn_id)
+        ),
+    )
+    monkeypatch.setattr(
+        critic,
+        "run_critic",
+        lambda paths, harness, session_id, agent_id, turn_id: observed.append(
+            ("critic", harness, session_id, agent_id, turn_id)
+        ),
+    )
+
+    for _ in range(2):
+        neutral_name = EVENTS[raw["hook_event_name"]]
+        event = ADAPTERS["claude"].parse(raw, neutral_name)
+        assert event is not None and event.event == "agent-end"
+        handle(event, env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "claude" / "session-1.jsonl")
+    assistant = [row for row in rows if row["kind"] == "assistant"]
+    assert [(row["text"], row["agent"]["id"]) for row in assistant] == [
+        ("beta line", "a18415b0acfbb69d4")
+    ]
+    expected_turn = "4bb02dbd-650d-4e13-a0bc-9511d9c860cb"
+    assert observed == [
+        ("probe", "claude", "session-1", "beta line", expected_turn),
+        ("critic", "claude", "session-1", "a18415b0acfbb69d4", expected_turn),
+    ] * 2
+
+
 def test_vibe_turn_end_records_reply_text(tmp_path, monkeypatch):
     from compchem_memory.hook import action_retrieval
     from compchem_memory.hook.transcript import append_event

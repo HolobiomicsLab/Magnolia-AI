@@ -279,6 +279,38 @@ def test_claude_launch_argv(tmp_path):
     assert not (tmp_path / "daemon-ran-tools").exists()
 
 
+def test_alternate_launch_handles_awkward_project_and_installation_paths(tmp_path):
+    base = tmp_path / 'installation "quoted" é'
+    base.mkdir()
+    ws = make_workspace(base)
+    project = 'project "quoted" 雪 with spaces'
+    projects = ws / "opencode_cc_mem" / "projects"
+    (projects / PROJECT).rename(projects / project)
+
+    out = dry_json(run_raw(ws, ["--harness", "claude", project]))
+
+    project_dir = (projects / project).resolve()
+    assert Path(out["cwd"]).resolve() == project_dir
+    assert Path(out["env"]["MAGNOLIA_PROJECT_DIR"]).resolve() == project_dir
+    rendered = json.loads((project_dir / "opencode.json").read_text(encoding="utf-8"))
+    memory = rendered["mcp"]["servers"]["compchem-memory"]
+    assert memory["environment"]["MAGNOLIA_PROJECT_DIR"] == str(project_dir)
+
+
+def test_usage_prints_setup_example_without_executing_it(tmp_path):
+    ws = make_workspace(tmp_path)
+    setup = tmp_path / "stubbin" / "setup"
+    setup.write_text('#!/bin/bash\ntouch "$SENTINEL_DIR/usage-ran-setup"\n', encoding="utf-8")
+    setup.chmod(0o755)
+
+    proc = run_raw(ws, ["--help"])
+
+    assert proc.returncode == 0
+    assert proc.stderr == ""
+    assert "setup --harness H [--model M]" in proc.stdout
+    assert not (tmp_path / "usage-ran-setup").exists()
+
+
 def test_model_from_flag_and_setup(tmp_path):
     ws = make_workspace(tmp_path)
     write_setup(ws, {"models": {"claude": "sonnet"}})

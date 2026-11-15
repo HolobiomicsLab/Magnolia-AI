@@ -121,6 +121,44 @@ def test_codex_preserves_member_entries_and_is_idempotent(make_render):
     assert {path: path.read_bytes() for path in before} == before
 
 
+def test_codex_reconciles_owned_server_transport_sets_and_is_idempotent(make_render):
+    neutral, context = make_render()
+    folder = _dir(context)
+    folder.mkdir(parents=True)
+    path = folder / "config.toml"
+    path.write_text(
+        '[mcp_servers.compchem-tools]\ncommand = "old-local"\n'
+        'args = ["--stdio"]\nenv = { OLD = "1" }\nmember_field = "keep-tools"\n\n'
+        '[mcp_servers.compchem-memory]\nurl = "https://old.example/mcp"\n'
+        'bearer_token_env_var = "OLD_TOKEN"\nhttp_headers = { X_Old = "1" }\n'
+        'env_http_headers = { X_Env = "OLD_HEADER" }\nmember_field = "keep-memory"\n',
+        encoding="utf-8",
+    )
+
+    first = render(neutral, context)
+    path.write_bytes(first.files[path])
+    servers = tomllib.loads(path.read_text(encoding="utf-8"))["mcp_servers"]
+
+    assert servers["compchem-tools"] == {
+        "url": "http://127.0.0.1:8123/mcp",
+        "tool_timeout_sec": 660,
+        "member_field": "keep-tools",
+    }
+    memory = servers["compchem-memory"]
+    assert memory["command"] == "/venv/bin/python"
+    assert memory["args"] == ["-m", "compchem_memory.server"]
+    assert memory["env"]["MAGNOLIA_MEMORY_MODEL"] == "mem-model"
+    assert memory["tool_timeout_sec"] == 660
+    assert memory["member_field"] == "keep-memory"
+    assert not {
+        "url", "bearer_token_env_var", "http_headers", "env_http_headers",
+    }.intersection(memory)
+    before = path.read_bytes()
+    second = render(neutral, context)
+    path.write_bytes(second.files[path])
+    assert path.read_bytes() == before
+
+
 def test_codex_reports_conflicts_and_toml_comment_backup(make_render):
     neutral, context = make_render()
     folder = _dir(context)

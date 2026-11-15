@@ -10,7 +10,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from compchem_memory.harness.files import merged_toml
+from compchem_memory.harness.files import merged_toml, validate_project_paths
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.ownership import owned
 from compchem_memory.harness.protocol import Launch, LaunchContext
@@ -42,6 +42,8 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     folder = context.project_dir / ".vibe"
     conflicts: list[str] = []
     config_path = folder / "config.toml"
+    hooks_path = folder / "hooks.toml"
+    validate_project_paths((config_path, hooks_path), context.project_dir)
     content, found, original = merged_toml(
         config_path, owned, _config(neutral, context, config_path)
     )
@@ -49,11 +51,11 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     conflicts += found
     _keep_backup(files, config_path, original)
     content, found, original = merged_toml(
-        folder / "hooks.toml", owned, {"hooks": _hooks(context)}
+        hooks_path, owned, {"hooks": _hooks(context)}
     )
-    files[folder / "hooks.toml"] = content
+    files[hooks_path] = content
     conflicts += found
-    _keep_backup(files, folder / "hooks.toml", original)
+    _keep_backup(files, hooks_path, original)
     return Launch(
         argv=["vibe", "--workdir", str(context.project_dir)],
         env=env,
