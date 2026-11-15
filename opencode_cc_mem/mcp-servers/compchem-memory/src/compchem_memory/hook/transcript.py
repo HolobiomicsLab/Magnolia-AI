@@ -85,7 +85,7 @@ def _event_row(event: HookEvent) -> dict | None:
 
 
 def _tool_row(tool: ToolCall, phase: str) -> dict:
-    row = {"kind": "tool", "phase": phase, "name": tool.name,
+    row = {"kind": "tool", "phase": phase, "name": tool.name, "server": tool.server,
            "call_id": tool.call_id, "input": _clean_input(tool.input)}
     if isinstance(row["input"], str):
         row["truncated"] = True
