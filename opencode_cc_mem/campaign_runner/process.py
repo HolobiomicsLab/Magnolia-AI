@@ -22,9 +22,10 @@ BARRIER_EXEC_FAILURE_EXIT = 126
 BARRIER_EXEC_NOT_FOUND_EXIT = 127
 _BARRIER_ENV_SNAPSHOT = "MAGNOLIA_BARRIER_ORIGINAL_ENV"
 _BARRIER_STUB = f"""
-import errno, json, os, sys
+import errno, json, os, signal, sys
 fd = int(sys.argv[1])
 client_path = sys.argv[2]
+client_argv0 = sys.argv[3]
 try:
     released = os.read(fd, 1)
 except OSError:
@@ -35,15 +36,14 @@ try:
     os.close(fd)
 except OSError:
     os._exit({BARRIER_FAILURE_EXIT})
-snapshot = json.loads(os.environ.pop({_BARRIER_ENV_SNAPSHOT!r}))
-original_keys = set(snapshot["keys"])
-for key in tuple(os.environ):
-    if key not in original_keys:
-        del os.environ[key]
-if snapshot["marker_present"]:
-    os.environ[{_BARRIER_ENV_SNAPSHOT!r}] = snapshot["marker_value"]
+snapshot = json.loads(os.environ[{_BARRIER_ENV_SNAPSHOT!r}])
+original_env = {{bytes.fromhex(key): bytes.fromhex(value) for key, value in snapshot}}
+for signal_name in ("SIGPIPE", "SIGXFZ", "SIGXFSZ"):
+    changed_signal = getattr(signal, signal_name, None)
+    if changed_signal is not None:
+        signal.signal(changed_signal, signal.SIG_DFL)
 try:
-    os.execv(client_path, [client_path, *sys.argv[3:]])
+    os.execve(client_path, [client_argv0, *sys.argv[4:]], original_env)
 except OSError as exc:
     code = {BARRIER_EXEC_NOT_FOUND_EXIT} if exc.errno == errno.ENOENT else {BARRIER_EXEC_FAILURE_EXIT}
     detail = os.strerror(exc.errno or errno.EIO).replace("\\n", " ")
@@ -200,28 +200,30 @@ def _start_governed_process(
 ) -> subprocess.Popen:
     try:
         client_path = _resolve_executable(argv[0], cwd, env)
-        read_fd, write_fd = os.pipe()
+        environment_snapshot = _snapshot_environment(env)
     except OSError as exc:
         raise _process_start_error(exc) from exc
-    launch_argv = [
-        sys.executable,
-        "-I",
-        "-S",
-        "-c",
-        _BARRIER_STUB,
-        str(read_fd),
-        client_path,
-        *argv[1:],
-    ]
     launch_env = dict(env)
-    launch_env[_BARRIER_ENV_SNAPSHOT] = json.dumps(
-        {
-            "keys": tuple(env),
-            "marker_present": _BARRIER_ENV_SNAPSHOT in env,
-            "marker_value": env.get(_BARRIER_ENV_SNAPSHOT),
-        }
-    )
+    launch_env.pop(_BARRIER_ENV_SNAPSHOT, None)
+    launch_env.pop(os.fsencode(_BARRIER_ENV_SNAPSHOT), None)
+    launch_env.pop("__PYVENV_LAUNCHER__", None)
+    launch_env.pop(b"__PYVENV_LAUNCHER__", None)
+    launch_env[_BARRIER_ENV_SNAPSHOT] = environment_snapshot
+    read_fd = None
+    write_fd = None
     try:
+        read_fd, write_fd = os.pipe()
+        launch_argv = [
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            _BARRIER_STUB,
+            str(read_fd),
+            client_path,
+            argv[0],
+            *argv[1:],
+        ]
         process = subprocess.Popen(
             launch_argv,
             cwd=str(cwd),
@@ -232,8 +234,10 @@ def _start_governed_process(
             pass_fds=(read_fd,),
         )
     except BaseException as exc:
-        os.close(read_fd)
-        os.close(write_fd)
+        if read_fd is not None:
+            os.close(read_fd)
+        if write_fd is not None:
+            os.close(write_fd)
         if isinstance(exc, OSError):
             raise _process_start_error(exc) from exc
         raise
@@ -278,12 +282,20 @@ def _resolve_executable(
             raise PermissionError(
                 errno.EACCES, os.strerror(errno.EACCES), executable
             )
-        return str(candidate.resolve())
+        return os.path.abspath(candidate)
     search_path = os.pathsep.join(os.get_exec_path(env))
     resolved = shutil.which(executable, path=search_path)
     if resolved is None:
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), executable)
-    return str(Path(resolved).resolve())
+    return os.path.abspath(resolved)
+
+
+def _snapshot_environment(env: Mapping[str, str]) -> str:
+    snapshot = [
+        (os.fsencode(key).hex(), os.fsencode(value).hex())
+        for key, value in env.items()
+    ]
+    return json.dumps(snapshot, separators=(",", ":"))
 
 
 def _process_start_error(exc: OSError) -> ProcessStartError:
@@ -291,8 +303,12 @@ def _process_start_error(exc: OSError) -> ProcessStartError:
 
 
 def _kill_and_reap(process: subprocess.Popen) -> None:
-    if process.returncode is None:
-        _signal_group(process.pid, signal.SIGKILL)
+    if process.returncode is None and process.poll() is None:
+        try:
+            _signal_group(process.pid, signal.SIGKILL)
+        except PermissionError:
+            if process.poll() is None:
+                raise
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:

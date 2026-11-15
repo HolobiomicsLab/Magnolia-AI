@@ -1,5 +1,6 @@
-import multiprocessing
+import errno
 import json
+import multiprocessing
 import os
 import signal
 import subprocess
@@ -84,6 +85,57 @@ def _open_spare_fds(through_fd):
     while not held or held[-1] < through_fd:
         held.append(os.open(os.devnull, os.O_RDONLY))
     return held
+
+
+def _open_fds(limit=256):
+    opened = set()
+    for fd in range(limit):
+        try:
+            os.fstat(fd)
+        except OSError:
+            continue
+        opened.add(fd)
+    return opened
+
+
+def _run_captured(tmp_path, stem, argv, env, governed):
+    control = None
+    if governed:
+        control = ProcessControl(
+            on_start=lambda _pid, _pgid: None,
+            hold_before_exec=True,
+        )
+    outcome = run_process(
+        argv,
+        cwd=tmp_path,
+        env=env,
+        timeout_seconds=30,
+        stdout_path=tmp_path / f"{stem}.out",
+        stderr_path=tmp_path / f"{stem}.err",
+        control=control,
+    )
+    return (
+        outcome,
+        (tmp_path / f"{stem}.out").read_bytes(),
+        (tmp_path / f"{stem}.err").read_bytes(),
+    )
+
+
+def _reap_test_process(pid):
+    try:
+        waited, _status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        return
+    if waited:
+        return
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass
 
 
 def test_run_process_stops_on_callback(tmp_path):
@@ -222,6 +274,8 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     client.chmod(0o755)
+    client_link = client_dir / "inspect client link"
+    client_link.symlink_to(client)
     canary = tmp_path / "injected"
     hostile = [
         f"$(touch {canary})",
@@ -251,7 +305,7 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(process_module.os, "pipe", record_pipe)
     try:
         outcome = run_process(
-            [str(client), *hostile],
+            [str(client_link), *hostile],
             cwd=tmp_path,
             env=child_env,
             timeout_seconds=30,
@@ -269,7 +323,7 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
     assert outcome.returncode == 0
     assert barrier_fds[0][0] >= 10
     assert payload["argv_bytes"] == [os.fsencode(value).hex() for value in hostile]
-    assert payload["argv0_bytes"] == os.fsencode(client.resolve()).hex()
+    assert payload["argv0_bytes"] == os.fsencode(str(client_link)).hex()
     assert payload["env"] == child_env
     assert "PWD" not in payload["env"] and "SHLVL" not in payload["env"]
     assert payload["pid"] == payload["pgid"] == payload["sid"]
@@ -301,6 +355,102 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
     )
     assert exited.returncode == 3
     assert signalled.returncode == -signal.SIGTERM
+
+
+@pytest.mark.parametrize(
+    "child_env",
+    [
+        {"PATH": "/usr/bin:/bin", "SENTINEL": "no locale"},
+        {"PATH": "/usr/bin:/bin", "LC_CTYPE": "C", "SENTINEL": "locale"},
+        {
+            "PATH": "/usr/bin:/bin",
+            "__PYVENV_LAUNCHER__": "/x/python",
+            "SENTINEL": "launcher",
+        },
+        {
+            "PATH": "/usr/bin:/bin",
+            "MAGNOLIA_BARRIER_ORIGINAL_ENV": "caller value",
+        },
+        {b"PATH": b"/usr/bin:/bin", b"SENTINEL": b"bytes key and value"},
+    ],
+    ids=[
+        "no-lc-all",
+        "lc-ctype-c",
+        "pyvenv-launcher",
+        "snapshot-marker",
+        "bytes-environment",
+    ],
+)
+def test_governed_client_environment_matches_plain_popen(tmp_path, child_env):
+    governed = _run_captured(
+        tmp_path, "governed-env", ["/usr/bin/env"], child_env, True
+    )
+    plain = _run_captured(tmp_path, "plain-env", ["/usr/bin/env"], child_env, False)
+
+    assert governed[0].returncode == plain[0].returncode == 0
+    assert sorted(governed[1].splitlines()) == sorted(plain[1].splitlines())
+    assert governed[2] == plain[2] == b""
+
+
+def test_governed_venv_interpreter_matches_plain_popen(tmp_path):
+    code = (
+        "import json, os, sys; "
+        "print(json.dumps({'prefix': sys.prefix, 'executable': sys.executable, "
+        "'environment': dict(os.environ)}, sort_keys=True))"
+    )
+    child_env = dict(os.environ)
+    child_env.pop("LC_ALL", None)
+    child_env["LC_CTYPE"] = "C"
+
+    governed = _run_captured(
+        tmp_path, "governed-venv", [sys.executable, "-c", code], child_env, True
+    )
+    plain = _run_captured(
+        tmp_path, "plain-venv", [sys.executable, "-c", code], child_env, False
+    )
+
+    assert governed[0].returncode == plain[0].returncode == 0
+    assert json.loads(governed[1]) == json.loads(plain[1])
+    assert governed[2] == plain[2] == b""
+
+
+def test_governed_stub_restores_subprocess_signal_dispositions(tmp_path):
+    command = '(yes; echo "yes rc=$?" >&2) | head -1 >/dev/null'
+    child_env = {"PATH": "/usr/bin:/bin"}
+
+    governed = _run_captured(
+        tmp_path, "governed-signals", ["/bin/sh", "-c", command], child_env, True
+    )
+    plain = _run_captured(
+        tmp_path, "plain-signals", ["/bin/sh", "-c", command], child_env, False
+    )
+
+    assert governed[0].returncode == plain[0].returncode == 0
+    assert governed[2] == plain[2]
+    assert b"yes rc=141" in governed[2]
+
+
+def test_snapshot_failure_matches_popen_without_leaking_pipe_fds(tmp_path):
+    invalid_env = {object(): "value"}
+    with pytest.raises(Exception) as plain:
+        subprocess.Popen(["/usr/bin/true"], env=invalid_env)
+    before = _open_fds()
+
+    with pytest.raises(type(plain.value)):
+        run_process(
+            ["/usr/bin/true"],
+            cwd=tmp_path,
+            env=invalid_env,
+            timeout_seconds=30,
+            stdout_path=tmp_path / "invalid-env.out",
+            stderr_path=tmp_path / "invalid-env.err",
+            control=ProcessControl(
+                on_start=lambda _pid, _pgid: None,
+                hold_before_exec=True,
+            ),
+        )
+
+    assert _open_fds() == before
 
 
 @pytest.mark.parametrize("remove_before_release, expected", [(False, 126), (True, 127)])
@@ -418,6 +568,115 @@ def test_governed_pre_exec_failure_is_not_accounted(
         assert str(governed.value) == str(ungoverned.value)
 
     assert usage.report(datetime.now(timezone.utc).date())["day"]["runs"] == 0
+    state = json.loads(usage.state_path.read_text(encoding="utf-8"))
+    assert state["reservations"] == {}
+
+
+def test_real_epipe_keeps_start_error_and_cancels_reservation(tmp_path, monkeypatch):
+    real_popen = subprocess.Popen
+    launcher_pids = []
+
+    class DiesBeforeRelease(real_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._die_on_poll = "-I" in self.args and "-S" in self.args
+            if self._die_on_poll:
+                launcher_pids.append(self.pid)
+
+        def poll(self):
+            if self._die_on_poll:
+                self._die_on_poll = False
+                os.kill(self.pid, signal.SIGKILL)
+                time.sleep(0.1)
+                return None
+            return super().poll()
+
+    def zombie_group_eperm(_pid, _sent_signal):
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM))
+
+    monkeypatch.setattr(process_module.subprocess, "Popen", DiesBeforeRelease)
+    monkeypatch.setattr(process_module, "_signal_group", zombie_group_eperm)
+    binary = tmp_path / "client"
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    usage = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    selected = ResolvedRoute(
+        "opencode", "provider/model", "provider", "opencode:provider", "worker", "test"
+    )
+    executor = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+        governance=InvocationGovernance(usage, selected, "run-1", "project"),
+    )
+
+    try:
+        with pytest.raises(WorkerError, match="Broken pipe"):
+            executor.run("work", tmp_path, tmp_path / "attempt")
+    finally:
+        for pid in launcher_pids:
+            _reap_test_process(pid)
+
+    assert not (tmp_path / "usage-ledger.jsonl").exists()
+    state = json.loads(usage.state_path.read_text(encoding="utf-8"))
+    assert state["reservations"] == {}
+    assert not (tmp_path / "client-ran").exists()
+
+
+@pytest.mark.parametrize("failure", ["callback", "keyboard_interrupt"])
+def test_dead_launcher_cleanup_preserves_on_start_failure(
+    tmp_path, monkeypatch, failure
+):
+    launcher_pids = []
+
+    def zombie_group_eperm(_pid, _sent_signal):
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM))
+
+    def fail_after_launcher_exit(pid, _pgid):
+        launcher_pids.append(pid)
+        os.kill(pid, signal.SIGKILL)
+        time.sleep(0.1)
+        if failure == "keyboard_interrupt":
+            raise KeyboardInterrupt
+        raise RuntimeError("caller callback failed")
+
+    monkeypatch.setattr(process_module, "_signal_group", zombie_group_eperm)
+    binary = tmp_path / "client"
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    usage = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    selected = ResolvedRoute(
+        "opencode", "provider/model", "provider", "opencode:provider", "worker", "test"
+    )
+    executor = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+        governance=InvocationGovernance(usage, selected, "run-1", "project"),
+    )
+
+    expected = KeyboardInterrupt if failure == "keyboard_interrupt" else WorkerError
+    try:
+        with pytest.raises(expected) as raised:
+            executor.run(
+                "work",
+                tmp_path,
+                tmp_path / "attempt",
+                control=ProcessControl(on_start=fail_after_launcher_exit),
+            )
+    finally:
+        for pid in launcher_pids:
+            _reap_test_process(pid)
+
+    if failure == "callback":
+        assert "caller callback failed" in str(raised.value)
+    assert not (tmp_path / "usage-ledger.jsonl").exists()
     state = json.loads(usage.state_path.read_text(encoding="utf-8"))
     assert state["reservations"] == {}
 
