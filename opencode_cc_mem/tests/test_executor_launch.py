@@ -237,6 +237,25 @@ def test_resume_refuses_other_project_identity(tmp_path):
         )
 
 
+@pytest.mark.parametrize("replacement", ("symlink", "directory"))
+def test_resume_refuses_non_regular_artifact(tmp_path, replacement):
+    first = prepare_launch(_context(tmp_path))
+    policy = first.invocation_dir / "policy.json"
+    policy.chmod(0o644)
+    body = policy.read_bytes()
+    policy.unlink()
+    if replacement == "symlink":
+        target = tmp_path / "run" / "work" / "policy.json"
+        target.write_bytes(body)
+        target.chmod(0o444)
+        policy.symlink_to(target)
+    else:
+        policy.mkdir(mode=0o444)
+
+    with pytest.raises(ExecutorRefused, match="regular file"):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
 @pytest.mark.parametrize(
     ("evidence_change", "message"),
     (
@@ -335,6 +354,61 @@ def test_forbidden_path_value_is_not_matched_as_unrelated_path_prefix(tmp_path):
     launch = prepare_launch(context)
 
     assert str(shared.resolve()) in _artifact_text(launch)
+
+
+def test_forbidden_path_value_is_not_matched_as_sibling_prefix(tmp_path):
+    config_root = tmp_path / "project" / "cfg"
+    config_root.mkdir(parents=True)
+    shared = tmp_path / "project" / "cfg-shared" / "skill.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("skill\n", encoding="utf-8")
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"CLAUDE_CONFIG_DIR": str(config_root)},
+        shared_skill_files=(shared,),
+    )
+
+    launch = prepare_launch(context)
+
+    assert str(shared.resolve()) in _artifact_text(launch)
+
+
+@pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
+def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter):
+    secret = "sk-ant-SECRET_123"
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp{delimiter}{secret}",
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="forbidden client environment value"):
+        prepare_launch(context)
+
+
+def test_forbidden_secret_value_is_not_matched_inside_longer_key_token(tmp_path):
+    secret = "sk-ant-SECRET_123"
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp/{secret}X",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert f"{secret}X" in _artifact_text(launch)
 
 
 def test_noninteractive_mention_writes_no_letter(tmp_path):
@@ -646,8 +720,7 @@ def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entry
         f"sys.argv=[{str(script)!r},'--help']; "
         "\ntry: runpy.run_path(sys.argv[0], run_name='__main__')"
         "\nexcept SystemExit as exc:\n assert exc.code in (0, None)"
-        "\nmodule=sys.modules.get('campaign_runner.launch')"
-        "\nassert module is not None"
+        "\nfrom campaign_runner import launch as module"
         "\nprint('LAUNCH_MODULE=' + module.__file__)"
     )
 
@@ -667,3 +740,31 @@ def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entry
         line for line in result.stdout.splitlines() if line.startswith("LAUNCH_MODULE=")
     )
     assert Path(module_line.split("=", 1)[1]).is_relative_to(ROOT)
+
+
+def test_daemon_help_does_not_require_pyyaml(tmp_path):
+    script = ROOT / "softwares" / "bin" / "magnolia-agents-daemon"
+    probe = (
+        "import builtins,runpy,sys; "
+        "original_import=builtins.__import__; "
+        "\ndef import_without_yaml(name,*args,**kwargs):"
+        "\n if name == 'yaml' or name.startswith('yaml.'):"
+        "\n  raise ModuleNotFoundError(\"No module named 'yaml'\")"
+        "\n return original_import(name,*args,**kwargs)"
+        "\nbuiltins.__import__=import_without_yaml"
+        f"\nsys.argv=[{str(script)!r},'--help']"
+        "\nrunpy.run_path(sys.argv[0], run_name='__main__')"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=tmp_path,
+        env={"HOME": os.environ["HOME"], "PATH": os.environ.get("PATH", "")},
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout.lower()
