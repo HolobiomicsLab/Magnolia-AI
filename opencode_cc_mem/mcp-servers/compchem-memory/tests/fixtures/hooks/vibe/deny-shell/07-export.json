@@ -1,0 +1,23 @@
+{
+ "cost_usd": 0.0,
+ "error": null,
+ "exit_code": 0,
+ "limits": {
+  "max_price": 0.05,
+  "max_tokens": null,
+  "max_turns": 8,
+  "time_limit_s": null
+ },
+ "outcome": "finished",
+ "schema_version": 1,
+ "steps": 2,
+ "stop_reason": null,
+ "subagents": [],
+ "usage": {
+  "cached_input_tokens": 19584,
+  "input_tokens": 42537,
+  "output_tokens": 128,
+  "total_tokens": 42665
+ },
+ "vibe_version": "3.1.2"
+}

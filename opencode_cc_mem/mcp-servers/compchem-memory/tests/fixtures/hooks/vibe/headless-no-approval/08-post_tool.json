@@ -1,0 +1,17 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "duration_ms": 0,
+ "hook_event_name": "post_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-15",
+ "tool_call_id": "typescript:10:chatcmpl-tool-8b300dc536942b0b:0:tool:0",
+ "tool_error": "Tool execution denied by approval callback",
+ "tool_input": {
+  "text": "top"
+ },
+ "tool_name": "mcp_probe.echo",
+ "tool_output": null,
+ "tool_output_text": "Tool execution denied by approval callback",
+ "tool_status": "failure",
+ "transcript_path": "/HOME/<elided>"
+}

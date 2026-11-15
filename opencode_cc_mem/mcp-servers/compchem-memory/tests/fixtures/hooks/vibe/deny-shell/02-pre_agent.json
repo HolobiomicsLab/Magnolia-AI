@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-deny-shell",
+ "hook_event_name": "pre_agent",
+ "parent_session_id": null,
+ "prompt": "Run the shell command: echo hi > shell-ran.txt . Then report what happened.",
+ "session_id": "ses-fixture-19",
+ "transcript_path": "/HOME/<elided>",
+ "turn_id": "turn-f9908032bd623145d34a8e08bd8428fb"
+}

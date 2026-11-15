@@ -1,0 +1,21 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "duration_ms": 0,
+ "hook_event_name": "post_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-15",
+ "tool_call_id": "typescript:20:chatcmpl-tool-bc195cc29b1ecf28:0:tool:0",
+ "tool_error": null,
+ "tool_input": {
+  "instructions": "You are a small helper agent. Your only task: call the MCP probe echo tool \u2014 in run_typescript, invoke tools.mcp_probe.echo({ text: 'sub' }) \u2014 then reply with the exact returned result string. If the call is denied or errors, reply with the exact error message instead.",
+  "message": "Call the probe echo tool (tools.mcp_probe.echo, exposed in your sandbox under the mcp_probe connector) exactly once with the text 'sub', then reply with the exact string it returned. If the tool call is denied or fails, reply with the exact error you received.",
+  "name": "probe-sub2"
+ },
+ "tool_name": "agents.spawn",
+ "tool_output": {
+  "type": "success"
+ },
+ "tool_output_text": "type: success",
+ "tool_status": "success",
+ "transcript_path": "/HOME/<elided>"
+}

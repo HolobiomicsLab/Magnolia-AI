@@ -1,0 +1,8 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-deny-shell",
+ "hook_event_name": "session_end",
+ "parent_session_id": null,
+ "reason": "exit",
+ "session_id": "ses-fixture-19",
+ "transcript_path": "/HOME/<elided>"
+}

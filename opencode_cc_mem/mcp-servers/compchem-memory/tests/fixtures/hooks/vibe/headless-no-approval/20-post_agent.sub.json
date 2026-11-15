@@ -1,0 +1,8 @@
+{
+ "agent_name": "accept-edits",
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "post_agent",
+ "parent_session_id": "ses-fixture-15",
+ "session_id": "ses-fixture-16",
+ "transcript_path": "/HOME/<elided>"
+}

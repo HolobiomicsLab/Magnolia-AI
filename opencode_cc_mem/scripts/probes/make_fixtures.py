@@ -33,7 +33,7 @@ HOME = os.path.expanduser("~")
 SECRET_KEY = re.compile(
     r"(?i)^(api[_-]?key|apikey|password|passwd|secret|client[_-]?secret|authorization|"
     r"(access|refresh|id|auth|bearer|session)[_-]?token|token)$")
-SHELL_TOOLS = ("Bash", "shell", "exec_command", "local_shell")
+SHELL_TOOLS = ("Bash", "shell", "exec_command", "local_shell", "file_system.bash")
 sess = {}
 
 
@@ -46,7 +46,7 @@ def scrub_str(s):
     s = re.sub(r"/var/folders/[^\"' ]*?/T/", "/TMPDIR/", s)
     s = re.sub(r"-private-var-folders-[A-Za-z0-9]+-[A-Za-z0-9]+-T-", "-TMPDIR-", s)
     s = re.sub(r"/private/tmp/claude-\d+/[^\"' ]*", "/TMPDIR/claude-scratchpad", s)
-    s = s.replace(HOME, "/HOME").replace("/Users/", "/HOME-")
+    s = s.replace(HOME, "/HOME").replace(os.path.basename(HOME), "USER").replace("/Users/", "/HOME-")
     s = re.sub(r"/HOME/(?!\.codex/|\.claude/)[^\s'\"]+", "/HOME/<elided>", s)
     s = re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "<email>", s)
     s = re.sub(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+", "<redacted>", s)
@@ -73,7 +73,7 @@ def scrub(o):
                 continue
             elif SECRET_KEY.match(k) and v not in (None, "", [], {}):
                 out[k] = "<redacted>"
-            elif shell and k == "tool_response" or cmd_item and k == "aggregated_output" and v:
+            elif shell and k in ("tool_response", "tool_output", "tool_output_text") and v or cmd_item and k == "aggregated_output" and v:
                 out[k] = elided(v)
             else:
                 out[k] = scrub(v)
@@ -207,3 +207,41 @@ write("codex", "turn-failed", [
     ("turn-failed", {"type": "turn.failed", "error": {"message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The '<model>' model is not supported when using Codex with a ChatGPT account.\",\"code\":\"model_not_found\"}}"}})],
     {"client": "codex", "version": "0.154.0", "command": "run_probes.sh codex_run deny-write <prompt>  (default model from the user config, refused by the account)",
      "observed": "hand-transcribed from the console output of a refused run; shape of error and turn.failed events"})
+
+
+# Vibe: hook payloads (run by the lead with --trust on temp projects) + a reduced export.json
+def vibe_items(run):
+    out = []
+    for line in open(f"{T}/probe-vibe-{run}/log.jsonl"):
+        s = json.loads(line)["stdin"]
+        out.append((s["hook_event_name"] + (".sub" if s.get("parent_session_id") else ""), s))
+    return out
+
+
+EXPORT_KEEP = ("outcome", "stop_reason", "error", "usage", "cost_usd", "steps", "limits", "exit_code",
+               "schema_version", "vibe_version", "subagents")
+
+
+def vibe_export(run):  # config, warnings, journal paths and timestamps are dropped (private configuration)
+    e = json.load(open(f"{T}/probe-vibe-{run}/out/export.json"))
+    e = {k: e[k] for k in EXPORT_KEEP if k in e}
+    e["subagents"] = [{k: v for k, v in a.items() if k != "journal_dir"} for a in e.get("subagents", [])]
+    return [("export", e)]
+
+
+VB = ("VIBE_DISABLE_TELEMETRY=true vibe -p <prompt> --output json --workdir <tmp> --trust --max-turns 8 "
+      "--max-price 0.05 --output-dir <tmp>/out [--auto-approve ...] (temp project only, run by the lead on the owner's go)")
+vm = lambda obs: {"client": "vibe", "version": "3.1.2", "command": VB, "observed": obs}
+vp = vibe_items("parent")
+write("vibe", "parent", vp + vibe_export("parent"), vm("--auto-approve --disabled-tools file_system.bash/write_file/edit; parent plus two agents.spawn subagents; export.json reduced"))
+write("vibe", "subagent", [x for x in vp if ".sub" in x[0]], vm("events inside agents.spawn subagents carry parent_session_id and their own child-... session_id"))
+write("vibe", "two-hooks", [x for x in vp if x[0].startswith("post_tool")], vm("five post_tool events; second independent hook wrote five lines"))
+for run, scen, obs in (
+    ("parent-noapprove", "headless-no-approval", "without --auto-approve the MCP tool is denied (needs approval a headless run cannot give); stopped at turn_limit"),
+    ("tool-error", "tool-error", "failing MCP tool: post_tool with tool_status failure and tool_error; no separate failure event"),
+    ("deny-shell", "deny-shell", "PROBE_DENY=bash: pre_tool hook denied file_system.bash; no post_tool; file not created"),
+    ("deny-write", "deny-write", "no deny hook: the shell wrote outside the project and TMPDIR successfully; Vibe has no sandbox"),
+    ("ctx-small", "context-small", "session_start additional_context of 2000 bytes; model did not report the marker (inconclusive)"),
+    ("ctx-max", "context-max", "session_start additional_context of 256043 bytes; model reported MAGNOLIA-END-7Q")):
+    write("vibe", scen, vibe_items(run) + vibe_export(run), vm(obs))
+write("vibe", "enabled-tools-hides-mcp", vibe_items("parent-filtered") if os.path.exists(f"{T}/probe-vibe-parent-filtered/log.jsonl") else [] , vm("--enabled-tools mcp_probe.echo: the MCP tool vanished from the tool list, no tool call (enabled-tools names do not match MCP tools)"))

@@ -29,7 +29,7 @@ Step 5 grep (`token|bearer|@|/Users/`) could be satisfied by the renaming above;
 `make_fixtures.py --check <fixtures_root>`, which looks for the home directory, the login and full name, e-mail
 addresses, `/Users/` paths and Bearer/`sk-` strings, and exits 1 on any hit.
 
-Status: Claude Code and Codex probed (Codex hooks via `--dangerously-bypass-hook-trust` on temp projects at the owner's request, 15 Nov). Vibe: not probed (awaiting the owner's go to install mistral-vibe).
+Status: Claude Code and Codex probed (Codex hooks via `--dangerously-bypass-hook-trust` on temp projects at the owner's request, 15 Nov). Vibe 3.1.2 probed (run by the lead on the owner's go, with `--trust` on temp projects only).
 Anything not observed is "unknown", not "absent".
 
 ## Executables
@@ -38,7 +38,7 @@ Anything not observed is "unknown", not "absent".
 |---|---|---|---|
 | Claude Code | 2.1.325 | `~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe` | `84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2` |
 | Codex | codex-cli 0.154.0 | `~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex` | `4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc` |
-| Vibe | not installed | | |
+| Vibe | 3.1.2 (`uv tool install mistral-vibe==3.1.2`) | `~/.local/share/uv/tools/mistral-vibe/bin/vibe` (symlinked from `~/.local/bin/vibe`) | `c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9` |
 
 ## Commands (replayable)
 
@@ -128,9 +128,48 @@ Context size (`codex/context-small/`, `codex/context-max/`, SessionStart `additi
 
 Caveat: 256 000 identical letters tokenise very compactly (about 2.3 k extra tokens), so this shows that the end of the payload reached the model, not that every character did, and only a realistic text payload can measure a limit. The same caveat applies to the Claude result, where the model reported seeing only a preview. Codex accepted and delivered the tail of a 256 KB payload; Claude did not.
 
-## Vibe
+## Vibe 3.1.2
 
-Not probed (awaiting the owner's go to install mistral-vibe).
+Setup: per run a temp project under `$TMPDIR` with `.vibe/config.toml` (`[[mcp_servers]] name = "probe", transport = "stdio"`) and `.vibe/hooks.toml`
+(`[[hooks]]` entries with `name`, `type`, `command`, optional `match`, `timeout`, `strict`; one hook per type plus a second independent `post_tool`).
+Project hooks and project MCP config are read only from a **trusted** folder: the lead passed `--trust` per run, on these temp projects only, on the owner's go (15 Nov);
+this report's author ran no Vibe call. Every run: `VIBE_DISABLE_TELEMETRY=true vibe -p "<prompt>" --output json --workdir <tmp> --trust --max-turns 8 --max-price 0.05 --output-dir <tmp>/out </dev/null`
+(plus the tool flags named per scenario), default model `zai-glm-5-3-flash` ("GLM-5.3 Flash (Mistral Hosted)", free tier), so every run reports `cost_usd` 0.0 and the price cap was never exercised.
+8 model runs; one more attempt failed on argument parsing before any call.
+
+| Hook event | Fields seen (beyond `hook_event_name`, `session_id`, `parent_session_id`, `transcript_path`, `cwd`) | Fixture |
+|---|---|---|
+| session_start | `source`, `agent_name`, `model` | `vibe/parent/01-session_start.json` |
+| pre_agent | `agent_name`, `turn_id`, `prompt` | `vibe/parent/02-pre_agent.json` |
+| pre_tool | `tool_name`, `tool_call_id`, `tool_input` | `vibe/parent/03-pre_tool.json` |
+| post_tool | + `tool_status` (success/failure), `tool_output`, `tool_output_text`, `tool_error`, `duration_ms` | `vibe/parent/04-post_tool.json` |
+| post_agent | `agent_name` | last agent events of `vibe/parent/` |
+| notification | `notification_type`, `message`, `agent_name` | `vibe/parent/` |
+| session_end | `reason` | last file of `vibe/parent/` |
+
+Answers:
+- **Tool name form**: qualified `mcp_<server>.<tool>` (`mcp_probe.echo`), built-ins `file_system.bash`, `agents.spawn`. No `task` tool. Matchers accept short or qualified names, but `--enabled-tools mcp_probe.echo` **hid** the MCP tool from the model (no call; `vibe/enabled-tools-hides-mcp/`): the tool flags do not address MCP tools by that name.
+- **Subagents** (`vibe/subagent/`): spawned through `agents.spawn`; `pre_agent`/`post_agent` fire per subagent; events inside the child carry their own `session_id` (`child-...`) and `parent_session_id` (the parent session). Parent events have `parent_session_id: null`. The two subagents here ended with status `failed` in export.json although each completed its echo call (cause not investigated: unknown). `session_start` never fires for subagents, per the docs.
+- **Two post_tool hooks** (`vibe/two-hooks/`): both ran; the second hook wrote five lines for five post_tool events.
+- **Tool error** (`vibe/tool-error/`): a failing MCP tool arrives as a normal `post_tool` with `tool_status: "failure"`, `tool_error` set and `tool_output: null`; there is no separate failure event.
+- **Headless approval** (`vibe/headless-no-approval/`): without `--auto-approve` the MCP tool is denied ("needs approval, which a headless run cannot give") and the run stopped at `turn_limit`; hooks still all fired. Governor runs need `--auto-approve` plus explicit `--disabled-tools`.
+- **What a hook returns** (from Vibe's bundled docs, exercised here for the two used): exit 0 and empty stdout = pass; JSON `{"decision": "deny", "reason": ...}` on `pre_tool` denies; `{"hook_specific_output": {"additional_context": ...}}` on `session_start`/`pre_agent`/`post_tool` adds context; `strict = true` (pre_tool, post_tool, pre_agent) escalates a hook failure to a block. Unparseable stdout counts as failure.
+- **Context size** (`vibe/context-small/`, `vibe/context-max/`, `session_start` `additional_context`):
+
+| | bytes emitted | hook output accepted | model reported marker | `input_tokens` |
+|---|---|---|---|---|
+| control | 2 000 | yes | no (the model said it had no hidden token: inconclusive) | 21 503 |
+| max | 256 043 | yes | yes (`MAGNOLIA-END-7Q`) | 85 264 |
+
+  The payload reached the model (about 63 k extra input tokens, a far less compact tokenisation than in the other clients). Caveat: repeated letters; only realistic text can measure a limit.
+- **Instructions file, skills location, disabling the shell**: the shell is disabled with `--disabled-tools file_system.bash` (also `file_system.write_file`, `file_system.edit`). Per the bundled docs, instructions are `AGENTS.md` (project root, `~/.vibe/AGENTS.md`) and skills are `.vibe/skills/` and `.agents/skills/`; neither was exercised.
+
+`export.json` (written by `--output-dir`, fixtures keep a reduced copy named `NN-export.json`; the `config` block embeds the effective configuration and is dropped; session journal files were not kept):
+`outcome` (`finished` | `turn_limit`), `stop_reason`, `error`, `exit_code`, `usage{input_tokens, output_tokens, cached_input_tokens, total_tokens}`, `cost_usd`, `steps`, `limits{max_turns, max_price, max_tokens, time_limit_s}`,
+`subagents[]` (each with `session_id`, `parent_session_id`, `agent_name`, `status`, `model`, own `usage`, `cost_usd`, `pricing_model`, `pricing_fallback`, `steps`), `started_at`, `ended_at`, `vibe_version`, `schema_version`.
+For a usage governor this offers exact per-run and per-subagent tokens and cost, the limit that stopped the run (`outcome: turn_limit`, exit code 3 in the no-approval run) and `--max-turns/--max-price` as hard caps. On the free tier cost is 0.0, so a money cap can only be verified on a paid model: unknown. Parent `usage` for the three-session run was 133 206 input / 659 output tokens (`vibe/parent/`).
+
+Denial (the table below): `deny-shell` (`PROBE_DENY=bash`, `--auto-approve`, write/edit disabled, `vibe/deny-shell/`): pre_tool `file_system.bash` denied by the hook, no post_tool, no file created. `deny-write` (`vibe/deny-write/`): no deny hook; the shell wrote `/private/var/tmp/magnolia-probe-deny-vibe/x.txt` outside the project, `$TMPDIR` and `/tmp` with exit 0; the lead deleted it afterwards. Vibe has no sandbox: nothing but a hook or the tool list stops an out-of-project write.
 
 ## Usage-limit texts (Step 4b)
 
@@ -143,14 +182,18 @@ No limit was hit. Not recorded from documentation either: no client help text or
 | Claude Code | MCP tool | PreToolUse hook `permissionDecision` / `--allowedTools` | not probed |
 | Codex | built-in shell (`Bash`) | PreToolUse hook `deny` | yes, hook (`codex/deny-shell/`) |
 | Codex | write outside project, outside `$TMPDIR` and `/tmp` | sandbox `workspace-write` | yes, sandbox (`codex/deny-write/`) |
-| Vibe | shell | config | not probed |
+| Vibe | shell (`file_system.bash`) | `pre_tool` hook deny, or `--disabled-tools file_system.bash` | hook deny: yes (`vibe/deny-shell/`) |
+| Vibe | write outside the project | none (no sandbox) | no: the write succeeded (`vibe/deny-write/`); only a hook or disabled tools can stop it |
 
 ## Consequences for design sections 5 and 7
 
 - Section 5 (hook core): normalise Claude `mcp__server__tool` and Codex `{server, tool}` separately; treat `agent_id` as the subagent discriminator on Claude; ignore `ToolSearch`/`SubagentHandback`; subscribe to PostToolUseFailure; accept multiple Stop and UserPromptSubmit events per run; never assume async hook ordering.
 - Section 7 (boot context): do not ship the boot payload through SessionStart `additionalContext` beyond a short pointer; the 256 KB maximum was accepted by Claude but the model saw about 2 KB. Codex delivered the tail of a 256 KB payload (marker seen), with the tokenisation caveat above.
+- Vibe: no sandbox, so a Vibe worker must be confined by a `strict` `pre_tool` hook on `re:bash|process_start` plus `--disabled-tools` for write/edit; MCP tools need `--auto-approve` in headless mode and are not hidden or selected by `--enabled-tools mcp_...`; `export.json` is the usage-governor source.
 - Section 8.1 (Codex worker denial): verified for the built-in shell (hook deny holds, no PostToolUse) and for writes outside the writable roots (sandbox). Hooks must be trusted for the campaign worker project; the bypass flag is not to be baked into any config.
 
 ## Calls spent
 
 Claude: 5 headless calls (parent 1, tool-error 2, context small 1, context max 1; two earlier invocations aborted on a script bug before launching claude). Codex: 10 by the agent and the lead together, plus one run that hung on stdin with no model call. Earlier round (agent): 5 (MCP probe 1, tool-error 1, deny-write 3 of which 2 refused by the model setting). This round (lead, with the bypass flag): 5 (parent+subagent+two-hooks, deny-shell, deny-write, context-small, context-max).
+
+Vibe: 8 model runs by the lead (parent, tool-error, deny-shell, deny-write, context small and max, plus a no-approval and an enabled-tools variant of the parent probe); total cost reported by export.json 0.0 USD (free default model).

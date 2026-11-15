@@ -80,4 +80,49 @@ codex_run() { # $1=name $2=prompt [extra codex args]
     codex exec --json -C "$d" -s workspace-write "$@" "$prompt" > "$d/events.jsonl" 2> "$d/stderr.txt"
   echo "$d"
 }
+
+# ---- Mistral Vibe 3.1.2. NOTE: --trust (project trust for hooks/MCP) is passed ONLY on throwaway temp
+# probe projects, by whoever the owner authorised; telemetry off; stdin closed; capped price and turns.
+vibe_cfg() { # $1=dir
+  mkdir -p "$1/.vibe"
+  cat > "$1/.vibe/config.toml" <<TOML
+[[mcp_servers]]
+name = "probe"
+transport = "stdio"
+command = "$PY"
+args = ["$HERE/probe_mcp.py"]
+TOML
+  python3 - "$1" "$PY" "$HERE" <<'PYEOF'
+import sys
+d, py, here = sys.argv[1:4]
+out = []
+for t in ["session_start", "session_end", "pre_agent", "post_agent", "pre_tool", "post_tool", "notification"]:
+    out.append(f'[[hooks]]\nname = "log-{t}"\ntype = "{t}"\ncommand = "{py} {here}/log_hook.py vibe"\n')
+out.append(f'[[hooks]]\nname = "second-post-tool"\ntype = "post_tool"\ncommand = "{py} {here}/second_hook.py"\n')
+open(f"{d}/.vibe/hooks.toml", "w").write("\n".join(out))
+PYEOF
+}
+
+vibe_run() { # $1=name $2=prompt [extra vibe args]; env PROBE_DENY / PROBE_INJECT pass through
+  local name="$1" prompt="$2"; shift 2
+  local d="$BASE/probe-vibe-$name"; rm -rf "$d"; mkdir -p "$d"; vibe_cfg "$d"
+  ( cd "$d" && VIBE_DISABLE_TELEMETRY=true PROBE_LOG="$d/log.jsonl" PROBE_LOG2="$d/log2.txt" \
+    vibe -p "$prompt" --output json --workdir "$d" --trust --max-turns 8 --max-price 0.05 \
+      --output-dir "$d/out" "$@" > "$d/stdout.json" 2> "$d/stderr.txt" < /dev/null )
+  echo "$d"
+}
+vibe_parent_sub() { vibe_run parent "Call the probe echo tool with text 'top'. Then spawn one subagent and have it call the probe echo tool with text 'sub'. Reply done."; }
+vibe_tool_error() { vibe_run tool-error "Call the probe echo tool with text 'fail' and report the outcome in five words."; }
+vibe_deny_shell() { PROBE_DENY=bash vibe_run deny-shell "Run the shell command: echo hi > shell-ran.txt . Then report what happened."; }
+vibe_deny_write() { vibe_run deny-write "Run the shell command: mkdir -p /private/var/tmp/magnolia-probe-deny-vibe && echo hi > /private/var/tmp/magnolia-probe-deny-vibe/x.txt . Then report the result."; }
+vibe_context() { # $1=small|max
+  local kind="$1" f="$BASE/probe-vibe-inject-$1.txt"
+  python3 - "$f" "$kind" <<'PYEOF'
+import sys
+f, kind = sys.argv[1:3]
+body = "A" * (2000 - 16) + "\n" if kind == "small" else ("B" * 256000) + "\n\n[truncated at 256k chars]\n"
+open(f, "w").write(body + "MAGNOLIA-END-7Q")
+PYEOF
+  PROBE_INJECT="$f" vibe_run "ctx-$kind" "Reply with the last token of your session context."
+}
 "${1:?function name}" "${@:2}"

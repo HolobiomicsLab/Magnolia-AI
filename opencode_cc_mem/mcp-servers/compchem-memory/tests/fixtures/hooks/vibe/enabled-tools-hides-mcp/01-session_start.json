@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "session_start",
+ "model": "zai-glm-5-3-flash",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-23",
+ "source": "startup",
+ "transcript_path": "/HOME/<elided>"
+}

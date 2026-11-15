@@ -16,6 +16,17 @@ except ValueError:
 with open(os.environ["PROBE_LOG"], "a", encoding="utf-8") as fh:
     fh.write(json.dumps({"argv": sys.argv[1:], "stdin": payload}) + "\n")
 
+ev = payload.get("hook_event_name") if isinstance(payload, dict) else None
+if sys.argv[1:2] == ["vibe"]:  # Vibe wire protocol: lower-case events, snake_case JSON reply
+    inject = os.environ.get("PROBE_INJECT")
+    if inject and ev == "session_start":
+        with open(inject, encoding="utf-8") as fh:
+            print(json.dumps({"hook_specific_output": {"additional_context": fh.read()}}))
+    deny = os.environ.get("PROBE_DENY")
+    if deny and ev == "pre_tool" and deny in str(payload.get("tool_name", "")):
+        print(json.dumps({"decision": "deny", "reason": "probe deny"}))
+    sys.exit(0)
+
 inject = os.environ.get("PROBE_INJECT")
 if inject and isinstance(payload, dict) and payload.get("hook_event_name") == "SessionStart":
     with open(inject, encoding="utf-8") as fh:

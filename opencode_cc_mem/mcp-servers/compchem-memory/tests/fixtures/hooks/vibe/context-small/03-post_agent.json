@@ -1,0 +1,8 @@
+{
+ "agent_name": "accept-edits",
+ "cwd": "/TMPDIR/probe-vibe-ctx-small",
+ "hook_event_name": "post_agent",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-21",
+ "transcript_path": "/HOME/<elided>"
+}

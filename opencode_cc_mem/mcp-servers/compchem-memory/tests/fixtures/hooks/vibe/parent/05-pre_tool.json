@@ -1,0 +1,14 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-12",
+ "tool_call_id": "typescript:12:chatcmpl-tool-a985444fd4051795:0:tool:0",
+ "tool_input": {
+  "instructions": "You have access to tool functions under the tools namespace. Call tools.mcp_probe.echo with the exact text \"sub\" (i.e. { text: \"sub\" }). Report the returned value.",
+  "message": "Call the probe echo tool with text \"sub\" and report the result back to me.",
+  "name": "echo-sub"
+ },
+ "tool_name": "agents.spawn",
+ "transcript_path": "/HOME/<elided>"
+}
