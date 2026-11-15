@@ -1,0 +1,363 @@
+"""Claim-critic routing, request parity, trace building, and persistence."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from compchem_memory import llm
+from compchem_memory.hook import critic
+from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
+from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.hook.state import SessionState
+from compchem_memory.hook.transcript import append_event, read_turns, transcript_path
+from compchem_memory.llm import CallResult, Route
+
+
+PLUGIN = Path(__file__).resolve().parents[4] / ".opencode" / "plugins" / "claim-critic.ts"
+NODE = Path("node")
+KEY_VARS = (
+    "MAGNOLIA_LLM_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+    "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY",
+    "ZHIPU_API_KEY", "ZAI_API_KEY", "DEEPSEEK_BASE_URL", "ANTHROPIC_BASE_URL",
+    "OPENAI_BASE_URL", "KIMI_BASE_URL", "OPENROUTER_BASE_URL", "MISTRAL_BASE_URL",
+    "ZAI_BASE_URL", "MAGNOLIA_MEMORY_PROVIDER", "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_LLM_PROVIDER", "MAGNOLIA_LLM_MODEL", "MAGNOLIA_CRITIC_PROVIDER",
+    "MAGNOLIA_CRITIC_MODEL", "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
+    "MAGNOLIA_CRITIC", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
+)
+
+DRIVER = r"""
+const [pluginPath, directory, replyKind] = process.argv.slice(2)
+const verdict = { flag: false, severity: "none", unsupported_claims: [], why: "supported" }
+const calls = []
+globalThis.fetch = async (url, init) => {
+  calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+  const text = JSON.stringify(verdict)
+  const data = replyKind === "anthropic"
+    ? { content: [{ type: "text", text }] }
+    : { choices: [{ message: { content: text } }] }
+  return { ok: true, status: 200, json: async () => data }
+}
+const mod = await import(pluginPath)
+const report = "The binding energy is -9.3 kcal/mol and the pose ranks first. ".repeat(5)
+const messages = [
+  { info: { role: "user" }, parts: [{ type: "text", text: "dock it" }] },
+  { info: { role: "assistant" }, parts: [{ type: "text", text: report }] },
+]
+const client = {
+  session: { messages: async () => ({ data: messages }) },
+  tui: { showToast: async () => {} },
+}
+const hooks = await mod.default.server({ client, directory })
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+process.stdout.write(JSON.stringify(calls[0]))
+"""
+
+
+@pytest.fixture(autouse=True)
+def clean_provider_env(monkeypatch):
+    """Remove every provider selector and key before each test."""
+    for name in KEY_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _paths(tmp_path: Path) -> ProjectPaths:
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    store.mkdir(parents=True)
+    return ProjectPaths(tmp_path, project, store, "project", False)
+
+
+def _event(kind: str, *, session: str = "s1", agent: AgentRef | None = None, **values) -> HookEvent:
+    return HookEvent(
+        harness="claude", event=kind, session_id=session, cwd="/project",
+        turn_id=values.pop("turn_id", "t1"), agent=agent, **values,
+    )
+
+
+def _tool(
+    name: str,
+    call_id: str,
+    *,
+    output: str | None = None,
+    tool_input: dict | None = None,
+    is_error: bool = False,
+) -> ToolCall:
+    return ToolCall(
+        name=name, server=None, raw_name=name, call_id=call_id,
+        input=tool_input or {}, output=output, is_error=is_error,
+    )
+
+
+@pytest.mark.parametrize(
+    ("provider", "key_var", "key", "model", "url", "schema"),
+    [
+        ("deepseek", "DEEPSEEK_API_KEY", "ds", "deepseek-flash", "https://api.deepseek.com/v1/chat/completions", "openai"),
+        ("anthropic", "ANTHROPIC_API_KEY", "an", "claude-haiku-4-5-20251001", "https://api.anthropic.com/v1/messages", "anthropic"),
+        ("openai", "OPENAI_API_KEY", "op", "gpt-4o-mini", "https://api.openai.com/v1/chat/completions", "openai"),
+        ("kimi", "KIMI_PLAN_MAGNOLIA_API_KEY", "km", "k3", "https://api.kimi.com/coding/v1/messages", "anthropic"),
+        ("openrouter", "OPENROUTER_API_KEY", "or", "deepseek/deepseek-v4.1-flash", "https://openrouter.ai/api/v1/chat/completions", "openai"),
+        ("mistral", "MISTRAL_API_KEY", "mi", "mistral-small-latest", "https://api.mistral.ai/v1/chat/completions", "openai"),
+        ("zai", "ZHIPU_API_KEY", "za", "glm-5.3-flash", "https://api.z.ai/api/paas/v4/chat/completions", "openai"),
+    ],
+)
+def test_resolve_route_critic_matches_plugin(monkeypatch, provider, key_var, key, model, url, schema):
+    monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", provider)
+    monkeypatch.setenv(key_var, key)
+    assert llm.resolve_route("critic") == Route(provider, model, url, key, schema)
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"DEEPSEEK_API_KEY": "ds"}, ("deepseek", "deepseek-flash", "ds")),
+        ({"MISTRAL_API_KEY": "mi", "DEEPSEEK_API_KEY": "ds"}, ("deepseek", "deepseek-flash", "ds")),
+        ({"MAGNOLIA_CRITIC_MODEL": "mistral-medium-latest", "MISTRAL_API_KEY": "mi", "DEEPSEEK_API_KEY": "ds"}, ("mistral", "mistral-medium-latest", "mi")),
+        ({"MAGNOLIA_CRITIC_PROVIDER": "zai", "ZHIPU_API_KEY": "za", "ZAI_BASE_URL": "https://api.z.ai/api/coding/paas/v4"}, ("zai", "glm-5.3-flash", "za")),
+        ({"MAGNOLIA_CRITIC_MODEL": "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY": "an"}, ("anthropic", "claude-haiku-4-5-20251001", "an")),
+        ({"MAGNOLIA_CRITIC_PROVIDER": "openai", "MAGNOLIA_CRITIC_API_KEY": "own", "MAGNOLIA_CRITIC_BASE_URL": "https://llm.example.org/api/", "MAGNOLIA_CRITIC_MODEL": "local-judge"}, ("openai", "local-judge", "own")),
+        ({}, None),
+        ({"MISTRAL_API_KEY": "mi"}, ("mistral", "mistral-small-latest", "mi")),
+    ],
+)
+def test_resolve_route_critic_eight_plugin_cases(monkeypatch, env, expected):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    route = llm.resolve_route("critic")
+    if expected is None:
+        assert route is None
+    else:
+        assert (route.provider, route.model, route.key) == expected
+
+
+class FakeResponse:
+    """Small httpx response stand-in used by request-shape tests."""
+
+    def __init__(self, data: dict, status: int = 200, text: str = "") -> None:
+        self._data = data
+        self.status_code = status
+        self.text = text
+
+    def json(self) -> dict:
+        return self._data
+
+
+def test_call_route_shapes(monkeypatch):
+    calls = []
+    replies = [
+        FakeResponse({"model": "claude-resolved", "content": [{"type": "thinking"}, {"type": "text", "text": "anthropic"}], "stop_reason": "max_tokens"}),
+        FakeResponse({"model": "gpt-resolved", "choices": [{"message": {"content": "openai"}, "finish_reason": "length"}]}),
+        FakeResponse({}, status=401, text="bad credential"),
+        FakeResponse({"choices": []}),
+    ]
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return replies.pop(0)
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    anthropic = Route("kimi", "k3", "https://kimi/messages", "km", "anthropic")
+    openai = Route("openrouter", "vendor/model", "https://router/chat/completions", "or", "openai")
+
+    first = llm.call_route(anthropic, "sys", "user", max_tokens=12, temperature=0, disable_thinking=True)
+    second = llm.call_route(openai, "sys", "user", max_tokens=13, temperature=0, json_mode=True)
+    unauthorized = llm.call_route(openai, "sys", "user", max_tokens=1)
+    empty = llm.call_route(openai, "sys", "user", max_tokens=1)
+
+    assert first == CallResult("anthropic", "max_tokens", "claude-resolved", None, 200)
+    assert calls[0][1]["json"]["thinking"] == {"type": "disabled"}
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer km"
+    assert second == CallResult("openai", "length", "gpt-resolved", None, 200)
+    assert second.finish_reason == "length"
+    assert calls[1][1]["json"]["response_format"] == {"type": "json_object"}
+    assert calls[1][1]["headers"]["HTTP-Referer"] == "https://magnolia.local"
+    assert unauthorized.status == 401 and "401" in unauthorized.error and "bad credential" in unauthorized.error
+    assert empty.text is None and empty.error is None and empty.status == 200
+    assert all(call[1]["timeout"] == 60 for call in calls)
+
+
+def test_call_route_never_raises(monkeypatch):
+    monkeypatch.setattr(llm.httpx, "post", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("offline")))
+    route = Route("openai", "m", "https://example/chat", "k", "openai")
+    assert llm.call_route(route, "s", "u", max_tokens=1) == CallResult(None, None, None, "offline", None)
+
+
+def test_memory_route_anthropic_explicit(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "an")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://anthropic-proxy.example/api")
+    assert llm.resolve_route("memory") == Route(
+        "anthropic", "claude-haiku-4-5-20251001",
+        "https://anthropic-proxy.example/api/v1/messages", "an", "anthropic",
+    )
+
+
+def test_legacy_llm_helpers_unchanged(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "an")
+    assert llm._resolve_call() == ("anthropic", "claude-haiku-4-5-20251001")
+    assert llm._get_api_key("anthropic") == "an"
+    assert llm._get_base_url("deepseek") == "https://api.deepseek.com/v1"
+    with pytest.raises(KeyError):
+        llm._get_base_url("anthropic")
+
+
+def _node_request(tmp_path: Path, env: dict[str, str], reply_kind: str = "openai") -> dict:
+    assert NODE.exists(), f"required parity Node is absent: {NODE}"
+    driver = tmp_path / "driver.mjs"
+    driver.write_text(DRIVER, encoding="utf-8")
+    project = tmp_path / "node-project"
+    (project / ".magnolia").mkdir(parents=True)
+    (project / ".magnolia" / "GOAL.md").write_text("goal\n", encoding="utf-8")
+    process_env = {key: value for key, value in os.environ.items() if key not in KEY_VARS}
+    process_env.update({"MAGNOLIA_CRITIC": "1", **env})
+    result = subprocess.run(
+        [str(NODE), str(driver), PLUGIN.as_uri(), str(project), reply_kind],
+        env=process_env, capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize(
+    ("env", "reply_kind"),
+    [
+        ({"DEEPSEEK_API_KEY": "ds"}, "openai"),
+        ({"KIMI_PLAN_MAGNOLIA_API_KEY": "km", "MAGNOLIA_CRITIC_PROVIDER": "kimi"}, "anthropic"),
+        ({"OPENROUTER_API_KEY": "or", "MAGNOLIA_CRITIC_PROVIDER": "openrouter"}, "openai"),
+    ],
+)
+def test_critic_request_matches_plugin(tmp_path, monkeypatch, env, reply_kind):
+    node_call = _node_request(tmp_path, env, reply_kind)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    paths = _paths(tmp_path / "python")
+    report = "The binding energy is -9.3 kcal/mol and the pose ranks first. " * 5
+    append_event(paths.store, _event("prompt", prompt="dock it"))
+    append_event(paths.store, _event("turn-end", assistant_text=report))
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update(url=url, headers=kwargs["headers"], body=kwargs["json"])
+        data = (
+            {"content": [{"type": "text", "text": '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'}]}
+            if reply_kind == "anthropic"
+            else {"choices": [{"message": {"content": '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'}}]}
+        )
+        return FakeResponse(data)
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    critic.run_critic(paths, "claude", "s1", None)
+    assert captured == node_call
+
+
+def test_critic_report_length_boundary(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "0")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds")
+    calls = []
+    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: calls.append(args) or CallResult("{}", None, None, None, 200))
+    append_event(paths.store, _event("prompt", session="short", prompt="p"))
+    append_event(paths.store, _event("turn-end", session="short", assistant_text="x" * 199))
+    critic.run_critic(paths, "claude", "short", None)
+    append_event(paths.store, _event("prompt", session="boundary", prompt="p"))
+    append_event(paths.store, _event("turn-end", session="boundary", assistant_text="x" * 200))
+    critic.run_critic(paths, "claude", "boundary", None)
+    assert len(calls) == 1
+
+
+def test_build_trace_caps(tmp_path):
+    store = tmp_path / ".magnolia"
+    append_event(store, _event("prompt", prompt="old"))
+    append_event(store, _event("post-tool", tool=_tool("read", "old", output="o" * 3000)))
+    append_event(store, _event("prompt", prompt="current", turn_id="t2"))
+    append_event(store, _event("post-tool", turn_id="t2", tool=_tool("read", "current", output="c" * 3000, tool_input={"text": "i" * 5000})))
+    append_event(store, _event("post-tool", turn_id="t2", tool=_tool("memory_search", "evidence", output="e" * 3000)))
+    append_event(store, _event("turn-end", turn_id="t2", assistant_text="report"))
+
+    rows = read_turns(transcript_path(store, "claude", "s1"))
+    report, trace_text = critic.build_trace(rows, None)
+    trace = json.loads(trace_text)
+    by_tool = {item["call_id"]: item for item in trace}
+    assert report == "report"
+    assert len(by_tool["old"]["output"]) == 500 and by_tool["old"]["turn"] == "earlier"
+    assert len(by_tool["current"]["output"]) == 2000 and "turn" not in by_tool["current"]
+    assert len(by_tool["evidence"]["output"]) == 3000
+    assert isinstance(by_tool["current"]["input"], str) and len(by_tool["current"]["input"]) == 4000
+
+
+def test_build_trace_one_item_per_call(tmp_path):
+    store = tmp_path / ".magnolia"
+    append_event(store, _event("prompt", prompt="p"))
+    append_event(store, _event("pre-tool", tool=_tool("read", "paired", tool_input={"path": "a"})))
+    append_event(store, _event("post-tool", tool=_tool("read", "paired", output="done", tool_input={"path": "a"})))
+    append_event(store, _event("pre-tool", tool=_tool("shell", "unfinished", tool_input={"cmd": "sleep"})))
+    _, trace_text = critic.build_trace(read_turns(transcript_path(store, "claude", "s1")), None)
+    trace = json.loads(trace_text)
+    assert [item["call_id"] for item in trace] == ["paired", "unfinished"]
+    assert trace[0]["status"] == "completed"
+    assert trace[1]["status"] == "unfinished" and trace[1]["output"] == ""
+
+
+def test_build_trace_parent_and_child_apart(tmp_path):
+    store = tmp_path / ".magnolia"
+    child = AgentRef("child-1", "Explore")
+    append_event(store, _event("prompt", prompt="parent prompt"))
+    append_event(store, _event("post-tool", tool=_tool("read", "parent", output="p")))
+    append_event(store, _event("agent-start", agent=child))
+    append_event(store, _event("post-tool", agent=child, tool=_tool("shell", "child", output="c")))
+    append_event(store, _event("turn-end", agent=child, assistant_text="child report"))
+    append_event(store, _event("turn-end", assistant_text="parent report"))
+    rows = read_turns(transcript_path(store, "claude", "s1"))
+
+    parent_report, parent_trace = critic.build_trace(rows, None)
+    child_report, child_trace = critic.build_trace(rows, "child-1")
+    assert parent_report == "parent report"
+    assert [item["call_id"] for item in json.loads(parent_trace)] == ["parent"]
+    assert child_report == "child report"
+    assert [item["call_id"] for item in json.loads(child_trace)] == ["child"]
+
+
+def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    verdict = '{"flag":true,"severity":"high","unsupported_claims":["ranking"],"why":"no ranking tool output"}'
+    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(f"```json\n{verdict}\n```", "stop", "resolved", None, 200))
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+
+    critic.run_critic(paths, "claude", "s1", None)
+
+    row = json.loads((paths.store / "claim-critic" / "s1.jsonl").read_text().strip())
+    assert row | {"ts": row["ts"]} == row
+    assert row["sessionID"] == "s1" and row["harness"] == "claude" and row["agent"] is None
+    assert row["provider"] == "deepseek" and row["model"] == "judge"
+    assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
+
+
+def test_run_critic_logs_http_error(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("mistral", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(None, None, None, "HTTP 401: denied", 401))
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+    critic.run_critic(paths, "claude", "s1", None)
+
+    error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
+    assert error["sessionID"] == "s1" and error["provider"] == "mistral"
+    assert error["status"] == 401 and error["error"] == "HTTP 401: denied"
+    assert not (paths.store / "claim-critic" / "s1.jsonl").exists()

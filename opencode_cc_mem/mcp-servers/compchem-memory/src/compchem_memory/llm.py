@@ -65,8 +65,10 @@ import os
 import re
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import httpx
 
@@ -273,6 +275,210 @@ def _get_base_url(provider: str) -> str:
             base += "/v1"
         return base
     return _DEFAULT_BASE[provider]
+
+
+@dataclass(frozen=True)
+class Route:
+    """One resolved provider endpoint and its wire schema."""
+
+    provider: str
+    model: str
+    url: str
+    key: str
+    schema: Literal["openai", "anthropic"]
+
+
+@dataclass(frozen=True)
+class CallResult:
+    """The observable outcome of a route call, including contained errors."""
+
+    text: str | None
+    finish_reason: str | None
+    resolved_model: str | None
+    error: str | None
+    status: int | None
+
+
+_ANTHROPIC_BASE = "https://api.anthropic.com/v1"
+_CRITIC_AUTODETECT_ORDER = (
+    PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI,
+    PROVIDER_OPENROUTER, PROVIDER_MISTRAL, PROVIDER_ZAI,
+)
+_PROVIDER_KEYS = {
+    PROVIDER_DEEPSEEK: ("DEEPSEEK_API_KEY",),
+    PROVIDER_ANTHROPIC: ("ANTHROPIC_API_KEY",),
+    PROVIDER_OPENAI: ("OPENAI_API_KEY",),
+    PROVIDER_KIMI: ("KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY"),
+    PROVIDER_OPENROUTER: ("OPENROUTER_API_KEY",),
+    PROVIDER_MISTRAL: ("MISTRAL_API_KEY",),
+    PROVIDER_ZAI: ("ZHIPU_API_KEY", "ZAI_API_KEY"),
+}
+
+
+def _trimmed_env(name: str) -> str:
+    return (os.environ.get(name) or "").strip()
+
+
+def _first_critic_key(provider: str) -> str:
+    return next((_trimmed_env(name) for name in _PROVIDER_KEYS[provider]
+                 if _trimmed_env(name)), "")
+
+
+def _normalise_base(raw: str) -> str:
+    base = raw.rstrip("/")
+    return base if re.search(r"/v\d+$", base) else f"{base}/v1"
+
+
+def _route(provider: str, model: str, key: str, base: str) -> Route:
+    schema: Literal["openai", "anthropic"] = (
+        "anthropic" if provider in (PROVIDER_ANTHROPIC, PROVIDER_KIMI) else "openai"
+    )
+    path = "/messages" if schema == "anthropic" else "/chat/completions"
+    return Route(provider, model, f"{base}{path}", key, schema)
+
+
+def _memory_route() -> Route | None:
+    provider, model = _resolve_call()
+    if not provider or not model:
+        return None
+    key = _get_api_key(provider)
+    if not key:
+        return None
+    if provider == PROVIDER_ANTHROPIC:
+        raw_base = os.environ.get("ANTHROPIC_BASE_URL")
+        base = _normalise_base(raw_base) if raw_base else _ANTHROPIC_BASE
+    else:
+        base = _get_base_url(provider)
+    return _route(provider, model, key, base)
+
+
+def _critic_route() -> Route | None:
+    requested_model = _trimmed_env("MAGNOLIA_CRITIC_MODEL")
+    explicit = _trimmed_env("MAGNOLIA_CRITIC_PROVIDER").lower()
+    provider = explicit if explicit in _VALID_PROVIDERS else None
+    if not provider and requested_model:
+        provider = _provider_for_model(requested_model)
+    if not provider:
+        provider = next((name for name in _CRITIC_AUTODETECT_ORDER
+                         if _first_critic_key(name)), None)
+    if not provider:
+        return None
+    key = _trimmed_env("MAGNOLIA_CRITIC_API_KEY") or _first_critic_key(provider)
+    if not key:
+        return None
+    base_env = "ANTHROPIC_BASE_URL" if provider == PROVIDER_ANTHROPIC else _BASE_URL_ENV[provider]
+    raw_base = _trimmed_env("MAGNOLIA_CRITIC_BASE_URL") or _trimmed_env(base_env)
+    if raw_base:
+        base = _normalise_base(raw_base)
+    elif provider == PROVIDER_ANTHROPIC:
+        base = _ANTHROPIC_BASE
+    else:
+        base = _DEFAULT_BASE[provider]
+    return _route(provider, requested_model or _DEFAULT_MODEL[provider], key, base)
+
+
+def resolve_route(role: Literal["memory", "critic"]) -> Route | None:
+    """Resolve a memory or critic provider without making a request."""
+    if role == "memory":
+        return _memory_route()
+    if role == "critic":
+        return _critic_route()
+    raise ValueError(f"unknown LLM role {role!r}")
+
+
+def _route_request(
+    route: Route,
+    system: str,
+    user: str,
+    max_tokens: int,
+    temperature: float | None,
+    json_mode: bool,
+    disable_thinking: bool,
+) -> tuple[dict[str, str], dict]:
+    if route.schema == "anthropic":
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": route.key,
+            "anthropic-version": "2023-06-01",
+            **({"Authorization": f"Bearer {route.key}"} if route.provider == PROVIDER_KIMI else {}),
+        }
+        body = {
+            "model": route.model, "max_tokens": max_tokens, "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+        if temperature is not None:
+            body["temperature"] = temperature
+        if disable_thinking and route.provider == PROVIDER_KIMI:
+            body["thinking"] = {"type": "disabled"}
+        return headers, body
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {route.key}",
+        **({
+            "HTTP-Referer": "https://magnolia.local",
+            "X-Title": "Magnolia",
+        } if route.provider == PROVIDER_OPENROUTER else {}),
+    }
+    body = {
+        "model": route.model, "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    if temperature is not None:
+        body["temperature"] = temperature
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    if disable_thinking and route.provider in (PROVIDER_DEEPSEEK, PROVIDER_ZAI):
+        body["thinking"] = {"type": "disabled"}
+    return headers, body
+
+
+def _route_response(route: Route, data: dict, status: int) -> CallResult:
+    resolved_model = data.get("model")
+    if route.schema == "anthropic":
+        text = next((block.get("text") for block in (data.get("content") or [])
+                     if block.get("type") == "text"), None)
+        return CallResult(text, data.get("stop_reason"), resolved_model, None, status)
+    choices = data.get("choices") or []
+    if not choices:
+        return CallResult(None, None, resolved_model, None, status)
+    choice = choices[0]
+    return CallResult(
+        (choice.get("message") or {}).get("content"), choice.get("finish_reason"),
+        resolved_model, None, status,
+    )
+
+
+def call_route(
+    route: Route,
+    system: str,
+    user: str,
+    *,
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+    disable_thinking: bool = False,
+) -> CallResult:
+    """Call one resolved route and contain every HTTP or decoding failure."""
+    status = None
+    try:
+        headers, body = _route_request(
+            route, system, user, max_tokens, temperature, json_mode, disable_thinking,
+        )
+        response = httpx.post(route.url, headers=headers, json=body, timeout=60)
+        status = response.status_code
+        if status < 200 or status >= 300:
+            detail = str(getattr(response, "text", "")).strip()
+            error = f"HTTP {status} from {route.provider}"
+            if detail:
+                error += f": {detail}"
+            return CallResult(None, None, None, error[:300], status)
+        return _route_response(route, response.json(), status)
+    except Exception as error:  # noqa: BLE001 - public contract: never raise
+        return CallResult(None, None, None, str(error)[:300], status)
 
 
 def is_llm_available() -> bool:
