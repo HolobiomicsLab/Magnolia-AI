@@ -5,6 +5,30 @@ Fixtures: `mcp-servers/compchem-memory/tests/fixtures/hooks/<client>/<scenario>/
 Scripts: `scripts/probes/{probe_mcp.py,log_hook.py,second_hook.py,run_probes.sh,make_fixtures.py}`.
 Fixture paths below are relative to `fixtures/hooks/`.
 
+**The fixtures are scrubbed, not verbatim.** The raw probe logs no longer exist, so the committed fixtures cannot be
+regenerated; they carry the changes of the scrubber version that produced them, plus one hand redaction:
+- home and temp paths became `/HOME` and `/TMPDIR/` (and `-TMPDIR-` inside Claude's project directory names); session and
+  thread ids under the keys `session_id`, `thread_id`, `sessionId` became `ses-fixture-N` (other thread, turn and item
+  UUIDs are as captured); e-mail addresses became `<email>`; `credential_expires_at` and `apiKeySource` were dropped;
+- **`token` was rewritten to `tok` everywhere, in field names and values** (Claude's `modelUsage` sub-fields read
+  `inputtoks`, `outputtoks`, `cacheReadInputtoks`, `cacheCreationInputtoks`, `thinkingtoks`, `maxOutputtoks`, and a
+  `tok_counts` key; free text reads "tok" for "token"), and every `@` became `(at)`. Read these back as `token` and `@`;
+- **`usage` and `modelUsage` were replaced by the string `"<dropped>"`**, so no fixture holds a token-usage shape: the
+  `turn.completed` usage object of Codex and the result line's `modelUsage` of Claude must be re-captured before Plan 3
+  relies on them. The `input_tokens` figures in the Codex context-size table below were read from the raw logs and have
+  no fixture;
+- by hand (15 Nov), the output of the Codex probe agent's built-in shell calls (`codex/parent/04`, `06`,
+  `codex/two-hooks/01`, `02`, `codex/parent-events/08`, `10`) and the file paths in those commands (`codex/parent/03`,
+  `05`, `codex/parent-events/07`, `09`) were replaced by `<redacted: owner's local agent configuration>`: the agent read
+  the owner's own instruction files at start. Keys and event order are unchanged.
+
+`scripts/probes/make_fixtures.py` now keeps field names and the `usage` numbers, elides built-in shell output
+(`<shell output elided, N chars>`), replaces home paths outside `~/.codex` and `~/.claude` with `/HOME/<elided>`, and
+redacts only the values of secret-named keys and Bearer/`sk-` strings. Its docstring lists every change. The plan's
+Step 5 grep (`token|bearer|@|/Users/`) could be satisfied by the renaming above; it is replaced by
+`make_fixtures.py --check <fixtures_root>`, which looks for the home directory, the login and full name, e-mail
+addresses, `/Users/` paths and Bearer/`sk-` strings, and exits 1 on any hit.
+
 Status: Claude Code and Codex probed (Codex hooks via `--dangerously-bypass-hook-trust` on temp projects at the owner's request, 15 Nov). Vibe: not probed (awaiting the owner's go to install mistral-vibe).
 Anything not observed is "unknown", not "absent".
 
@@ -51,7 +75,7 @@ Answers:
 - **`agent_id` in subagent**: yes. Every tool event inside the subagent carries `agent_id` and `agent_type` ("general-purpose"); parent events carry neither (`claude/subagent/`, compare `parent/05` and `parent/12`). PostToolUse for the `Agent` tool itself is a parent event (no `agent_id`) and its `tool_response` has `agentId`, `isAsync: true`.
 - **Order**: the subagent ran in the background (`isAsync`). Parent order: Pre/Post Agent, SubagentStart, subagent tool events interleaved with parent tool events, parent **Stop (17) before the subagent finished**, then a second UserPromptSubmit (21, `prompt` = an `<agent-message>` hand-back), SubagentStop (22), second Stop (25), SessionEnd (26). So Stop can fire twice per `-p` run and is not "end of work".
 - **Two PostToolUse hooks**: both ran for every tool call (six `second-hook` lines for six PostToolUse events, `parent` run; log2). Order across separate hook commands was not shown as deterministic: the sync commands ran as the event fired; the async one logged later and out of order (`07`, `11`, `14`, `18`, `23`, `24` tagged `.async`). `async: true` hooks do not block and may arrive after later events, even after Stop.
-- **Stop payload**: see table. **Result line** (stream-json `type: result`): `subtype: success`, `result` text, `num_turns`, `terminal_reason`, `permission_denials: []`, `subagent_stats`, `modelUsage` (dropped from the fixture), `origin` (`parent/27-result-stream-line.json`). Observed: with a backgrounded subagent the result line came from the task-notification turn (`origin.kind: task-notification`).
+- **Stop payload**: see table. **Result line** (stream-json `type: result`): `subtype: success`, `result` text, `num_turns`, `terminal_reason`, `permission_denials: []`, `subagent_stats`, `modelUsage` (replaced by `"<dropped>"` in the fixture), `origin` (`parent/27-result-stream-line.json`). Observed: with a backgrounded subagent the result line came from the task-notification turn (`origin.kind: task-notification`).
 - **Tool error**: PostToolUse does **not** fire for a failing MCP tool; `PostToolUseFailure` does (`tool-error/06-PostToolUseFailure.json`). First run, without that hook registered, showed no event at all after PreToolUse: an adapter must subscribe to PostToolUseFailure, or failures are invisible. The model reports "Error calling tool 'echo': probe failure requested".
 - **Context-size** (default model; `claude/context-small/`, `claude/context-max/`):
 
@@ -89,7 +113,7 @@ Answers:
 - **Two PostToolUse hooks** (`codex/two-hooks/`): both ran; the second hook wrote six lines for six PostToolUse events. Relative order not tested.
 - **Stop**: carries `last_assistant_message` and `stop_hook_active`; one Stop in the run.
 - **Tool failure**: in the `--json` stream (no hooks) a failing MCP tool is `status: "failed"`, `error: null`, text in `result.content[0].text`, then `turn.completed` (`codex/tool-error/`). Hook-side failure event: unknown.
-- **Model refused**: `error` then `turn.failed` (`codex/turn-failed/`). Usage fields are dropped from fixtures.
+- **Model refused**: `error` then `turn.failed` (`codex/turn-failed/`). Usage fields are replaced by `"<dropped>"` in the fixtures (see the top of this report).
 
 Denial (`-s workspace-write`; the `--json` stream contains no `command_execution` item for either probe, so the mechanism is inferred from the hook log, the agent's reply and the file system):
 - **(a) `deny-shell`** (`PROBE_DENY=Bash`, `codex/deny-shell/`): PreToolUse(Bash, `echo hi > shell-ran.txt`) logged, hook printed `permissionDecision: "deny"`; **no PostToolUse followed**, the agent replied "Security hook blocked the shell command; no file was created", and the file did not exist. Mechanism: **hook**. The denial held.

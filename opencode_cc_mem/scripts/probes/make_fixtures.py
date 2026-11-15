@@ -1,15 +1,39 @@
 """Turn raw probe logs into scrubbed fixtures.
 
 Usage: make_fixtures.py <probe_tmp_dir> <fixtures_root>
-Scrubs: home and temp paths, session/thread ids, token/usage fields, e-mail-like text.
+       make_fixtures.py --check <fixtures_root>
+
+What the scrubber changes (field names are never rewritten):
+- home and temp paths: the home directory becomes /HOME; a path under /HOME
+  other than ~/.codex or ~/.claude becomes /HOME/<elided>; macOS per-user temp
+  directories become /TMPDIR/ (also inside Claude's project directory names);
+- session and thread ids (keys session_id, thread_id, sessionId) become
+  ses-fixture-N;
+- output of built-in shell calls (tool_response of a Bash/shell tool,
+  aggregated_output of a command_execution item) becomes
+  "<shell output elided, N chars>": a probe agent may read the owner's own
+  configuration files at start, and that text must not be published;
+- values of secret-named keys (api key, password, secret, authorization,
+  access/refresh/id token, ...) become "<redacted>"; Bearer and sk- strings in
+  any value become "<redacted>"; e-mail addresses become <email>;
+- credential_expires_at and apiKeySource are dropped.
+Kept as captured: every other key and value, including usage and modelUsage.
+
+--check scans a fixtures tree for the home directory, the login and full
+name, e-mail addresses, /Users/ paths and Bearer/sk- strings, and exits 1 if
+any is found (it reports file and kind, never the matched text).
 """
 import json
 import os
+import pwd
 import re
 import sys
 
-T, OUT = sys.argv[1], sys.argv[2]
 HOME = os.path.expanduser("~")
+SECRET_KEY = re.compile(
+    r"(?i)^(api[_-]?key|apikey|password|passwd|secret|client[_-]?secret|authorization|"
+    r"(access|refresh|id|auth|bearer|session)[_-]?token|token)$")
+SHELL_TOOLS = ("Bash", "shell", "exec_command", "local_shell")
 sess = {}
 
 
@@ -20,34 +44,73 @@ def sid(v):
 def scrub_str(s):
     s = re.sub(r"/private/var/folders/[^\"' ]*?/T/", "/TMPDIR/", s)
     s = re.sub(r"/var/folders/[^\"' ]*?/T/", "/TMPDIR/", s)
+    s = re.sub(r"-private-var-folders-[A-Za-z0-9]+-[A-Za-z0-9]+-T-", "-TMPDIR-", s)
     s = re.sub(r"/private/tmp/claude-\d+/[^\"' ]*", "/TMPDIR/claude-scratchpad", s)
     s = s.replace(HOME, "/HOME").replace("/Users/", "/HOME-")
+    s = re.sub(r"/HOME/(?!\.codex/|\.claude/)[^\s'\"]+", "/HOME/<elided>", s)
     s = re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "<email>", s)
-    s = re.sub(r"(?i)token", "tok", s)
-    s = s.replace("@", "(at)")
+    s = re.sub(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+", "<redacted>", s)
+    s = re.sub(r"\bsk-[A-Za-z0-9_-]{16,}", "<redacted>", s)
     for k, v in sess.items():
         s = s.replace(k, v)
     return s
 
 
+def elided(v):
+    n = len(v) if isinstance(v, str) else len(json.dumps(v))
+    return f"<shell output elided, {n} chars>"
+
+
 def scrub(o):
     if isinstance(o, dict):
+        shell = o.get("tool_name") in SHELL_TOOLS
+        cmd_item = o.get("type") == "command_execution"
         out = {}
         for k, v in o.items():
             if k in ("session_id", "thread_id", "sessionId") and isinstance(v, str):
                 out[k] = sid(v)
             elif k in ("credential_expires_at", "apiKeySource"):
                 continue
-            elif k in ("usage", "modelUsage"):
-                out[k] = "<dropped>"
+            elif SECRET_KEY.match(k) and v not in (None, "", [], {}):
+                out[k] = "<redacted>"
+            elif shell and k == "tool_response" or cmd_item and k == "aggregated_output" and v:
+                out[k] = elided(v)
             else:
-                out[scrub_str(k)] = scrub(v)
+                out[k] = scrub(v)
         return out
     if isinstance(o, list):
         return [scrub(x) for x in o]
     if isinstance(o, str):
         return scrub_str(o)
     return o
+
+
+def check(root):
+    user = pwd.getpwuid(os.getuid())
+    names = [n for n in re.split(r"[\s,]+", user.pw_gecos or "") if len(n) > 2]
+    kinds = {
+        "home": re.compile(re.escape(HOME)),
+        "/Users/ path": re.compile(r"/Users/"),
+        "login": re.compile(re.escape(user.pw_name), re.I),
+        "full name": re.compile("|".join(map(re.escape, names)), re.I) if names else None,
+        "e-mail": re.compile(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", re.I),
+        "bearer/sk-": re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{16,}"),
+    }
+    bad = 0
+    for d, _, fs in os.walk(root):
+        for f in sorted(fs):
+            p = os.path.join(d, f)
+            text = open(p, encoding="utf-8", errors="replace").read()
+            for kind, rx in kinds.items():
+                if rx is not None and rx.search(text):
+                    print(f"{p}: {kind}")
+                    bad += 1
+    return 1 if bad else 0
+
+
+if sys.argv[1] == "--check":
+    sys.exit(check(sys.argv[2]))
+T, OUT = sys.argv[1], sys.argv[2]
 
 
 def write(client, scenario, items, meta):
