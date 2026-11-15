@@ -41,10 +41,12 @@ def iter_sessions(store: Path) -> Iterator[dict]:
 
 def _read_rows(path: Path) -> Iterator[dict]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").split("\n")
     except FileNotFoundError:
         return
     for line in lines:
+        if not line.strip():
+            continue
         try:
             row = json.loads(line)
         except (ValueError, TypeError):

@@ -29,3 +29,15 @@ def test_iter_sessions_merges_legacy(tmp_path):
     assert rows[1] == {"ts": "2026-11-15T10:00:00.000Z", "harness": "opencode",
                        "session_id": "ses-legacy", "directory": "/legacy", "worktree": "main",
                        "transcript_ref": None}
+
+
+def test_iter_sessions_round_trips_unicode_line_separators(tmp_path):
+    row = {
+        "ts": "2026-11-15T10:00:00.000Z", "harness": "claude-code", "session_id": "s1",
+        "directory": "/project\u2028one\u2029two\u0085three", "transcript_ref": None,
+    }
+    (tmp_path / "agent-sessions.jsonl").write_text(
+        "\n" + json.dumps(row, ensure_ascii=False) + "\nmalformed\n", encoding="utf-8",
+    )
+
+    assert list(iter_sessions(tmp_path)) == [row]

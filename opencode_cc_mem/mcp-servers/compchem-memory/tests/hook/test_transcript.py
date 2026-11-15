@@ -99,6 +99,57 @@ def test_transcript_scrubs_secrets(tmp_path):
     assert "[REDACTED_SECRET]" in rows[1]["output"]
 
 
+def test_transcript_redacts_secret_keys_recursively(tmp_path):
+    secrets = (
+        "hunter2", "918273645", "fake-list-password", "it's-a-fake-pw",
+        'fakepw"tailsecret', "fake-private-key", "tiny", "fake-passwd",
+        "fake-cookie", "fake-api-key", "ZmFrZS1jcmVkZW50aWFscw==",
+    )
+    tool = ToolCall(name="shell", server=None, raw_name="shell", call_id="nested-secrets", input={
+        "db": {
+            "password": secrets[0],
+            "nested": [
+                {"password": 918273645},
+                {"password": [secrets[2]]},
+                {"password": secrets[3]},
+                {"password": secrets[4]},
+            ],
+        },
+        "PRIVATE_KEY": secrets[5],
+        "pwd": secrets[6],
+        "passwd": secrets[7],
+        "COOKIE": secrets[8],
+        "api-key": secrets[9],
+        "ordinary": "kept",
+        "text": f"Authorization: Basic {secrets[10]}",
+    })
+    append_event(tmp_path, _event("pre-tool", tool=tool))
+
+    raw = transcript_path(tmp_path, "opencode", "ses-1").read_text(encoding="utf-8")
+    for secret in secrets:
+        assert secret not in raw
+    row = read_turns(transcript_path(tmp_path, "opencode", "ses-1"))[0]
+    assert row["input"]["db"]["password"] == "[REDACTED_SECRET]"
+    assert all(item["password"] == "[REDACTED_SECRET]" for item in row["input"]["db"]["nested"])
+    assert all(row["input"][key] == "[REDACTED_SECRET]" for key in (
+        "PRIVATE_KEY", "pwd", "passwd", "COOKIE", "api-key",
+    ))
+    assert row["input"]["ordinary"] == "kept"
+    assert row["input"]["text"] == "Authorization: Basic [REDACTED_SECRET]"
+
+
+def test_transcript_round_trips_unicode_line_separators(tmp_path):
+    prompt = "prompt\u2028one\u2029two\u0085three"
+    output = "output\u2028one\u2029two\u0085three"
+    append_event(tmp_path, _event("prompt", prompt=prompt))
+    append_event(tmp_path, _event("post-tool", tool=_tool(output=output)))
+
+    rows = read_turns(transcript_path(tmp_path, "opencode", "ses-1"))
+    assert len(rows) == 2
+    assert rows[0]["text"] == prompt
+    assert rows[1]["output"] == output
+
+
 def test_transcript_keeps_evidence_tool_outputs_whole(tmp_path):
     output = "evidence" * 1250
     append_event(tmp_path, _event("post-tool", tool=_tool(name="memory_search", output=output)))
