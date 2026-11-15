@@ -48,8 +48,10 @@ Magnolia therefore sends a path-private `magnolia-<role>-<digest>` session id by
 critic calls. Set `MAGNOLIA_OPENROUTER_STICKY=0` (also `false`, `no` or `off`) to omit it. The default
 provider quality floor accepts fp8, bf16, fp16, fp32 and endpoints whose quantization is unknown, avoiding
 the fp4 hosts that returned degenerate JSON during the campaign. `MAGNOLIA_OPENROUTER_PROVIDER` replaces
-that filter entirely, including with an explicit host order. If no endpoint matches, Magnolia retries once
-without the provider filter and records the fallback.
+that filter entirely, including with an explicit host order; Magnolia never drops a member-supplied value.
+Invalid provider JSON warns once and falls back to the default floor. For a 400 or 404 that specifically says
+`no endpoints found` or names quantization, Magnolia retries the default floor once without `provider` and
+records the fallback. Context-length, token-limit and rate-limit errors do not trigger it.
 
 OpenRouter caches DeepSeek, OpenAI, Gemini 2.5+, Grok, Moonshot and Z.AI models automatically. Anthropic
 models require an explicit breakpoint, so Magnolia marks only the conversation extractor's transcript and

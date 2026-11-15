@@ -3,13 +3,16 @@
 ## Routing metadata
 
 1. `resolve_route(role)` labels critic and memory routes in `llm.Route.role`; `call_llm` is always a memory call.
-2. `_openrouter_session_id` resolves `MAGNOLIA_PROJECT_DIR` (or the current directory), hashes the resolved
-   path with SHA-256, and emits only `magnolia-<role>-<first 16 hex>`.
+2. `_openrouter_session_id` reuses the hook-core project resolver (root markers, `.active-project`, then
+   `MAGNOLIA_PROJECT_DIR`, with the current directory fallback), normalises the resulting path, hashes it with
+   SHA-256, and emits only `magnolia-<role>-<first 16 hex>`.
 3. `_route_request` and `_call_openai_compat` add that value to OpenRouter request bodies unless
    `MAGNOLIA_OPENROUTER_STICKY` is `0`, `false`, `no` or `off`.
 4. `_openrouter_provider` supplies the default quantization filter. A valid member value in
-   `MAGNOLIA_OPENROUTER_PROVIDER` replaces it; a no-endpoint response makes `_post_openrouter` retry once
-   without the provider field and surfaces `quality_floor_dropped` to timing and critic rows.
+   `MAGNOLIA_OPENROUTER_PROVIDER` replaces it and is never dropped; an invalid value warns once and uses the
+   default. A 400 or 404 specifically naming `no endpoints found` or quantization makes `_post_openrouter`
+   retry the default once without the provider field and surfaces `quality_floor_dropped` to timing and
+   critic rows, including when the retry raises.
 
 ## Reused extractor prefix
 

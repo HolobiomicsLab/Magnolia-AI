@@ -57,7 +57,7 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
   `KIMI_PLAN_MAGNOLIA_API_KEY` (Magnolia-specific) or `KIMI_API_KEY`.
 - `MAGNOLIA_OPENROUTER_PROVIDER` optionally holds an OpenRouter provider JSON
   object and replaces Magnolia's default fp8/bf16/fp16/fp32/unknown quality
-  floor. Invalid JSON is ignored with one stderr warning.
+  floor. Invalid JSON falls back to that floor with one stderr warning.
 - `MAGNOLIA_OPENROUTER_STICKY=0` (also false/no/off) disables the default
   role-specific, project-private OpenRouter session id.
 - All errors are swallowed and surface as `None` — callers must handle the
@@ -79,6 +79,7 @@ from typing import Literal
 
 import httpx
 
+from compchem_memory.hook.project import resolve_project
 from compchem_memory.opencode_ingest import scrub_secrets
 
 PROVIDER_DEEPSEEK = "deepseek"
@@ -381,11 +382,11 @@ _OPENROUTER_QUALITY_FLOOR = {
 _FALSE_VALUES = {"0", "false", "no", "off"}
 
 
-def _openrouter_provider() -> dict | None:
-    """Return the member's provider preference or Magnolia's quality floor."""
+def _member_openrouter_provider() -> dict | None:
+    """Return a valid member provider object, warning once when invalid."""
     raw = _trimmed_env("MAGNOLIA_OPENROUTER_PROVIDER")
     if not raw:
-        return {key: list(value) for key, value in _OPENROUTER_QUALITY_FLOOR.items()}
+        return None
     try:
         value = json.loads(raw)
         if isinstance(value, dict):
@@ -395,17 +396,27 @@ def _openrouter_provider() -> dict | None:
         if not _INVALID_OPENROUTER_PROVIDER_WARNED:
             _INVALID_OPENROUTER_PROVIDER_WARNED.add(raw)
             print(
-                f"[llm] ignoring invalid MAGNOLIA_OPENROUTER_PROVIDER: {error}",
+                "[llm] invalid MAGNOLIA_OPENROUTER_PROVIDER; "
+                f"using default quality floor: {error}",
                 file=sys.stderr,
             )
         return None
+
+
+def _openrouter_provider() -> dict:
+    """Return the member's provider preference or Magnolia's quality floor."""
+    member_provider = _member_openrouter_provider()
+    if member_provider is not None:
+        return member_provider
+    return {key: list(value) for key, value in _OPENROUTER_QUALITY_FLOOR.items()}
 
 
 def _openrouter_session_id(role: Literal["memory", "critic"]) -> str | None:
     """Return a path-private sticky-routing id for one project and LLM role."""
     if _trimmed_env("MAGNOLIA_OPENROUTER_STICKY").lower() in _FALSE_VALUES:
         return None
-    project = Path(os.environ.get("MAGNOLIA_PROJECT_DIR") or ".").resolve()
+    resolved = resolve_project(Path.cwd(), os.environ)
+    project = (resolved.project_dir if resolved else Path.cwd()).resolve()
     digest = hashlib.sha256(str(project).encode("utf-8")).hexdigest()[:16]
     return f"magnolia-{role}-{digest}"
 
@@ -574,8 +585,7 @@ def _route_request(
         body["response_format"] = {"type": "json_object"}
     if route.provider == PROVIDER_OPENROUTER:
         provider = _openrouter_provider()
-        if provider is not None:
-            body["provider"] = provider
+        body["provider"] = provider
         if session_id := _openrouter_session_id(route.role):
             body["session_id"] = session_id
         if disable_thinking:
@@ -635,13 +645,17 @@ def _reasoning_rejected(response: object, body: dict) -> bool:
 
 
 def _provider_filter_rejected(response: object, body: dict) -> bool:
-    if "provider" not in body:
+    if (
+        body.get("provider") != _OPENROUTER_QUALITY_FLOOR
+        or _member_openrouter_provider() is not None
+    ):
         return False
     status = getattr(response, "status_code", None)
     text = str(getattr(response, "text", "")).lower()
-    return status == 404 or (
-        status == 400 and ("endpoint" in text or "quantization" in text)
-    )
+    excluded = ("context length", "max token", "rate limit")
+    if status not in (400, 404) or any(phrase in text for phrase in excluded):
+        return False
+    return "no endpoints found" in text or "quantization" in text
 
 
 def _post_openrouter(url: str, headers: dict, body: dict) -> tuple[object, bool]:
@@ -650,7 +664,12 @@ def _post_openrouter(url: str, headers: dict, body: dict) -> tuple[object, bool]
     reasoning_retried = False
     quality_floor_dropped = False
     for _ in range(3):
-        response = httpx.post(url, headers=headers, json=current, timeout=60)
+        try:
+            response = httpx.post(url, headers=headers, json=current, timeout=60)
+        except Exception as error:
+            if quality_floor_dropped:
+                error.quality_floor_dropped = True
+            raise
         if not reasoning_retried and _reasoning_rejected(response, current):
             current = {key: value for key, value in current.items() if key != "reasoning"}
             reasoning_retried = True
@@ -707,6 +726,9 @@ def call_route(
             )
         return _route_response(route, response.json(), status, quality_floor_dropped)
     except Exception as error:  # noqa: BLE001 - public contract: never raise
+        quality_floor_dropped = bool(
+            getattr(error, "quality_floor_dropped", quality_floor_dropped)
+        )
         return CallResult(
             None, None, None, _scrub_route_error(str(error), route.key), status,
             quality_floor_dropped=quality_floor_dropped,
@@ -912,8 +934,7 @@ def _call_openai_compat(
         body["temperature"] = temperature
     if provider == PROVIDER_OPENROUTER:
         provider_preference = _openrouter_provider()
-        if provider_preference is not None:
-            body["provider"] = provider_preference
+        body["provider"] = provider_preference
         if session_id := _openrouter_session_id("memory"):
             body["session_id"] = session_id
         if disable_thinking:
