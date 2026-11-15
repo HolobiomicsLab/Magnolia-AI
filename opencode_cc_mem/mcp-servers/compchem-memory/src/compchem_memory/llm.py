@@ -72,6 +72,8 @@ from typing import Literal
 
 import httpx
 
+from compchem_memory.opencode_ingest import scrub_secrets
+
 PROVIDER_DEEPSEEK = "deepseek"
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI = "openai"
@@ -452,6 +454,16 @@ def _route_response(route: Route, data: dict, status: int) -> CallResult:
     )
 
 
+_BEARER_CREDENTIAL = re.compile(r"Bearer\s+\S+")
+
+
+def _scrub_route_error(text: str, key: str) -> str:
+    """Redact route credentials and known secret shapes, then bound the error."""
+    redacted = text.replace(key, "[REDACTED]") if key else text
+    redacted = scrub_secrets(redacted)
+    return _BEARER_CREDENTIAL.sub("Bearer [REDACTED]", redacted)[:300]
+
+
 def call_route(
     route: Route,
     system: str,
@@ -475,10 +487,10 @@ def call_route(
             error = f"HTTP {status} from {route.provider}"
             if detail:
                 error += f": {detail}"
-            return CallResult(None, None, None, error[:300], status)
+            return CallResult(None, None, None, _scrub_route_error(error, route.key), status)
         return _route_response(route, response.json(), status)
     except Exception as error:  # noqa: BLE001 - public contract: never raise
-        return CallResult(None, None, None, str(error)[:300], status)
+        return CallResult(None, None, None, _scrub_route_error(str(error), route.key), status)
 
 
 def is_llm_available() -> bool:

@@ -187,6 +187,33 @@ def test_call_route_never_raises(monkeypatch):
     assert llm.call_route(route, "s", "u", max_tokens=1) == CallResult(None, None, None, "offline", None)
 
 
+@pytest.mark.parametrize("failure_kind", ["http", "exception"])
+def test_call_route_scrubs_key_from_result_and_critic_log(tmp_path, monkeypatch, failure_kind):
+    fabricated_key = "sk-fabricated-critic-key-1234567890"
+    route = Route("openai", "judge", "https://judge/chat", fabricated_key, "openai")
+
+    def fake_post(*args, **kwargs):
+        if failure_kind == "http":
+            detail = f"invalid key {fabricated_key}; Authorization: Bearer {fabricated_key}"
+            return FakeResponse({}, status=401, text=detail)
+        raise OSError(f"transport rejected key {fabricated_key}")
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    result = llm.call_route(route, "system", "user", max_tokens=1)
+    assert fabricated_key not in (result.error or "")
+
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+    critic.run_critic(paths, "claude", "s1", None)
+
+    error_log = (paths.store / "claim-critic" / "errors.jsonl").read_text()
+    assert fabricated_key not in error_log
+    assert "[REDACTED]" in error_log
+
+
 def test_memory_route_anthropic_explicit(monkeypatch):
     monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "claude-haiku-4-5-20251001")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "an")
