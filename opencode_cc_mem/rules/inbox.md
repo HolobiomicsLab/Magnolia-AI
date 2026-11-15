@@ -8,7 +8,7 @@ tags: [inbox, inter-project, communication, protocol]
 
 # Inter-project inbox
 
-One opencode session works on one project and cannot write into another
+One agent session works on one project and cannot write into another
 project's memory. The inbox is the way around that: every project has a
 mailbox directory, `projects/<name>/inbox/`, and projects talk by leaving
 message files in the mailbox of the project they are writing to.
