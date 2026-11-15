@@ -1,4 +1,10 @@
 import json
+import multiprocessing
+import os
+import signal
+import subprocess
+import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -62,29 +68,114 @@ def finish(admission, outcome="success", usage=None):
     admission.release(usage=usage, outcome=RunOutcome(outcome))
 
 
+def _race_admit(ledger, policy_values, when, barrier, results, identifier):
+    usage = Governor(
+        Policy(**policy_values),
+        ledger_path=ledger,
+        clock=lambda: when,
+    )
+    barrier.wait()
+    result = usage.admit(request(identifier))
+    results.put("admitted" if isinstance(result, Admission) else result.reason)
+
+
+def _run_admission_race(ledger, policy, when, count=6):
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(count)
+    results = context.Queue()
+    processes = [
+        context.Process(
+            target=_race_admit,
+            args=(ledger, policy, when, barrier, results, f"racer-{index}"),
+        )
+        for index in range(count)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(10)
+        assert process.exitcode == 0
+    return [results.get(timeout=2) for _ in processes]
+
+
+def _reserve_and_exit(ledger, identifier, child_ready=None):
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+    admitted = usage.admit(request(identifier))
+    if child_ready is None:
+        return
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+    )
+    admitted.mark_started(pid=child.pid, pgid=child.pid)
+    child_ready.put(child.pid)
+
+
+def _wait_for_process_exit(pid, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"process {pid} did not exit")
+
+
 def test_slots_hold_across_processes(tmp_path):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
-    first = governor(tmp_path, clock, max_concurrent=1, min_seconds_between_runs=1)
-    second = governor(tmp_path, clock, max_concurrent=1, min_seconds_between_runs=1)
+    policy = {
+        "max_concurrent": 2,
+        "max_runs_per_day": 50,
+        "max_turns_per_run": 60,
+        "min_seconds_between_runs": 1,
+    }
+    usage = Governor(
+        Policy(**policy),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+        clock=clock,
+    )
+    held = usage.admit(request("held"))
+    held.mark_started(pid=os.getpid(), pgid=os.getpgrp())
+    clock.advance(2)
 
-    held = first.admit(request("one"))
-    blocked = second.admit(request("two"))
+    results = _run_admission_race(
+        usage.ledger_path,
+        policy,
+        clock(),
+    )
 
-    assert isinstance(held, Admission)
-    assert isinstance(blocked, QuotaWaiting)
-    assert blocked.reason == "concurrency"
+    assert results.count("admitted") == 1
+    assert results.count("concurrency") == 5
 
 
 def test_last_daily_admission_race(tmp_path):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
-    first = governor(tmp_path, clock, max_runs_per_day=1, min_seconds_between_runs=1)
-    second = governor(tmp_path, clock, max_runs_per_day=1, min_seconds_between_runs=1)
+    policy = {
+        "max_concurrent": 8,
+        "max_runs_per_day": 2,
+        "max_turns_per_run": 60,
+        "min_seconds_between_runs": 1,
+    }
+    usage = Governor(
+        Policy(**policy),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+        clock=clock,
+    )
+    finish(usage.admit(request("completed")))
+    clock.advance(2)
 
-    assert isinstance(first.admit(request("one")), Admission)
-    blocked = second.admit(request("two", route("anthropic")))
+    results = _run_admission_race(
+        usage.ledger_path,
+        policy,
+        clock(),
+    )
 
-    assert isinstance(blocked, QuotaWaiting)
-    assert blocked.reason == "daily_limit"
+    assert results.count("admitted") == 1
+    assert results.count("daily_limit") == 5
 
 
 def test_spacing_and_cancel_without_lock_held(tmp_path):
@@ -124,8 +215,11 @@ def test_unknown_provider_throttled_api_provider_only_recorded(tmp_path):
 
 def test_xdg_and_missing_vs_invalid_policy(tmp_path, monkeypatch):
     config_home = tmp_path / "config"
+    state_home = tmp_path / "state"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
     assert Policy.load() == Policy()
+    assert Governor().ledger_path == state_home / "magnolia" / "usage-ledger.jsonl"
     with pytest.raises(PolicyError):
         Policy.load(tmp_path / "missing.yaml")
     policy_path = config_home / "magnolia" / "usage-policy.yaml"
@@ -134,14 +228,39 @@ def test_xdg_and_missing_vs_invalid_policy(tmp_path, monkeypatch):
     with pytest.raises(PolicyError):
         Policy.load()
 
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    monkeypatch.setenv("XDG_STATE_HOME", "")
+    assert Policy.load() == Policy()
+    assert Governor().ledger_path == tmp_path / "home" / ".local/state/magnolia/usage-ledger.jsonl"
+
+    default_policy = tmp_path / "home" / ".config/magnolia/usage-policy.yaml"
+    default_policy.parent.mkdir(parents=True)
+    default_policy.symlink_to(tmp_path / "missing-policy.yaml")
+    with pytest.raises(PolicyError, match="dangling"):
+        Policy.load()
+
+
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+def test_policy_rejects_non_finite_price(price):
+    with pytest.raises(PolicyError, match="finite"):
+        Policy(max_price_per_run=price)
+
 
 @pytest.mark.parametrize("kind", ["failure", "timeout", "cancelled"])
 def test_release_idempotent_on_exception_timeout_cancel(tmp_path, kind):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
     usage = governor(tmp_path, clock, min_seconds_between_runs=1)
     admitted = usage.admit(request(kind))
-    admitted.mark_started(pid=101, pgid=101, process_start_token="proc-1")
-    admitted.release(outcome=RunOutcome(kind))
+    if kind == "failure":
+        with pytest.raises(RuntimeError, match="boom"):
+            with admitted as active:
+                active.mark_started(pid=101, pgid=101, process_start_token="proc-1")
+                raise RuntimeError("boom")
+    else:
+        with admitted as active:
+            active.mark_started(pid=101, pgid=101, process_start_token="proc-1")
+            active.release(outcome=RunOutcome(kind))
     admitted.release(outcome=RunOutcome("success"))
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
@@ -149,13 +268,58 @@ def test_release_idempotent_on_exception_timeout_cancel(tmp_path, kind):
 
 
 def test_dead_owner_live_child_not_reclaimed(tmp_path):
-    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
-    usage = governor(tmp_path, clock, max_concurrent=1, min_seconds_between_runs=1)
-    admitted = usage.admit(request("one"))
-    admitted.mark_started(pid=202, pgid=202, process_start_token="birth")
+    context = multiprocessing.get_context("spawn")
+    child_ready = context.Queue()
+    ledger = tmp_path / "usage-ledger.jsonl"
+    owner = context.Process(target=_reserve_and_exit, args=(ledger, "one", child_ready))
+    owner.start()
+    child_pid = child_ready.get(timeout=5)
+    owner.join(5)
+    assert owner.exitcode == 0
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+    try:
+        assert usage.reconcile("one", service_request_ended=True) is False
+        assert usage.admit(request("two")).reason == "concurrency"
+    finally:
+        os.killpg(child_pid, signal.SIGTERM)
+        _wait_for_process_exit(child_pid)
+    assert usage.reconcile("one", service_request_ended=True) is True
 
-    assert usage.reconcile("one", process_ended=False, service_request_ended=True) is False
-    assert usage.admit(request("two")).reason == "concurrency"
+
+def test_never_launched_reservation_owner_lifecycle(tmp_path):
+    usage = governor(
+        tmp_path,
+        FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc)),
+        max_concurrent=1,
+        min_seconds_between_runs=1,
+    )
+    usage.admit(request("live-owner"))
+    assert not usage.reconcile(
+        "live-owner", process_ended=True, service_request_ended=True
+    )
+
+    context = multiprocessing.get_context("spawn")
+    dead_owner_dir = tmp_path / "dead-owner"
+    dead_owner_dir.mkdir()
+    dead_owner_ledger = dead_owner_dir / "usage-ledger.jsonl"
+    dead_owner = context.Process(
+        target=_reserve_and_exit,
+        args=(dead_owner_ledger, "dead-owner"),
+    )
+    dead_owner.start()
+    dead_owner.join(5)
+    assert dead_owner.exitcode == 0
+    abandoned = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=dead_owner_ledger,
+    )
+    assert abandoned.reconcile(
+        "dead-owner", process_ended=False, service_request_ended=False
+    )
+    assert isinstance(abandoned.admit(request("replacement")), Admission)
 
 
 def test_ended_work_reclaimed_once(tmp_path):
@@ -235,16 +399,73 @@ def test_waiters_visible_without_completed_runs(tmp_path):
     assert report["waits"][0]["caller_id"] == "two"
 
 
+def test_cancelled_and_stale_waits_are_not_active(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(tmp_path, clock, max_concurrent=1, min_seconds_between_runs=1)
+    cancelled = usage.admit(
+        request("cancelled"),
+        type("Control", (), {"should_stop": lambda self: "stop"})(),
+    )
+    assert cancelled.reason == "cancelled"
+    assert usage.report(clock().date())["waits"] == []
+
+    usage.admit(request("held"))
+    context = multiprocessing.get_context("spawn")
+    waiter_barrier = context.Barrier(1)
+    waiter_results = context.Queue()
+    waiter = context.Process(
+        target=_race_admit,
+        args=(
+            usage.ledger_path,
+            {
+                "max_concurrent": 1,
+                "max_runs_per_day": 50,
+                "max_turns_per_run": 60,
+                "min_seconds_between_runs": 1,
+            },
+            clock(),
+            waiter_barrier,
+            waiter_results,
+            "gone-waiter",
+        ),
+    )
+    waiter.start()
+    waiter.join(5)
+    assert waiter.exitcode == 0
+    assert usage.report(clock().date())["waits"] == []
+
+
 def test_ledger_has_no_prompt_reply_or_key(tmp_path):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    from campaign_runner.workers import InvocationGovernance, OpenCodeExecutor
+
+    binary = tmp_path / "privacy-client"
+    binary.write_text(
+        """#!/usr/bin/env python3
+import json
+print(json.dumps({'sessionID': 'private-session', 'part': {'type': 'text', 'messageID': 'm1', 'text': 'reply-sentinel-7e8f'}}))
+""",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
     usage = governor(tmp_path, clock, min_seconds_between_runs=1)
-    admitted = usage.admit(request("one"))
-    finish(admitted)
+    executor = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+        environment={"PROVIDER_API_KEY": "key-sentinel-4d5c"},
+        governance=InvocationGovernance(
+            usage,
+            route(),
+            "private-run",
+            "project-digest",
+        ),
+    )
+    executor.run("prompt-sentinel-1a2b", tmp_path, tmp_path / "privacy-attempt")
     body = (tmp_path / "usage-ledger.jsonl").read_text()
-    assert "prompt" not in body
-    assert "reply" not in body
-    assert "api_key" not in body
-    assert "secret" not in body
+    assert "prompt-sentinel-1a2b" not in body
+    assert "reply-sentinel-7e8f" not in body
+    assert "key-sentinel-4d5c" not in body
 
 
 def test_unknown_quota_requires_explicit_resume(tmp_path):
@@ -256,3 +477,87 @@ def test_unknown_quota_requires_explicit_resume(tmp_path):
     assert usage.admit(request("two")).reason == "quota"
     assert usage.resume_key("opencode:anthropic")
     assert isinstance(usage.admit(request("three")), Admission)
+
+
+def test_resume_compare_and_clear_and_conservative_hold_merge(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(
+        tmp_path,
+        clock,
+        max_concurrent=3,
+        min_seconds_between_runs=1,
+    )
+    first = usage.admit(request("first"))
+    clock.advance(1)
+    second = usage.admit(request("second"))
+    clock.advance(1)
+    third = usage.admit(request("third"))
+    first.mark_started(pid=1, pgid=1, process_start_token="first")
+    first.release(
+        outcome=RunOutcome(
+            "quota",
+            LimitInfo("first", clock() + timedelta(hours=2), "probe"),
+        )
+    )
+    observed = usage.report(clock().date())["holds"][0]
+
+    second.mark_started(pid=2, pgid=2, process_start_token="second")
+    second.release(
+        outcome=RunOutcome(
+            "quota",
+            LimitInfo("second", clock() + timedelta(hours=1), "probe"),
+        )
+    )
+    current = usage.report(clock().date())["holds"][0]
+    assert current["generation"] != observed["generation"]
+    assert current["reset_at"] == observed["reset_at"]
+    assert not usage.resume_key(
+        "opencode:anthropic", expected_hold=observed["generation"]
+    )
+
+    third.mark_started(pid=3, pgid=3, process_start_token="third")
+    third.release(outcome=RunOutcome("quota"))
+    unknown = usage.report(clock().date())["holds"][0]
+    assert unknown["reset_at"] is None
+    assert usage.resume_key(
+        "opencode:anthropic", expected_hold=unknown["generation"]
+    )
+
+
+def test_torn_final_ledger_line_is_quarantined_other_corruption_refuses(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(tmp_path, clock, min_seconds_between_runs=1)
+    finish(usage.admit(request("one")))
+    clock.advance(2)
+    with usage.ledger_path.open("ab") as handle:
+        handle.write(b'{"invocation_id":"torn"')
+
+    assert isinstance(usage.admit(request("two")), Admission)
+    quarantine = usage.ledger_path.with_suffix(".jsonl.quarantine")
+    assert quarantine.exists()
+    assert "torn" in quarantine.read_text(encoding="utf-8")
+
+    corrupt = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "corrupt.jsonl",
+        clock=clock,
+    )
+    corrupt.ledger_path.write_text("not-json\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="invalid usage ledger row 1"):
+        corrupt.admit(request("refused"))
+
+
+def test_daily_accounting_uses_reservation_day(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 23, 59, 59, tzinfo=timezone.utc))
+    usage = governor(
+        tmp_path,
+        clock,
+        max_runs_per_day=1,
+        min_seconds_between_runs=1,
+    )
+    admitted = usage.admit(request("before-midnight"))
+    clock.advance(2)
+    finish(admitted)
+    clock.advance(2)
+
+    assert isinstance(usage.admit(request("new-day")), Admission)

@@ -104,6 +104,32 @@ def test_run_process_cancel_is_typed(tmp_path):
     assert outcome.outcome.kind == "cancelled"
 
 
+def test_governed_process_is_recorded_before_client_runs(tmp_path):
+    marker = tmp_path / "client-ran"
+    callback_observations = []
+
+    def on_start(_pid, _pgid):
+        time.sleep(0.1)
+        callback_observations.append(marker.exists())
+
+    outcome = run_process(
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')",
+        ],
+        cwd=tmp_path,
+        env={},
+        timeout_seconds=30,
+        stdout_path=tmp_path / "out.log",
+        stderr_path=tmp_path / "err.log",
+        control=ProcessControl(on_start=on_start, hold_before_exec=True),
+    )
+    assert outcome.returncode == 0
+    assert callback_observations == [False]
+    assert marker.read_text() == "ran"
+
+
 def test_resume_and_repair_each_reserve_and_record(tmp_path):
     binary = tmp_path / "client"
     binary.write_text(
@@ -113,7 +139,7 @@ resumed = '--session' in sys.argv
 session = 'same-session'
 print(json.dumps({'sessionID': session, 'part': {'type': 'step-start'}}))
 if resumed:
-    print(json.dumps({'sessionID': session, 'part': {'type': 'step-finish', 'tokens': {'input': 150, 'output': 30}}}))
+    print(json.dumps({'sessionID': session, 'part': {'type': 'step-finish', 'tokens': {'input': 30, 'output': 10}}}))
     print(json.dumps({'sessionID': session, 'part': {'type': 'text', 'messageID': 'm2', 'text': 'done'}}))
 else:
     print(json.dumps({'sessionID': session, 'part': {'type': 'step-finish', 'tokens': {'input': 100, 'output': 20}}}))
@@ -121,16 +147,13 @@ else:
         encoding="utf-8",
     )
     binary.chmod(0o755)
-    now = {"value": datetime(2026, 11, 15, 12, tzinfo=timezone.utc)}
-
-    def clock():
-        now["value"] += timedelta(seconds=1)
-        return now["value"]
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
 
     usage = Governor(
-        Policy(min_seconds_between_runs=1),
+        Policy(),
         ledger_path=tmp_path / "usage-ledger.jsonl",
         clock=clock,
+        sleeper=clock.advance,
     )
     selected = ResolvedRoute(
         "opencode", "provider/model", "provider", "opencode:provider", "worker", "test"
@@ -155,4 +178,25 @@ else:
     assert result.final_text == "done"
     assert len(rows) == 2
     assert rows[0]["usage"]["input_tokens"] == 100
-    assert rows[1]["usage"]["input_tokens"] == 50
+    assert rows[1]["usage"]["input_tokens"] == 30
+    assert result.usage["input_tokens"] == 130
+    assert usage.report(clock().date())["waits"] == []
+
+    ungoverned = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+    ).run("work", tmp_path, tmp_path / "ungoverned-attempt")
+    assert result.final_text == ungoverned.final_text
+    assert result.usage == ungoverned.usage
+
+
+class FakeClock:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, seconds):
+        self.value += timedelta(seconds=seconds)
