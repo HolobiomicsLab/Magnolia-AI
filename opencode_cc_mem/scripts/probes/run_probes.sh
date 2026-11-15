@@ -4,7 +4,7 @@
 # Never uses `claude --bare`; never touches global configs.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PY="${PROBE_PY:-python3}"
+PY="${PROBE_PY:?set PROBE_PY to a Python that has fastmcp or mcp}"
 BASE="${TMPDIR:-/tmp}"
 
 claude_cfg() { # $1=dir ; writes settings.json and mcp.json
