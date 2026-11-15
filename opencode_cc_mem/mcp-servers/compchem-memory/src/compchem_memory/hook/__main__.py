@@ -11,17 +11,25 @@ from pathlib import Path
 from typing import Any, Mapping
 
 POST_TOOL_SECONDS = 2.5
+POST_TOOL_EXIT_RESERVE_SECONDS = 0.2
 DEFAULT_SECONDS = 8.0
 
 
 def _render_handled(adapter: Any, handled: Any, event: Any):
-    """Render a handled response and commit only a delivered action note."""
-    rendered = adapter.render(handled.response, event)
+    """Render a handled response without recording delivery yet."""
+    return adapter.render(handled.response, event)
+
+
+def _write_rendered(rendered: Any, handled: Any, event: Any) -> None:
+    """Write UTF-8 output and commit exposure after stdout delivery."""
+    sys.stdout.buffer.write(rendered.stdout.encode("utf-8"))
+    sys.stdout.buffer.flush()
     if handled.pending is not None and "tool_note" in rendered.emitted:
         from compchem_memory.hook.action_retrieval import commit_exposure
 
         commit_exposure(handled.pending, event.session_id)
-    return rendered
+    sys.stderr.buffer.write(rendered.stderr.encode("utf-8"))
+    sys.stderr.buffer.flush()
 
 
 def _error_destination(event: Any, env: Mapping[str, str]) -> Path:
@@ -29,9 +37,12 @@ def _error_destination(event: Any, env: Mapping[str, str]) -> Path:
     from compchem_memory.hook.project import bind_project, state_home
 
     if event is not None:
-        paths = bind_project(
-            event.harness, event.session_id, Path(event.cwd), env,
-        )
+        try:
+            paths = bind_project(
+                event.harness, event.session_id, Path(event.cwd), env,
+            )
+        except Exception:  # noqa: BLE001 - error logging must retain its fallback
+            return state_home(env)
         if paths is not None:
             return paths.store
     return state_home(env)
@@ -86,22 +97,20 @@ def main() -> None:
     harness = sys.argv[1] if len(sys.argv) > 1 else ""
     event_name = sys.argv[2] if len(sys.argv) > 2 else ""
     timeout = POST_TOOL_SECONDS if event_name == "post-tool" else DEFAULT_SECONDS
+    deadline = started + timeout
+    if event_name == "post-tool":
+        deadline -= POST_TOOL_EXIT_RESERVE_SECONDS
     event = None
     try:
         adapter, event = _parse_stdin(harness, event_name)
         from compchem_memory.hook.dispatch import handle
 
-        handled = handle(event, os.environ, started + timeout)
+        handled = handle(event, os.environ, deadline)
         rendered = _render_handled(adapter, handled, event)
+        _write_rendered(rendered, handled, event)
     except Exception as error:  # noqa: BLE001 - every hook failure is fail-open
         _log_error(error, harness, event_name, event, os.environ)
-        sys.stdout.flush()
-        sys.stderr.flush()
         os._exit(0)
-    sys.stdout.write(rendered.stdout)
-    sys.stderr.write(rendered.stderr)
-    sys.stdout.flush()
-    sys.stderr.flush()
     os._exit(rendered.exit_code)
 
 

@@ -14,11 +14,12 @@ from types import SimpleNamespace
 import pytest
 
 from compchem_memory import quick_search
-from compchem_memory.hook.__main__ import _render_handled
+from compchem_memory.hook.__main__ import _log_error, _render_handled
 from compchem_memory.hook.adapters import Rendered
 from compchem_memory.hook.adapters import json_adapter
 from compchem_memory.hook.dispatch import handle
 from compchem_memory.hook.events import Block, HookEvent, HookResponse, ToolCall
+from compchem_memory.hook import project as project_module
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -48,6 +49,7 @@ def _payload(project: Path, session_id: str, event: str) -> dict:
 
 def _run_cli(project: Path, state: Path, event: str, session_id: str, env: dict | None = None):
     process_env = dict(os.environ if env is None else env)
+    process_env["HOME"] = str(state.parent / "home")
     process_env["XDG_STATE_HOME"] = str(state)
     return subprocess.run(
         [sys.executable, "-m", "compchem_memory.hook", "json", event],
@@ -133,6 +135,7 @@ def test_cli_logs_post_bind_failure_to_project_store(tmp_path):
     payload = _payload(project, "missing-tool", "post-tool")
     payload.pop("tool")
     env = dict(os.environ)
+    env["HOME"] = str(tmp_path / "home")
     env["XDG_STATE_HOME"] = str(state)
 
     proc = subprocess.run(
@@ -151,6 +154,85 @@ def test_cli_logs_post_bind_failure_to_project_store(tmp_path):
     ]
     assert rows[0]["harness"] == "json" and rows[0]["event"] == "post-tool"
     assert rows[0]["error"].startswith("AttributeError:")
+
+
+def test_error_log_falls_back_to_state_home_when_binding_raises(tmp_path, monkeypatch):
+    state = tmp_path / "state"
+    env = {"HOME": str(tmp_path / "home"), "XDG_STATE_HOME": str(state)}
+    event = HookEvent("json", "prompt", "broken-binding", str(tmp_path))
+
+    def raise_binding_error(*args, **kwargs):
+        raise OSError("binding failed")
+
+    monkeypatch.setattr(project_module, "bind_project", raise_binding_error)
+
+    _log_error(ValueError("dispatch failed"), "json", "prompt", event, env)
+
+    rows = [
+        json.loads(line)
+        for line in (state / "magnolia" / "hook-errors.jsonl").read_text().splitlines()
+    ]
+    assert rows[0]["error"] == "ValueError: dispatch failed"
+
+
+def test_cli_writes_utf8_bytes_with_ascii_python_io_encoding(tmp_path):
+    project = _workspace(tmp_path)
+    state = tmp_path / "state"
+    env = dict(os.environ)
+    env.update({
+        "HOME": str(tmp_path / "home"),
+        "PYTHONIOENCODING": "ascii",
+        "XDG_STATE_HOME": str(state),
+    })
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "compchem_memory.hook", "json", "session-start"],
+        input=json.dumps(_payload(project, "ascii-output", "session-start")).encode("utf-8"),
+        capture_output=True,
+        timeout=30,
+        env=env,
+    )
+
+    output = json.loads(proc.stdout.decode("utf-8"))
+    assert proc.returncode == 0 and output["context"]
+    assert proc.stderr == b""
+
+
+def test_cli_stdout_failure_logs_error_without_exposure(tmp_path):
+    project = _workspace(tmp_path)
+    entry = project / ".magnolia" / "entries" / "haddock.md"
+    entry.write_text(
+        "---\ntitle: Haddock workflow\ntype: error_resolution\n---\n"
+        "haddock3 run workflow recovery\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env.update({
+        "HOME": str(tmp_path / "home"),
+        "MAGNOLIA_JOB_NOTIFY": "0",
+        "XDG_STATE_HOME": str(tmp_path / "state"),
+    })
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "compchem_memory.hook", "json", "post-tool"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+    proc.stdout.close()
+    proc.stdin.write(json.dumps(_payload(project, "closed-stdout", "post-tool")).encode("utf-8"))
+    proc.stdin.close()
+    stderr = proc.stderr.read()
+    returncode = proc.wait(timeout=30)
+
+    assert returncode == 0 and stderr == b""
+    rows = [
+        json.loads(line)
+        for line in (project / ".magnolia" / "hook-errors.jsonl").read_text().splitlines()
+    ]
+    assert rows[0]["error"].startswith("BrokenPipeError:")
+    assert not (project / ".magnolia" / "surfacing.jsonl").exists()
 
 
 def test_cli_post_tool_exits_within_deadline(tmp_path):
@@ -172,7 +254,7 @@ def test_cli_post_tool_exits_within_deadline(tmp_path):
     proc = _run_cli(project, tmp_path / "state", "post-tool", "slow-search", env)
 
     elapsed = time.perf_counter() - started
-    assert proc.returncode == 0 and elapsed < 3.0, (elapsed, proc.stderr)
+    assert proc.returncode == 0 and elapsed < 2.5, (elapsed, proc.stderr)
     rows = [
         json.loads(line)
         for line in (project / ".magnolia" / "action-retrieval.jsonl").read_text().splitlines()
@@ -193,6 +275,7 @@ def test_cli_post_tool_exits_within_deadline(tmp_path):
 )
 def test_cli_garbage_payloads_exit_zero(stdin, tmp_path):
     env = dict(os.environ)
+    env["HOME"] = str(tmp_path / "home")
     env["XDG_STATE_HOME"] = str(tmp_path / "state")
     proc = subprocess.run(
         [sys.executable, "-m", "compchem_memory.hook", "json", "post-tool"],
