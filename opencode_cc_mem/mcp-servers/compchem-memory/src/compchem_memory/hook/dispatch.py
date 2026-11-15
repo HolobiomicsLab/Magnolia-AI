@@ -33,8 +33,11 @@ _RECOVERED_TURN_LIMIT = 200
 _VIBE_TURN_LIMIT = 200
 _CATCHUP_ATTEMPT_LIMIT = 3
 _CATCHUP_MAX_AGE_SECONDS = 24 * 60 * 60
-_CATCHUP_JOURNAL_LIMIT = 2
+_CATCHUP_JOURNAL_LIMIT = 16
+_CATCHUP_HOOK_LIMIT_SECONDS = 4.0
+_CATCHUP_EXIT_MARGIN_SECONDS = 0.5
 _WORKER_LEASE_SECONDS = 300
+_QUEUE_ORDER_STEP_SECONDS = 0.000001
 _CARRIED_RESERVATION_TTL_SECONDS = 60
 # Claude Code shows its model only about 2 KB of SessionStart context.
 CLAUDE_CONTEXT_LIMIT = 1800
@@ -550,57 +553,130 @@ def _turn_key(event: HookEvent) -> str | None:
     return f"{agent_id}--{event.turn_id}"
 
 
-def _schedule_background(paths: ProjectPaths, event: HookEvent, reply_text: str) -> bool:
-    """Persist and spawn one detached worker; never wait for its critic."""
-    key = _turn_key(event)
-    if key is None:
-        return False
-    from compchem_memory.atomic_io import atomic_write_text
-    from compchem_memory.hook.state import SessionState, private_mkdir
+def _background_queue_row(event: HookEvent, reply_text: str) -> dict | None:
+    """Build one durable probe/critic queue row."""
+    if (key := _turn_key(event)) is None:
+        return None
+    return {
+        "key": key,
+        "agent_id": None if event.agent is None else event.agent.id,
+        "turn_id": event.turn_id,
+        "reply_text": reply_text,
+        "queued": time.time(),
+    }
+
+
+def _has_live_lease(row: object) -> bool:
+    """Return whether a persisted worker row still owns its lease."""
+    return isinstance(row, dict) and row.get("status") == "running" and (
+        time.time() - float(row.get("started", time.time())) < _WORKER_LEASE_SECONDS
+    )
+
+
+def _trim_background_queue(queue: list[dict]) -> list[dict]:
+    """Keep every main job before retaining the newest child jobs."""
+    main = [row for row in queue if row.get("agent_id") is None]
+    children = [row for row in queue if row.get("agent_id") is not None]
+    if len(main) >= _VIBE_TURN_LIMIT:
+        return main
+    child_limit = _VIBE_TURN_LIMIT - len(main)
+    return [*main, *children[-child_limit:]]
+
+
+def _reserve_session_worker(
+    paths: ProjectPaths, event: HookEvent, rows: list[dict],
+) -> tuple[bool, bool]:
+    """Enqueue new rows and reserve the session's sole worker when needed."""
+    from compchem_memory.hook.state import SessionState
 
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queue = state.data.get("background_queue")
+        queue = [row for row in queue if isinstance(row, dict)] if isinstance(queue, list) else []
         ledger = state.data.get("background_turns")
         ledger = ledger if isinstance(ledger, dict) else {}
-        current = ledger.get(key)
-        current = current if isinstance(current, dict) else {}
-        if current.get("status") == "done":
-            return False
-        if current.get("status") == "running" and (
-            time.time() - float(current.get("started", time.time())) < _WORKER_LEASE_SECONDS
-        ):
-            return False
-        attempts = int(current.get("attempts", 0)) + 1
-        if attempts > _CATCHUP_ATTEMPT_LIMIT:
-            return False
-        ledger[key] = {"status": "running", "attempts": attempts, "started": time.time()}
+        queued_keys = {row.get("key") for row in queue}
+        added = False
+        for row in rows:
+            key = row["key"]
+            current = ledger.get(key)
+            status = current.get("status") if isinstance(current, dict) else None
+            if status == "done" or key in queued_keys or _has_live_lease(current):
+                continue
+            queue.append(row)
+            queued_keys.add(key)
+            attempts = int(current.get("attempts", 0)) if isinstance(current, dict) else 0
+            ledger[key] = {"status": "queued", "attempts": attempts}
+            added = True
+        trimmed_queue = _trim_background_queue(queue)
+        retained_keys = {row.get("key") for row in trimmed_queue}
+        for key, current in ledger.items():
+            if key not in retained_keys and isinstance(current, dict) \
+                    and current.get("status") == "queued":
+                current["status"] = "failed"
+        state.data["background_queue"] = trimmed_queue
         state.data["background_turns"] = dict(list(ledger.items())[-_VIBE_TURN_LIMIT:])
-    folder = paths.store / "hook-workers"
-    private_mkdir(folder)
-    job_path = folder / f"{key}-{attempts}.json"
-    payload = {
+        worker = state.data.get("background_worker")
+        is_running = _has_live_lease(worker)
+        should_spawn = bool(trimmed_queue) and not is_running
+        if should_spawn:
+            state.data["background_worker"] = {"status": "running", "started": time.time()}
+        return added, should_spawn
+
+
+def _worker_payload(paths: ProjectPaths, event: HookEvent) -> dict:
+    """Return the session metadata needed by the queue-draining worker."""
+    return {
         "root": str(paths.root), "project_dir": str(paths.project_dir),
         "store": str(paths.store), "name": paths.name, "root_mode": paths.root_mode,
         "harness": event.harness, "session_id": event.session_id,
-        "agent_id": None if event.agent is None else event.agent.id,
-        "turn_id": event.turn_id, "reply_text": reply_text, "key": key,
     }
-    atomic_write_text(job_path, json.dumps(payload, ensure_ascii=False))
+
+
+def _mark_worker_spawn_failed(paths: ProjectPaths, event: HookEvent) -> None:
+    """Release a failed worker reservation without dropping queued jobs."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        state.data["background_worker"] = {"status": "failed", "started": time.time()}
+
+
+def _schedule_background_batch(
+    paths: ProjectPaths, event: HookEvent, jobs: list[tuple[HookEvent, str]],
+) -> bool:
+    """Enqueue jobs and spawn at most one detached worker for this session."""
+    from compchem_memory.atomic_io import atomic_write_text
+    from compchem_memory.hook.state import private_mkdir
+
+    queued_at = time.time()
+    rows = [row for job, reply in jobs if (row := _background_queue_row(job, reply))]
+    for index, row in enumerate(rows):
+        row["queued"] = queued_at - index * _QUEUE_ORDER_STEP_SECONDS
+    added, should_spawn = _reserve_session_worker(paths, event, rows)
+    if not should_spawn:
+        return added
+    folder = paths.store / "hook-workers"
+    private_mkdir(folder)
+    job_path = folder / f"session-worker-{time.time_ns()}.json"
+    atomic_write_text(job_path, json.dumps(_worker_payload(paths, event), ensure_ascii=False))
     try:
         subprocess.Popen(
             [sys.executable, "-m", "compchem_memory.hook.background", str(job_path)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-        return True
+        return added
     except Exception as error:  # noqa: BLE001 - caller remains fail-open
-        with SessionState.open(paths.store, event.harness, event.session_id) as state:
-            ledger = state.data.get("background_turns")
-            if isinstance(ledger, dict) and isinstance(ledger.get(key), dict):
-                ledger[key]["status"] = "failed"
+        job_path.unlink(missing_ok=True)
+        _mark_worker_spawn_failed(paths, event)
         from compchem_memory.hook.errors import log_error
 
         log_error(error, event.harness, event.event, paths.store, {}, "catch-up-worker")
         return False
+
+
+def _schedule_background(paths: ProjectPaths, event: HookEvent, reply_text: str) -> bool:
+    """Enqueue one turn for the session's detached queue-draining worker."""
+    return _schedule_background_batch(paths, event, [(event, reply_text)])
 
 
 def _defer_turn(paths: ProjectPaths, event: HookEvent) -> None:
@@ -684,7 +760,8 @@ def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
                 continue
             kept.append(row)
             current = ledger.get(key) if key else None
-            is_running = status == "running" and isinstance(current, dict) and (
+            is_running = status in {"queued", "running"} and isinstance(current, dict) and (
+                status == "queued" or
                 now - float(current.get("started", now)) < _WORKER_LEASE_SECONDS
             )
             if not is_running:
@@ -699,14 +776,18 @@ def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
 
         main = newest([row for row in available if row.get("agent_id") is None])
         children = newest([row for row in available if row.get("agent_id") is not None])
-        ordered = main[:1]
-        ordered.extend(children)
-        ordered.extend(main[1:])
-        return ordered
+        return [*main, *children]
 
 
-def _update_pending(paths: ProjectPaths, event: HookEvent, item: dict, *, turn_id: str | None) -> None:
-    """Increment one recovery attempt and retain its resolved turn id."""
+def _update_pending(
+    paths: ProjectPaths,
+    event: HookEvent,
+    item: dict,
+    *,
+    turn_id: str | None,
+    recovered: bool,
+) -> None:
+    """Record recovery without charging an attempt before judging starts."""
     from compchem_memory.hook.state import SessionState
 
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
@@ -715,8 +796,10 @@ def _update_pending(paths: ProjectPaths, event: HookEvent, item: dict, *, turn_i
             return
         for row in pending:
             if isinstance(row, dict) and row.get("id") == item.get("id"):
-                row["attempts"] = int(row.get("attempts", 0)) + 1
                 row["turn_id"] = turn_id
+                row["recovered"] = recovered
+                if not recovered:
+                    row["attempts"] = int(row.get("attempts", 0)) + 1
                 break
 
 
@@ -735,22 +818,37 @@ def _reply_for_turn(paths: ProjectPaths, event: HookEvent) -> str:
     return replies[-1] if replies else ""
 
 
-def _catch_up_pending(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> None:
-    """Recover at most two client journals and detach their expensive work."""
+def _catch_up_pending(
+    paths: ProjectPaths, event: HookEvent, guard: _Guard, deadline: float,
+) -> None:
+    """Recover up to 16 journals, then enqueue one ordered worker batch."""
     if event.agent is not None:
         return
     from compchem_memory.hook.client_transcripts import vibe_assistant_turns
 
-    for item in _pending_turns(paths, event)[:_CATCHUP_JOURNAL_LIMIT]:
+    stop_at = deadline - _CATCHUP_EXIT_MARGIN_SECONDS
+    ready: list[tuple[HookEvent, str]] = []
+    journals_read = 0
+    for item in _pending_turns(paths, event):
         turn_id = item.get("turn_id")
         agent_id = item.get("agent_id")
         transcript_ref = item.get("transcript_ref")
+        agent = AgentRef(str(agent_id), item.get("agent_type")) if agent_id else None
+        catch_up = replace(
+            event, event="turn-end", turn_id=turn_id, agent=agent, assistant_text=None,
+            transcript_ref=str(transcript_ref),
+        )
+        if item.get("recovered") and turn_id:
+            ready.append((catch_up, _reply_for_turn(paths, catch_up)))
+            continue
+        if journals_read >= _CATCHUP_JOURNAL_LIMIT or time.monotonic() >= stop_at:
+            break
+        journals_read += 1
         if not turn_id and event.harness == "vibe":
             turns = vibe_assistant_turns(str(transcript_ref), agent_id=agent_id)
             turn_index = item.get("turn_index")
             if isinstance(turn_index, int) and 0 <= turn_index < len(turns):
                 turn_id = turns[turn_index]
-        agent = AgentRef(str(agent_id), item.get("agent_type")) if agent_id else None
         catch_up = replace(
             event, event="turn-end", turn_id=turn_id, agent=agent, assistant_text=None,
             transcript_ref=str(transcript_ref),
@@ -759,10 +857,11 @@ def _catch_up_pending(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> N
             "client-transcript", _recover_assistant_transcript,
             paths, catch_up, default=False,
         )
-        _update_pending(paths, event, item, turn_id=turn_id)
+        _update_pending(paths, event, item, turn_id=turn_id, recovered=bool(recovered))
         if not recovered or not turn_id:
             continue
-        _schedule_background(paths, catch_up, _reply_for_turn(paths, catch_up))
+        ready.append((catch_up, _reply_for_turn(paths, catch_up)))
+    _schedule_background_batch(paths, event, ready)
 
 
 def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
@@ -784,6 +883,7 @@ def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
 
 def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled:
     """Bind and record an event, then return its neutral hook response."""
+    catchup_deadline = min(deadline, time.monotonic() + _CATCHUP_HOOK_LIMIT_SECONDS)
     paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
     if paths is None:
         return Handled(HookResponse(), None)
@@ -804,6 +904,8 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         if turn_id:
             event = replace(event, turn_id=turn_id)
     guard("session-map", _record_session, paths, event)
+    if event.event == "prompt" and event.harness == "vibe" and event.agent is None:
+        guard("catch-up", _catch_up_pending, paths, event, guard, catchup_deadline)
     transcript_handled = False
     if completion_event:
         transcript_handled = guard(
@@ -818,23 +920,19 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":
-        if event.harness == "vibe" and event.agent is None:
-            guard("catch-up", _catch_up_pending, paths, event, guard)
         handled = _prompt(paths, event, env, guard)
     elif event.event == "post-tool":
         handled = _post_tool(paths, event, deadline, guard)
     elif completion_event:
-        if event.harness == "vibe" or (event.harness == "claude" and event.event == "agent-end"):
+        if event.harness in {"vibe", "claude"}:
             guard("catch-up-ledger", _defer_turn, paths, event)
             handled = Handled(HookResponse(), None)
         else:
-            if event.harness == "claude":
-                guard("catch-up-ledger", _defer_turn, paths, event)
             handled = _turn_end(paths, event, guard)
         if event.harness == "claude" and event.event == "turn-end":
-            guard("catch-up", _catch_up_pending, paths, event, guard)
+            guard("catch-up", _catch_up_pending, paths, event, guard, catchup_deadline)
     elif event.event == "session-end" and event.harness in {"vibe", "claude"}:
-        guard("catch-up", _catch_up_pending, paths, event, guard)
+        guard("catch-up", _catch_up_pending, paths, event, guard, catchup_deadline)
         handled = Handled(HookResponse(), None)
     else:
         handled = Handled(HookResponse(), None)

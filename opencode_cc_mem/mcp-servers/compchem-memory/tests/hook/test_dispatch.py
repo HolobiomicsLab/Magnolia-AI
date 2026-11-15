@@ -7,8 +7,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
+
 from compchem_memory import quick_search
-from compchem_memory.hook import critic, dispatch
+from compchem_memory.hook import action_retrieval, background, critic, dispatch
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.directive import DIRECTIVE
 from compchem_memory.hook.dispatch import handle
@@ -57,7 +59,7 @@ def _post_tool(project: Path) -> HookEvent:
     )
 
 
-def test_background_turn_is_spawned_once_without_waiting(tmp_path, monkeypatch):
+def test_second_hook_queues_without_spawning_while_session_worker_runs(tmp_path, monkeypatch):
     project, _ = _workspace(tmp_path)
     paths = ProjectPaths(project.parent.parent, project, project / ".magnolia", "alpha", False)
     event = HookEvent("vibe", "turn-end", "s1", str(project), turn_id="t1")
@@ -72,12 +74,19 @@ def test_background_turn_is_spawned_once_without_waiting(tmp_path, monkeypatch):
     )
 
     assert dispatch._schedule_background(paths, event, "final reply")
-    assert not dispatch._schedule_background(paths, event, "final reply")
+    assert dispatch._schedule_background(
+        paths, HookEvent("vibe", "turn-end", "s1", str(project), turn_id="t2"),
+        "second reply",
+    )
     assert len(calls) == 1
     assert calls[0][1]["start_new_session"] is True
     assert calls[0][1]["stdin"] is dispatch.subprocess.DEVNULL
     assert calls[0][1]["stdout"] is dispatch.subprocess.DEVNULL
     assert calls[0][1]["stderr"] is dispatch.subprocess.DEVNULL
+    with SessionState.open(paths.store, "vibe", "s1") as state:
+        assert [row["key"] for row in state.data["background_queue"]] == [
+            "main--t1", "main--t2",
+        ]
 
 
 def test_prompt_catchup_failure_keeps_other_context(tmp_path, monkeypatch):
@@ -98,7 +107,7 @@ def test_prompt_catchup_failure_keeps_other_context(tmp_path, monkeypatch):
     assert handled.response.notice == "still delivered"
 
 
-def test_catchup_reads_at_most_two_journals_and_drops_expired(tmp_path, monkeypatch):
+def test_catchup_failed_recoveries_consume_attempts_and_drop_expired(tmp_path, monkeypatch):
     project, env = _workspace(tmp_path)
     store = project / ".magnolia"
     now = time.time()
@@ -124,11 +133,143 @@ def test_catchup_reads_at_most_two_journals_and_drops_expired(tmp_path, monkeypa
         "vibe", "prompt", "s1", str(project), prompt="next", turn_id="next",
     ), env, time.monotonic() + 8)
 
-    assert reads == [str(tmp_path / "j4"), str(tmp_path / "j3")]
+    assert reads == [str(tmp_path / f"j{i}") for i in range(4, -1, -1)]
     with SessionState.open(store, "vibe", "s1") as state:
         kept = state.data["catchup_pending"]
     assert all(row["id"] != "main--old" for row in kept)
-    assert [row["attempts"] for row in kept] == [0, 0, 0, 1, 1]
+    assert [row["attempts"] for row in kept] == [1, 1, 1, 1, 1]
+
+
+@pytest.mark.parametrize("harness", ["vibe", "claude"])
+def test_session_end_recovers_sixteen_and_one_worker_drains_main_then_newest_children(
+    tmp_path, monkeypatch, harness,
+):
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    now = time.time()
+    pending = [{
+        "id": "main--mt", "turn_id": "mt", "transcript_ref": str(tmp_path / "main"),
+        "agent_id": None, "agent_type": None, "created": now + 31, "attempts": 0,
+    }]
+    pending.extend({
+        "id": f"c{index}--ct{index}", "turn_id": f"ct{index}",
+        "transcript_ref": str(tmp_path / f"c{index}"), "agent_id": f"c{index}",
+        "agent_type": "worker", "created": now + index, "attempts": 0,
+    } for index in range(30))
+    with SessionState.open(store, harness, "s1") as state:
+        state.data["catchup_pending"] = pending
+
+    recovered = []
+    monkeypatch.setattr(
+        dispatch, "_recover_assistant_transcript",
+        lambda paths, event: recovered.append(
+            (None if event.agent is None else event.agent.id, event.turn_id)
+        ) or True,
+    )
+    monkeypatch.setattr(dispatch, "_reply_for_turn", lambda paths, event: f"reply-{event.turn_id}")
+    spawned = []
+    monkeypatch.setattr(
+        dispatch.subprocess, "Popen",
+        lambda argv, **kwargs: spawned.append(Path(argv[-1])) or object(),
+    )
+
+    handle(HookEvent(harness, "session-end", "s1", str(project)),
+           env, time.monotonic() + 8)
+
+    expected = [(None, "mt"), *[(f"c{index}", f"ct{index}") for index in range(29, 14, -1)]]
+    assert recovered == expected
+    assert len(spawned) == 1
+    with SessionState.open(store, harness, "s1") as state:
+        still_pending = state.data["catchup_pending"]
+        assert len(still_pending) == 31
+        assert sum(bool(row.get("recovered")) for row in still_pending) == 16
+        assert all(row["attempts"] == 0 for row in still_pending)
+
+    judged = []
+    monkeypatch.setattr(
+        action_retrieval, "probe_application",
+        lambda paths, worker_harness, session_id, reply, turn_id: judged.append(
+            ("probe", turn_id)
+        ),
+    )
+    monkeypatch.setattr(
+        critic, "run_critic",
+        lambda paths, worker_harness, session_id, agent_id, turn_id: judged.append(
+            ("critic", turn_id)
+        ),
+    )
+
+    background.run_job(spawned[0])
+
+    assert judged[::2] == [("probe", turn_id) for _, turn_id in expected]
+    assert judged[1::2] == [("critic", turn_id) for _, turn_id in expected]
+    with SessionState.open(store, harness, "s1") as state:
+        assert state.data["background_queue"] == []
+
+
+def test_catchup_stops_before_deadline_margin(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["catchup_pending"] = [{
+            "id": "main--mt", "turn_id": "mt", "transcript_ref": str(tmp_path / "main"),
+            "agent_id": None, "agent_type": None, "created": time.time(), "attempts": 0,
+        }]
+    recovered = []
+    monkeypatch.setattr(
+        dispatch, "_recover_assistant_transcript",
+        lambda paths, event: recovered.append(event.turn_id) or True,
+    )
+
+    handle(HookEvent("vibe", "session-end", "s1", str(project)),
+           env, time.monotonic() + 0.5)
+
+    assert recovered == []
+    with SessionState.open(store, "vibe", "s1") as state:
+        assert state.data["catchup_pending"][0]["attempts"] == 0
+
+
+def test_claude_turn_end_recovers_backlog_before_starting_one_worker(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    with SessionState.open(store, "claude", "s1") as state:
+        state.data["catchup_pending"] = [{
+            "id": "c1--ct", "turn_id": "ct", "transcript_ref": str(tmp_path / "child"),
+            "agent_id": "c1", "agent_type": "Explore", "created": time.time(), "attempts": 0,
+        }]
+    recovered = []
+    monkeypatch.setattr(
+        dispatch, "_recover_assistant_transcript",
+        lambda paths, event: recovered.append(
+            (None if event.agent is None else event.agent.id, event.turn_id)
+        ) or True,
+    )
+    monkeypatch.setattr(dispatch, "_reply_for_turn", lambda paths, event: f"reply-{event.turn_id}")
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda *args: (_ for _ in ()).throw(AssertionError("spawned before catch-up")),
+    )
+    batches = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: batches.append(
+            (list(recovered), [
+                (None if job.agent is None else job.agent.id, job.turn_id)
+                for job, _ in jobs
+            ])
+        ) or True,
+    )
+
+    handle(HookEvent(
+        "claude", "turn-end", "s1", str(project), turn_id="mt",
+        transcript_ref=str(tmp_path / "main"),
+    ), env, time.monotonic() + 8)
+
+    assert len(batches) == 1
+    recovered_at_spawn, jobs = batches[0]
+    assert (None, "mt") in recovered_at_spawn
+    assert ("c1", "ct") in recovered_at_spawn
+    assert jobs == [(None, "mt"), ("c1", "ct")]
 
 
 def test_codex_turn_end_detaches_probe_and_critic(tmp_path, monkeypatch):
@@ -172,8 +313,10 @@ def test_vibe_session_end_records_late_child_before_closing_row(tmp_path, monkey
     source = _vibe_journal(tmp_path / "child", "c1:turn:1", "Calling a tool.")
     scheduled = []
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: scheduled.extend(
+            (job.turn_id, reply) for job, reply in jobs
+        ) or True,
     )
     common = dict(harness="vibe", session_id="s1", cwd=str(project))
 
@@ -193,7 +336,7 @@ def test_claude_session_end_records_late_child_before_closing_row(tmp_path, monk
     child = AgentRef("c1", "Explore")
     transcript = tmp_path / "child.jsonl"
     transcript.write_text("", encoding="utf-8")
-    monkeypatch.setattr(dispatch, "_schedule_background", lambda *args: True)
+    monkeypatch.setattr(dispatch, "_schedule_background_batch", lambda *args: True)
     common = dict(harness="claude", session_id="s1", cwd=str(project))
 
     handle(HookEvent(event="agent-end", agent=child, turn_id="T1",
@@ -272,8 +415,10 @@ def test_vibe_consecutive_child_turns_keep_distinct_turn_ids(tmp_path, monkeypat
     assert pending[0]["id"] != pending[1]["id"]
     scheduled = []
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: scheduled.extend(
+            (job.turn_id, reply) for job, reply in jobs
+        ) or True,
     )
 
     handle(HookEvent("vibe", "session-end", "s1", str(project)),
@@ -288,8 +433,10 @@ def test_vibe_partial_child_turn_is_caught_up_after_final_reply_lands(tmp_path, 
     source = _vibe_journal(tmp_path / "child", "c1:turn:1", "Calling the echo tool.")
     scheduled = []
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: scheduled.extend(
+            (job.turn_id, reply) for job, reply in jobs
+        ) or True,
     )
     common = dict(harness="vibe", session_id="s1", cwd=str(project))
 
@@ -478,9 +625,9 @@ def test_claude_subagent_stop_defers_reply_until_parent_session_end(
     })
     observed = []
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: observed.append(
-            (event.agent.id, event.turn_id, reply)
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: observed.extend(
+            (job.agent.id, job.turn_id, reply) for job, reply in jobs
         ) or True,
     )
 
@@ -610,8 +757,8 @@ def test_vibe_next_main_prompt_detaches_critic_for_later_notice(tmp_path, monkey
     monkeypatch.setattr(action_retrieval, "probe_application", lambda *args: None)
 
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: observed.append(event.turn_id) or True,
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: observed.extend(job.turn_id for job, _ in jobs) or True,
     )
     common = dict(
         harness="vibe", session_id="session-1", cwd=str(project),
@@ -982,8 +1129,10 @@ def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journa
     source = _vibe_journal(tmp_path / "vibe-child-session", "child-turn")
     scheduled = []
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: scheduled.append((event.turn_id, event.agent.id, reply)) or True,
+        dispatch, "_schedule_background_batch",
+        lambda paths, event, jobs: scheduled.extend(
+            (job.turn_id, job.agent.id, reply) for job, reply in jobs
+        ) or True,
     )
 
     handle(HookEvent(
@@ -1009,28 +1158,41 @@ def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journa
     assert scheduled == [("child-turn", "child-1", "child reply")]
 
 
-def test_vibe_one_shot_with_two_children_catches_up_main_reply(tmp_path, monkeypatch):
+def test_vibe_one_shot_with_two_children_catches_up_every_reply_before_main_worker(
+    tmp_path, monkeypatch,
+):
     project, env = _workspace(tmp_path)
     scheduled = []
+    main_worker_rows = []
+
+    def schedule(paths, event, jobs):
+        path = paths.store / "transcripts" / "vibe" / "session-1.jsonl"
+        main_worker_rows.extend(_rows(path))
+        scheduled.extend(
+            (None if job.agent is None else job.agent.id, job.turn_id, reply)
+            for job, reply in jobs
+        )
+        return True
+
     monkeypatch.setattr(
-        dispatch, "_schedule_background",
-        lambda paths, event, reply: scheduled.append(
-            (None if event.agent is None else event.agent.id, event.turn_id, reply)
-        ) or True,
+        dispatch, "_schedule_background_batch",
+        schedule,
     )
     main_journal = _vibe_journal(tmp_path / "main", "T1", "partial")
     common = dict(harness="vibe", session_id="session-1", cwd=str(project))
     handle(HookEvent(event="prompt", prompt="go", turn_id="T1",
                      transcript_ref=str(main_journal), **common), env, time.monotonic() + 8)
+    child_journals = {}
     for child_id in ("c1", "c2"):
-        child_journal = _vibe_journal(
-            tmp_path / child_id, f"{child_id}:turn:1", f"{child_id} reply",
-        )
+        child_journal = _vibe_journal(tmp_path / child_id, f"{child_id}:turn:1")
+        child_journals[child_id] = child_journal
         handle(HookEvent(event="turn-end", agent=AgentRef(child_id, "worker"),
                          transcript_ref=str(child_journal), **common),
                env, time.monotonic() + 8)
     handle(HookEvent(event="turn-end", transcript_ref=str(main_journal), **common),
            env, time.monotonic() + 8)
+    for child_id, child_journal in child_journals.items():
+        _vibe_journal(child_journal, f"{child_id}:turn:1", f"{child_id} reply")
     _vibe_journal(main_journal, "T1", "partial", "final main reply")
 
     handle(HookEvent(event="session-end", transcript_ref=str(main_journal), **common),
@@ -1039,6 +1201,45 @@ def test_vibe_one_shot_with_two_children_catches_up_main_reply(tmp_path, monkeyp
     assert scheduled == [
         (None, "T1", "final main reply"),
         ("c2", "c2:turn:1", "c2 reply"),
+        ("c1", "c1:turn:1", "c1 reply"),
     ]
     rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
-    assert "final main reply" in [row.get("text") for row in rows]
+    replies = [row.get("text") for row in rows if row.get("kind") == "assistant"]
+    assert all(reply in replies for reply in ("c1 reply", "c2 reply", "final main reply"))
+    visible_to_main_worker = [
+        row.get("text") for row in main_worker_rows if row.get("kind") == "assistant"
+    ]
+    assert "c1 reply" in visible_to_main_worker
+    assert "c2 reply" in visible_to_main_worker
+
+
+def test_vibe_next_prompt_records_child_reply_before_main_worker_and_prompt(
+    tmp_path, monkeypatch,
+):
+    project, env = _workspace(tmp_path)
+    common = dict(harness="vibe", session_id="session-1", cwd=str(project))
+    main_journal = _vibe_journal(tmp_path / "main", "T1", "main reply")
+    child_journal = _vibe_journal(tmp_path / "child", "C1")
+    handle(HookEvent(event="prompt", prompt="go", turn_id="T1",
+                     transcript_ref=str(main_journal), **common), env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", agent=AgentRef("c1", "worker"),
+                     transcript_ref=str(child_journal), **common), env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", transcript_ref=str(main_journal), **common),
+           env, time.monotonic() + 8)
+    _vibe_journal(child_journal, "C1", "child reply")
+    worker_rows = []
+
+    def schedule(paths, event, jobs):
+        worker_rows.extend(_rows(paths.store / "transcripts" / "vibe" / "session-1.jsonl"))
+        return True
+
+    monkeypatch.setattr(dispatch, "_schedule_background_batch", schedule)
+
+    handle(HookEvent(event="prompt", prompt="next", turn_id="T2", **common),
+           env, time.monotonic() + 8)
+
+    assert "child reply" in [row.get("text") for row in worker_rows]
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    child_index = next(index for index, row in enumerate(rows) if row.get("text") == "child reply")
+    next_prompt_index = next(index for index, row in enumerate(rows) if row.get("turn_id") == "T2")
+    assert child_index < next_prompt_index

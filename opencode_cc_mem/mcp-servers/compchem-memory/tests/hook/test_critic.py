@@ -407,6 +407,106 @@ def test_vibe_parent_trace_includes_time_linked_child_tool_and_reply(tmp_path):
     assert trace[1]["output"] == "The child measured energy -12.3"
 
 
+def test_vibe_parent_trace_includes_child_reply_recovered_after_main_reply():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "run_shell", "call_id": "child-call", "input": {}, "output": "42"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None,
+         "text": "The child reported 42."},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "run_shell returned 42."},
+        {"kind": "session-end", "turn_id": None, "agent": None},
+    ]
+
+    report, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+    trace = json.loads(trace_text)
+
+    assert report == "The child reported 42."
+    [child_reply] = [item for item in trace if item["tool"] == "SUB-AGENT REPORT"]
+    assert child_reply["agent"] == "[child c1]"
+    assert child_reply["output"] == "run_shell returned 42."
+    assert "turn" not in child_reply
+
+
+def test_vibe_late_child_reply_matches_boundary_in_parent_window():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "first"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "old-call", "input": {}, "output": "old"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "first done"},
+        {"kind": "prompt", "turn_id": "T2", "agent": None, "text": "second"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "new-call", "input": {}, "output": "new"},
+        {"kind": "turn-boundary", "turn_id": "C2", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T2", "agent": None, "text": "second done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "OLD-REPLY-" + "x" * 700},
+        {"kind": "assistant", "turn_id": "C2", "agent": {"id": "c1"},
+         "text": "NEW-REPLY"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T2", harness="vibe")
+    replies = [item for item in json.loads(trace_text) if item["tool"] == "SUB-AGENT REPORT"]
+
+    old_reply = next(item for item in replies if item["output"].startswith("OLD-REPLY"))
+    new_reply = next(item for item in replies if item["output"] == "NEW-REPLY")
+    assert old_reply["turn"] == "earlier"
+    assert len(old_reply["output"]) == 500
+    assert "turn" not in new_reply
+
+
+def test_late_child_reply_after_next_main_prompt_is_not_in_previous_trace():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "prompt", "turn_id": "T2", "agent": None, "text": "next"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "too late"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+
+    assert "too late" not in trace_text
+
+
+def test_claude_does_not_promote_child_reply_after_parent_reply():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "async reply"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="claude")
+
+    assert "async reply" not in trace_text
+
+
+def test_trace_budget_keeps_current_late_vibe_child_reply():
+    rows = [{"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"}]
+    rows.extend({
+        "kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+        "name": "read_file", "call_id": f"call-{index}", "input": {},
+        "output": f"output-{index}-" + "x" * 2000,
+    } for index in range(50))
+    rows.extend([
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "LATE-CHILD-REPLY"},
+    ])
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+
+    assert len(trace_text) <= critic.MAX_TRACE_CHARS
+    assert "LATE-CHILD-REPLY" in trace_text
+
+
 def test_consecutive_child_turn_windows_use_post_agent_boundaries():
     rows = [
         {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},

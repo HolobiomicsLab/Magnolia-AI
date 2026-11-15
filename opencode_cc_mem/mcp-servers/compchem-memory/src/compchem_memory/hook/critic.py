@@ -102,7 +102,10 @@ def _is_current_row(
     boundary: int,
     turn_id: str | None,
     current_window: tuple[int, int] | None,
+    current_indexes: set[int] | None = None,
 ) -> bool:
+    if current_indexes is not None and index in current_indexes:
+        return True
     if current_window is not None and current_window[0] <= index <= current_window[1]:
         return True
     return row.get("turn_id") == turn_id if turn_id is not None else index > boundary
@@ -114,6 +117,7 @@ def _tool_items(
     turn_id: str | None = None,
     current_window: tuple[int, int] | None = None,
     label_children: bool = False,
+    current_indexes: set[int] | None = None,
 ) -> list[dict]:
     items: list[dict] = []
     pending: dict[tuple[object, object], list[int]] = {}
@@ -129,7 +133,9 @@ def _tool_items(
             items.append(item)
             continue
         if row.get("kind") == "assistant" and label_children and _child_label(row):
-            is_current = _is_current_row(index, row, boundary, turn_id, current_window)
+            is_current = _is_current_row(
+                index, row, boundary, turn_id, current_window, current_indexes,
+            )
             output = str(row.get("text") or "")
             item = {
                 "tool": "SUB-AGENT REPORT", "call_id": None, "status": "completed",
@@ -144,7 +150,9 @@ def _tool_items(
         if row.get("kind") != "tool" or row.get("phase") not in {"pre", "post", "denied"}:
             continue
         key = (row.get("call_id"), row.get("name"))
-        is_current = _is_current_row(index, row, boundary, turn_id, current_window)
+        is_current = _is_current_row(
+            index, row, boundary, turn_id, current_window, current_indexes,
+        )
         if row["phase"] == "denied":
             item = _trace_item(row, is_current, "denied", label_children)
             item["tool"] = f"DENIED: {row.get('name')}"
@@ -247,10 +255,63 @@ def _fit_trace(items: list[dict]) -> str:
     return trace_text
 
 
+def _has_matching_child_boundary(
+    rows: list[dict], reply: dict, current_window: tuple[int, int],
+) -> bool:
+    """Return whether the reply's child turn began inside the parent window."""
+    agent = reply.get("agent")
+    agent_id = agent.get("id") if isinstance(agent, dict) else None
+    turn_id = reply.get("turn_id")
+    if not agent_id or not turn_id:
+        return False
+    start, end = current_window
+    return any(
+        start < index <= end
+        and row.get("kind") == "turn-boundary"
+        and row.get("turn_id") == turn_id
+        and isinstance(row.get("agent"), dict)
+        and row["agent"].get("id") == agent_id
+        for index, row in enumerate(rows)
+    )
+
+
+def _late_child_reply_indexes(
+    rows: list[dict],
+    trace_rows: list[tuple[int, dict]],
+    child_ids: set[str],
+    current_window: tuple[int, int] | None,
+    harness: str | None,
+) -> tuple[set[int], set[int]]:
+    """Return all late Vibe replies and those proven current by a boundary."""
+    if harness != "vibe" or current_window is None:
+        return set(), set()
+    # A reply recovered after this point stays earlier-turn evidence on retry.
+    next_prompt = next((
+        index for index, row in enumerate(rows)
+        if index > current_window[1]
+        and row.get("agent") is None
+        and row.get("kind") == "prompt"
+    ), len(rows))
+    late = {
+        index for index, row in trace_rows
+        if current_window[1] < index < next_prompt
+        and row.get("kind") == "assistant"
+        and isinstance(row.get("agent"), dict)
+        and row["agent"].get("id") in child_ids
+    }
+    current = {
+        index for index, row in trace_rows
+        if index in late and _has_matching_child_boundary(rows, row, current_window)
+    }
+    return late, current
+
+
 def _trace(
     rows: list[dict],
     agent_id: str | None,
     turn_id: str | None = None,
+    *,
+    harness: str | None = None,
 ) -> tuple[str, str, int]:
     primary = [(index, row) for index, row in enumerate(rows) if _matches_agent(row, agent_id)]
     has_turns = any(row.get("turn_id") is not None for _, row in primary)
@@ -279,6 +340,12 @@ def _trace(
             if _matches_agent(row, None)
             or (isinstance(row.get("agent"), dict) and row["agent"].get("id") in child_ids)
         ]
+        late_child_replies, current_late_child_replies = _late_child_reply_indexes(
+            rows, trace_rows, child_ids, current_window, harness,
+        )
+    else:
+        late_child_replies = set()
+        current_late_child_replies = set()
     if current_turn is not None and report_rows:
         first_turn_index = min(index for index, _ in report_rows)
         last_turn_index = max(index for index, _ in report_rows)
@@ -288,7 +355,7 @@ def _trace(
         # later turn (a late, asynchronous Stop): they are not evidence here.
         trace_rows = [
             (index, row) for index, row in trace_rows
-            if index <= last_turn_index
+            if (index <= last_turn_index or index in late_child_replies)
             and not (
                 index > first_turn_index
                 and row.get("agent") is None
@@ -298,6 +365,7 @@ def _trace(
         ]
     items = _tool_items(
         trace_rows, boundary, current_turn, current_window, label_children=agent_id is None,
+        current_indexes=current_late_child_replies,
     )
     trace_text = _fit_trace(items)
     return report, trace_text, len(items)
@@ -413,7 +481,9 @@ def run_critic(
         path = transcript_path(paths.store, harness, session_id)
         if not path.exists():
             return
-        report, trace_text, n_tools = _trace(read_turns(path), agent_id, turn_id)
+        report, trace_text, n_tools = _trace(
+            read_turns(path), agent_id, turn_id, harness=harness,
+        )
         if len(report) < MIN_REPORT_CHARS or (route := resolve_route("critic")) is None:
             return
         result = _judge(route, report, trace_text)
