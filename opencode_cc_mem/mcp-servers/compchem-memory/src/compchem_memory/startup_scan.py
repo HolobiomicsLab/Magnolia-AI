@@ -1,8 +1,8 @@
 """Startup/timer distillation sweep.
 
-One distillation path: the opencode dialogue transcript is the source of truth.
+One distillation path: the available dialogue transcript is the source of truth.
 The tool-event heuristic extractor runs ONLY as a fallback, when the dialogue
-path cannot — no `opencode` binary, no LLM, or no captured session mapping.
+path cannot — no usable client transcript or no LLM.
 """
 
 import json
@@ -37,9 +37,7 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     """
     pd = Path(project_dir)
     store = pd / ".magnolia"
-    mapping = store / "opencode-sessions.jsonl"
-
-    if mapping.exists() and is_llm_available() and _opencode_available():
+    if is_llm_available() and _has_dialogue_source(store):
         result = _distill_dialogue(store)
     else:
         result = _distill_tool_events(pd)
@@ -51,6 +49,22 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     _surface_pending_promotion(project_dir, store)
     _commit_after_sweep(store, result)
     return result
+
+
+def _has_dialogue_source(store: Path) -> bool:
+    """Whether a hook transcript or exportable legacy mapping is available."""
+    from compchem_memory.hook.transcript import transcript_path
+    from compchem_memory.transcript_source import (
+        active_opencode_sid,
+        list_sessions,
+    )
+
+    for ref in list_sessions(store):
+        if not ref.sealable and transcript_path(
+            store, ref.harness, ref.session_id,
+        ).exists():
+            return True
+    return active_opencode_sid(store) is not None and _opencode_available()
 
 
 def _distill_dialogue(store: Path) -> dict[str, Any]:

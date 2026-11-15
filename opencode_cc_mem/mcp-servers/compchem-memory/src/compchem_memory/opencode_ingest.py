@@ -394,13 +394,13 @@ def _read_mapping_ids(mapping: Path) -> list[str]:
     return ids
 
 
-def _save_candidate(store: Path, candidate: dict, ses_id: str) -> str:
+def _save_candidate(store: Path, candidate: dict, session_key: str) -> str:
     """Write a distilled candidate to staging, stamped with provenance back to
-    the opencode session it came from."""
+    the client-neutral session key it came from."""
     from compchem_memory.staging_io import save_candidate
 
     return save_candidate(store, candidate, source="opencode_distill",
-                          opencode_session_id=ses_id)
+                          opencode_session_id=session_key)
 
 
 def _default_distiller(transcript: str) -> list[dict[str, Any]]:
@@ -466,9 +466,44 @@ def _write_progress(rec_path: Path, cursor: str | None, candidates: int, done: b
     }) + "\n")
 
 
+def _session_exporter(
+    store_dir: str,
+    legacy_exporter: Callable[[str], Optional[dict]],
+) -> Callable[[Any], Optional[dict]]:
+    """Route SessionRefs without changing the legacy string-id exporter.
+
+    A hook-fed session whose harness is ``opencode`` is not a legacy mapping
+    session, so it deliberately follows the other hook-fed clients through
+    ``magnolia_exporter``.
+    """
+    from compchem_memory.transcript_source import exporter_for, magnolia_exporter
+
+    contracted = exporter_for(store_dir, injected=legacy_exporter)
+    neutral = magnolia_exporter(store_dir)
+
+    def export(ref: Any) -> Optional[dict]:
+        if ref.harness == "opencode" and not ref.sealable:
+            return neutral(ref)
+        return contracted(ref)
+
+    return export
+
+
+def _session_ref(store_dir: str, session: Any) -> Any:
+    """Resolve a key/string to a SessionRef while preserving the old API."""
+    from compchem_memory.transcript_source import SessionRef, list_sessions
+
+    if isinstance(session, SessionRef):
+        return session
+    for ref in list_sessions(store_dir):
+        if ref.key == session:
+            return ref
+    return SessionRef("opencode", str(session), str(session), None, None, True)
+
+
 def distill_session_transcript(
     store_dir: str,
-    sid: str,
+    sid: Any,
     *,
     commit: bool,
     exporter: Callable[[str], Optional[dict]] | None = None,
@@ -483,15 +518,17 @@ def distill_session_transcript(
     ``distiller`` resolve to the live functions when not injected, so the module
     attributes stay monkeypatchable.
     """
-    exporter = exporter or plugin_dump_exporter(store_dir)
+    ref = _session_ref(store_dir, sid)
+    legacy_exporter = exporter or plugin_dump_exporter(store_dir)
+    export_session_ref = _session_exporter(store_dir, legacy_exporter)
     distiller = distiller or _default_distiller
 
     store = Path(store_dir)
-    rec_path = store / "opencode-distilled" / f"{sid}.json"
+    rec_path = store / "opencode-distilled" / f"{ref.key}.json"
     rec = _read_progress(rec_path)
     cursor = rec.get("cursor") if rec else None
 
-    export = exporter(sid)
+    export = export_session_ref(ref)
     if export is None:
         return None  # unavailable — let caller fall back
 
@@ -506,7 +543,7 @@ def distill_session_transcript(
         return {"status": "preview", "candidates": kept}
 
     rec_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = [_save_candidate(store, c, sid) for c in kept]
+    saved = [_save_candidate(store, c, ref.key) for c in kept]
     new_cursor = _last_message_id(new_msgs) or cursor
     prior = rec.get("candidates", 0) if rec else 0
     _write_progress(rec_path, new_cursor, prior + len(kept), done=False)
@@ -534,26 +571,43 @@ def ingest_opencode_sessions(
     The per-session record at ``opencode-distilled/<sid>.json`` is a progress
     record: ``{cursor, candidates, done, updated}``.
     """
+    from compchem_memory.transcript_source import (
+        SessionRef,
+        active_opencode_sid,
+        list_sessions,
+    )
+
     store = Path(store_dir)
-    exporter = exporter or plugin_dump_exporter(store_dir)
-    mapping = Path(mapping_path) if mapping_path else store / "opencode-sessions.jsonl"
+    legacy_exporter = exporter or plugin_dump_exporter(store_dir)
+    export_session_ref = _session_exporter(store_dir, legacy_exporter)
     markers = store / "opencode-distilled"
     markers.mkdir(parents=True, exist_ok=True)
 
-    latest = _latest_sid(mapping)
+    refs = list_sessions(store)
+    active_sid = active_opencode_sid(store)
+    default_mapping = store / "opencode-sessions.jsonl"
+    if mapping_path is not None and Path(mapping_path) != default_mapping:
+        custom_mapping = Path(mapping_path)
+        legacy_refs = [
+            SessionRef("opencode", sid, sid, None, None, True)
+            for sid in _read_mapping_ids(custom_mapping)
+        ]
+        refs = legacy_refs + [ref for ref in refs if not ref.sealable]
+        active_sid = _latest_sid(custom_mapping)
     saved: list[str] = []
 
-    for sid in _read_mapping_ids(mapping):
-        rec_path = markers / f"{sid}.json"
+    for ref in refs:
+        rec_path = markers / f"{ref.key}.json"
         rec = _read_progress(rec_path)
         if rec and rec.get("done"):
             continue  # sealed — never re-export
 
         cursor = rec.get("cursor") if rec else None
         prior_count = rec.get("candidates", 0) if rec else 0
-        is_active = sid == latest
+        is_active = ref.harness == "opencode" and ref.session_id == active_sid
+        can_seal = ref.sealable and not is_active
 
-        export = exporter(sid)
+        export = export_session_ref(ref)
         if export is None:
             continue  # export failed — don't advance; retry on a later sweep
 
@@ -562,7 +616,7 @@ def ingest_opencode_sessions(
             # Nothing new since the cursor. Seal it if it is no longer the active
             # session, so we stop re-exporting a finished conversation; leave the
             # active one open for its next slice.
-            if not is_active:
+            if can_seal:
                 _write_progress(rec_path, cursor, prior_count, done=True)
             continue
 
@@ -589,15 +643,15 @@ def ingest_opencode_sessions(
             try:
                 from compchem_memory.admission import AdmissionGate
                 _gate = AdmissionGate(store)
-                _gres = _gate.admit(kept, transcript=transcript, session=sid)
+                _gres = _gate.admit(kept, transcript=transcript, session=ref.key)
                 kept = _gres.admitted
             except Exception as e:  # noqa: BLE001 - gate failure never blocks distillation
                 print(f"[admission] gate error (fail-open): {e}")
 
         for c in kept:
-            saved.append(_save_candidate(store, c, sid))
+            saved.append(_save_candidate(store, c, ref.key))
 
         new_cursor = _last_message_id(new_msgs) or cursor
-        _write_progress(rec_path, new_cursor, prior_count + len(kept), done=not is_active)
+        _write_progress(rec_path, new_cursor, prior_count + len(kept), done=can_seal)
 
     return saved

@@ -150,3 +150,48 @@ def test_boot_context_hook_writes_rows(tmp_path):
     for r in boot_rows:
         assert r["counts_for_exposure"] is False
         assert r["id"].endswith(".md")
+
+
+def test_guess_session_id_uses_hook_session_without_mapping(tmp_path):
+    sessions = tmp_path / "agent-sessions.jsonl"
+    sessions.write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-only",
+    }) + "\n", encoding="utf-8")
+    transcript = tmp_path / "transcripts" / "claude" / "claude-only.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "hello"}) + "\n")
+
+    assert guess_session_id(tmp_path) == "claude-claude-only"
+
+
+def test_guess_session_id_prefers_resumed_active_opencode_by_activity(tmp_path):
+    import os
+    from datetime import datetime, timezone
+
+    (tmp_path / "opencode-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T09:00:00Z",
+        "opencode_session_id": "ses-a",
+    }) + "\n", encoding="utf-8")
+    opencode = tmp_path / "opencode-transcripts" / "ses-a.json"
+    opencode.parent.mkdir()
+    opencode.write_text('{"messages": []}', encoding="utf-8")
+    (tmp_path / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T09:30:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n", encoding="utf-8")
+    claude = tmp_path / "transcripts" / "claude" / "claude-one.jsonl"
+    claude.parent.mkdir(parents=True)
+    claude.write_text(json.dumps({"kind": "prompt", "text": "hello"}) + "\n")
+
+    def timestamp(hour, minute=0):
+        return datetime(2026, 11, 15, hour, minute, tzinfo=timezone.utc).timestamp()
+
+    os.utime(claude, (timestamp(10), timestamp(10)))
+    os.utime(opencode, (timestamp(10, 30), timestamp(10, 30)))
+    assert guess_session_id(tmp_path) == "ses-a"
+
+    os.utime(claude, (timestamp(11), timestamp(11)))
+    assert guess_session_id(tmp_path) == "claude-claude-one"

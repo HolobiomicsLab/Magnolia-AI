@@ -44,27 +44,11 @@ def surfacing_path(store: Path | str) -> Path:
 
 
 def guess_session_id(store: Path | str) -> str | None:
-    """Best-effort opencode session id of the LIVE caller.
+    """Best-effort client-neutral key of the most recently observed session."""
+    from compchem_memory.transcript_source import current_session
 
-    The capture plugin appends the current session last to the store's
-    opencode-sessions.jsonl mapping, so the final line names the caller
-    (same contract as opencode_ingest._latest_sid).
-    """
-    mapping = Path(store) / "opencode-sessions.jsonl"
-    if not mapping.exists():
-        return None
-    latest: str | None = None
-    for line in mapping.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            sid = json.loads(line).get("opencode_session_id")
-        except json.JSONDecodeError:
-            continue
-        if sid:
-            latest = sid
-    return latest
+    ref = current_session(store)
+    return ref.key if ref is not None else None
 
 
 def counts_for_exposure(channel: str, task_description: str | None = None) -> bool:
