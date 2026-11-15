@@ -33,6 +33,16 @@ JOB_LIMIT = 10
 CRITIC_LIMIT = JOB_LIMIT
 NOTICE_LINE_LIMIT = 160
 NOTICE_TEXT_LIMIT = (JOB_LIMIT + CRITIC_LIMIT) * NOTICE_LINE_LIMIT + JOB_LIMIT + CRITIC_LIMIT - 1
+_RUN_ID_LIMIT = 64
+
+
+def _shorten_middle(text: str, limit: int) -> str:
+    """Keep both identifying ends of a long display field."""
+    if len(text) <= limit:
+        return text
+    left = (limit - 1) // 2
+    right = limit - left - 1
+    return f"{text[:left]}…{text[-right:]}"
 
 
 @dataclass
@@ -48,10 +58,13 @@ class Notices:
 def _job_line(row: dict) -> str:
     category = str(row.get("category") or "")
     icon = _ICONS.get(category, "🔔")
-    tool = str(row.get("tool") if row.get("tool") is not None else "job")
-    state = str(row.get("state") or "")
+    tool = _shorten_middle(
+        str(row.get("tool") if row.get("tool") is not None else "job"), 40,
+    )
+    state = _shorten_middle(str(row.get("state") or ""), 24)
     run_id = str(row.get("run_id") or "")
-    return f"{icon} {tool} finished ({state}) — run …{run_id[-24:]}"[:160]
+    shown_run_id = _shorten_middle(run_id, _RUN_ID_LIMIT)
+    return f"{icon} {tool} finished ({state}) — run {shown_run_id}"
 
 
 def _peek_jobs(project_dir: str, limit: int) -> tuple[list[dict], list[str], JobNoticeLock | None]:

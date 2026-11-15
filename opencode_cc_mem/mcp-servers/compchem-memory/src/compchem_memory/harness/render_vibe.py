@@ -126,5 +126,7 @@ def _hooks(context: LaunchContext) -> list[dict]:
         }
         if kind == "pre_tool":
             hook["strict"] = True
+        if kind == "pre_agent":
+            hook["match"] = "main"
         hooks.append(hook)
     return hooks

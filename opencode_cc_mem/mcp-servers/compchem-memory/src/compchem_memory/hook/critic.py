@@ -178,6 +178,7 @@ def _error_row(
         "error": (result.error or "empty judge reply")[:300],
         "finish_reason": result.finish_reason,
         "reply_chars": len(result.text or ""),
+        "upstream_provider": result.upstream_provider,
     }
 
 
@@ -249,6 +250,7 @@ def run_critic(
         except Exception as error:  # noqa: BLE001 - malformed judge output is logged
             malformed = CallResult(
                 result.text, result.finish_reason, result.resolved_model, str(error), result.status,
+                result.upstream_provider,
             )
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
             return

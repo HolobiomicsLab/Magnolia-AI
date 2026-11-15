@@ -48,6 +48,32 @@ def assistant_texts(
     return []
 
 
+def latest_vibe_assistant_turn(
+    transcript_ref: str,
+    *,
+    agent_id: str | None,
+    max_bytes: int = 2_000_000,
+) -> str | None:
+    """Return the latest Vibe assistant turn for one agent, without raising."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+        return None
+    try:
+        session = Path(transcript_ref)
+        if not session.is_dir():
+            return None
+        rows = _json_rows_many(_vibe_tail_texts(session, max_bytes))
+        entries = _vibe_assistant_entries(rows)
+        has_exact_agent = any(_vibe_exact_agent(entry, agent_id) for entry in entries)
+        for entry in reversed(entries):
+            turn_id = entry.get("turnId")
+            if (_vibe_matches_agent(entry, agent_id, has_exact_agent)
+                    and isinstance(turn_id, str) and turn_id):
+                return turn_id
+    except Exception:  # noqa: BLE001 - a client transcript must never break its session
+        return None
+    return None
+
+
 def _tail_text(path: Path, max_bytes: int) -> str:
     """Read at most ``max_bytes`` from a file tail, excluding a partial row."""
     size = path.stat().st_size
@@ -193,28 +219,56 @@ def _vibe_blocks(rows: list[dict], turn_id: str, agent_id: str | None) -> list[s
     entry_order: list[str] = []
     entries: dict[str, list[str]] = {}
     anonymous = 0
+    assistant_entries = _vibe_assistant_entries(rows)
+    has_exact_agent = any(_vibe_exact_agent(entry, agent_id) for entry in assistant_entries)
+    for entry in assistant_entries:
+        if (entry.get("turnId") != turn_id
+                or not _vibe_matches_agent(entry, agent_id, has_exact_agent)):
+            continue
+        texts = _content_texts(entry.get("content"), "text")
+        if not texts:
+            continue
+        entry_id = entry.get("id")
+        if not isinstance(entry_id, str) or not entry_id:
+            anonymous += 1
+            entry_id = f"__anonymous_{anonymous}"
+        if entry_id not in entries:
+            entry_order.append(entry_id)
+        entries[entry_id] = texts
+    return [text for entry_id in entry_order for text in entries[entry_id]]
+
+
+def _vibe_assistant_entries(rows: list[dict]) -> list[dict]:
+    """Flatten role-tagged Vibe assistant entries in journal order."""
+    entries = []
     for row in rows:
         payload = row.get("payload")
         deltas = payload.get("delta") if isinstance(payload, dict) else None
         if not isinstance(deltas, list):
             continue
-        for delta in deltas:
-            entry = delta.get("entry") if isinstance(delta, dict) else None
-            if not isinstance(entry, dict) or entry.get("role") != "assistant":
-                continue
-            if entry.get("turnId") != turn_id or not _matches_agent(entry, agent_id):
-                continue
-            texts = _content_texts(entry.get("content"), "text")
-            if not texts:
-                continue
-            entry_id = entry.get("id")
-            if not isinstance(entry_id, str) or not entry_id:
-                anonymous += 1
-                entry_id = f"__anonymous_{anonymous}"
-            if entry_id not in entries:
-                entry_order.append(entry_id)
-            entries[entry_id] = texts
-    return [text for entry_id in entry_order for text in entries[entry_id]]
+        entries.extend(
+            entry for delta in deltas
+            if isinstance(delta, dict)
+            and isinstance((entry := delta.get("entry")), dict)
+            and entry.get("role") == "assistant"
+        )
+    return entries
+
+
+def _vibe_exact_agent(entry: dict, agent_id: str | None) -> bool:
+    """Whether a Vibe entry explicitly identifies this child session."""
+    return agent_id is not None and (
+        entry.get("agentId") == agent_id or entry.get("sessionId") == agent_id
+    )
+
+
+def _vibe_matches_agent(entry: dict, agent_id: str | None, has_exact_agent: bool) -> bool:
+    """Match shared journals, or untagged entries in a child-specific journal."""
+    if agent_id is None:
+        return _matches_agent(entry, None)
+    if has_exact_agent:
+        return _vibe_exact_agent(entry, agent_id)
+    return entry.get("agentId") is None and entry.get("isSidechain") is not True
 
 
 def _matches_agent(row: dict, agent_id: str | None) -> bool:

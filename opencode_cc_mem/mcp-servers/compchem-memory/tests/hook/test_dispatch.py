@@ -275,10 +275,96 @@ def test_vibe_turn_end_records_reply_text(tmp_path, monkeypatch):
         'note.txt contains exactly one line: "alpha line". '
         "It is a minimal placeholder note with no other content or instructions.",
     ]
+    assert observed == []
+
+
+def _vibe_journal(path: Path, turn_id: str, *texts: str, agent_id: str | None = None) -> Path:
+    journal = path / "journal"
+    journal.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for index, text in enumerate(texts):
+        entry = {
+            "id": f"assistant-{index}", "role": "assistant", "turnId": turn_id,
+            "content": [{"type": "text", "text": text}],
+        }
+        if agent_id is not None:
+            entry["agentId"] = agent_id
+        rows.append({"payload": {"delta": [{"entry": entry}]}})
+    (journal / "001.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8",
+    )
+    return path
+
+
+def test_vibe_session_end_catches_up_complete_reply_once(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    turn_id = "vibe-late-turn"
+    source = _vibe_journal(tmp_path / "vibe-session", turn_id, "partial")
+    observed = []
+    monkeypatch.setattr(
+        action_retrieval, "probe_application",
+        lambda paths, harness, session_id, reply, event_turn_id:
+            observed.append(("probe", reply, event_turn_id)),
+    )
+    monkeypatch.setattr(
+        critic, "run_critic",
+        lambda paths, harness, session_id, agent_id, event_turn_id:
+            observed.append(("critic", agent_id, event_turn_id)),
+    )
+    common = dict(
+        harness="vibe", session_id="session-1", cwd=str(project),
+        transcript_ref=str(source),
+    )
+    handle(HookEvent(event="prompt", prompt="work", turn_id=turn_id, **common),
+           env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", **common), env, time.monotonic() + 8)
+    _vibe_journal(source, turn_id, "partial", "final reply")
+
+    handle(HookEvent(event="session-end", **common), env, time.monotonic() + 8)
+    handle(HookEvent(event="session-end", **common), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == [
+        "partial", "final reply",
+    ]
     assert observed == [
-        ("probe", rows[-1]["text"], turn_id),
+        ("probe", "final reply", turn_id),
         ("critic", None, turn_id),
     ]
+
+
+def test_vibe_next_main_prompt_catches_up_before_notices(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    source = _vibe_journal(tmp_path / "vibe-session", "turn-1", "final reply")
+    observed = []
+    monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
+    monkeypatch.setattr(action_retrieval, "probe_application", lambda *args: None)
+
+    def flag_critic(paths, harness, session_id, agent_id, turn_id):
+        observed.append(turn_id)
+        with SessionState.open(paths.store, harness, session_id) as state:
+            state.data["unshown_notices"] = ["critic catch-up"]
+
+    monkeypatch.setattr(critic, "run_critic", flag_critic)
+    common = dict(
+        harness="vibe", session_id="session-1", cwd=str(project),
+        transcript_ref=str(source),
+    )
+    handle(HookEvent(event="prompt", prompt="first", turn_id="turn-1", **common),
+           env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", **common), env, time.monotonic() + 8)
+
+    handled = handle(
+        HookEvent(event="prompt", prompt="second", turn_id="turn-2", **common),
+        env, time.monotonic() + 8,
+    )
+
+    assert observed == ["turn-1"]
+    assert handled.response.notice == "critic catch-up"
 
 
 def test_client_recovery_keeps_native_final_reply_last(tmp_path, monkeypatch):
@@ -621,7 +707,26 @@ def test_vibe_turn_end_without_turn_id_takes_the_last_prompt_turn(tmp_path, monk
     rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
     replies = [row for row in rows if row["kind"] == "assistant" and row["agent"] is None]
     assert replies and all(row["turn_id"] == turn_id for row in replies)
-    assert observed == [
-        ("probe", turn_id), ("critic", None, turn_id),
-        ("probe", "turn-child"), ("critic", "child-1", "turn-child"),
+    assert observed == []
+
+
+def test_vibe_child_turn_end_without_prompt_uses_latest_journal_assistant_turn(
+    tmp_path, monkeypatch,
+):
+    project, env = _workspace(tmp_path)
+    child = AgentRef(id="child-1", type="reviewer")
+    source = _vibe_journal(
+        tmp_path / "vibe-child-session", "child-turn", "child reply",
+    )
+    _quiet_turn_end(monkeypatch)
+
+    handle(HookEvent(
+        harness="vibe", event="turn-end", session_id="session-1", cwd=str(project),
+        agent=child, transcript_ref=str(source),
+    ), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    replies = [row for row in rows if row["kind"] == "assistant"]
+    assert [(row["text"], row["turn_id"], row["agent"]["id"]) for row in replies] == [
+        ("child reply", "child-turn", "child-1"),
     ]

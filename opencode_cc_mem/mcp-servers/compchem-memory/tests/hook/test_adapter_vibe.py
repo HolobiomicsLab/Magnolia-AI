@@ -97,6 +97,56 @@ def test_renders_tool_note_on_post_tool() -> None:
     assert rendered.emitted == frozenset({"tool_note"})
 
 
+def test_mcp_post_tool_replaces_result_with_original_output_and_context() -> None:
+    raw = {
+        "hook_event_name": "post_tool", "session_id": "s1", "cwd": "/project",
+        "tool_name": "mcp_compchem-tools.run_shell", "tool_input": {},
+        "tool_output_text": "original output\nkept verbatim",
+    }
+    event = ADAPTERS["vibe"].parse(raw, "post-tool")
+    assert event is not None
+
+    rendered = ADAPTERS["vibe"].render(
+        HookResponse(context="Context", tool_note="Tool note", notice="Notice"), event,
+    )
+
+    assert json.loads(rendered.stdout) == {
+        "decision": "deny",
+        "reason": (
+            "original output\nkept verbatim\n\n"
+            "Context\n\nTool note\n\n[Magnolia notice] Notice"
+        ),
+    }
+    assert rendered.emitted == frozenset({"context", "tool_note", "notice"})
+
+
+@pytest.mark.parametrize("native_output", [None, "failure"])
+def test_mcp_post_tool_without_original_text_uses_additional_context(native_output) -> None:
+    raw = {
+        "hook_event_name": "post_tool", "session_id": "s1", "cwd": "/project",
+        "tool_name": "mcp_compchem-tools.run_shell", "tool_input": {},
+        "tool_output_text": native_output,
+    }
+    if native_output == "failure":
+        raw.update(tool_status="failure", tool_error="failed")
+    event = ADAPTERS["vibe"].parse(raw, "post-tool")
+    assert event is not None
+
+    rendered = ADAPTERS["vibe"].render(HookResponse(tool_note="Tool note"), event)
+
+    assert json.loads(rendered.stdout) == {
+        "hook_specific_output": {"additional_context": "Tool note"}
+    }
+
+
+def test_builtin_post_tool_keeps_additional_context() -> None:
+    rendered = _render(HookResponse(tool_note="Tool note"), "post_tool")
+
+    assert json.loads(rendered.stdout) == {
+        "hook_specific_output": {"additional_context": "Tool note"}
+    }
+
+
 def test_renders_deny() -> None:
     rendered = _render(HookResponse(block=Block("Shell is disabled")), "pre_tool")
 
