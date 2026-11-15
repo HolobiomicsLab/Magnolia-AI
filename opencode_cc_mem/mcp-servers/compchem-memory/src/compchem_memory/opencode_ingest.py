@@ -465,13 +465,31 @@ def _read_progress(rec_path: Path) -> dict | None:
         return None
 
 
-def _write_progress(rec_path: Path, cursor: str | None, candidates: int, done: bool) -> None:
-    rec_path.write_text(json.dumps({
+def _write_progress(
+    rec_path: Path,
+    cursor: str | None,
+    candidates: int,
+    done: bool,
+    *,
+    fingerprint: dict[str, int] | None = None,
+    closed: bool | None = None,
+) -> None:
+    from compchem_memory.transcript_source import (
+        SESSION_CLOSED_KEY,
+        SESSION_FINGERPRINT_KEY,
+    )
+
+    payload = {
         "cursor": cursor,
         "candidates": candidates,
         "done": done,
         "updated": datetime.now(timezone.utc).isoformat(),
-    }) + "\n")
+    }
+    if fingerprint is not None:
+        payload[SESSION_FINGERPRINT_KEY] = fingerprint
+    if closed is not None:
+        payload[SESSION_CLOSED_KEY] = closed
+    rec_path.write_text(json.dumps(payload) + "\n")
 
 
 def _session_exporter(
@@ -536,6 +554,16 @@ def distill_session_transcript(
     rec = _read_progress(rec_path)
     cursor = rec.get("cursor") if rec else None
 
+    from compchem_memory.transcript_source import (
+        fingerprint_matches,
+        hook_session_closed,
+        hook_transcript_fingerprint,
+    )
+
+    fingerprint = hook_transcript_fingerprint(store, ref)
+    if commit and fingerprint_matches(rec, fingerprint):
+        return {"status": "committed", "saved": []}
+
     export = export_session_ref(ref)
     if export is None:
         return None  # unavailable — let caller fall back
@@ -549,7 +577,8 @@ def distill_session_transcript(
         candidates = distiller(transcript) if transcript.strip() else []
     else:
         candidates = []
-    if candidates is None:
+    distillation_failed = candidates is None
+    if distillation_failed:
         candidates = []
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
 
@@ -560,7 +589,18 @@ def distill_session_transcript(
     saved = [_save_candidate(store, c, ref.key) for c in kept]
     new_cursor = _last_message_id(new_msgs) or cursor
     prior = rec.get("candidates", 0) if rec else 0
-    _write_progress(rec_path, new_cursor, prior + len(kept), done=False)
+    closed = (
+        hook_session_closed(store, ref, fingerprint=fingerprint)
+        if not ref.sealable and not distillation_failed else None
+    )
+    _write_progress(
+        rec_path,
+        new_cursor,
+        prior + len(kept),
+        done=False,
+        fingerprint=None if distillation_failed else fingerprint,
+        closed=closed,
+    )
     return {"status": "committed", "saved": saved}
 
 
@@ -574,20 +614,23 @@ def ingest_opencode_sessions(
     """Incrementally distil opencode conversations into staging.
 
     Cursor-based, not once-and-done: each sweep distils only the messages
-    appended since the recorded cursor. The active session (latest in the
-    mapping) is re-swept every call and never sealed, so a long live session
-    keeps producing learnings as it grows. A superseded session is sealed
-    (``done: true``) once drained and skipped thereafter — that is the only state
-    that stops re-export. Returns saved staging-entry paths. ``exporter`` /
-    ``distiller`` are injectable for tests; the default exporter prefers the
-    v2 plugin's in-process transcript dump (see plugin_dump_exporter).
+    appended since the recorded cursor. Hook transcripts also carry a stat
+    fingerprint, so an unchanged file is skipped before export while any growth
+    reopens it. A superseded legacy OpenCode session is sealed (``done: true``)
+    once drained and skipped thereafter. Returns saved staging-entry paths.
+    ``exporter`` / ``distiller`` are injectable for tests; the default exporter
+    prefers the v2 plugin's in-process transcript dump (see plugin_dump_exporter).
 
     The per-session record at ``opencode-distilled/<sid>.json`` is a progress
-    record: ``{cursor, candidates, done, updated}``.
+    record: ``{cursor, candidates, done, updated}``, plus hook-only fingerprint
+    and closed-state fields when available.
     """
     from compchem_memory.transcript_source import (
         SessionRef,
         active_opencode_sid,
+        fingerprint_matches,
+        hook_session_closed,
+        hook_transcript_fingerprint,
         list_sessions,
     )
 
@@ -620,6 +663,9 @@ def ingest_opencode_sessions(
         prior_count = rec.get("candidates", 0) if rec else 0
         is_active = ref.harness == "opencode" and ref.session_id == active_sid
         can_seal = ref.sealable and not is_active
+        fingerprint = hook_transcript_fingerprint(store, ref)
+        if fingerprint_matches(rec, fingerprint):
+            continue
 
         export = export_session_ref(ref)
         if export is None:
@@ -632,6 +678,17 @@ def ingest_opencode_sessions(
             # active one open for its next slice.
             if can_seal:
                 _write_progress(rec_path, cursor, prior_count, done=True)
+            elif not ref.sealable:
+                _write_progress(
+                    rec_path,
+                    cursor,
+                    prior_count,
+                    done=False,
+                    fingerprint=fingerprint,
+                    closed=hook_session_closed(
+                        store, ref, fingerprint=fingerprint,
+                    ),
+                )
             continue
 
         transcript = scrub_secrets(reconstruct_transcript({
@@ -669,6 +726,17 @@ def ingest_opencode_sessions(
             saved.append(_save_candidate(store, c, ref.key))
 
         new_cursor = _last_message_id(new_msgs) or cursor
-        _write_progress(rec_path, new_cursor, prior_count + len(kept), done=can_seal)
+        closed = (
+            hook_session_closed(store, ref, fingerprint=fingerprint)
+            if not ref.sealable else None
+        )
+        _write_progress(
+            rec_path,
+            new_cursor,
+            prior_count + len(kept),
+            done=can_seal,
+            fingerprint=fingerprint,
+            closed=closed,
+        )
 
     return saved
