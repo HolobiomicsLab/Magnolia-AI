@@ -20,6 +20,7 @@ class ProcessControl:
     on_heartbeat: Callable[[], None] | None = None
     observe: Callable[[Path, Path], RunOutcome | None] | None = None
     poll_interval: float = 0.2
+    hold_before_exec: bool = False
 
 
 @dataclass
@@ -51,9 +52,18 @@ def run_process(
     stopped_reason: str | None = None
     typed_outcome: RunOutcome | None = None
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        launch_argv = list(argv)
+        if control and control.hold_before_exec:
+            launch_argv = [
+                "/bin/sh",
+                "-c",
+                'kill -STOP "$$"; exec "$@"',
+                "magnolia-governed-launch",
+                *launch_argv,
+            ]
         try:
             process = subprocess.Popen(
-                list(argv),
+                launch_argv,
                 cwd=str(cwd),
                 env=dict(env),
                 stdout=stdout,
@@ -62,13 +72,20 @@ def run_process(
             )
         except OSError:
             raise
+        if control and control.hold_before_exec:
+            _wait_until_stopped(process)
         if control and control.on_start:
             try:
                 control.on_start(process.pid, process.pid)
             except Exception as exc:
-                _terminate_tree(process)
+                if control.hold_before_exec:
+                    _signal_group(process.pid, signal.SIGKILL)
+                else:
+                    _terminate_tree(process)
                 process.wait()
                 raise RuntimeError(f"process start callback failed: {exc}") from exc
+        if control and control.hold_before_exec:
+            _signal_group(process.pid, signal.SIGCONT)
         while True:
             returncode = process.poll()
             if control:
@@ -137,6 +154,21 @@ def _terminate_tree(process: subprocess.Popen) -> None:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         _signal_group(process.pid, signal.SIGKILL)
+
+
+def _wait_until_stopped(process: subprocess.Popen, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pid, status = os.waitpid(process.pid, os.WUNTRACED | os.WNOHANG)
+        if pid == process.pid and os.WIFSTOPPED(status):
+            return
+        if pid == process.pid and (os.WIFEXITED(status) or os.WIFSIGNALED(status)):
+            process.returncode = os.waitstatus_to_exitcode(status)
+            raise RuntimeError("governed process exited before launch was recorded")
+        time.sleep(0.001)
+    _signal_group(process.pid, signal.SIGKILL)
+    process.wait()
+    raise RuntimeError("governed process did not reach its pre-exec barrier")
 
 
 def _signal_group(pid: int, sig: signal.Signals) -> None:

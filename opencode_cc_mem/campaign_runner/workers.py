@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -156,6 +155,7 @@ class InvocationGovernance:
     project_digest: str
     role_cap: int | None = None
     session_identity: SessionIdentity | None = None
+    usage_is_session_cumulative: bool = False
 
 
 @dataclass
@@ -230,15 +230,21 @@ class OpenCodeExecutor:
                 attempt_index, stem, session_id, control
             )
             if isinstance(admission, QuotaWaiting):
-                typed_outcome = RunOutcome(
-                    "quota",
-                    LimitInfo(
-                        f"governor {admission.reason}",
-                        admission.reset_at,
-                        "usage governor",
-                    ),
-                )
-                stopped_reason = admission.reason
+                governance = self.governance
+                assert governance is not None
+                governance.governor.cancel_wait(admission)
+                if admission.reason == "quota":
+                    typed_outcome = RunOutcome(
+                        "quota",
+                        LimitInfo(
+                            "governor quota",
+                            admission.reset_at,
+                            "usage governor",
+                        ),
+                    )
+                else:
+                    typed_outcome = RunOutcome("cancelled")
+                stopped_reason = _control_reason(control) or admission.reason
                 break
             attempts += 1
             invocation_control = _invocation_control(control, admission)
@@ -343,7 +349,18 @@ class OpenCodeExecutor:
             role_cap=governance.role_cap or self.max_steps,
             session_identity=identity,
         )
-        return governance.governor.admit(request, control)
+        while True:
+            admitted = governance.governor.admit(request, control)
+            if isinstance(admitted, Admission):
+                return admitted
+            if admitted.reason in {"quota", "cancelled"}:
+                return admitted
+            if not governance.governor.wait(admitted, control):
+                return QuotaWaiting(
+                    admitted.key,
+                    admitted.caller_id,
+                    "cancelled",
+                )
 
     def _usage_record(
         self,
@@ -355,9 +372,12 @@ class OpenCodeExecutor:
             return None, baseline
         raw = _raw_usage(parsed.usage)
         absolute = UsageRecord.from_raw(raw)
+        cumulative = bool(
+            self.governance and self.governance.usage_is_session_cumulative
+        )
         record = UsageRecord.from_raw(
             raw,
-            baseline=baseline,
+            baseline=baseline if cumulative else None,
             session_identity=admission.request.session_identity,
             invocation_id=admission.request.invocation_id,
             parent_run_id=admission.request.parent_run_id,
@@ -365,7 +385,7 @@ class OpenCodeExecutor:
             run_kind=admission.request.run_kind,
             project_digest=admission.request.project_digest,
         )
-        return record, absolute
+        return record, absolute if cumulative else baseline
 
     def _argv(self, prompt: str, session_id: str | None) -> list[str]:
         argv = [
@@ -452,11 +472,7 @@ def _invocation_control(
         return control
 
     def on_start(pid: int, pgid: int) -> None:
-        admission.mark_started(
-            pid=pid,
-            pgid=pgid,
-            process_start_token=f"{pid}:{time.time_ns()}",
-        )
+        admission.mark_started(pid=pid, pgid=pgid)
         if control and control.on_start:
             control.on_start(pid, pgid)
 
@@ -466,7 +482,17 @@ def _invocation_control(
         on_heartbeat=control.on_heartbeat if control else None,
         observe=control.observe if control else None,
         poll_interval=control.poll_interval if control else 0.2,
+        hold_before_exec=True,
     )
+
+
+def _control_reason(control: ProcessControl | None) -> str | None:
+    if control is None or control.should_stop is None:
+        return None
+    try:
+        return control.should_stop()
+    except Exception as exc:
+        return f"stop check failed: {exc}"
 
 
 class _NoAdmission:

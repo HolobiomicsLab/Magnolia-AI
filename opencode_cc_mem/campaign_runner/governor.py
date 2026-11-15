@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
+import subprocess
 import tempfile
 import time as system_time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
@@ -23,6 +26,7 @@ DEFAULT_MAX_CONCURRENT = 2
 DEFAULT_MAX_RUNS_PER_DAY = 50
 DEFAULT_MAX_TURNS_PER_RUN = 60
 DEFAULT_MIN_SECONDS_BETWEEN_RUNS = 30
+UNVERIFIED_OWNER_TTL_SECONDS = 600
 POLICY_KEYS = frozenset(
     {
         "max_concurrent",
@@ -62,9 +66,14 @@ class Policy:
                 raise PolicyError(f"{name} must be a positive integer")
         price = self.max_price_per_run
         if price is not None and (
-            isinstance(price, bool) or not isinstance(price, (int, float)) or price <= 0
+            isinstance(price, bool)
+            or not isinstance(price, (int, float))
+            or not math.isfinite(price)
+            or price <= 0
         ):
-            raise PolicyError("max_price_per_run must be positive when configured")
+            raise PolicyError(
+                "max_price_per_run must be positive and finite when configured"
+            )
         providers = self.api_key_providers
         if isinstance(providers, list):
             providers = tuple(providers)
@@ -80,6 +89,8 @@ class Policy:
         explicit = path is not None
         policy_path = Path(path).expanduser() if explicit else _default_policy_path()
         if not policy_path.exists():
+            if policy_path.is_symlink():
+                raise PolicyError(f"usage policy is a dangling symlink: {policy_path}")
             if explicit:
                 raise PolicyError(f"usage policy does not exist: {policy_path}")
             return cls()
@@ -216,19 +227,24 @@ class Governor:
         *,
         ledger_path: str | Path | None = None,
         clock: Callable[[], datetime] | None = None,
+        sleeper: Callable[[float], None] | None = None,
     ) -> None:
         self.policy = policy or Policy.load()
         self.ledger_path = Path(ledger_path) if ledger_path else _default_ledger_path()
         self.state_path = self.ledger_path.with_name("usage-state.json")
         self.lock_path = self.ledger_path.with_name("usage-state.lock")
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.sleeper = sleeper or system_time.sleep
 
     def admit(self, request: AdmissionRequest, control: Any = None) -> Admission | QuotaWaiting:
         """Atomically reserve one invocation or persist why its caller waits."""
         stopped = _control_reason(control)
         if stopped:
-            return self._record_wait(request, "cancelled", None)
+            key = request.route.subscription_key
+            assert key is not None
+            return QuotaWaiting(key, request.invocation_id, "cancelled")
         now = self._now()
+        owner = _owner_identity(now)
         key = request.route.subscription_key
         assert key is not None
         billing = "api" if self._is_api_provider(key) else "subscription"
@@ -248,21 +264,28 @@ class Governor:
             if billing == "subscription":
                 waiting = self._subscription_wait(state, request, now)
                 if waiting:
-                    self._put_wait(state, waiting)
+                    self._put_wait(state, waiting, owner)
                     return waiting
             effective_cap = request.role_cap
             if billing == "subscription":
                 configured = request.role_cap or self.policy.max_turns_per_run
                 effective_cap = min(configured, self.policy.max_turns_per_run)
-            reservation = self._reservation(request, now, billing, effective_cap)
+            reservation = self._reservation(
+                request, now, billing, effective_cap, owner
+            )
             state["reservations"][request.invocation_id] = reservation
             self._remove_wait(state, request.invocation_id)
         return Admission(self, request, effective_cap, billing)
 
-    def resume_key(self, key: str) -> bool:
+    def resume_key(self, key: str, expected_hold: str | None = None) -> bool:
         """Clear an observed quota hold without changing daily accounting."""
         with self._locked() as state:
             self._recover_pending(state)
+            current = state["cooldowns"].get(key)
+            if current is None:
+                return False
+            if expected_hold is not None and current.get("generation") != expected_hold:
+                return False
             removed = state["cooldowns"].pop(key, None) is not None
             if removed:
                 for wait_id, wait in tuple(state["waits"].items()):
@@ -276,19 +299,32 @@ class Governor:
         control: Any = None,
         *,
         poll_interval: float = 1.0,
-        sleeper: Callable[[float], None] = system_time.sleep,
+        sleeper: Callable[[float], None] | None = None,
     ) -> bool:
         """Wait for a timed hold while checking caller cancellation each poll."""
         if poll_interval <= 0:
             raise ValueError("poll interval must be positive")
-        while self._wait_is_active(waiting):
-            if _control_reason(control):
-                return False
-            delay = poll_interval
-            if waiting.reset_at is not None:
-                delay = min(delay, (waiting.reset_at - self._now()).total_seconds())
-            sleeper(max(delay, 0.0))
-        return True
+        sleep = sleeper or self.sleeper
+        try:
+            while self._wait_is_active(waiting):
+                if _control_reason(control):
+                    self.cancel_wait(waiting)
+                    return False
+                delay = poll_interval
+                if waiting.reset_at is not None:
+                    delay = min(delay, (waiting.reset_at - self._now()).total_seconds())
+                sleep(max(delay, 0.0))
+            return True
+        except BaseException:
+            self.cancel_wait(waiting)
+            raise
+
+    def cancel_wait(self, waiting: QuotaWaiting) -> bool:
+        """Remove a wait record when its caller gives up or is cancelled."""
+        with self._locked() as state:
+            return state["waits"].pop(
+                _wait_id(waiting.key, waiting.caller_id), None
+            ) is not None
 
     def _wait_is_active(self, waiting: QuotaWaiting) -> bool:
         now = self._now()
@@ -312,17 +348,30 @@ class Governor:
         self,
         invocation_id: str,
         *,
-        process_ended: bool,
+        process_ended: bool | None = None,
         service_request_ended: bool,
     ) -> bool:
         """Finalize an abandoned hold only after local and service work ended."""
-        if not process_ended or not service_request_ended:
-            return False
         with self._locked() as state:
             self._recover_pending(state)
             reservation = state["reservations"].get(invocation_id)
-            if not reservation or not reservation.get("launched"):
+            if not reservation:
                 return False
+            reservation = dict(reservation)
+        if not reservation.get("launched"):
+            if not _reservation_owner_gone(reservation, self._now()):
+                return False
+            with self._locked() as state:
+                current = state["reservations"].get(invocation_id)
+                if current != reservation or current.get("launched"):
+                    return False
+                del state["reservations"][invocation_id]
+                self._remove_wait(state, invocation_id)
+                return True
+        if process_ended is None:
+            process_ended = not _reservation_process_alive(reservation)
+        if not process_ended or not service_request_ended:
+            return False
         return self._finalize(
             invocation_id,
             usage=None,
@@ -333,7 +382,13 @@ class Governor:
         """Return selected-day, seven-day, and current-wait accounting."""
         with self._locked() as state:
             self._recover_pending(state)
+            for key in tuple(state["cooldowns"]):
+                self._clear_due_cooldown(state, key, self._now())
             waits = list(state["waits"].values())
+            holds = [
+                {"key": key, **hold}
+                for key, hold in state["cooldowns"].items()
+            ]
             rows = self._ledger_rows()
         first_day = day - timedelta(days=6)
         selected = [row for row in rows if _row_day(row) == day]
@@ -346,6 +401,7 @@ class Governor:
             "day": {"date": day.isoformat(), "runs": len(selected)},
             "week": {"from": first_day.isoformat(), "through": day.isoformat(), "runs": len(week), "days": by_day},
             "waits": sorted(waits, key=lambda item: (item["key"], item["caller_id"])),
+            "holds": sorted(holds, key=lambda item: item["key"]),
         }
 
     def _subscription_wait(
@@ -392,6 +448,7 @@ class Governor:
         now: datetime,
         billing: str,
         effective_cap: int | None,
+        owner: Mapping[str, Any],
     ) -> dict[str, Any]:
         return {
             "invocation_id": request.invocation_id,
@@ -411,6 +468,9 @@ class Governor:
             "process_start_token": None,
             "service_request_id": None,
             "session_identity": _session_dict(request.session_identity),
+            "owner_pid": owner["pid"],
+            "owner_start_token": owner["start_token"],
+            "owner_expires_at": owner["expires_at"],
         }
 
     def _mark_started(self, invocation_id: str, **identity: Any) -> None:
@@ -463,11 +523,16 @@ class Governor:
             state["pending_completions"][invocation_id] = record
             if outcome.kind == "quota":
                 limit = outcome.limit
-                state["cooldowns"][reservation["key"]] = {
+                observed = {
                     "reason": limit.reason if limit else "quota or rate limit",
                     "reset_at": limit.reset_at.isoformat() if limit and limit.reset_at else None,
                     "observed_at": self._now().isoformat(),
+                    "generation": uuid.uuid4().hex,
                 }
+                current = state["cooldowns"].get(reservation["key"])
+                state["cooldowns"][reservation["key"]] = _merge_cooldown(
+                    current, observed
+                )
             self._save_state(state)
             self._append_once(record)
             state["completed"][invocation_id] = record["ended_at"]
@@ -503,6 +568,7 @@ class Governor:
             "schema_version": "magnolia-invocation-v1",
             "invocation_id": reservation["invocation_id"],
             "parent_run_id": reservation["parent_run_id"],
+            "reserved_at": reservation["reserved_at"],
             "started_at": reservation["started_at"],
             "ended_at": self._now().isoformat(),
             "client": reservation["client"],
@@ -530,24 +596,19 @@ class Governor:
             },
         }
 
-    def _record_wait(
-        self, request: AdmissionRequest, reason: str, reset_at: datetime | None
-    ) -> QuotaWaiting:
-        key = request.route.subscription_key
-        assert key is not None
-        waiting = QuotaWaiting(key, request.invocation_id, reason, reset_at)
-        with self._locked() as state:
-            self._recover_pending(state)
-            self._put_wait(state, waiting)
-        return waiting
-
-    def _put_wait(self, state: dict[str, Any], waiting: QuotaWaiting) -> None:
+    def _put_wait(
+        self,
+        state: dict[str, Any],
+        waiting: QuotaWaiting,
+        owner: Mapping[str, Any],
+    ) -> None:
         state["waits"][_wait_id(waiting.key, waiting.caller_id)] = {
             "key": waiting.key,
             "caller_id": waiting.caller_id,
             "reason": waiting.reason,
             "reset_at": waiting.reset_at.isoformat() if waiting.reset_at else None,
             "observed_at": self._now().isoformat(),
+            "owner_pid": owner["pid"],
         }
 
     def _remove_wait(self, state: dict[str, Any], caller_id: str) -> None:
@@ -561,6 +622,9 @@ class Governor:
             return
         if now >= _parse_time(cooldown["reset_at"]):
             del state["cooldowns"][key]
+            for wait_id, wait in tuple(state["waits"].items()):
+                if wait.get("key") == key and wait.get("reason") == "quota":
+                    del state["waits"][wait_id]
 
     def _recover_pending(self, state: dict[str, Any]) -> None:
         for invocation_id, record in tuple(state["pending_completions"].items()):
@@ -582,21 +646,65 @@ class Governor:
 
     def _ledger_rows(self) -> list[dict[str, Any]]:
         try:
-            lines = self.ledger_path.read_text(encoding="utf-8").splitlines()
+            body = self.ledger_path.read_bytes()
         except FileNotFoundError:
             return []
+        if not body:
+            return []
+        has_torn_tail = not body.endswith(b"\n")
+        chunks = body.split(b"\n")
+        if not has_torn_tail:
+            chunks = chunks[:-1]
         rows = []
-        for line_number, line in enumerate(lines, start=1):
+        for index, encoded in enumerate(chunks):
+            line_number = index + 1
             try:
+                line = encoded.decode("utf-8")
                 value = json.loads(line)
-            except json.JSONDecodeError as exc:
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                if has_torn_tail and index == len(chunks) - 1:
+                    self._quarantine_torn_tail(encoded, body[: -len(encoded)])
+                    return rows
                 raise RuntimeError(
                     f"invalid usage ledger row {line_number}: {exc}"
                 ) from exc
             if not isinstance(value, dict):
                 raise RuntimeError(f"invalid usage ledger row {line_number}")
             rows.append(value)
+        if has_torn_tail:
+            self._replace_ledger(body + b"\n")
         return rows
+
+    def _quarantine_torn_tail(self, fragment: bytes, valid_prefix: bytes) -> None:
+        quarantine = self.ledger_path.with_suffix(
+            self.ledger_path.suffix + ".quarantine"
+        )
+        record = {
+            "quarantined_at": self._now().isoformat(),
+            "fragment": fragment.decode("utf-8", errors="replace"),
+        }
+        quarantine.parent.mkdir(parents=True, exist_ok=True)
+        with quarantine.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._replace_ledger(valid_prefix)
+
+    def _replace_ledger(self, body: bytes) -> None:
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=".usage-ledger-", dir=self.ledger_path.parent
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(body)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.ledger_path)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
 
     def _is_api_provider(self, key: str) -> bool:
         if not key.startswith("opencode:"):
@@ -612,6 +720,7 @@ class Governor:
         with self.lock_path.open("a+b") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             state = self._load_state()
+            _prune_stale_waits(state)
             try:
                 yield state
             finally:
@@ -654,13 +763,22 @@ class Governor:
 
 
 def _default_policy_path() -> Path:
-    root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    root = _xdg_root("XDG_CONFIG_HOME", Path.home() / ".config")
     return root / "magnolia" / "usage-policy.yaml"
 
 
 def _default_ledger_path() -> Path:
-    root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    root = _xdg_root("XDG_STATE_HOME", Path.home() / ".local" / "state")
     return root / "magnolia" / "usage-ledger.jsonl"
+
+
+def _xdg_root(name: str, fallback: Path) -> Path:
+    configured = os.environ.get(name)
+    if configured:
+        candidate = Path(configured).expanduser()
+        if candidate.is_absolute():
+            return candidate
+    return fallback
 
 
 def _utc(value: datetime) -> datetime:
@@ -676,7 +794,8 @@ def _parse_time(value: str | None) -> datetime:
 
 
 def _row_day(row: Mapping[str, Any]) -> date:
-    return _parse_time(str(row["started_at"])).date()
+    basis = row.get("reserved_at") or row.get("started_at")
+    return _parse_time(str(basis)).date()
 
 
 def _wait_id(key: str, caller_id: str) -> str:
@@ -707,9 +826,117 @@ def _control_reason(control: Any) -> str | None:
 
 
 def _process_start_token(pid: int) -> str:
+    verified = _verified_process_start_token(pid)
+    if verified:
+        return verified
+    return f"unverified:{pid}:{system_time.time_ns()}"
+
+
+def _verified_process_start_token(pid: int) -> str | None:
     try:
         body = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         fields = body.rsplit(")", 1)[1].split()
-        return f"{pid}:{fields[19]}"
+        return f"proc:{pid}:{fields[19]}"
     except (OSError, IndexError):
-        return f"{pid}:{system_time.time_ns()}"
+        pass
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    started = " ".join(result.stdout.split())
+    return f"ps:{pid}:{started}" if result.returncode == 0 and started else None
+
+
+def _owner_identity(now: datetime) -> dict[str, Any]:
+    pid = os.getpid()
+    token = _verified_process_start_token(pid)
+    expires_at = None
+    if token is None:
+        expires_at = (now + timedelta(seconds=UNVERIFIED_OWNER_TTL_SECONDS)).isoformat()
+    return {"pid": pid, "start_token": token, "expires_at": expires_at}
+
+
+def _reservation_owner_gone(reservation: Mapping[str, Any], now: datetime) -> bool:
+    pid = reservation.get("owner_pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return True
+    expected = reservation.get("owner_start_token")
+    if isinstance(expected, str) and expected:
+        return _verified_process_start_token(pid) != expected
+    expires_at = reservation.get("owner_expires_at")
+    if isinstance(expires_at, str) and now >= _parse_time(expires_at):
+        return True
+    return not _pid_exists(pid)
+
+
+def _reservation_process_alive(reservation: Mapping[str, Any]) -> bool:
+    pid = reservation.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    expected = reservation.get("process_start_token")
+    if isinstance(expected, str) and expected.startswith(("proc:", "ps:")):
+        return _verified_process_start_token(pid) == expected and _pid_exists(pid)
+    return _pid_exists(pid)
+
+
+def _pid_exists(pid: int) -> bool:
+    proc_stat = Path(f"/proc/{pid}/stat")
+    try:
+        body = proc_stat.read_text(encoding="utf-8")
+        fields = body.rsplit(")", 1)[1].split()
+        return bool(fields and fields[0] != "Z")
+    except (OSError, IndexError):
+        pass
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError):
+            return False
+        return True
+    state = result.stdout.strip()
+    return result.returncode == 0 and bool(state) and not state.startswith("Z")
+
+
+def _pid_exists_fast(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _prune_stale_waits(state: dict[str, Any]) -> None:
+    for wait_id, waiting in tuple(state["waits"].items()):
+        owner_pid = waiting.get("owner_pid")
+        if isinstance(owner_pid, int) and not _pid_exists_fast(owner_pid):
+            del state["waits"][wait_id]
+
+
+def _merge_cooldown(
+    current: Mapping[str, Any] | None, observed: dict[str, Any]
+) -> dict[str, Any]:
+    if current is None:
+        return observed
+    current_reset = current.get("reset_at")
+    observed_reset = observed.get("reset_at")
+    if current_reset is None or observed_reset is None:
+        observed["reset_at"] = None
+    elif _parse_time(current_reset) > _parse_time(observed_reset):
+        observed["reset_at"] = current_reset
+    return observed
