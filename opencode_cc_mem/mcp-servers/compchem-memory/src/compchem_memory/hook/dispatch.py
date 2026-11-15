@@ -1,7 +1,7 @@
 """Route neutral hook events through Magnolia's portable behaviours.
 
-Turn-end deliberately runs the critic last and may therefore be slow. Client
-adapters may run that event asynchronously; Claude Code supports ``async: true``.
+Claude and Vibe turn-end events recover replies and launch a detached critic
+worker, keeping synchronous client hooks short.
 
 Behaviours are isolated from each other, as the OpenCode plugins are: each runs
 under its own guard, a failure leaves one row in ``hook-errors.jsonl`` (in the
@@ -34,7 +34,8 @@ _VIBE_TURN_LIMIT = 200
 _CATCHUP_ATTEMPT_LIMIT = 3
 _CATCHUP_MAX_AGE_SECONDS = 24 * 60 * 60
 _CATCHUP_JOURNAL_LIMIT = 2
-_WORKER_LEASE_SECONDS = 120
+_WORKER_LEASE_SECONDS = 300
+_CARRIED_RESERVATION_TTL_SECONDS = 30
 # Claude Code shows its model only about 2 KB of SessionStart context.
 CLAUDE_CONTEXT_LIMIT = 1800
 
@@ -318,7 +319,9 @@ def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float, guard: _G
     from compchem_memory.hook.action_retrieval import on_post_tool
 
     pending = guard("action-retrieval", on_post_tool, event, paths, deadline)
-    carried = guard("carried-context", _carried_notes, paths, event, default=[])
+    is_builtin = event.tool is not None and event.tool.server is None
+    carried = guard("carried-context", _carried_notes, paths, event, default=[]) \
+        if is_builtin else []
     notes = [item.text for item in carried]
     if pending is not None:
         notes.append(pending.text)
@@ -350,22 +353,45 @@ def _note_entry_ids(note: ActionNote) -> list[str]:
 
 
 def _carried_notes(paths: ProjectPaths, event: HookEvent) -> list[CarriedNote]:
-    """Restore Vibe notes without consuming them before rendered delivery."""
+    """Reserve this agent's Vibe notes before rendered delivery."""
     if event.harness != "vibe":
         return []
     from compchem_memory.hook.action_retrieval import restore_note
     from compchem_memory.hook.state import SessionState
 
+    agent_id = None if event.agent is None else event.agent.id
+    selected: list[tuple[dict, ActionNote]] = []
+    now = time.time()
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
-        payloads = state.data.get("carried_action_notes")
-        payloads = payloads if isinstance(payloads, list) else []
+        queued = state.data.get("carried_action_notes")
+        queued = [item for item in queued if isinstance(item, dict)] \
+            if isinstance(queued, list) else []
+        in_flight = state.data.get("carried_action_notes_in_flight")
+        in_flight = in_flight if isinstance(in_flight, dict) else {}
+        for note_id, reservation in list(in_flight.items()):
+            if not isinstance(reservation, dict):
+                in_flight.pop(note_id, None)
+                continue
+            if now - float(reservation.get("ts", now)) > _CARRIED_RESERVATION_TTL_SECONDS:
+                payload = reservation.get("payload")
+                if isinstance(payload, dict):
+                    queued.insert(0, payload)
+                in_flight.pop(note_id, None)
+        remaining = []
+        for payload in queued:
+            note = restore_note(payload.get("note", {}), paths)
+            if note is None:
+                continue
+            if payload.get("agent_id") != agent_id:
+                remaining.append(payload)
+                continue
+            note_id = str(payload.get("id") or "")
+            selected.append((payload, note))
+            in_flight[note_id] = {"ts": now, "payload": payload}
+        state.data["carried_action_notes"] = remaining
+        state.data["carried_action_notes_in_flight"] = in_flight
     carried = []
-    for payload in payloads:
-        if not isinstance(payload, dict):
-            continue
-        note = restore_note(payload.get("note", {}), paths)
-        if note is None:
-            continue
+    for payload, note in selected:
         tool = str(payload.get("tool") or "tool")
         carried.append(CarriedNote(
             id=str(payload.get("id") or ""),
@@ -379,23 +405,32 @@ def _carried_notes(paths: ProjectPaths, event: HookEvent) -> list[CarriedNote]:
 def stash_carried_note(paths: ProjectPaths, event: HookEvent, note: ActionNote) -> None:
     """Persist an undeliverable Vibe MCP note with its original reservation."""
     import uuid
-    from compchem_memory.hook.action_retrieval import serialise_note
+    from compchem_memory.hook.action_retrieval import discard_note, restore_note, serialise_note
     from compchem_memory.hook.state import SessionState
 
     tool = event.tool.name if event.tool is not None else "tool"
     call_id = event.tool.call_id if event.tool is not None else None
     payload = {
         "id": uuid.uuid4().hex, "tool": tool, "call_id": call_id,
+        "agent_id": None if event.agent is None else event.agent.id,
         "note": serialise_note(note),
     }
+    dropped = []
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
         queued = state.data.get("carried_action_notes")
         queued = queued if isinstance(queued, list) else []
-        state.data["carried_action_notes"] = [*queued, payload][-_VIBE_TURN_LIMIT:]
+        combined = [*queued, payload]
+        dropped = combined[:-_VIBE_TURN_LIMIT]
+        state.data["carried_action_notes"] = combined[-_VIBE_TURN_LIMIT:]
+    for old_payload in dropped:
+        old_note = restore_note(old_payload.get("note", {}), paths) \
+            if isinstance(old_payload, dict) else None
+        if old_note is not None:
+            discard_note(old_note, reason="carried-note queue limit exceeded")
 
 
 def clear_carried_notes(paths: ProjectPaths, event: HookEvent, ids: list[str]) -> None:
-    """Remove only carried notes whose delivery was committed."""
+    """Commit only the carried-note reservations that were delivered."""
     from compchem_memory.hook.state import SessionState
 
     selected = set(ids)
@@ -406,6 +441,52 @@ def clear_carried_notes(paths: ProjectPaths, event: HookEvent, ids: list[str]) -
                 item for item in queued
                 if not isinstance(item, dict) or item.get("id") not in selected
             ]
+        in_flight = state.data.get("carried_action_notes_in_flight")
+        if isinstance(in_flight, dict):
+            for note_id in selected:
+                in_flight.pop(note_id, None)
+
+
+def release_carried_notes(paths: ProjectPaths, event: HookEvent, ids: list[str]) -> None:
+    """Return undelivered carried-note reservations to the queue."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queued = state.data.get("carried_action_notes")
+        queued = [item for item in queued if isinstance(item, dict)] \
+            if isinstance(queued, list) else []
+        in_flight = state.data.get("carried_action_notes_in_flight")
+        if not isinstance(in_flight, dict):
+            return
+        restored = []
+        for note_id in ids:
+            reservation = in_flight.pop(note_id, None)
+            payload = reservation.get("payload") if isinstance(reservation, dict) else None
+            if isinstance(payload, dict):
+                restored.append(payload)
+        state.data["carried_action_notes"] = [*restored, *queued]
+
+
+def _drop_child_carried_notes(paths: ProjectPaths, event: HookEvent) -> None:
+    """Release queued notes that cannot outlive their Vibe child agent."""
+    if event.harness != "vibe" or event.agent is None:
+        return
+    from compchem_memory.hook.action_retrieval import discard_note, restore_note
+    from compchem_memory.hook.state import SessionState
+
+    dropped = []
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queued = state.data.get("carried_action_notes")
+        queued = [item for item in queued if isinstance(item, dict)] \
+            if isinstance(queued, list) else []
+        dropped = [item for item in queued if item.get("agent_id") == event.agent.id]
+        state.data["carried_action_notes"] = [
+            item for item in queued if item.get("agent_id") != event.agent.id
+        ]
+    for payload in dropped:
+        note = restore_note(payload.get("note", {}), paths)
+        if note is not None:
+            discard_note(note, reason="child ended before a deliverable post-tool event")
 
 
 def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
@@ -507,7 +588,7 @@ def _defer_turn(paths: ProjectPaths, event: HookEvent) -> None:
 
 
 def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
-    """Return pending rows after pruning completed and expired work."""
+    """Prioritise the newest main turn, then newest idle child turns."""
     from compchem_memory.hook.state import SessionState
 
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
@@ -518,6 +599,7 @@ def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
         ledger = ledger if isinstance(ledger, dict) else {}
         now = time.time()
         kept = []
+        available = []
         for row in pending:
             turn_id = row.get("turn_id")
             agent_id = row.get("agent_id") or "main"
@@ -528,8 +610,23 @@ def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
             if status == "done" or expired or exhausted:
                 continue
             kept.append(row)
+            current = ledger.get(key) if key else None
+            is_running = status == "running" and isinstance(current, dict) and (
+                now - float(current.get("started", now)) < _WORKER_LEASE_SECONDS
+            )
+            if not is_running:
+                available.append(row)
         state.data["catchup_pending"] = kept
-        return kept
+        main = [row for row in available if row.get("agent_id") is None]
+        children = [row for row in available if row.get("agent_id") is not None]
+        newest_main = max(
+            enumerate(main), key=lambda item: (float(item[1].get("created", 0)), item[0]),
+        )[1] if main else None
+        ordered = [newest_main] if newest_main is not None else []
+        ordered.extend(sorted(
+            children, key=lambda row: float(row.get("created", 0)), reverse=True,
+        ))
+        return ordered
 
 
 def _update_pending(paths: ProjectPaths, event: HookEvent, item: dict, *, turn_id: str | None) -> None:
@@ -634,6 +731,8 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         )
     if not transcript_handled or event.event == "agent-end":
         guard("transcript", _append_transcript, paths, event)
+    if completion_event and event.agent is not None:
+        guard("carried-context", _drop_child_carried_notes, paths, event)
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":

@@ -71,11 +71,6 @@ def _tool(raw: dict) -> dict | None:
         "input": raw.get("tool_input"),
         "output": normalise_output(output),
         "is_error": failed,
-        "native_output_text": (
-            raw.get("tool_output_text")
-            if not failed and isinstance(raw.get("tool_output_text"), str)
-            else None
-        ),
     }
 
 

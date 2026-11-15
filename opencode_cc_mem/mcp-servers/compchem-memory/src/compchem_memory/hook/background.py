@@ -24,44 +24,51 @@ def _mark(store: Path, harness: str, session_id: str, key: str, status: str) -> 
 
 def run_job(job_path: Path) -> None:
     """Run one persisted job under its per-turn lock and mark completion last."""
+    job_path = Path(job_path)
     try:
-        payload = json.loads(Path(job_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
-        return
-    store = Path(payload["store"])
-    harness = str(payload["harness"])
-    session_id = str(payload["session_id"])
-    key = str(payload["key"])
-    lock_path = store / "hook-workers" / f"{key}.lock"
-    private_mkdir(lock_path.parent)
-    with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
         try:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            payload = json.loads(job_path.read_text(encoding="utf-8"))
+            store = Path(payload["store"])
+            harness = str(payload["harness"])
+            session_id = str(payload["session_id"])
+            key = str(payload["key"])
+        except (KeyError, OSError, ValueError, TypeError):
             return
-        try:
-            paths = ProjectPaths(
-                Path(payload["root"]), Path(payload["project_dir"]), store,
-                str(payload["name"]), bool(payload["root_mode"]),
-            )
-            from compchem_memory.hook.action_retrieval import probe_application
-            from compchem_memory.hook.critic import run_critic
+        lock_path = store / "hook-workers" / f"{key}.lock"
+        private_mkdir(lock_path.parent)
+        with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            with SessionState.open(store, harness, session_id) as state:
+                ledger = state.data.get("background_turns")
+                row = ledger.get(key) if isinstance(ledger, dict) else None
+                if isinstance(row, dict) and row.get("status") == "done":
+                    return
+            try:
+                paths = ProjectPaths(
+                    Path(payload["root"]), Path(payload["project_dir"]), store,
+                    str(payload["name"]), bool(payload["root_mode"]),
+                )
+                from compchem_memory.hook.action_retrieval import probe_application
+                from compchem_memory.hook.critic import run_critic
 
-            probe_application(
-                paths, harness, session_id, str(payload.get("reply_text") or ""),
-                payload.get("turn_id"),
-            )
-            run_critic(
-                paths, harness, session_id, payload.get("agent_id"), payload.get("turn_id"),
-            )
-            _mark(store, harness, session_id, key, "done")
-        except Exception as error:  # noqa: BLE001 - worker failure is durable evidence
-            from compchem_memory.hook.errors import log_error
+                probe_application(
+                    paths, harness, session_id, str(payload.get("reply_text") or ""),
+                    payload.get("turn_id"),
+                )
+                run_critic(
+                    paths, harness, session_id, payload.get("agent_id"), payload.get("turn_id"),
+                )
+                _mark(store, harness, session_id, key, "done")
+            except Exception as error:  # noqa: BLE001 - worker failure is durable evidence
+                from compchem_memory.hook.errors import log_error
 
-            _mark(store, harness, session_id, key, "failed")
-            log_error(error, harness, "background", store, {}, "catch-up-worker")
-        finally:
-            Path(job_path).unlink(missing_ok=True)
+                _mark(store, harness, session_id, key, "failed")
+                log_error(error, harness, "background", store, {}, "catch-up-worker")
+    finally:
+        job_path.unlink(missing_ok=True)
 
 
 def main() -> None:

@@ -43,9 +43,13 @@ _MEMORY_ENV_VARS = [
     "MAGNOLIA_LLM_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY",
     "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY",
+    "MAGNOLIA_MEMORY_PROVIDER", "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_LLM_PROVIDER", "MAGNOLIA_LLM_MODEL",
     "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_CRITIC",
     "MAGNOLIA_CRITIC_PROVIDER", "MAGNOLIA_CRITIC_MODEL",
     "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
+    "DEEPSEEK_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL",
+    "KIMI_BASE_URL", "OPENROUTER_BASE_URL", "MISTRAL_BASE_URL", "ZAI_BASE_URL",
 ]
 
 
@@ -132,10 +136,10 @@ def _servers(neutral: NeutralConfig) -> dict:
         else:
             command, args = split_command(server)
             entry = {"command": command, "args": args}
-        if server.env:
-            entry["env"] = dict(server.env)
-        if server.name == "compchem-memory":
-            entry["env_vars"] = list(_MEMORY_ENV_VARS)
+            if server.env:
+                entry["env"] = dict(server.env)
+            if server.name == "compchem-memory":
+                entry["env_vars"] = list(_MEMORY_ENV_VARS)
         entry["tool_timeout_sec"] = timeout_seconds(server)
         servers[server.name] = entry
     return servers

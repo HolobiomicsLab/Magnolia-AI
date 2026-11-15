@@ -43,9 +43,9 @@ configured shell policy still denies the built-in shell.
 
 Known limits, from the live acceptance: the Claude Code Stop hook is synchronous only long enough
 to recover replies and launch Magnolia's detached critic worker; the worker records its verdict at
-a later event. Earlier asynchronous Stop hooks did
-not finish, so the reply and the critic are missing for that turn; the critic judge sometimes
-returns no JSON; Vibe's model did not acknowledge the action note Vibe appended to a tool result.
+a later event. Earlier asynchronous Stop hooks did not finish, and the critic judge sometimes
+returns no JSON. Vibe cannot attach context to an MCP result safely, so Magnolia carries an action
+note to the same agent's next built-in post-tool event (or the main agent's next prompt).
 
 ## Choose the integration level
 

@@ -44,13 +44,16 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
             discard_note(pending)
     carried = getattr(handled, "carried", [])
     carried_field = getattr(handled, "carried_field", None)
-    if carried and carried_field in rendered.emitted and handled.paths is not None:
+    if carried and handled.paths is not None:
         from compchem_memory.hook.action_retrieval import commit_exposure
-        from compchem_memory.hook.dispatch import clear_carried_notes
+        from compchem_memory.hook.dispatch import clear_carried_notes, release_carried_notes
 
-        for item in carried:
-            commit_exposure(item.note, event.session_id)
-        clear_carried_notes(handled.paths, event, [item.id for item in carried])
+        if carried_field in rendered.emitted:
+            for item in carried:
+                commit_exposure(item.note, event.session_id)
+            clear_carried_notes(handled.paths, event, [item.id for item in carried])
+        else:
+            release_carried_notes(handled.paths, event, [item.id for item in carried])
     notices = getattr(handled, "notices", None)
     paths = getattr(handled, "paths", None)
     if notices is not None:
@@ -74,7 +77,7 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
             )
 
 
-def _release_unsettled(handled: Any) -> None:
+def _release_unsettled(handled: Any, event: Any = None) -> None:
     """Release action-note and notice reservations after a failure; never raise."""
     pending = getattr(handled, "pending", None)
     if pending is not None:
@@ -85,6 +88,15 @@ def _release_unsettled(handled: Any) -> None:
         except Exception:  # noqa: BLE001 - the error row is already written
             pass
     notices = getattr(handled, "notices", None)
+    paths = getattr(handled, "paths", None)
+    carried = getattr(handled, "carried", [])
+    if carried and paths is not None and event is not None:
+        try:
+            from compchem_memory.hook.dispatch import release_carried_notes
+
+            release_carried_notes(paths, event, [item.id for item in carried])
+        except Exception:  # noqa: BLE001 - the error row is already written
+            pass
     if notices is not None:
         try:
             from compchem_memory.hook.notices import release_notices
@@ -108,7 +120,7 @@ def _write_rendered(
             _commit_delivered(rendered, handled, event)
         except Exception as error:  # noqa: BLE001 - rendered denial must keep its exit code
             _log_error(error, event.harness, event.event, event, env or os.environ)
-            _release_unsettled(handled)
+            _release_unsettled(handled, event)
     sys.stderr.buffer.write(rendered.stderr.encode("utf-8"))
     sys.stderr.buffer.flush()
 
@@ -206,6 +218,8 @@ def _render_policy_block(
 
 def _record_denied(event: Any, reason: str, env: Mapping[str, str]) -> None:
     """Record policy evidence only after the client received the denial."""
+    if event.session_id == "unknown":
+        return
     store = _bound_store(event, env)
     if store is None:
         return
@@ -281,19 +295,19 @@ def main() -> None:
     except Exception as error:  # noqa: BLE001 - policy denial survives dispatch failure
         _log_error(error, harness, event_name, event, os.environ)
         if policy_response.block is None:
-            _release_unsettled(handled)
+            _release_unsettled(handled, event)
             os._exit(0)
         try:
             rendered = adapter.render(policy_response, event)
         except Exception as render_error:  # noqa: BLE001 - no client denial can be emitted
             _log_error(render_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled)
+            _release_unsettled(handled, event)
             os._exit(0)
         try:
             _write_rendered(rendered, handled, event, os.environ)
         except Exception as write_error:  # noqa: BLE001 - a rendered shell denial stays closed
             _log_error(write_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled)
+            _release_unsettled(handled, event)
         os._exit(rendered.exit_code)
 
     handled.response = policy_response.merge(handled.response)
@@ -301,13 +315,13 @@ def main() -> None:
         rendered = _render_handled(adapter, handled, event)
     except Exception as render_error:  # noqa: BLE001 - adapter could not produce a denial
         _log_error(render_error, harness, event_name, event, os.environ)
-        _release_unsettled(handled)
+        _release_unsettled(handled, event)
         os._exit(0)
     try:
         _write_rendered(rendered, handled, event, os.environ)
     except Exception as write_error:  # noqa: BLE001 - only shell policy remains fail-closed
         _log_error(write_error, harness, event_name, event, os.environ)
-        _release_unsettled(handled)
+        _release_unsettled(handled, event)
         if policy_response.block is None:
             os._exit(0)
     os._exit(rendered.exit_code)

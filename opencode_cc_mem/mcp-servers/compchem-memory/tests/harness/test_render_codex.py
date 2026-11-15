@@ -2,7 +2,8 @@ import json
 import tomllib
 
 from compchem_memory.harness import RENDERERS
-from compchem_memory.harness.render_codex import render
+from compchem_memory.harness.neutral import McpServer, NeutralConfig
+from compchem_memory.harness.render_codex import _servers, render
 
 
 def _dir(context):
@@ -81,12 +82,32 @@ def test_codex_config_toml_servers(make_render):
     assert "OPENAI_API_KEY" in memory["env_vars"]
     assert "MAGNOLIA_CRITIC_API_KEY" in memory["env_vars"]
     assert "MAGNOLIA_OPENROUTER_PROVIDER" in memory["env_vars"]
+    assert "MAGNOLIA_MEMORY_PROVIDER" in memory["env_vars"]
+    assert "MAGNOLIA_LLM_PROVIDER" in memory["env_vars"]
+    assert "MAGNOLIA_LLM_MODEL" in memory["env_vars"]
+    assert "ANTHROPIC_BASE_URL" in memory["env_vars"]
+    assert "OPENROUTER_BASE_URL" in memory["env_vars"]
 
     neutral, context = make_render(setup={})
     config = tomllib.loads(
         render(neutral, context).files[_dir(context) / "config.toml"].decode()
     )["mcp_servers"]
     assert "compchem-memory" not in config
+
+
+def test_codex_remote_server_never_gets_stdio_env_fields():
+    neutral = NeutralConfig(servers=[McpServer(
+        name="compchem-memory", kind="remote", command=None,
+        url="https://memory.example/mcp", env={"SHOULD_NOT_RENDER": "value"},
+        timeout_ms=1000, enabled=True,
+    )], deny_tools=frozenset())
+
+    server = _servers(neutral)["compchem-memory"]
+
+    assert server == {
+        "url": "https://memory.example/mcp",
+        "tool_timeout_sec": 1,
+    }
 
 
 def test_codex_config_never_renders_forwarded_secret_values(make_render, monkeypatch):
