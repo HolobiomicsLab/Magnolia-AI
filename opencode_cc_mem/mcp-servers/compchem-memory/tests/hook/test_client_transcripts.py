@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from compchem_memory.hook.client_transcripts import assistant_texts, latest_vibe_assistant_turn
+from compchem_memory.hook.client_transcripts import (
+    assistant_texts,
+    latest_vibe_assistant_turn,
+    latest_vibe_turn,
+)
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "client-transcripts"
@@ -78,15 +82,20 @@ def test_latest_vibe_assistant_turn_is_agent_scoped_and_bounded(tmp_path):
             "id": "child-new", "role": "assistant", "turnId": "child-new-turn",
             "agentId": "child-1", "content": [{"type": "text", "text": "new"}],
         }}]}},
+        {"payload": {"delta": [{"entry": {
+            "id": "child-user", "role": "user", "turnId": "child-user-turn",
+            "sessionId": "child-1", "content": [{"type": "text", "text": "next"}],
+        }}]}},
     ]
     text = "".join(json.dumps(row) + "\n" for row in rows)
     (journal / "001.jsonl").write_text(text, encoding="utf-8")
 
     assert latest_vibe_assistant_turn(str(session), agent_id=None) == "main-turn"
     assert latest_vibe_assistant_turn(str(session), agent_id="child-1") == "child-new-turn"
+    assert latest_vibe_turn(str(session), agent_id="child-1") == "child-user-turn"
     assert latest_vibe_assistant_turn(
         str(session), agent_id="child-1",
-        max_bytes=len((json.dumps(rows[-1]) + "\n").encode()) + 1,
+        max_bytes=len("".join(json.dumps(row) + "\n" for row in rows[-2:]).encode()) + 1,
     ) == "child-new-turn"
     assert latest_vibe_assistant_turn(str(tmp_path / "missing"), agent_id=None) is None
 

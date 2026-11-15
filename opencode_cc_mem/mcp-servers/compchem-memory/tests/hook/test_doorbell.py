@@ -67,7 +67,7 @@ def test_doorbell_title_replaces_newlines_and_control_characters():
     assert f"## Request\n\n{request}\n\n" in letter
 
 
-def test_doorbell_sends_only_first_mention_per_target(tmp_path, monkeypatch):
+def test_doorbell_merges_distinct_requests_for_one_target(tmp_path, monkeypatch):
     monkeypatch.delenv("MAGNOLIA_DOORBELL", raising=False)
     paths = _project(tmp_path)
     prompt = "@literature find three recent papers on A\n@literature find three recent papers on B"
@@ -83,7 +83,9 @@ def test_doorbell_sends_only_first_mention_per_target(tmp_path, monkeypatch):
     now = datetime.strptime(date_line.group(1).decode("ascii"), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
         tzinfo=timezone.utc
     )
-    expected = _letter("find three recent papers on A", "alpha", now).encode("utf-8")
+    expected = _letter(
+        "find three recent papers on A\n\nfind three recent papers on B", "alpha", now,
+    ).encode("utf-8")
     assert contents == expected
 
 

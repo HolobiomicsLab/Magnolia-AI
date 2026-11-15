@@ -63,6 +63,47 @@ def latest_vibe_assistant_turn(
     return turns[-1] if turns else None
 
 
+def latest_vibe_turn(
+    transcript_ref: str,
+    *,
+    agent_id: str | None,
+    max_bytes: int = 2_000_000,
+) -> str | None:
+    """Return the latest visible Vibe user or assistant turn for one agent."""
+    turns = vibe_turns(transcript_ref, agent_id=agent_id, max_bytes=max_bytes)
+    return turns[-1] if turns else None
+
+
+def vibe_turns(
+    transcript_ref: str,
+    *,
+    agent_id: str | None,
+    max_bytes: int = 2_000_000,
+) -> list[str]:
+    """Return ordered Vibe turns visible through user or assistant entries."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+        return []
+    try:
+        session = Path(transcript_ref)
+        if not session.is_dir():
+            return []
+        rows = _json_rows_many(_vibe_tail_texts(session, max_bytes))
+        entries = [
+            entry for entry in _vibe_entries(rows)
+            if entry.get("role") in {"user", "assistant"}
+        ]
+        has_exact_agent = any(_vibe_exact_agent(entry, agent_id) for entry in entries)
+        turns = []
+        for entry in entries:
+            turn_id = entry.get("turnId")
+            if (_vibe_matches_agent(entry, agent_id, has_exact_agent)
+                    and isinstance(turn_id, str) and turn_id and turn_id not in turns):
+                turns.append(turn_id)
+        return turns
+    except Exception:  # noqa: BLE001 - a client transcript must never break its session
+        return []
+
+
 def vibe_assistant_turns(
     transcript_ref: str,
     *,
@@ -256,6 +297,11 @@ def _vibe_blocks(rows: list[dict], turn_id: str, agent_id: str | None) -> list[s
 
 def _vibe_assistant_entries(rows: list[dict]) -> list[dict]:
     """Flatten role-tagged Vibe assistant entries in journal order."""
+    return [entry for entry in _vibe_entries(rows) if entry.get("role") == "assistant"]
+
+
+def _vibe_entries(rows: list[dict]) -> list[dict]:
+    """Flatten Vibe journal entries in their observed order."""
     entries = []
     for row in rows:
         payload = row.get("payload")
@@ -266,7 +312,6 @@ def _vibe_assistant_entries(rows: list[dict]) -> list[dict]:
             entry for delta in deltas
             if isinstance(delta, dict)
             and isinstance((entry := delta.get("entry")), dict)
-            and entry.get("role") == "assistant"
         )
     return entries
 

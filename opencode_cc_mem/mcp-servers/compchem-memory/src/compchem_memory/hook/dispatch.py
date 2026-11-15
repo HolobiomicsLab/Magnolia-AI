@@ -1,6 +1,6 @@
 """Route neutral hook events through Magnolia's portable behaviours.
 
-Claude and Vibe turn-end events recover replies and launch a detached critic
+Claude, Codex and Vibe turn-end events recover replies and launch a detached critic
 worker, keeping synchronous client hooks short.
 
 Behaviours are isolated from each other, as the OpenCode plugins are: each runs
@@ -287,7 +287,7 @@ def _doorbell(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> 
         return None
     mentions = ", ".join(result.sent)
     return (
-        "The following @mentions were already sent to helper agents; "
+        "One letter containing all requests was sent for each of these helper agents; "
         f"do not act on them: {mentions}"
     )
 
@@ -610,29 +610,54 @@ def _defer_turn(paths: ProjectPaths, event: HookEvent) -> None:
     from compchem_memory.hook.state import SessionState
 
     agent_id = None if event.agent is None else event.agent.id
-    seen_turn_ids: list[str] = []
+    visible_turns: list[str] = []
     if event.harness == "vibe" and not event.turn_id:
-        from compchem_memory.hook.client_transcripts import vibe_assistant_turns
+        from compchem_memory.hook.client_transcripts import vibe_turns
 
-        seen_turn_ids = vibe_assistant_turns(event.transcript_ref, agent_id=agent_id)
+        visible_turns = vibe_turns(event.transcript_ref, agent_id=agent_id)
+    resolved_turn = event.turn_id or (visible_turns[-1] if visible_turns else None)
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
         sequence = int(state.data.get("catchup_sequence", 0)) + 1
         state.data["catchup_sequence"] = sequence
-        identifier = (
-            f"{agent_id or 'main'}--{event.turn_id}"
-            if event.turn_id else f"{agent_id or 'main'}--pending-{sequence}"
-        )
-        item = {
-            "id": identifier, "turn_id": event.turn_id, "transcript_ref": event.transcript_ref,
-            "agent_id": agent_id,
-            "agent_type": None if event.agent is None else event.agent.type,
-            "created": time.time(), "attempts": 0, "seen_turn_ids": seen_turn_ids,
-        }
+        agent_key = agent_id or "main"
+        counts = state.data.get("catchup_agent_turn_counts")
+        counts = counts if isinstance(counts, dict) else {}
+        turn_index = int(counts.get(agent_key, 0))
+        counts[agent_key] = turn_index + 1
+        state.data["catchup_agent_turn_counts"] = counts
         pending = state.data.get("catchup_pending")
         pending = [row for row in pending if isinstance(row, dict)] \
             if isinstance(pending, list) else []
+        same_journal = [
+            row for row in pending
+            if row.get("agent_id") == agent_id
+            and row.get("transcript_ref") == event.transcript_ref
+        ]
+        candidate_index = visible_turns.index(resolved_turn) \
+            if resolved_turn in visible_turns else None
+        is_reserved = any(
+            row.get("turn_id") == resolved_turn
+            or (candidate_index is not None and row.get("turn_index") == candidate_index)
+            for row in same_journal
+        )
+        if not event.turn_id and (is_reserved or candidate_index != turn_index):
+            resolved_turn = None
+        identifier = (
+            f"{agent_key}--{resolved_turn}"
+            if resolved_turn else f"{agent_key}--pending-{sequence}"
+        )
+        item = {
+            "id": identifier, "turn_id": resolved_turn, "transcript_ref": event.transcript_ref,
+            "agent_id": agent_id,
+            "agent_type": None if event.agent is None else event.agent.type,
+            "created": time.time(), "attempts": 0, "turn_index": turn_index,
+        }
         pending = [row for row in pending if row.get("id") != identifier]
         state.data["catchup_pending"] = [*pending, item][-_VIBE_TURN_LIMIT:]
+    if event.harness == "vibe" and resolved_turn and event.agent is not None:
+        from compchem_memory.hook.transcript import append_turn_boundary
+
+        append_turn_boundary(paths.store, replace(event, turn_id=resolved_turn))
 
 
 def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
@@ -721,11 +746,10 @@ def _catch_up_pending(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> N
         agent_id = item.get("agent_id")
         transcript_ref = item.get("transcript_ref")
         if not turn_id and event.harness == "vibe":
-            seen = item.get("seen_turn_ids")
-            seen = set(seen) if isinstance(seen, list) else set()
-            turn_id = next((candidate for candidate in vibe_assistant_turns(
-                str(transcript_ref), agent_id=agent_id,
-            ) if candidate not in seen), None)
+            turns = vibe_assistant_turns(str(transcript_ref), agent_id=agent_id)
+            turn_index = item.get("turn_index")
+            if isinstance(turn_index, int) and 0 <= turn_index < len(turns):
+                turn_id = turns[turn_index]
         agent = AgentRef(str(agent_id), item.get("agent_type")) if agent_id else None
         catch_up = replace(
             event, event="turn-end", turn_id=turn_id, agent=agent, assistant_text=None,
@@ -765,6 +789,7 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         return Handled(HookResponse(), None)
     guard = _Guard(paths, event, env)
     completion_event = event.event in {"turn-end", "agent-end"}
+    closing_session_end = event.event == "session-end" and event.harness in {"vibe", "claude"}
     if completion_event and not event.turn_id:
         turn_id = guard("turn-id", _last_prompt_turn, paths, event, default=None)
         if not turn_id and event.harness == "vibe" and event.transcript_ref \
@@ -784,11 +809,11 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         transcript_handled = guard(
             "client-transcript", _recover_assistant_transcript, paths, event, default=False,
         )
-    if not transcript_handled or event.event == "agent-end":
+    if (not transcript_handled or event.event == "agent-end") and not closing_session_end:
         guard("transcript", _append_transcript, paths, event)
     if completion_event and event.agent is not None:
         guard("carried-context", _drop_child_carried_notes, paths, event)
-    if event.event == "session-end" and event.harness == "vibe":
+    if event.event == "session-end" and event.harness == "vibe" and event.agent is None:
         guard("carried-context", _drop_session_carried_notes, paths, event)
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
@@ -813,5 +838,7 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         handled = Handled(HookResponse(), None)
     else:
         handled = Handled(HookResponse(), None)
+    if closing_session_end and event.agent is None:
+        guard("transcript", _append_transcript, paths, event)
     handled.paths = paths
     return handled

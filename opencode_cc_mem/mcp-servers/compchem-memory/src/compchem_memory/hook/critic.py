@@ -195,6 +195,17 @@ def _agent_window(
     """Bound a child's current Vibe turn when its tool rows have no turn id."""
     if turn_id is None or not report_rows:
         return None
+    markers = [
+        index for index, row in primary
+        if row.get("kind") == "turn-boundary" and row.get("turn_id") == turn_id
+    ]
+    if markers:
+        end = markers[-1]
+        previous = [
+            index for index, row in primary
+            if index < end and row.get("kind") == "turn-boundary"
+        ]
+        return (max(previous) + 1 if previous else 0, end)
     first = min(index for index, _ in report_rows)
     end = max(index for index, _ in report_rows)
     previous = [
