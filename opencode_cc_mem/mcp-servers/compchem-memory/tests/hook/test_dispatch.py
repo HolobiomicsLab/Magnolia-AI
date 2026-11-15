@@ -530,3 +530,42 @@ def test_vibe_session_start_has_agents_md_first(tmp_path, monkeypatch):
     context = _start(project, env, "vibe")
     assert "RULE TEXT" in context and DIRECTIVE in context
     assert context.index("AGENTS TEXT") < context.index("--- boot-context.md ---")
+
+
+def test_vibe_turn_end_without_turn_id_takes_the_last_prompt_turn(tmp_path, monkeypatch):
+    """Vibe's post_agent payload has no turn_id: the agent's last prompt supplies it."""
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    turn_id = "turn-2c40443c7526b229e2076d661938b73f"
+    child = AgentRef(id="child-1", type="reviewer")
+    observed = []
+    monkeypatch.setattr(
+        action_retrieval, "probe_application",
+        lambda paths, harness, session_id, reply, event_turn_id: observed.append(
+            ("probe", event_turn_id)
+        ),
+    )
+    monkeypatch.setattr(
+        critic, "run_critic",
+        lambda paths, harness, session_id, agent_id, event_turn_id: observed.append(
+            ("critic", agent_id, event_turn_id)
+        ),
+    )
+    common = dict(harness="vibe", session_id="session-1", cwd=str(project))
+    handle(HookEvent(event="prompt", prompt="read note", turn_id=turn_id, **common),
+           env, time.monotonic() + 8)
+    handle(HookEvent(event="prompt", prompt="review", turn_id="turn-child", agent=child,
+                     **common), env, time.monotonic() + 8)
+
+    handle(HookEvent(event="turn-end", transcript_ref=str(CLIENT_TRANSCRIPTS / "vibe" / "session"),
+                     **common), env, time.monotonic() + 8)
+    handle(HookEvent(event="turn-end", agent=child, **common), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    replies = [row for row in rows if row["kind"] == "assistant" and row["agent"] is None]
+    assert replies and all(row["turn_id"] == turn_id for row in replies)
+    assert observed == [
+        ("probe", turn_id), ("critic", None, turn_id),
+        ("probe", "turn-child"), ("critic", "child-1", "turn-child"),
+    ]

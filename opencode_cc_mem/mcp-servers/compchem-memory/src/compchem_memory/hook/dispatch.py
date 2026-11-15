@@ -13,7 +13,7 @@ the boot context.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
@@ -278,12 +278,33 @@ def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
     return Handled(HookResponse(), None)
 
 
+def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
+    """Return the turn id of this agent's last recorded prompt.
+
+    Vibe's ``post_agent`` payload carries no turn id; its ``pre_agent`` payload does.
+    """
+    from compchem_memory.hook.transcript import read_turns, transcript_path
+
+    agent_id = None if event.agent is None else event.agent.id
+    for row in reversed(read_turns(transcript_path(paths.store, event.harness, event.session_id))):
+        row_agent = row.get("agent")
+        row_agent_id = row_agent.get("id") if isinstance(row_agent, dict) else None
+        if row.get("kind") == "prompt" and row_agent_id == agent_id:
+            turn_id = row.get("turn_id")
+            return turn_id if isinstance(turn_id, str) and turn_id else None
+    return None
+
+
 def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled:
     """Bind and record an event, then return its neutral hook response."""
     paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
     if paths is None:
         return Handled(HookResponse(), None)
     guard = _Guard(paths, event, env)
+    if event.event == "turn-end" and not event.turn_id:
+        turn_id = guard("turn-id", _last_prompt_turn, paths, event, default=None)
+        if turn_id:
+            event = replace(event, turn_id=turn_id)
     guard("session-map", _record_session, paths, event)
     transcript_handled = False
     if event.event == "turn-end":

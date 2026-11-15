@@ -532,3 +532,22 @@ def test_late_stop_trace_excludes_the_next_turns_tools(tmp_path):
 
     assert report == "first report"
     assert [item["call_id"] for item in json.loads(trace_text)] == ["t1-tool"]
+
+
+def test_run_critic_malformed_verdict_logs_finish_reason_and_length(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("openrouter", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    truncated = '{"flag": true, "unsupported_claims": ["one", "two'
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(truncated, "length", "judge", None, 200),
+    )
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+    critic.run_critic(paths, "claude", "s1", None)
+
+    error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
+    assert error["error"] == "judge reply has no JSON object"
+    assert error["finish_reason"] == "length" and error["reply_chars"] == len(truncated)
