@@ -1,3 +1,4 @@
+import errno
 import json
 import multiprocessing
 import os
@@ -336,8 +337,8 @@ def test_macos_start_token_uses_absolute_ps_and_pinned_environment(monkeypatch):
 
     monkeypatch.setattr(
         governor_module.Path,
-        "read_text",
-        lambda *_a, **_k: (_ for _ in ()).throw(OSError()),
+        "read_bytes",
+        lambda *_a, **_k: (_ for _ in ()).throw(FileNotFoundError()),
     )
     monkeypatch.setattr(governor_module.subprocess, "run", fake_run)
 
@@ -353,8 +354,8 @@ def test_macos_start_token_uses_absolute_ps_and_pinned_environment(monkeypatch):
 def test_unparsable_start_token_is_unknown(monkeypatch):
     monkeypatch.setattr(
         governor_module.Path,
-        "read_text",
-        lambda *_a, **_k: (_ for _ in ()).throw(OSError()),
+        "read_bytes",
+        lambda *_a, **_k: (_ for _ in ()).throw(FileNotFoundError()),
     )
     monkeypatch.setattr(
         governor_module.subprocess,
@@ -364,6 +365,94 @@ def test_unparsable_start_token_is_unknown(monkeypatch):
         ),
     )
     assert governor_module._verified_process_start_token(123) is None
+
+
+def test_proc_start_token_parses_bytes_after_last_parenthesis(monkeypatch):
+    fields = [b"S", b"1", b"4242", *([b"1"] * 16), b"987654"]
+    body = b"4242 (invalid-\xff) comm ) " + b" ".join(fields) + b"\n"
+    monkeypatch.setattr(governor_module.Path, "read_bytes", lambda *_a, **_k: body)
+
+    assert governor_module._verified_process_start_token(4242) == "proc:4242:987654"
+
+
+def test_unparsable_proc_state_is_unknown_and_therefore_alive(monkeypatch):
+    monkeypatch.setattr(
+        governor_module.Path,
+        "read_bytes",
+        lambda *_a, **_k: b"malformed proc stat without a closing delimiter",
+    )
+    monkeypatch.setattr(governor_module.os, "kill", lambda _pid, _signal: None)
+
+    reservation = {"pid": 4242, "pgid": 4242, "process_start_token": "proc:4242:1"}
+
+    assert governor_module._verified_process_start_token(4242) is None
+    assert governor_module._reservation_process_alive(reservation)
+
+
+@pytest.mark.parametrize(
+    ("has_live_members", "expected"),
+    [(False, False), (True, True), (None, True)],
+)
+def test_eperm_group_uses_membership_probe(
+    monkeypatch, has_live_members, expected
+):
+    def deny_group_probe(_pgid, _signal):
+        raise OSError(errno.EPERM, os.strerror(errno.EPERM))
+
+    monkeypatch.setattr(governor_module.os, "killpg", deny_group_probe)
+    monkeypatch.setattr(governor_module.Path, "is_dir", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        governor_module,
+        "_ps_group_has_live_members",
+        lambda _pgid: has_live_members,
+    )
+
+    assert governor_module._process_group_exists(4242) is expected
+
+
+def test_zombie_leader_with_empty_group_is_gone():
+    leader = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+    token = governor_module._verified_process_start_token(leader.pid)
+    deadline = time.monotonic() + 5
+    try:
+        state = governor_module._process_state(leader.pid)
+        while state is not None and "Z" not in state:
+            if time.monotonic() >= deadline:
+                pytest.fail(f"process {leader.pid} did not become a zombie")
+            time.sleep(0.01)
+            state = governor_module._process_state(leader.pid)
+        if state is None:
+            pytest.skip("process state is unavailable in this sandbox")
+        reservation = {
+            "pid": leader.pid,
+            "pgid": leader.pid,
+            "process_start_token": token,
+        }
+        assert not governor_module._reservation_process_alive(reservation)
+    finally:
+        leader.wait(timeout=5)
+
+
+def test_macos_zombie_state_and_empty_group_use_pinned_ps(monkeypatch):
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        stdout = "Z+\n" if argv[1:3] == ["-o", "stat="] else "4242 Z+\n"
+        return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(
+        governor_module.Path,
+        "read_bytes",
+        lambda *_a, **_k: (_ for _ in ()).throw(FileNotFoundError()),
+    )
+    monkeypatch.setattr(governor_module.Path, "is_dir", lambda *_a, **_k: False)
+    monkeypatch.setattr(governor_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(governor_module.os, "killpg", lambda _pgid, _signal: None)
+
+    assert governor_module._process_state(4242) == "Z+"
+    assert not governor_module._process_group_exists(4242)
+    assert all(call[1]["env"] == {"LC_ALL": "C", "TZ": "UTC"} for call in calls)
 
 
 def test_dead_leader_with_live_group_member_is_retained_then_reclaimed(tmp_path):

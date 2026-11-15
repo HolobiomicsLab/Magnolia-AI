@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import math
@@ -850,14 +851,19 @@ def _process_start_token(pid: int) -> str:
 
 def _verified_process_start_token(pid: int) -> str | None:
     try:
-        body = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-        fields = body.rsplit(")", 1)[1].split()
+        body = Path(f"/proc/{pid}/stat").read_bytes()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return None
+    else:
+        fields = _proc_stat_fields(body)
+        if fields is None or len(fields) <= 19:
+            return None
         start_time = fields[19]
         if not start_time.isdigit():
             return None
-        return f"proc:{pid}:{start_time}"
-    except (OSError, IndexError):
-        pass
+        return f"proc:{pid}:{start_time.decode('ascii')}"
     try:
         result = subprocess.run(
             ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
@@ -964,6 +970,9 @@ def _reservation_process_alive(reservation: Mapping[str, Any]) -> bool:
 
 
 def _pid_gone(pid: int) -> bool:
+    state = _process_state(pid)
+    if state is not None:
+        return "Z" in state
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -976,11 +985,116 @@ def _pid_gone(pid: int) -> bool:
 def _process_group_exists(pgid: int) -> bool:
     try:
         os.killpg(pgid, 0)
-    except ProcessLookupError:
-        return False
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return False
+        if exc.errno != errno.EPERM:
+            return True
+    if Path("/proc").is_dir():
+        has_live_members = _linux_group_has_live_members(pgid)
+    else:
+        has_live_members = _ps_group_has_live_members(pgid)
+    return True if has_live_members is None else has_live_members
+
+
+def _proc_stat_fields(body: bytes) -> list[bytes] | None:
+    parts = body.rsplit(b")", 1)
+    if len(parts) != 2:
+        return None
+    fields = parts[1].split()
+    return fields or None
+
+
+def _process_state(pid: int) -> str | None:
+    try:
+        body = Path(f"/proc/{pid}/stat").read_bytes()
+    except FileNotFoundError:
+        return _ps_process_state(pid)
     except OSError:
-        return True
-    return True
+        return None
+    fields = _proc_stat_fields(body)
+    if fields is None or len(fields[0]) != 1:
+        return None
+    try:
+        return fields[0].decode("ascii")
+    except UnicodeDecodeError:
+        return None
+
+
+def _ps_process_state(pid: int) -> str | None:
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-o", "stat=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "TZ": "UTC"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    state = result.stdout.strip()
+    if result.returncode != 0 or not state:
+        return None
+    return state
+
+
+def _linux_group_has_live_members(pgid: int) -> bool | None:
+    expected_group = str(pgid).encode("ascii")
+    saw_group = False
+    try:
+        entries = tuple(Path("/proc").iterdir())
+    except OSError:
+        return None
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            body = (entry / "stat").read_bytes()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return None
+        fields = _proc_stat_fields(body)
+        if fields is None or len(fields) < 3:
+            return None
+        if fields[2] != expected_group:
+            continue
+        saw_group = True
+        if fields[0] != b"Z":
+            return True
+    return False if saw_group else None
+
+
+def _ps_group_has_live_members(pgid: int) -> bool | None:
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-axo", "pgid=,stat="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "TZ": "UTC"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    saw_group = False
+    for line in result.stdout.splitlines():
+        fields = line.split(None, 1)
+        if len(fields) != 2:
+            return None
+        try:
+            process_group = int(fields[0])
+        except ValueError:
+            return None
+        if process_group != pgid:
+            continue
+        saw_group = True
+        if "Z" not in fields[1]:
+            return True
+    return False if saw_group else None
 
 
 def _pid_exists_fast(pid: int) -> bool:
