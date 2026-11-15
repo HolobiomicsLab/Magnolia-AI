@@ -22,7 +22,6 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import ContextManager
 
 from compchem_memory import quick_search, surfacing
 from compchem_memory.hook.events import HookEvent, canonical_tool
@@ -125,16 +124,6 @@ def commit_exposure(note: ActionNote, session_id: str) -> None:
         )
 
 
-def _state_open(
-    state: object,
-    paths: ProjectPaths,
-    harness: str,
-    session_id: str,
-) -> ContextManager[SessionState]:
-    manager = state if isinstance(state, type) and hasattr(state, "open") else SessionState
-    return manager.open(paths.store, harness, session_id)
-
-
 def _canonical_key(event: HookEvent) -> str | None:
     if event.tool is None:
         return None
@@ -176,12 +165,11 @@ def _coarse_row(event: HookEvent, tool_key: str, injected: int) -> dict:
 def _log_skip(
     event: HookEvent,
     paths: ProjectPaths,
-    state: object,
-    tool_key: str,
+    ledger_tool: str,
     reason: str,
 ) -> None:
     should_log = False
-    with _state_open(state, paths, event.harness, event.session_id) as current:
+    with SessionState.open(paths.store, event.harness, event.session_id) as current:
         seen = current.data.setdefault("skips_logged", [])
         if not isinstance(seen, list):
             seen = []
@@ -194,7 +182,7 @@ def _log_skip(
             paths,
             {
                 "sessionID": event.session_id,
-                "tool": tool_key,
+                "tool": ledger_tool,
                 "callID": event.tool.call_id if event.tool is not None else None,
                 "skipped": reason,
             },
@@ -272,11 +260,13 @@ def _sources(hits: list[dict]) -> dict[Path, list[dict]]:
 
 def on_post_tool(
     event: HookEvent,
-    paths: ProjectPaths | None,
-    state: SessionState,
+    paths: ProjectPaths,
     deadline: float,
 ) -> ActionNote | None:
-    """Retrieve and prepare a note for one completed action-tool call."""
+    """Retrieve a note, opening state only for short read and commit sections.
+
+    The caller must not hold this session's state while calling this function.
+    """
     if paths is None or event.tool is None or event.tool.output is None:
         return None
     if str(os.environ.get("MAGNOLIA_ACTION_RETRIEVE", "")).lower() in _DISABLED:
@@ -284,11 +274,12 @@ def on_post_tool(
     tool_key = _canonical_key(event)
     if tool_key not in ACTION_TOOLS:
         return None
+    ledger_tool = event.tool.raw_name
 
     query_text = f"{event.tool.name} {args_to_query(event.tool.input)}"
     now = time.time()
     cached_hits: list[dict] | None = None
-    with _state_open(state, paths, event.harness, event.session_id) as current:
+    with SessionState.open(paths.store, event.harness, event.session_id) as current:
         cache = current.data.get("query_cache", {})
         if isinstance(cache, dict):
             cached = cache.get(query_text)
@@ -304,11 +295,11 @@ def on_post_tool(
     if searched:
         status, hits, elapsed_ms = _search_before_deadline(query_text, str(paths.project_dir), deadline)
         if status == "timeout":
-            _log_skip(event, paths, state, tool_key, "timeout")
-            _log(paths, _coarse_row(event, tool_key, 0))
+            _log_skip(event, paths, ledger_tool, "timeout")
+            _log(paths, _coarse_row(event, ledger_tool, 0))
             return None
         if status == "error" or hits is None:
-            _log(paths, _coarse_row(event, tool_key, 0))
+            _log(paths, _coarse_row(event, ledger_tool, 0))
             return None
     else:
         hits = cached_hits
@@ -316,7 +307,7 @@ def on_post_tool(
 
     selected: list[dict] = []
     skip_reason: str | None = None
-    with _state_open(state, paths, event.harness, event.session_id) as current:
+    with SessionState.open(paths.store, event.harness, event.session_id) as current:
         if searched:
             cache = current.data.setdefault("query_cache", {})
             if not isinstance(cache, dict):
@@ -357,15 +348,15 @@ def on_post_tool(
             pending.append(
                 {
                     "callID": str(event.tool.call_id or ""),
-                    "tool": tool_key,
+                    "tool": ledger_tool,
                     "titles": [str(hit.get("title") or "") for hit in selected],
                     "paths": [str(hit.get("path") or "") for hit in selected],
                 }
             )
 
     if skip_reason is not None:
-        _log_skip(event, paths, state, tool_key, skip_reason)
-    _log(paths, _coarse_row(event, tool_key, len(selected)))
+        _log_skip(event, paths, ledger_tool, skip_reason)
+    _log(paths, _coarse_row(event, ledger_tool, len(selected)))
     if not selected:
         return None
 
@@ -373,7 +364,7 @@ def on_post_tool(
         paths,
         {
             "sessionID": event.session_id,
-            "tool": tool_key,
+            "tool": ledger_tool,
             "callID": event.tool.call_id,
             "ms": elapsed_ms,
             "hits": len(selected),
@@ -404,15 +395,19 @@ def _distinctive_tokens(titles: list[str], paths: list[str]) -> list[str]:
 
 def probe_application(
     paths: ProjectPaths,
-    state: SessionState,
+    harness: str,
     session_id: str,
     reply_text: str,
 ) -> None:
-    """Log whether a reply lexically engages each pending injected note."""
-    items = state.data.get("pending_application", [])
-    if not isinstance(items, list) or not items:
-        return
-    state.data["pending_application"] = []
+    """Probe pending notes using one short state transaction.
+
+    The caller must not hold this session's state while calling this function.
+    """
+    with SessionState.open(paths.store, harness, session_id) as state:
+        items = state.data.get("pending_application", [])
+        if not isinstance(items, list) or not items:
+            return
+        state.data["pending_application"] = []
     reply = reply_text.lower()
     for item in items:
         try:

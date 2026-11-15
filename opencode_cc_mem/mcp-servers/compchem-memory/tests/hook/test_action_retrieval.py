@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -31,7 +33,7 @@ def _event(
     *,
     session_id: str = "s1",
     call_id: str = "c1",
-    raw_name: str = "mcp__compchem-tools__run_shell",
+    raw_name: str = "compchem-tools_run_shell",
     server: str | None = "compchem-tools",
     name: str = "run_shell",
     tool_input: dict | None = None,
@@ -92,7 +94,7 @@ def _call(
     *,
     seconds: float = 10.0,
 ) -> ActionNote | None:
-    return on_post_tool(event, paths, SessionState, time.monotonic() + seconds)
+    return on_post_tool(event, paths, time.monotonic() + seconds)
 
 
 def test_args_to_query_depth_and_cut() -> None:
@@ -141,12 +143,13 @@ def test_action_retrieval_injects_block(tmp_path, monkeypatch) -> None:
     assert rows[0] | {"ts": "ignored"} == {
         "ts": "ignored",
         "sessionID": "s1",
-        "tool": "compchem-tools.run_shell",
+        "tool": "compchem-tools_run_shell",
         "callID": "c1",
         "outcome": "ok",
         "injected": 3,
     }
     assert rows[1]["hits"] == 3
+    assert {row["tool"] for row in rows} == {"compchem-tools_run_shell"}
     assert rows[1]["titles"] == ["First learning", "Second learning", "Third learning"]
     assert rows[1]["entries"] == [
         {
@@ -266,6 +269,52 @@ def test_action_retrieval_timeout_skips(tmp_path, monkeypatch) -> None:
     assert any(row.get("injected") == 0 for row in rows)
 
 
+def test_action_retrieval_waits_only_for_short_state_sections(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "short-lock.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+    locked = threading.Event()
+
+    def hold_state() -> None:
+        with SessionState.open(paths.store, "claude", "s1"):
+            locked.set()
+            time.sleep(0.3)
+
+    holder = threading.Thread(target=hold_state)
+    holder.start()
+    assert locked.wait(timeout=1)
+    started = time.monotonic()
+
+    note = _call(_event(paths), paths)
+
+    elapsed = time.monotonic() - started
+    holder.join(timeout=1)
+    assert note is not None
+    assert elapsed < 2
+    assert not holder.is_alive()
+
+
+def test_action_retrieval_does_not_hold_state_lock_while_searching(
+    tmp_path, monkeypatch
+) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "search-unlocked.md")
+    searched = threading.Event()
+
+    def search_without_state_lock(query, project_dir, k=5):
+        lock_path = paths.store / "hook-state" / "claude-s1.json.lock"
+        with open(lock_path, "a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        searched.set()
+        return [hit]
+
+    monkeypatch.setattr(quick_search, "search", search_without_state_lock)
+
+    assert _call(_event(paths), paths) is not None
+    assert searched.is_set()
+
+
 def test_probe_application_positive_and_negative(tmp_path, monkeypatch) -> None:
     paths = _paths(tmp_path)
     first = _hit(paths.store, "alpha_beta.md", title="Alpha catalyst protocol")
@@ -278,8 +327,12 @@ def test_probe_application_positive_and_negative(tmp_path, monkeypatch) -> None:
         _event(paths, call_id="negative", tool_input={"cmd": "different query"}), paths
     ) is not None
 
-    with SessionState.open(paths.store, "claude", "s1") as state:
-        probe_application(paths, state, "s1", "I followed the alpha catalyst recommendation.")
+    probe_application(
+        paths,
+        "claude",
+        "s1",
+        "I followed the alpha catalyst recommendation.",
+    )
 
     applications = [row for row in _rows(paths.store) if row.get("event") == "application"]
     assert [row["applied"] for row in applications] == [True, False]

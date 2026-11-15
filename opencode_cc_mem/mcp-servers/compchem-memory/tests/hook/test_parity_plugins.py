@@ -266,7 +266,7 @@ def test_action_retrieval_block_matches_plugin_v2(tmp_path, monkeypatch):
             output="RESULT",
         ),
     )
-    note = on_post_tool(event, paths, SessionState, __import__("time").monotonic() + 10)
+    note = on_post_tool(event, paths, __import__("time").monotonic() + 10)
 
     assert note is not None
     assert note.text == plugin_block
