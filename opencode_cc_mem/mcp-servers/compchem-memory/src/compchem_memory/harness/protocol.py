@@ -28,6 +28,8 @@ class Launch:
     env: dict[str, str]
     files: dict[Path, bytes]
     conflicts: list[str] = field(default_factory=list)
+    links: dict[Path, Path] = field(default_factory=dict)
+    """Symlinks for the CLI to create: link path -> absolute target."""
 
 
 Renderer = Callable[[NeutralConfig, LaunchContext], Launch]

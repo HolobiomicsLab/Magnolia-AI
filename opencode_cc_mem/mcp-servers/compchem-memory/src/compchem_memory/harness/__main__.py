@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from collections.abc import Sequence
@@ -24,6 +25,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"warning: {str(conflict).splitlines()[0]}", file=sys.stderr)
         for path, content in launch.files.items():
             atomic_write(path, content)
+        _link(launch.links, args.root.resolve() / "projects" / args.project)
         _emit(launch)
         return 0
     except MissingBinary as error:
@@ -103,6 +105,35 @@ def _substitutions(context: LaunchContext) -> dict[str, str]:
         "@@MEMORY_ENABLED@@": "true" if memory_enabled else "false",
         "@@COMPCHEM_TOOLS_PORT@@": str(context.tools_port),
     }
+
+
+def _link(links: dict[Path, Path], project_dir: Path) -> None:
+    """Point each link at its target; replace a stale link, never a real file or directory."""
+    boundary = project_dir.resolve()
+    for link, target in links.items():
+        if not link.parent.resolve().is_relative_to(boundary):
+            print(
+                f"warning: skill link skipped, {link.parent} leaves the project",
+                file=sys.stderr,
+            )
+            continue
+        if link.is_symlink():
+            if os.readlink(link) == str(target):
+                continue
+        elif link.exists():
+            print(
+                f"warning: skill link skipped, {link} exists and is not a link",
+                file=sys.stderr,
+            )
+            continue
+        link.parent.mkdir(parents=True, exist_ok=True)
+        temporary = link.with_name(f".{link.name}.{os.getpid()}.tmp")
+        temporary.unlink(missing_ok=True)
+        try:
+            temporary.symlink_to(target)
+            os.replace(temporary, link)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def _emit(launch: Launch) -> None:

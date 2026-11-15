@@ -1,0 +1,65 @@
+"""Values and files every client renderer builds the same way."""
+
+from __future__ import annotations
+
+import json
+import shlex
+from pathlib import Path
+
+from compchem_memory.harness.neutral import McpServer, NeutralConfig
+from compchem_memory.harness.protocol import LaunchContext
+
+# Neutral event names; each client maps its own event onto one of these.
+POST_TOOL_TIMEOUT_S = 10
+DEFAULT_HOOK_TIMEOUT_S = 30
+MCP_TOOL_TIMEOUT_MS = "660000"
+
+
+def hook_command(context: LaunchContext, harness: str, event: str) -> str:
+    """The shell command a client runs for one hook event."""
+    return f"{shlex.quote(context.python)} -m compchem_memory.hook {harness} {event}"
+
+
+def hook_timeout(event: str) -> int:
+    """Hook timeout in seconds (Claude, Codex and Vibe all use seconds)."""
+    return POST_TOOL_TIMEOUT_S if event == "post-tool" else DEFAULT_HOOK_TIMEOUT_S
+
+
+def harness_dir(context: LaunchContext, harness: str) -> Path:
+    return context.project_dir / ".magnolia" / "harness" / harness
+
+
+def policy_files(
+    neutral: NeutralConfig, context: LaunchContext, harness: str
+) -> tuple[dict[Path, bytes], dict[str, str]]:
+    """The hook policy file and the environment variable that points the hook at it."""
+    path = harness_dir(context, harness) / "policy.json"
+    body = {"deny_tools": sorted(neutral.deny_tools)}
+    return {path: (json.dumps(body) + "\n").encode("utf-8")}, {
+        "MAGNOLIA_HOOK_POLICY": str(path)
+    }
+
+
+def active_servers(neutral: NeutralConfig) -> list[McpServer]:
+    return [server for server in neutral.servers if server.enabled]
+
+
+def split_command(server: McpServer) -> tuple[str, list[str]]:
+    command = server.command or []
+    return command[0], list(command[1:])
+
+
+def timeout_seconds(server: McpServer) -> int:
+    return server.timeout_ms // 1000
+
+
+def skill_links(context: LaunchContext, subdirectory: str) -> dict[Path, Path]:
+    """One link per skill under ``<project>/<subdirectory>/``, pointing at the shared skills."""
+    source = context.root / ".opencode" / "skills"
+    if not source.is_dir():
+        return {}
+    return {
+        context.project_dir / subdirectory / skill.name: skill
+        for skill in sorted(source.iterdir())
+        if skill.is_dir()
+    }

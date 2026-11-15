@@ -131,7 +131,10 @@ def test_launch_missing_binary_exits_two_with_one_stderr_line(tmp_path, monkeypa
     assert not (root / "projects").exists()
 
 
-def test_launch_other_failure_exits_one_with_one_stderr_line(tmp_path, capsysbinary):
+def test_launch_other_failure_exits_one_with_one_stderr_line(
+    tmp_path, monkeypatch, capsysbinary
+):
+    monkeypatch.delitem(RENDERERS, "claude")
     exit_code = launch_cli.main(_args(_root(tmp_path)))
     captured = capsysbinary.readouterr()
 
@@ -162,7 +165,10 @@ def test_launch_subprocess_emits_machine_readable_error(tmp_path):
     proc = subprocess.run(
         [
             str(Path(__import__("sys").executable)),
-            "-m", "compchem_memory.harness", *_args(_root(tmp_path)),
+            "-c",
+            "import sys; from compchem_memory.harness import RENDERERS, __main__ as cli;"
+            " RENDERERS.clear(); raise SystemExit(cli.main(sys.argv[1:]))",
+            *_args(_root(tmp_path)),
         ],
         capture_output=True,
         check=False,
