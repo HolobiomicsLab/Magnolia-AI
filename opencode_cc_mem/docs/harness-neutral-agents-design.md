@@ -117,8 +117,37 @@ Anti-goals (a failure even if it works)
 | Session mapping + Magnolia transcript | all events | yes | yes | yes | tool events + turn end only |
 | Claim critic | `turn-end` (async) | yes | Stop, `async: true` | Stop, `async: true` | after-turn hook |
 | Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | at next tool event |
-| Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id` on SubagentStop; on tool events: P0 | P0 |
-| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (Codex has no tool deny for its shell; P0 decides) | tool disable in config (P0) |
+| Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | P0 (not probed) |
+| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | tool disable in config (P0) |
+
+### 5.1 What P0 observed
+
+Source: `harness-probes-2026-11.md` (Claude Code 2.1.325, Codex 0.154.0, 15 Nov 2026). Vibe was
+not probed (awaiting the owner's go to install it), so its column above is still a plan. What was
+not observed is unknown, not absent.
+
+- Tool names: MCP tools are `mcp__<server>__<tool>` on both clients. Claude adds an `mcp_server`
+  object; Codex does not. Claude's sub-agent tool is `Agent`; Codex's is `spawn_agent`. The core
+  ignores Claude's `ToolSearch` and `SubagentHandback` events.
+- Failure: on Claude a failing MCP tool fires `PostToolUseFailure`, not `PostToolUse`; the adapter
+  must subscribe to it. The Codex hook-side failure event is unknown.
+- Sub-agents: on both clients tool events inside a sub-agent carry `agent_id` and `agent_type`;
+  parent events carry neither. On Claude `SubagentStart`/`SubagentStop` fire; on Codex they were
+  not registered.
+- Ordering: Claude can fire `Stop` twice in one `-p` run (a background sub-agent hands back in a
+  second turn), and `async: true` hooks can arrive after later events. The core must not treat
+  `Stop` as the end of work or assume async order.
+- Codex hook trust: project hooks do not load until trusted. The probes used
+  `--dangerously-bypass-hook-trust` on throwaway temp projects only, at the owner's request. The
+  flag is not to be put in any Magnolia config; the campaign worker project needs trusted hooks.
+- Denial (Codex): a PreToolUse `deny` on the shell stopped the command and no PostToolUse followed;
+  a write outside the project was stopped by the `workspace-write` sandbox. Claude denial was not
+  probed.
+- Context size: Claude accepted a 256 KB SessionStart `additionalContext` but the model reported
+  seeing only a preview of about 2 KB (one self-report, threshold not measured). Codex delivered
+  the tail marker of the same payload. The payload was 256 000 identical letters, which tokenise
+  compactly, so this is weak evidence: a realistic payload is still to be measured. Until then
+  the boot payload should be a short pointer plus a file or `--append-system-prompt-file` on Claude.
 
 ## 6. The core
 
@@ -306,13 +335,25 @@ A4 is relaxed here by LFX's decision; the change is announced in the release not
 
 | Phase | Content | Proof |
 |---|---|---|
-| P0 | Probes, no Magnolia change: each client's hooks around an MCP tool call and inside a sub-agent, tool-name format, size limit of injected context, Codex shell-tool control, Vibe install and files, usage-limit texts where documented | probe report in `opencode_cc_mem/docs/` with commands and captured payloads |
-| P1 | `magnolia-hook`, normalised schema, Python behaviours, Magnolia transcript; OpenCode plugins untouched | parity tests: on recorded OpenCode payloads the core produces what the TS plugins produce; existing suites green |
+| P0 (done, c7596eb, 75b0aa6, c6c9db4) | Probes, no Magnolia change: each client's hooks around an MCP tool call and inside a sub-agent, tool-name format, size limit of injected context, Codex shell-tool control, Vibe install and files, usage-limit texts where documented | probe report in `opencode_cc_mem/docs/` with commands and captured payloads |
+| P1 (done, b2311d9 to 1345638) | `magnolia-hook`, normalised schema, Python behaviours, Magnolia transcript; OpenCode plugins untouched | parity tests: on recorded OpenCode payloads the core produces what the TS plugins produce; existing suites green |
 | P2 | Claude Code adapter + `--harness` launcher + `setup` support | live session on a demo project: boot context visible, retrieval note after a `run_shell` call, capture rows, critic row, transcript file; distillation of that session compared with an OpenCode session on the same task (same candidate kinds found) |
 | P3 | Codex adapter | same live checklist |
 | P4 | Executor registry, governor, campaigns and daemon on Claude Code and Codex | unit tests on recorded event streams; one small campaign per client; governor stops on a simulated limit |
 | P5 | Vibe adapter and executor | live checklist on Vibe |
 | P6 | Optional: OpenCode plugins as shims over the core | Tao's call |
+
+Status of P0 and P1 (branch `feat/hook-core-p0-p1`, nothing pushed, awaiting Tao's review):
+
+- P0: Claude Code and Codex probed; Vibe not probed. Findings in section 5.1; usage-limit texts
+  not recorded (no limit hit, none found in the help texts consulted).
+- P1: package `compchem_memory.hook` (events, project, state, boot_context, directive, doorbell,
+  action_retrieval, transcript, sessions, critic, notices, dispatch, `__main__`, JSON adapter).
+  Full package suite at 1345638: 1046 passed, 4 skipped. Cold start, median of 5 on one Mac:
+  0.041 s for session-start, 0.078 s for post-tool.
+- Not done: the OpenCode plugins are untouched and still run the TypeScript path; distillation
+  and handover do not yet read the Magnolia transcripts (section 6.3, Plan 2); no client adapter
+  or launcher exists yet (P2 onward).
 
 Each phase ends with Tao's review on its own branch.
 
