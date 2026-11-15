@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from compchem_memory.hook.state import SessionState
+from compchem_memory.hook.state import SessionState, safe_component
 
 
 def test_state_roundtrip(tmp_path):
@@ -31,9 +31,31 @@ def test_state_sanitises_session_id(tmp_path):
     with SessionState.open(tmp_path, "claude", "a/b c:d") as st:
         st.data["injections"] = 1
 
-    assert (tmp_path / "hook-state" / "claude-a_b_c_d.json").exists()
+    [path] = (tmp_path / "hook-state").glob("*.json")
+    assert path.name == f"claude-{safe_component('a/b c:d')}.json"
+    assert path.name.startswith("claude-a_b_c_d=")
     with SessionState.open(tmp_path, "claude", "a/b c:d") as st:
         assert st.data["injections"] == 1
+
+
+@pytest.mark.parametrize("session_id", ["../../../../escape", "..", ".", "", "a/../../b", "x" * 500])
+def test_state_dot_dot_session_id_stays_in_store(tmp_path, session_id):
+    store = tmp_path / "store"
+    with SessionState.open(store, "../claude", session_id) as st:
+        st.data["n"] = 1
+
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert written and all((store / "hook-state") in p.parents for p in written)
+    assert all(len(p.name) < 255 for p in written)
+
+
+def test_safe_component_is_distinct_and_keeps_plain_ids():
+    assert safe_component("ses-1_A.b") == "ses-1_A.b"
+    assert safe_component("01a1ded9-75f1-7e93-aec8-19119f3d6509") == "01a1ded9-75f1-7e93-aec8-19119f3d6509"
+    names = {safe_component(v) for v in ("a/b", "a_b", "a:b", "..", ".", "", ".hidden")}
+    assert len(names) == 7
+    for name in names:
+        assert name not in ("", ".", "..") and "/" not in name and not name.startswith(".")
 
 
 def test_state_lock_not_held_by_slow_work(tmp_path):

@@ -392,3 +392,22 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
     assert error["status"] == 401 and error["error"] == "HTTP 401: denied"
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
+
+
+def test_run_critic_dot_dot_session_id_stays_in_store(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    verdict = '{"flag":true,"severity":"high","unsupported_claims":["x"],"why":"no tool output"}'
+    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(verdict, "stop", "resolved", None, 200))
+    session = "../../../../escape"
+    append_event(paths.store, _event("prompt", session=session, prompt="rank"))
+    append_event(paths.store, _event("turn-end", session=session, assistant_text="x" * 200))
+
+    critic.run_critic(paths, "claude", session, None)
+
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert all(paths.store in p.parents for p in written)
+    [row_file] = (paths.store / "claim-critic").glob("*.jsonl")
+    assert json.loads(row_file.read_text())["sessionID"] == session

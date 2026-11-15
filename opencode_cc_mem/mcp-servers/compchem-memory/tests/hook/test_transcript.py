@@ -179,3 +179,15 @@ def test_read_turns_skips_malformed_lines(tmp_path):
     path = tmp_path / "transcript.jsonl"
     path.write_text('{"kind":"prompt"}\nnot json\n[]\n{"kind":"tool"}\n', encoding="utf-8")
     assert read_turns(path) == [{"kind": "prompt"}, {"kind": "tool"}]
+
+
+def test_transcript_dot_dot_session_id_stays_in_store(tmp_path):
+    store = tmp_path / "workspace" / "projects" / "alpha" / ".magnolia"
+    append_event(store, _event("prompt", prompt="hi", harness="../json", session_id="../../../../escape"))
+    append_event(store, _event("prompt", prompt="hi", session_id="a/b"))
+
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert len(written) == 2
+    assert all((store / "transcripts") in p.parents for p in written)
+    assert transcript_path(store, "opencode", "a/b").parent == store / "transcripts" / "opencode"
+    assert transcript_path(store, "opencode", "a/b") != transcript_path(store, "opencode", "a_b")

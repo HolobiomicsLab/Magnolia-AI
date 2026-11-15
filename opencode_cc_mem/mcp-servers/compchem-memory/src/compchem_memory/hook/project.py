@@ -10,12 +10,13 @@ plugin root rules and removes the ``projects/xiulian`` fallback.
 
 import json
 import os
-import re
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
+
+from compchem_memory.hook.state import safe_component
 
 
 _READ_RETRY_SECONDS = 0.2
@@ -89,10 +90,6 @@ def resolve_project(cwd: Path, env: Mapping[str, str]) -> ProjectPaths | None:
     return _project_paths(cwd, project_dir.absolute(), False)
 
 
-def _safe_component(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", value)
-
-
 def _serialise(project: ProjectPaths | None) -> dict[str, object]:
     if project is None:
         return {"project": None}
@@ -154,7 +151,7 @@ def bind_project(
     """Return the session's first binding, creating it on any first event."""
     bindings = state_home(env) / "bindings"
     bindings.mkdir(mode=0o700, exist_ok=True)
-    filename = f"{_safe_component(harness)}-{_safe_component(session_id)}.json"
+    filename = f"{safe_component(harness)}-{safe_component(session_id)}.json"
     binding_path = bindings / filename
     try:
         _create_binding(binding_path, resolve_project(cwd, env))

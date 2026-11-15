@@ -12,6 +12,7 @@ atomically, which would otherwise discard a lock held on the old inode.
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import re
 from contextlib import contextmanager
@@ -22,12 +23,26 @@ from compchem_memory.atomic_io import atomic_write_text
 
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_.-]")
+_SAFE = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}")
 
 
-def _sanitise(value: str) -> str:
-    """Map a harness or session id onto a safe file-name component."""
-    cleaned = _UNSAFE.sub("_", value)
-    return cleaned or "_"
+def safe_component(value: str) -> str:
+    """Map a harness or session id onto one safe, distinct file-name component.
+
+    Ids already made of ``[A-Za-z0-9_.-]`` (not starting with a dot, at most
+    100 characters) are kept as they are. Any other id becomes a cleaned,
+    shortened prefix followed by ``=`` and a SHA-256 digest of the original;
+    ``=`` never occurs in a kept id, so two ids never share a name, and no
+    result is empty, ``.``, ``..`` or contains a path separator.
+    """
+    if _SAFE.fullmatch(value):
+        return value
+    digest = hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()[:24]
+    prefix = _UNSAFE.sub("_", value)[:40].lstrip(".")
+    return f"{prefix}={digest}"
+
+
+_sanitise = safe_component
 
 
 def _read_data(path: Path) -> dict:

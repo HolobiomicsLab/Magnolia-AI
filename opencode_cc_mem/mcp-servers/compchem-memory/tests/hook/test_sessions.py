@@ -41,3 +41,14 @@ def test_iter_sessions_round_trips_unicode_line_separators(tmp_path):
     )
 
     assert list(iter_sessions(tmp_path)) == [row]
+
+
+def test_record_session_dot_dot_id_stays_in_store(tmp_path):
+    store = tmp_path / "store"
+    assert record_session(store, "../json", "../../../../escape", "/project", None) is True
+    assert record_session(store, "../json", "../../../../escape", "/project", None) is False
+
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert written and all(store in p.parents for p in written)
+    [row] = [json.loads(line) for line in (store / "agent-sessions.jsonl").read_text().splitlines()]
+    assert row["session_id"] == "../../../../escape"

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.hook.project import ProjectPaths
-from compchem_memory.hook.state import SessionState
+from compchem_memory.hook.state import SessionState, safe_component
 from compchem_memory.hook.transcript import read_turns, transcript_path
 from compchem_memory.llm import CallResult, Route, call_route, resolve_route
 
@@ -216,7 +216,7 @@ def run_critic(
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
             return
         row = _verdict_row(harness, session_id, agent_id, route, verdict, report, n_tools)
-        _append_jsonl(out_dir / f"{session_id}.jsonl", row)
+        _append_jsonl(out_dir / f"{safe_component(session_id)}.jsonl", row)
         _save_notice(paths, harness, session_id, row)
     except Exception:  # noqa: BLE001 - a hook failure must never break the client
         return

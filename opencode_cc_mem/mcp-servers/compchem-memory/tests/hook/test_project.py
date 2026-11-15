@@ -11,6 +11,7 @@ import pytest
 
 from compchem_memory.hook import project as project_module
 from compchem_memory.hook.project import ProjectPaths, bind_project, resolve_project, state_home
+from compchem_memory.hook.state import safe_component
 
 
 def _make_workspace(tmp_path: Path) -> Path:
@@ -175,7 +176,7 @@ def test_binding_concurrent_first_events(tmp_path):
     assert len(results) == 8
     bindings = list((state / "magnolia" / "bindings").glob("*.json"))
     assert len(bindings) == 1
-    assert bindings[0].name == "opencode-shared_session.json"
+    assert bindings[0].name == f"opencode-{safe_component('shared/session')}.json"
 
 
 def test_binding_without_session_start(tmp_path):
@@ -199,7 +200,8 @@ def test_binding_none_is_persistent_and_sanitised(tmp_path):
     _activate(tmp_path, "late")
     assert bind_project(harness, session, tmp_path, {"XDG_STATE_HOME": str(state)}) is None
 
-    binding = state / "magnolia" / "bindings" / "client_name-session_id.json"
+    binding = state / "magnolia" / "bindings" / f"{safe_component(harness)}-{safe_component(session)}.json"
+    assert binding.name.startswith("client_name=")
     assert json.loads(binding.read_text(encoding="utf-8")) == {"project": None}
     assert binding.parent.stat().st_mode & 0o777 == 0o700
     assert state_home({"XDG_STATE_HOME": str(state)}).stat().st_mode & 0o777 == 0o700
@@ -238,3 +240,13 @@ def test_binding_creation_fsyncs_before_link(tmp_path, monkeypatch):
 
     assert bind_project("codex", "synced", tmp_path, {"XDG_STATE_HOME": str(state)}) is None
     assert events == ["fsync", "link"]
+
+
+def test_binding_dot_dot_session_id_stays_in_bindings(tmp_path):
+    state = tmp_path / "state"
+    env = {"XDG_STATE_HOME": str(state)}
+    assert bind_project("../json", "../../../../escape", tmp_path / "nowhere", env) is None
+
+    bindings = state / "magnolia" / "bindings"
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert written and all(p.parent == bindings for p in written)

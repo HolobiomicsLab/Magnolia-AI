@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.hook.events import HookEvent, ToolCall
+from compchem_memory.hook.state import safe_component
 from compchem_memory.opencode_ingest import scrub_secrets
 
 _INPUT_LIMIT = 4000
@@ -36,7 +37,7 @@ _EVIDENCE_TOOLS = {
 
 def transcript_path(store: Path, harness: str, session_id: str) -> Path:
     """Return the per-harness JSONL transcript path for a client session."""
-    return Path(store) / "transcripts" / harness / f"{session_id}.jsonl"
+    return Path(store) / "transcripts" / safe_component(harness) / f"{safe_component(session_id)}.jsonl"
 
 
 def append_event(store: Path, event: HookEvent) -> None:
