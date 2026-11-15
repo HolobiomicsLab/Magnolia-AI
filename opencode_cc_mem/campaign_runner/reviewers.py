@@ -12,6 +12,7 @@ from .accounting import read_session_usage
 from .process import ProcessControl
 from .security import SecurityError, ensure_within
 from .workers import OpenCodeExecutor, empty_usage
+from .executors.contracts import RunOutcome
 
 
 REVIEW_FORMAT_NOTE = (
@@ -53,9 +54,14 @@ class ReviewResult:
     attempts: int = 0
     model: str = ""
     stopped_reason: str | None = None
+    outcome: RunOutcome | None = None
 
 
 def model_family(model: str) -> str:
+    for client in ("claude-code", "codex", "vibe"):
+        if model.lower().startswith(client + "/"):
+            model = model[len(client) + 1 :]
+            break
     lowered = model.lower()
     for token, family in _FAMILY_HINTS:
         if token in lowered:
@@ -68,9 +74,10 @@ def choose_reviewer_model(
     reviewer_model: str,
     alternate_model: str | None,
 ) -> str:
-    if model_family(worker_model) != model_family(reviewer_model):
+    worker_family = model_family(worker_model)
+    if worker_family != model_family(reviewer_model):
         return reviewer_model
-    if alternate_model and model_family(worker_model) != model_family(alternate_model):
+    if alternate_model and worker_family != model_family(alternate_model):
         return alternate_model
     raise ReviewError(
         "no independent reviewer model: configure a reviewer from another model family"

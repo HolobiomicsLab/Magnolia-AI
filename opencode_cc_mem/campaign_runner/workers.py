@@ -6,7 +6,9 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol
+
+from .executors.contracts import RunOutcome
 
 from .process import ProcessControl, run_process
 from .security import redact_paths
@@ -48,6 +50,20 @@ class WorkerResult:
     stderr_paths: list[Path]
     stopped_reason: str | None = None
     errors: list[dict[str, Any]] = field(default_factory=list)
+    outcome: RunOutcome | None = None
+
+
+class WorkerExecutor(Protocol):
+    def run(
+        self,
+        prompt: str,
+        cwd: str | Path,
+        attempt_dir: Path,
+        stem: str = "worker",
+        resume_session: str | None = None,
+        retries: int | None = None,
+        control: ProcessControl | None = None,
+    ) -> WorkerResult: ...
 
 
 def empty_usage() -> dict[str, float]:
