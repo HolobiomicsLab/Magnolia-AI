@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -11,6 +13,13 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from .executors.contracts import RunOutcome
+
+
+BARRIER_FAILURE_EXIT = 125
+
+
+class ProcessStartError(OSError):
+    """Raised when governed work cannot cross its pre-exec barrier."""
 
 
 @dataclass
@@ -52,40 +61,28 @@ def run_process(
     stopped_reason: str | None = None
     typed_outcome: RunOutcome | None = None
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
-        launch_argv = list(argv)
         if control and control.hold_before_exec:
-            launch_argv = [
-                "/bin/sh",
-                "-c",
-                'kill -STOP "$$"; exec "$@"',
-                "magnolia-governed-launch",
-                *launch_argv,
-            ]
-        try:
+            process = _start_governed_process(
+                argv, cwd, env, stdout, stderr, control
+            )
+        else:
             process = subprocess.Popen(
-                launch_argv,
+                list(argv),
                 cwd=str(cwd),
                 env=dict(env),
                 stdout=stdout,
                 stderr=stderr,
                 start_new_session=True,
             )
-        except OSError:
-            raise
-        if control and control.hold_before_exec:
-            _wait_until_stopped(process)
-        if control and control.on_start:
-            try:
-                control.on_start(process.pid, process.pid)
-            except Exception as exc:
-                if control.hold_before_exec:
-                    _signal_group(process.pid, signal.SIGKILL)
-                else:
+            if control and control.on_start:
+                try:
+                    control.on_start(process.pid, process.pid)
+                except Exception as exc:
                     _terminate_tree(process)
-                process.wait()
-                raise RuntimeError(f"process start callback failed: {exc}") from exc
-        if control and control.hold_before_exec:
-            _signal_group(process.pid, signal.SIGCONT)
+                    process.wait()
+                    raise RuntimeError(
+                        f"process start callback failed: {exc}"
+                    ) from exc
         while True:
             returncode = process.poll()
             if control:
@@ -156,19 +153,100 @@ def _terminate_tree(process: subprocess.Popen) -> None:
         _signal_group(process.pid, signal.SIGKILL)
 
 
-def _wait_until_stopped(process: subprocess.Popen, timeout: float = 2.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        pid, status = os.waitpid(process.pid, os.WUNTRACED | os.WNOHANG)
-        if pid == process.pid and os.WIFSTOPPED(status):
-            return
-        if pid == process.pid and (os.WIFEXITED(status) or os.WIFSIGNALED(status)):
-            process.returncode = os.waitstatus_to_exitcode(status)
-            raise RuntimeError("governed process exited before launch was recorded")
-        time.sleep(0.001)
+def _start_governed_process(
+    argv: Sequence[str],
+    cwd: str | Path,
+    env: Mapping[str, str],
+    stdout: object,
+    stderr: object,
+    control: ProcessControl,
+) -> subprocess.Popen:
+    try:
+        _validate_executable(argv[0], cwd, env)
+        read_fd, write_fd = os.pipe()
+    except OSError as exc:
+        raise _process_start_error(exc) from exc
+    script = (
+        f"IFS= read -r _ <&{read_fd} || exit {BARRIER_FAILURE_EXIT}; "
+        f"exec {read_fd}<&-; exec \"$@\""
+    )
+    launch_argv = [
+        "/bin/sh",
+        "-c",
+        script,
+        "magnolia-governed-launch",
+        *argv,
+    ]
+    try:
+        process = subprocess.Popen(
+            launch_argv,
+            cwd=str(cwd),
+            env=dict(env),
+            stdout=stdout,
+            stderr=stderr,
+            start_new_session=True,
+            pass_fds=(read_fd,),
+        )
+    except BaseException as exc:
+        os.close(read_fd)
+        os.close(write_fd)
+        if isinstance(exc, OSError):
+            raise _process_start_error(exc) from exc
+        raise
+    os.close(read_fd)
+    try:
+        if control.on_start:
+            control.on_start(process.pid, process.pid)
+        if process.poll() is not None:
+            raise ProcessStartError(
+                errno.EIO, "governed process exited before barrier release"
+            )
+        if os.write(write_fd, b"\n") != 1:
+            raise ProcessStartError(errno.EIO, "short barrier release write")
+    except BaseException as exc:
+        os.close(write_fd)
+        _kill_and_reap(process)
+        if isinstance(exc, Exception) and not isinstance(exc, OSError):
+            raise ProcessStartError(
+                errno.EIO, f"governed pre-exec callback failed: {exc}"
+            ) from exc
+        raise
+    os.close(write_fd)
+    return process
+
+
+def _validate_executable(
+    executable: str, cwd: str | Path, env: Mapping[str, str]
+) -> None:
+    if os.path.dirname(executable):
+        candidate = Path(executable)
+        if not candidate.is_absolute():
+            candidate = Path(cwd) / candidate
+        if not candidate.exists():
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), executable
+            )
+        if candidate.is_dir() or not os.access(candidate, os.X_OK):
+            raise PermissionError(
+                errno.EACCES, os.strerror(errno.EACCES), executable
+            )
+        return
+    search_path = os.pathsep.join(os.get_exec_path(env))
+    if shutil.which(executable, path=search_path) is None:
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), executable)
+
+
+def _process_start_error(exc: OSError) -> ProcessStartError:
+    return ProcessStartError(exc.errno, exc.strerror, exc.filename)
+
+
+def _kill_and_reap(process: subprocess.Popen) -> None:
     _signal_group(process.pid, signal.SIGKILL)
-    process.wait()
-    raise RuntimeError("governed process did not reach its pre-exec barrier")
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
 def _signal_group(pid: int, sig: signal.Signals) -> None:

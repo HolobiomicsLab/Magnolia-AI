@@ -10,10 +10,16 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .executors.contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
-from .governor import Admission, AdmissionRequest, Governor, QuotaWaiting
+from .governor import (
+    Admission,
+    AdmissionRequest,
+    Governor,
+    QuotaWaiting,
+    _control_reason,
+)
 from .routing import ResolvedRoute
 
-from .process import ProcessControl, run_process
+from .process import ProcessControl, ProcessStartError, run_process
 from .security import redact_paths
 
 
@@ -255,15 +261,20 @@ class OpenCodeExecutor:
                 )
             try:
                 with admission or _NoAdmission():
-                    outcome = run_process(
-                        argv=argv,
-                        cwd=cwd,
-                        env=invocation_environment,
-                        timeout_seconds=self.timeout_seconds,
-                        stdout_path=stdout_path,
-                        stderr_path=stderr_path,
-                        control=invocation_control,
-                    )
+                    try:
+                        outcome = run_process(
+                            argv=argv,
+                            cwd=cwd,
+                            env=invocation_environment,
+                            timeout_seconds=self.timeout_seconds,
+                            stdout_path=stdout_path,
+                            stderr_path=stderr_path,
+                            control=invocation_control,
+                        )
+                    except ProcessStartError:
+                        if admission is not None:
+                            admission._cancel_before_client_exec()
+                        raise
                     parsed = parse_run_events(
                         stdout_path.read_text(encoding="utf-8", errors="replace")
                     )
@@ -472,9 +483,9 @@ def _invocation_control(
         return control
 
     def on_start(pid: int, pgid: int) -> None:
-        admission.mark_started(pid=pid, pgid=pgid)
         if control and control.on_start:
             control.on_start(pid, pgid)
+        admission.mark_started(pid=pid, pgid=pgid)
 
     return ProcessControl(
         should_stop=control.should_stop if control else None,
@@ -484,15 +495,6 @@ def _invocation_control(
         poll_interval=control.poll_interval if control else 0.2,
         hold_before_exec=True,
     )
-
-
-def _control_reason(control: ProcessControl | None) -> str | None:
-    if control is None or control.should_stop is None:
-        return None
-    try:
-        return control.should_stop()
-    except Exception as exc:
-        return f"stop check failed: {exc}"
 
 
 class _NoAdmission:

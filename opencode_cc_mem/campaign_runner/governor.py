@@ -198,6 +198,14 @@ class Admission:
         self._finalized = self._finalized or cancelled
         return cancelled
 
+    def _cancel_before_client_exec(self) -> bool:
+        """Cancel after a governed launcher is reaped before client exec."""
+        cancelled = self.governor._cancel_before_client_exec(
+            self.request.invocation_id
+        )
+        self._finalized = self._finalized or cancelled
+        return cancelled
+
     def release(
         self,
         *,
@@ -495,6 +503,14 @@ class Governor:
             self._recover_pending(state)
             reservation = state["reservations"].get(invocation_id)
             if not reservation or reservation.get("launched"):
+                return False
+            del state["reservations"][invocation_id]
+            return True
+
+    def _cancel_before_client_exec(self, invocation_id: str) -> bool:
+        with self._locked() as state:
+            self._recover_pending(state)
+            if invocation_id not in state["reservations"]:
                 return False
             del state["reservations"][invocation_id]
             return True
@@ -836,21 +852,70 @@ def _verified_process_start_token(pid: int) -> str | None:
     try:
         body = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         fields = body.rsplit(")", 1)[1].split()
-        return f"proc:{pid}:{fields[19]}"
+        start_time = fields[19]
+        if not start_time.isdigit():
+            return None
+        return f"proc:{pid}:{start_time}"
     except (OSError, IndexError):
         pass
     try:
         result = subprocess.run(
-            ["ps", "-o", "lstart=", "-p", str(pid)],
+            ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
             check=False,
             capture_output=True,
             text=True,
             timeout=1,
+            env={"LC_ALL": "C", "TZ": "UTC"},
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
     started = " ".join(result.stdout.split())
-    return f"ps:{pid}:{started}" if result.returncode == 0 and started else None
+    if result.returncode != 0 or not started:
+        return None
+    if not _valid_ps_start(started):
+        return None
+    return f"ps:{pid}:{started}"
+
+
+def _valid_ps_start(started: str) -> bool:
+    weekdays = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+    months = {
+        name: index
+        for index, name in enumerate(
+            (
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ),
+            start=1,
+        )
+    }
+    parts = started.split()
+    if len(parts) != 5 or parts[0] not in weekdays or parts[1] not in months:
+        return False
+    try:
+        hour, minute, second = (int(value) for value in parts[3].split(":"))
+        datetime(
+            int(parts[4]),
+            months[parts[1]],
+            int(parts[2]),
+            hour,
+            minute,
+            second,
+            tzinfo=timezone.utc,
+        )
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _owner_identity(now: datetime) -> dict[str, Any]:
@@ -868,47 +933,54 @@ def _reservation_owner_gone(reservation: Mapping[str, Any], now: datetime) -> bo
         return True
     expected = reservation.get("owner_start_token")
     if isinstance(expected, str) and expected:
-        return _verified_process_start_token(pid) != expected
+        current = _verified_process_start_token(pid)
+        if current is not None:
+            return current != expected
+        return _pid_gone(pid)
     expires_at = reservation.get("owner_expires_at")
     if isinstance(expires_at, str) and now >= _parse_time(expires_at):
         return True
-    return not _pid_exists(pid)
+    return _pid_gone(pid)
 
 
 def _reservation_process_alive(reservation: Mapping[str, Any]) -> bool:
     pid = reservation.get("pid")
+    pgid = reservation.get("pgid")
     if not isinstance(pid, int) or pid <= 0:
-        return False
+        return True
+    if not isinstance(pgid, int) or pgid <= 0:
+        return True
+    leader_gone = _pid_gone(pid)
     expected = reservation.get("process_start_token")
     if isinstance(expected, str) and expected.startswith(("proc:", "ps:")):
-        return _verified_process_start_token(pid) == expected and _pid_exists(pid)
-    return _pid_exists(pid)
-
-
-def _pid_exists(pid: int) -> bool:
-    proc_stat = Path(f"/proc/{pid}/stat")
-    try:
-        body = proc_stat.read_text(encoding="utf-8")
-        fields = body.rsplit(")", 1)[1].split()
-        return bool(fields and fields[0] != "Z")
-    except (OSError, IndexError):
-        pass
-    try:
-        result = subprocess.run(
-            ["ps", "-o", "stat=", "-p", str(pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        try:
-            os.kill(pid, 0)
-        except (ProcessLookupError, PermissionError):
-            return False
+        current = _verified_process_start_token(pid)
+        if current is None and not leader_gone:
+            return True
+        if current is not None and current != expected:
+            leader_gone = True
+    if not leader_gone:
         return True
-    state = result.stdout.strip()
-    return result.returncode == 0 and bool(state) and not state.startswith("Z")
+    return _process_group_exists(pgid)
+
+
+def _pid_gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+def _process_group_exists(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def _pid_exists_fast(pid: int) -> bool:

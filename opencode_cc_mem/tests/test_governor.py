@@ -6,10 +6,12 @@ import subprocess
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome, UsageRecord
+from campaign_runner import governor as governor_module
 from campaign_runner.governor import (
     Admission,
     AdmissionRequest,
@@ -121,6 +123,11 @@ def _wait_for_process_exit(pid, timeout=5):
             os.kill(pid, 0)
         except ProcessLookupError:
             return
+        proc_stat = Path(f"/proc/{pid}/stat")
+        if proc_stat.exists():
+            fields = proc_stat.read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+            if fields and fields[0] == "Z":
+                return
         time.sleep(0.02)
     raise AssertionError(f"process {pid} did not exit")
 
@@ -287,6 +294,113 @@ def test_dead_owner_live_child_not_reclaimed(tmp_path):
         os.killpg(child_pid, signal.SIGTERM)
         _wait_for_process_exit(child_pid)
     assert usage.reconcile("one", service_request_ended=True) is True
+
+
+def test_reconcile_is_environment_independent_and_unknown_is_alive(
+    tmp_path, monkeypatch
+):
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+    )
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    usage.admit(request("one")).mark_started(pid=child.pid, pgid=child.pid)
+    try:
+        monkeypatch.setenv("TZ", "UTC")
+        monkeypatch.setenv("LANG", "fr_FR.UTF-8")
+        monkeypatch.setenv("PATH", "/nonexistent")
+        assert not usage.reconcile("one", service_request_ended=True)
+        monkeypatch.setattr(
+            governor_module, "_verified_process_start_token", lambda _pid: None
+        )
+        assert not usage.reconcile("one", service_request_ended=True)
+    finally:
+        os.killpg(child.pid, signal.SIGTERM)
+        child.wait(timeout=5)
+
+
+def test_macos_start_token_uses_absolute_ps_and_pinned_environment(monkeypatch):
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout="Sun Nov 15 22:25:16 2026\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        governor_module.Path,
+        "read_text",
+        lambda *_a, **_k: (_ for _ in ()).throw(OSError()),
+    )
+    monkeypatch.setattr(governor_module.subprocess, "run", fake_run)
+
+    token = governor_module._verified_process_start_token(123)
+
+    assert token == "ps:123:Sun Nov 15 22:25:16 2026"
+    argv, kwargs = calls[0]
+    assert argv[0] == "/bin/ps"
+    assert kwargs["env"]["LC_ALL"] == "C"
+    assert kwargs["env"]["TZ"] == "UTC"
+
+
+def test_unparsable_start_token_is_unknown(monkeypatch):
+    monkeypatch.setattr(
+        governor_module.Path,
+        "read_text",
+        lambda *_a, **_k: (_ for _ in ()).throw(OSError()),
+    )
+    monkeypatch.setattr(
+        governor_module.subprocess,
+        "run",
+        lambda argv, **kwargs: subprocess.CompletedProcess(
+            argv, 0, stdout="not a timestamp\n", stderr=""
+        ),
+    )
+    assert governor_module._verified_process_start_token(123) is None
+
+
+def test_dead_leader_with_live_group_member_is_retained_then_reclaimed(tmp_path):
+    child_pid_path = tmp_path / "group-child.pid"
+    release_path = tmp_path / "release-leader"
+    leader = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; import subprocess, sys, time; "
+                f"child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
+                f"Path({str(child_pid_path)!r}).write_text(str(child.pid)); "
+                f"release=Path({str(release_path)!r}); "
+                "\nwhile not release.exists(): time.sleep(0.01)"
+            ),
+        ],
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 5
+    while not child_pid_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert child_pid_path.exists()
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    usage.admit(request("one")).mark_started(pid=leader.pid, pgid=leader.pid)
+    release_path.touch()
+    leader.wait(timeout=5)
+
+    try:
+        assert not usage.reconcile("one", service_request_ended=True)
+    finally:
+        os.killpg(leader.pid, signal.SIGTERM)
+        _wait_for_process_exit(int(child_pid_path.read_text(encoding="utf-8")))
+    assert usage.reconcile("one", service_request_ended=True)
 
 
 def test_never_launched_reservation_owner_lifecycle(tmp_path):

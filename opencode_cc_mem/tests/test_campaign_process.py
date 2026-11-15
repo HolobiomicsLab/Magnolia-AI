@@ -1,17 +1,60 @@
+import multiprocessing
+import os
+import signal
 import sys
 import time
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from campaign_runner.executors.contracts import RunOutcome  # noqa: E402
 from campaign_runner.governor import Governor, Policy  # noqa: E402
+from campaign_runner import process as process_module  # noqa: E402
 from campaign_runner.process import ProcessControl, run_process  # noqa: E402
 from campaign_runner.routing import ResolvedRoute  # noqa: E402
-from campaign_runner.workers import InvocationGovernance, OpenCodeExecutor  # noqa: E402
+from campaign_runner.workers import (  # noqa: E402
+    InvocationGovernance,
+    OpenCodeExecutor,
+    WorkerError,
+)
+
+
+def _die_during_pre_exec(tmp_path_text):
+    tmp_path = Path(tmp_path_text)
+
+    def kill_parent(pid, _pgid):
+        (tmp_path / "child.pid").write_text(str(pid), encoding="utf-8")
+        os.kill(os.getpid(), signal.SIGKILL)
+
+    run_process(
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path({str(tmp_path / 'client-ran')!r}).write_text('ran')",
+        ],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        timeout_seconds=30,
+        stdout_path=tmp_path / "out.log",
+        stderr_path=tmp_path / "err.log",
+        control=ProcessControl(on_start=kill_parent, hold_before_exec=True),
+    )
+
+
+def _wait_until_process_gone(pid, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.02)
+    return False
 
 
 def test_run_process_stops_on_callback(tmp_path):
@@ -130,6 +173,161 @@ def test_governed_process_is_recorded_before_client_runs(tmp_path):
     assert marker.read_text() == "ran"
 
 
+def test_governed_pipe_preserves_exec_contract(tmp_path):
+    client_dir = tmp_path / "dir with spaces"
+    client_dir.mkdir()
+    client = client_dir / "inspect client"
+    client.write_text(
+        "#!" + sys.executable + "\n"
+        "import json, os, sys\n"
+        "fds = []\n"
+        "for fd in range(3, 64):\n"
+        "    try: os.fstat(fd)\n"
+        "    except OSError: continue\n"
+        "    fds.append(fd)\n"
+        "print(json.dumps({'argv': sys.argv[1:], 'pid': os.getpid(), "
+        "'pgid': os.getpgrp(), 'sid': os.getsid(0), 'fds': fds}))\n"
+        "print('inherited stderr', file=sys.stderr)\n",
+        encoding="utf-8",
+    )
+    client.chmod(0o755)
+    canary = tmp_path / "injected"
+    hostile = [
+        f"$(touch {canary})",
+        f"`touch {canary}`",
+        f'"; touch {canary}; "',
+        "$@",
+        "$0",
+        "line one\nline two",
+        "",
+        "*",
+        "éè unicode",
+    ]
+    outcome = run_process(
+        [str(client), *hostile],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        timeout_seconds=30,
+        stdout_path=tmp_path / "out.log",
+        stderr_path=tmp_path / "err.log",
+        control=ProcessControl(on_start=lambda _pid, _pgid: None, hold_before_exec=True),
+    )
+    payload = json.loads((tmp_path / "out.log").read_text(encoding="utf-8"))
+    assert outcome.returncode == 0
+    assert payload["argv"] == hostile
+    assert payload["pid"] == payload["pgid"] == payload["sid"]
+    assert payload["fds"] == []
+    assert (tmp_path / "err.log").read_text(encoding="utf-8").strip() == "inherited stderr"
+    assert not canary.exists()
+
+    exited = run_process(
+        [sys.executable, "-c", "import sys; sys.exit(3)"],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        timeout_seconds=30,
+        stdout_path=tmp_path / "exit.out",
+        stderr_path=tmp_path / "exit.err",
+        control=ProcessControl(on_start=lambda _pid, _pgid: None, hold_before_exec=True),
+    )
+    signalled = run_process(
+        [
+            sys.executable,
+            "-c",
+            "import os, signal; os.kill(os.getpid(), signal.SIGTERM)",
+        ],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        timeout_seconds=30,
+        stdout_path=tmp_path / "signal.out",
+        stderr_path=tmp_path / "signal.err",
+        control=ProcessControl(on_start=lambda _pid, _pgid: None, hold_before_exec=True),
+    )
+    assert exited.returncode == 3
+    assert signalled.returncode == -signal.SIGTERM
+
+
+def test_parent_death_releases_barrier_without_running_client(tmp_path):
+    parent = multiprocessing.get_context("spawn").Process(
+        target=_die_during_pre_exec,
+        args=(str(tmp_path),),
+    )
+    parent.start()
+    parent.join(5)
+    assert parent.exitcode == -signal.SIGKILL
+    child_pid = int((tmp_path / "child.pid").read_text(encoding="utf-8"))
+    try:
+        assert _wait_until_process_gone(child_pid)
+        assert not (tmp_path / "client-ran").exists()
+    finally:
+        try:
+            os.killpg(child_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def test_keyboard_interrupt_before_exec_reaps_process_group(tmp_path):
+    child = {}
+
+    def interrupt(pid, _pgid):
+        child["pid"] = pid
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        try:
+            run_process(
+                [sys.executable, "-c", "pass"],
+                cwd=tmp_path,
+                env=dict(os.environ),
+                timeout_seconds=30,
+                stdout_path=tmp_path / "out.log",
+                stderr_path=tmp_path / "err.log",
+                control=ProcessControl(on_start=interrupt, hold_before_exec=True),
+            )
+        finally:
+            if child and not _wait_until_process_gone(child["pid"]):
+                os.killpg(child["pid"], signal.SIGKILL)
+    assert _wait_until_process_gone(child["pid"])
+
+
+@pytest.mark.parametrize("failure", ["missing", "barrier"])
+def test_governed_pre_exec_failure_is_not_accounted(
+    tmp_path, monkeypatch, failure
+):
+    binary = tmp_path / "client"
+    if failure == "barrier":
+        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o755)
+        monkeypatch.setattr(process_module.os, "write", lambda _fd, _body: 0)
+    usage = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    selected = ResolvedRoute(
+        "opencode", "provider/model", "provider", "opencode:provider", "worker", "test"
+    )
+    executor = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+        governance=InvocationGovernance(usage, selected, "run-1", "project"),
+    )
+
+    with pytest.raises(WorkerError, match="cannot start worker") as governed:
+        executor.run("work", tmp_path, tmp_path / "attempt")
+
+    if failure == "missing":
+        plain = OpenCodeExecutor(
+            str(binary), "provider/model", "campaign-worker"
+        )
+        with pytest.raises(WorkerError, match="cannot start worker") as ungoverned:
+            plain.run("work", tmp_path, tmp_path / "plain-attempt")
+        assert str(governed.value) == str(ungoverned.value)
+
+    assert usage.report(datetime.now(timezone.utc).date())["day"]["runs"] == 0
+    state = json.loads(usage.state_path.read_text(encoding="utf-8"))
+    assert state["reservations"] == {}
+
+
 def test_resume_and_repair_each_reserve_and_record(tmp_path):
     binary = tmp_path / "client"
     binary.write_text(
@@ -171,6 +369,7 @@ else:
         ),
     )
 
+    started_at = clock()
     result = executor.run("work", tmp_path, tmp_path / "attempt")
 
     rows = [json.loads(line) for line in (tmp_path / "usage-ledger.jsonl").read_text().splitlines()]
@@ -180,6 +379,7 @@ else:
     assert rows[0]["usage"]["input_tokens"] == 100
     assert rows[1]["usage"]["input_tokens"] == 30
     assert result.usage["input_tokens"] == 130
+    assert (clock() - started_at).total_seconds() >= 30
     assert usage.report(clock().date())["waits"] == []
 
     ungoverned = OpenCodeExecutor(
