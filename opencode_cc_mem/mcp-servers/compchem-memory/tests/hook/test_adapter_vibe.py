@@ -97,7 +97,7 @@ def test_renders_tool_note_on_post_tool() -> None:
     assert rendered.emitted == frozenset({"tool_note"})
 
 
-def test_mcp_post_tool_replaces_result_with_original_output_and_context() -> None:
+def test_mcp_post_tool_never_replaces_result() -> None:
     raw = {
         "hook_event_name": "post_tool", "session_id": "s1", "cwd": "/project",
         "tool_name": "mcp_compchem-tools.run_shell", "tool_input": {},
@@ -110,18 +110,12 @@ def test_mcp_post_tool_replaces_result_with_original_output_and_context() -> Non
         HookResponse(context="Context", tool_note="Tool note", notice="Notice"), event,
     )
 
-    assert json.loads(rendered.stdout) == {
-        "decision": "deny",
-        "reason": (
-            "original output\nkept verbatim\n\n"
-            "Context\n\nTool note\n\n[Magnolia notice] Notice"
-        ),
-    }
-    assert rendered.emitted == frozenset({"context", "tool_note", "notice"})
+    assert rendered.stdout == ""
+    assert rendered.emitted == frozenset()
 
 
 @pytest.mark.parametrize("native_output", [None, "failure"])
-def test_mcp_post_tool_without_original_text_uses_additional_context(native_output) -> None:
+def test_every_mcp_post_tool_renders_nothing(native_output) -> None:
     raw = {
         "hook_event_name": "post_tool", "session_id": "s1", "cwd": "/project",
         "tool_name": "mcp_compchem-tools.run_shell", "tool_input": {},
@@ -134,9 +128,8 @@ def test_mcp_post_tool_without_original_text_uses_additional_context(native_outp
 
     rendered = ADAPTERS["vibe"].render(HookResponse(tool_note="Tool note"), event)
 
-    assert json.loads(rendered.stdout) == {
-        "hook_specific_output": {"additional_context": "Tool note"}
-    }
+    assert rendered.stdout == ""
+    assert rendered.emitted == frozenset()
 
 
 def test_builtin_post_tool_keeps_additional_context() -> None:

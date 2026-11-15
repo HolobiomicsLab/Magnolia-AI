@@ -15,3 +15,7 @@ configuration, reasoning content of Codex, token usage. Home and temp paths are 
 - `codex/rollout.jsonl`: rows of `~/.codex/sessions/YYYY/MM/DD/rollout-*-<thread>.jsonl`.
 - `vibe/session/journal/*.jsonl`: rows of `~/.vibe/logs/session/unified/<sid>/journal/`; Vibe's
   hooks pass the session folder itself as `transcript_path`.
+
+The `claude-hooks/` and `codex-hooks/` fixtures were recorded on 15 Nov 2026 with Magnolia hooks
+enabled, using Claude Code Haiku and Codex gpt-5.6-luna. They are reduced to conversation rows plus
+Magnolia hook rows, and pin that hook attachment/developer text is not attributed to the assistant.

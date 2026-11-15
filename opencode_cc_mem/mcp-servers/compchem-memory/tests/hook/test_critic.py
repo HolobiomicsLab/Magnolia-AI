@@ -355,9 +355,27 @@ def test_build_trace_parent_and_child_apart(tmp_path):
     parent_report, parent_trace = critic.build_trace(rows, None)
     child_report, child_trace = critic.build_trace(rows, "child-1")
     assert parent_report == "parent report"
-    assert [item["call_id"] for item in json.loads(parent_trace)] == ["parent"]
+    assert [item["call_id"] for item in json.loads(parent_trace)] == ["parent", "child"]
     assert child_report == "child report"
     assert [item["call_id"] for item in json.loads(child_trace)] == ["child"]
+
+
+def test_build_trace_includes_delivered_notes_and_denials(tmp_path):
+    from compchem_memory.hook.transcript import append_denied, append_injected
+
+    store = tmp_path / ".magnolia"
+    event = _event("post-tool", tool=_tool("shell", "denied", tool_input={"cmd": "rm x"}))
+    append_denied(store, event, "blocked")
+    append_injected(
+        store, event, channel="action_memory", text="known recovery", entry_ids=["e1"],
+        tool_call_id="note-call",
+    )
+    append_event(store, _event("turn-end", assistant_text="report"))
+
+    _, trace_text = critic.build_trace(read_turns(transcript_path(store, "claude", "s1")), None)
+    assert "DENIED: shell" in trace_text
+    assert "MAGNOLIA NOTE" in trace_text
+    assert "known recovery" in trace_text
 
 
 def test_late_stop_judges_its_own_turn(tmp_path, monkeypatch):
@@ -435,7 +453,12 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
     monkeypatch.setattr(critic, "resolve_route", lambda role: route)
     verdict = '{"flag":true,"severity":"high","unsupported_claims":["ranking"],"why":"no ranking tool output"}'
-    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(f"```json\n{verdict}\n```", "stop", "resolved", None, 200))
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(
+            f"```json\n{verdict}\n```", "stop", "resolved", None, 200, "DeepInfra",
+        ),
+    )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
@@ -446,6 +469,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row | {"ts": row["ts"]} == row
     assert row["sessionID"] == "s1" and row["harness"] == "claude" and row["agent"] is None
     assert row["provider"] == "deepseek" and row["model"] == "judge"
+    assert row["upstream_provider"] == "DeepInfra"
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]

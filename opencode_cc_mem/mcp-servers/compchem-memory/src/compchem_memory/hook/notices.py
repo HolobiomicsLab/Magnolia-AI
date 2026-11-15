@@ -39,6 +39,8 @@ def _shorten_middle(text: str, limit: int) -> str:
     """Keep both identifying ends of a long display field."""
     if len(text) <= limit:
         return text
+    if limit <= 1:
+        return "…"[:limit]
     left = (limit - 1) // 2
     right = limit - left - 1
     return f"{text[:left]}…{text[-right:]}"

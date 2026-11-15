@@ -163,11 +163,16 @@ def magnolia_exporter(store: str | Path) -> SessionExporter:
         if not path.exists():
             return None
         messages: list[dict] = []
+        known_entry_ids: list[str] = []
         for index, row in enumerate(read_turns(path)):
+            if row.get("kind") == "injected":
+                for entry_id in row.get("entry_ids", []):
+                    if isinstance(entry_id, str) and entry_id not in known_entry_ids:
+                        known_entry_ids.append(entry_id)
             message = _row_message(ref, row, index)
             if message is not None:
                 messages.append(message)
-        return {"messages": messages}
+        return {"messages": messages, "known_entry_ids": known_entry_ids}
 
     return export
 

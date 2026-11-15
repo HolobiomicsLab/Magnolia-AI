@@ -205,6 +205,20 @@ def test_untruncated_output_is_byte_identical(monkeypatch):
     assert out["stderr"] == stderr
 
 
+def test_truncation_keeps_full_tail_when_no_line_boundary(monkeypatch):
+    stdout = "x" * 5000
+    _patch(monkeypatch, FakeProc(stdout=stdout))
+
+    out = run_shell("anything")
+
+    marker, shown = out["stdout"].split("\n", 1)
+    assert shown == "x" * 4096
+    assert marker == (
+        "[output truncated: showing the last 4096 of 5000 characters; "
+        "first line cut]"
+    )
+
+
 def test_build_local_redirect_shape_and_content():
     out = _build_local_redirect("python analyze.py", "/runs/dock1", _DEFAULT_TIMEOUT)
     # actionable error mentions the limit and the right tools, and warns off re-running

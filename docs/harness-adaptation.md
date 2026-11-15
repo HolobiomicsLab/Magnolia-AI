@@ -34,14 +34,16 @@ with one of those names is kept and reported as a conflict.
 |---|---|---|---|
 | Files written | `.magnolia/harness/claude/` (settings, MCP, policy, system prompt) | `.codex/config.toml`, `.codex/hooks.json` | `.vibe/config.toml`, `.vibe/hooks.toml` |
 | Built-in shell | removed (`--disallowedTools Bash`) | denied by the pre-tool hook; sandbox `workspace-write` | removed (`disabled_tools`) and denied by a strict `pre_tool` hook |
-| Skills | `.claude/skills` | none | `.agents/skills` |
+| Skills | `.claude/skills` | `.agents/skills` | `.agents/skills` |
 | Reply text for the transcript | client transcript | client rollout | Vibe session journal |
 
 The hook command is `python -m compchem_memory.hook <harness> <event>`. It never breaks the
 client: a failure is logged to `.magnolia/hook-errors.jsonl` and the event passes, except that a
 configured shell policy still denies the built-in shell.
 
-Known limits, from the live acceptance: in Claude Code `-p` runs the asynchronous Stop hook does
+Known limits, from the live acceptance: the Claude Code Stop hook is synchronous only long enough
+to recover replies and launch Magnolia's detached critic worker; the worker records its verdict at
+a later event. Earlier asynchronous Stop hooks did
 not finish, so the reply and the critic are missing for that turn; the critic judge sometimes
 returns no JSON; Vibe's model did not acknowledge the action note Vibe appended to a tool result.
 

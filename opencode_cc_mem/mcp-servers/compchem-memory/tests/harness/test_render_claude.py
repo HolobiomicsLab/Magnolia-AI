@@ -85,10 +85,13 @@ def test_claude_settings_hooks_cover_every_event(make_render):
         assert hook["type"] == "command"
         assert hook["command"] == f"{python} -m compchem_memory.hook claude {name}"
         assert hook["timeout"] == (10 if name == "post-tool" else 30)
-        assert hook.get("async") is (True if event == "Stop" else None)
-    assert set(json.loads(
+        assert hook.get("async") is None
+    settings = json.loads(
         render(neutral, context).files[_harness(context) / "settings.json"]
-    )) == {"hooks"}
+    )
+    assert settings["permissions"]["allow"] == [
+        "mcp__compchem-tools", "mcp__compchem-memory",
+    ]
 
 
 def test_claude_policy_env_present(make_render):

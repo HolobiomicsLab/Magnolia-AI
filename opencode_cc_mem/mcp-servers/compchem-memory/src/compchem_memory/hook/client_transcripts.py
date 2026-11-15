@@ -268,7 +268,11 @@ def _vibe_matches_agent(entry: dict, agent_id: str | None, has_exact_agent: bool
         return _matches_agent(entry, None)
     if has_exact_agent:
         return _vibe_exact_agent(entry, agent_id)
-    return entry.get("agentId") is None and entry.get("isSidechain") is not True
+    return (
+        entry.get("agentId") is None
+        and entry.get("sessionId") in (None, agent_id)
+        and entry.get("isSidechain") is not True
+    )
 
 
 def _matches_agent(row: dict, agent_id: str | None) -> bool:

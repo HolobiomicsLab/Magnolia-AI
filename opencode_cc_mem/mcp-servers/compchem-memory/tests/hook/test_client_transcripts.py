@@ -263,3 +263,49 @@ def test_none_turn_id_does_not_guess_across_turns():
     assert assistant_texts(
         "codex", str(FIXTURES / "codex" / "rollout.jsonl"), turn_id=None, agent_id=None,
     ) == []
+
+
+def test_vibe_child_fallback_rejects_other_session_entries(tmp_path):
+    session = tmp_path / "child"
+    journal = session / "journal"
+    journal.mkdir(parents=True)
+    row = {"payload": {"delta": [{"entry": {
+        "role": "assistant", "turnId": "parent-turn", "sessionId": "parent",
+        "content": [{"type": "text", "text": "parent reply"}],
+    }}]}}
+    (journal / "001.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    assert assistant_texts(
+        "vibe", str(session), turn_id="parent-turn", agent_id="child-1",
+    ) == []
+
+
+def test_hook_on_claude_main_excludes_hook_attachments():
+    texts = assistant_texts(
+        "claude", str(FIXTURES / "claude-hooks" / "session.jsonl"),
+        turn_id="82631030-ae80-4e1f-9be5-080092569c28", agent_id=None,
+    )
+    assert len(texts) == 2
+    assert texts[0].startswith("1) The project codename")
+    assert texts[1].startswith("1) The project codename")
+    assert all("magnolia-boot-context" not in text for text in texts)
+
+
+def test_hook_on_claude_child_returns_its_report():
+    assert assistant_texts(
+        "claude",
+        str(FIXTURES / "claude-hooks" / "subagents" / "agent-a77ecef04fa822044.jsonl"),
+        turn_id="82631030-ae80-4e1f-9be5-080092569c28",
+        agent_id="a77ecef04fa822044",
+    ) == ['The shell command ran successfully and its stdout was "gmx grompp check".']
+
+
+def test_hook_on_codex_returns_assistant_not_developer_messages():
+    texts = assistant_texts(
+        "codex", str(FIXTURES / "codex-hooks" / "rollout.jsonl"),
+        turn_id="01a1e012-3060-7693-81e6-a32969d6b6a5", agent_id=None,
+    )
+    assert len(texts) == 2
+    assert texts[0].startswith("I’m checking the matched")
+    assert texts[1].startswith("1. HELIOTROPE-7")
+    assert all("Warning: truncated output" not in text for text in texts)
