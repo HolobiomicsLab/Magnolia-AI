@@ -19,11 +19,27 @@ def merge_json(path: Path, owned: Owned, magnolia: dict) -> list[str]:
     ``kind`` is ``"server"`` for MCP server dictionaries and ``"hook"`` for
     hook dictionaries. Owned entries absent from ``magnolia`` are removed.
     """
-    current = _read_json(path)
-    conflicts = []
-    merged = _merge_dict(current, owned, magnolia, conflicts=conflicts)
-    atomic_write(path, _json_bytes(merged))
+    content, conflicts = merged_json(path, owned, magnolia)
+    atomic_write(path, content)
     return conflicts
+
+
+def merged_json(
+    path: Path,
+    owned: Owned,
+    magnolia: dict,
+    prepare: Callable[[dict], dict] | None = None,
+) -> tuple[bytes, list[str]]:
+    """Return the bytes :func:`merge_json` would write, and its conflicts; write nothing.
+
+    ``prepare`` may rewrite the parsed current file before merging.
+    """
+    current = _read_json(path)
+    if prepare is not None:
+        current = prepare(current)
+    conflicts: list[str] = []
+    merged = _merge_dict(current, owned, magnolia, conflicts=conflicts)
+    return _json_bytes(merged), conflicts
 
 
 def merge_toml(path: Path, owned: Owned, magnolia: dict) -> list[str]:
@@ -32,17 +48,27 @@ def merge_toml(path: Path, owned: Owned, magnolia: dict) -> list[str]:
     The first byte-changing rewrite of a file with a real comment saves the original
     bytes to ``<name>.magnolia-backup`` and never replaces that backup.
     """
-    original = path.read_bytes() if path.exists() else b""
-    current = tomllib.loads(original.decode("utf-8")) if original else {}
-    conflicts = []
-    merged = _merge_dict(current, owned, magnolia, conflicts=conflicts)
-    content = _toml_bytes(merged)
-    if content != original and original and _has_comment(original.decode("utf-8")):
+    content, conflicts, original = merged_toml(path, owned, magnolia)
+    if original is not None:
         backup = path.with_name(path.name + ".magnolia-backup")
         if not backup.exists():
             backup.write_bytes(original)
     atomic_write(path, content)
     return conflicts
+
+
+def merged_toml(
+    path: Path, owned: Owned, magnolia: dict
+) -> tuple[bytes, list[str], bytes | None]:
+    """Return the bytes :func:`merge_toml` would write, its conflicts, and the original
+    bytes to back up (or None when no backup is due); write nothing."""
+    original = path.read_bytes() if path.exists() else b""
+    current = tomllib.loads(original.decode("utf-8")) if original else {}
+    conflicts: list[str] = []
+    merged = _merge_dict(current, owned, magnolia, conflicts=conflicts)
+    content = _toml_bytes(merged)
+    due = content != original and original and _has_comment(original.decode("utf-8"))
+    return content, conflicts, (original if due else None)
 
 
 def atomic_write(path: Path, content: bytes) -> None:

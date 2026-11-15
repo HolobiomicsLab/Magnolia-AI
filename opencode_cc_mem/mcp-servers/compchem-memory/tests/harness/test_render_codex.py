@@ -1,0 +1,189 @@
+import json
+import tomllib
+
+from compchem_memory.harness import RENDERERS
+from compchem_memory.harness.render_codex import render
+
+
+def _dir(context):
+    return context.project_dir / ".codex"
+
+
+def _policy(context):
+    return context.project_dir / ".magnolia" / "harness" / "codex" / "policy.json"
+
+
+def test_codex_renderer_is_registered_with_its_binary():
+    assert RENDERERS["codex"] is render
+    assert render.binary == "codex"
+
+
+def test_codex_argv(make_render):
+    neutral, context = make_render(model="gpt-x")
+    assert render(neutral, context).argv == [
+        "codex", "-C", str(context.project_dir), "-s", "workspace-write", "-m", "gpt-x",
+    ]
+    neutral, context = make_render()
+    assert "-m" not in render(neutral, context).argv
+
+
+def test_codex_policy_blocks_shell_rendered(make_render):
+    neutral, context = make_render()
+    launch = render(neutral, context)
+    hooks = json.loads(launch.files[_dir(context) / "hooks.json"])["hooks"]
+
+    assert json.loads(launch.files[_policy(context)]) == {"deny_tools": ["bash"]}
+    assert launch.env == {"MAGNOLIA_HOOK_POLICY": str(_policy(context))}
+    (hook,) = hooks["PreToolUse"][0]["hooks"]
+    assert hook == {
+        "type": "command",
+        "command": "/venv/bin/python -m compchem_memory.hook codex pre-tool",
+        "timeout": 30,
+    }
+    assert set(hooks) == {
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop",
+    }
+    assert hooks["PostToolUse"][0]["hooks"][0]["timeout"] == 10
+    assert "async" not in json.dumps(hooks)
+
+
+def test_codex_config_has_no_bypass_and_no_codex_home(make_render):
+    neutral, context = make_render(model="m")
+    launch = render(neutral, context)
+    text = " ".join(launch.argv) + " ".join(launch.env) + b" ".join(
+        launch.files.values()
+    ).decode()
+    for forbidden in (
+        "--dangerously", "--auto-approve", "--trust", "CODEX_HOME", "CLAUDE_CONFIG_DIR",
+        "VIBE_HOME", "bypass",
+    ):
+        assert forbidden not in text
+    assert not launch.links
+
+
+def test_codex_config_toml_servers(make_render):
+    neutral, context = make_render()
+    config = tomllib.loads(
+        render(neutral, context).files[_dir(context) / "config.toml"].decode()
+    )["mcp_servers"]
+
+    assert config["compchem-tools"] == {
+        "url": "http://127.0.0.1:8123/mcp", "tool_timeout_sec": 660,
+    }
+    memory = config["compchem-memory"]
+    assert memory["command"] == "/venv/bin/python"
+    assert memory["args"] == ["-m", "compchem_memory.server"]
+    assert memory["tool_timeout_sec"] == 660
+    assert memory["env"]["MAGNOLIA_MEMORY_MODEL"] == "mem-model"
+
+    neutral, context = make_render(setup={})
+    config = tomllib.loads(
+        render(neutral, context).files[_dir(context) / "config.toml"].decode()
+    )["mcp_servers"]
+    assert "compchem-memory" not in config
+
+
+def test_codex_preserves_member_entries_and_is_idempotent(make_render):
+    neutral, context = make_render()
+    folder = _dir(context)
+    folder.mkdir(parents=True)
+    (folder / "config.toml").write_text(
+        'model = "member"\n\n[mcp_servers.mine]\ncommand = "mine"\n\n'
+        '[mcp_servers.compchem-memory]\ncommand = "stale"\n', encoding="utf-8",
+    )
+    member_hook = {"hooks": [{"type": "command", "command": "member-hook"}]}
+    stale = {"hooks": [{"type": "command", "command": "py -m compchem_memory.hook codex old"}]}
+    (folder / "hooks.json").write_text(
+        json.dumps({"hooks": {"PreToolUse": [member_hook, stale], "Notify": [member_hook]}}),
+        encoding="utf-8",
+    )
+
+    def apply(launch):
+        for path, content in launch.files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+
+    first = render(neutral, context)
+    apply(first)
+    config = tomllib.loads((folder / "config.toml").read_text())
+    hooks = json.loads((folder / "hooks.json").read_text())["hooks"]
+    assert config["model"] == "member"
+    assert config["mcp_servers"]["mine"] == {"command": "mine"}
+    assert config["mcp_servers"]["compchem-memory"]["command"] == "/venv/bin/python"
+    assert hooks["Notify"] == [member_hook]
+    assert hooks["PreToolUse"][0] == member_hook
+    assert len(hooks["PreToolUse"]) == 2
+    assert "codex pre-tool" in hooks["PreToolUse"][1]["hooks"][0]["command"]
+
+    before = {path: path.read_bytes() for path in (folder / "config.toml", folder / "hooks.json")}
+    second = render(neutral, context)
+    apply(second)
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_codex_reports_conflicts_and_toml_comment_backup(make_render):
+    neutral, context = make_render()
+    folder = _dir(context)
+    folder.mkdir(parents=True)
+    original = b'# my notes\n[mcp_servers.mine]\ncommand = "mine"\n'
+    (folder / "config.toml").write_bytes(original)
+    launch = render(neutral, context)
+    assert launch.files[folder / "config.toml.magnolia-backup"] == original
+    assert launch.conflicts == []
+
+    (folder / "hooks.json").write_text(
+        json.dumps({"hooks": [{"name": "x"}]}), encoding="utf-8"
+    )
+    # A non-dict-shaped hooks table in the member file is reported, not clobbered.
+    (folder / "config.toml").write_text(
+        '[mcp_servers.perspicacite]\ncommand = "member-owned-name"\n', encoding="utf-8",
+    )
+    launch = render(neutral, context)
+    assert "perspicacite" in launch.files[folder / "config.toml"].decode()
+
+
+def test_codex_hooks_map_every_native_event_to_its_neutral_event(make_render):
+    neutral, context = make_render(python="/my venv/bin/python")
+    hooks = json.loads(
+        render(neutral, context).files[_dir(context) / "hooks.json"]
+    )["hooks"]
+    expected = {
+        "SessionStart": "session-start", "UserPromptSubmit": "prompt",
+        "PreToolUse": "pre-tool", "PostToolUse": "post-tool", "Stop": "turn-end",
+    }
+    assert set(hooks) == set(expected)
+    for event, name in expected.items():
+        (group,) = hooks[event]
+        (hook,) = group["hooks"]
+        assert hook == {
+            "type": "command",
+            "command": f"'/my venv/bin/python' -m compchem_memory.hook codex {name}",
+            "timeout": 10 if name == "post-tool" else 30,
+        }
+
+
+def test_codex_mixed_matcher_group_keeps_member_hook_and_runs_ours_once(make_render):
+    neutral, context = make_render()
+    folder = _dir(context)
+    folder.mkdir(parents=True)
+    member = {"type": "command", "command": "member-hook"}
+    ours = {"type": "command", "command": "py -m compchem_memory.hook codex pre-tool"}
+    (folder / "hooks.json").write_text(
+        json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [member, ours]}]}}),
+        encoding="utf-8",
+    )
+
+    def apply(launch):
+        for path, content in launch.files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+
+    apply(render(neutral, context))
+    first = (folder / "hooks.json").read_bytes()
+    groups = json.loads(first)["hooks"]["PreToolUse"]
+    commands = [h["command"] for g in groups for h in g["hooks"]]
+    assert groups[0] == {"matcher": "Bash", "hooks": [member]}
+    assert commands.count("member-hook") == 1
+    assert sum("compchem_memory.hook codex pre-tool" in c for c in commands) == 1
+    apply(render(neutral, context))
+    assert (folder / "hooks.json").read_bytes() == first
