@@ -458,6 +458,7 @@ def on_post_tool(
             pending={
                 "callID": str(event.tool.call_id or ""),
                 "tool": ledger_tool,
+                "turn_id": event.turn_id,
                 "titles": [str(hit.get("title") or "") for hit in selected],
                 "paths": [str(hit.get("path") or "") for hit in selected],
             },
@@ -496,11 +497,25 @@ def _distinctive_tokens(titles: list[str], paths: list[str]) -> list[str]:
     )
 
 
+def _pending_for_turn(items: list[dict], turn_id: str | None) -> tuple[list[dict], list[dict]]:
+    """Partition pending probes while retaining legacy items for compatibility."""
+    has_turns = any(isinstance(item, dict) and item.get("turn_id") is not None for item in items)
+    if turn_id is None or not has_turns:
+        return items, []
+    selected: list[dict] = []
+    remaining: list[dict] = []
+    for item in items:
+        target = item.get("turn_id") if isinstance(item, dict) else None
+        (selected if target in {None, turn_id} else remaining).append(item)
+    return selected, remaining
+
+
 def probe_application(
     paths: ProjectPaths,
     harness: str,
     session_id: str,
     reply_text: str,
+    turn_id: str | None = None,
 ) -> None:
     """Probe pending notes in one state transaction, removing each after its row.
 
@@ -516,7 +531,8 @@ def probe_application(
         if not isinstance(pending, list) or not pending:
             return
         reply = reply_text.lower()
-        for item in list(pending):
+        selected, _ = _pending_for_turn(pending, turn_id)
+        for item in list(selected):
             try:
                 tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
                 matched = [token for token in tokens if token in reply]

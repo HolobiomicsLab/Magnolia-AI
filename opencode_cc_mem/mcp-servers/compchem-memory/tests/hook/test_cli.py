@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import statistics
@@ -61,6 +62,26 @@ def _run_cli(project: Path, state: Path, event: str, session_id: str, env: dict 
         timeout=30,
         env=process_env,
     )
+
+
+def _invoke_main(monkeypatch, payload: dict, harness: str, event: str) -> int:
+    """Run the CLI entry point without letting its hard exit stop pytest."""
+    from compchem_memory.hook import __main__ as cli
+
+    monkeypatch.setattr(sys, "argv", ["hook", harness, event])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setattr(os, "_exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    return stopped.value.code
+
+
+@pytest.fixture
+def isolated_cli_state(tmp_path, monkeypatch):
+    """Keep in-process CLI failures out of the developer's state home."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    return tmp_path / "state"
 
 
 def test_dropped_tool_note_leaves_no_exposure(tmp_path, monkeypatch):
@@ -163,6 +184,170 @@ def test_block_rendered_by_adapter():
     assert rendered.stderr == "unsafe operation\n"
     assert json.loads(rendered.stdout) == {"context": "context before block"}
     assert rendered.emitted == frozenset({"context"})
+
+
+def test_cli_policy_block_survives_handle_failure(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook import dispatch
+    from compchem_memory.hook.policy import REASON
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setattr(dispatch, "handle", lambda *args: (_ for _ in ()).throw(RuntimeError("boom")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+    captured = capfd.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert captured.err == REASON + "\n"
+
+
+def test_cli_policy_exception_still_blocks_bash(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook import policy
+
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "policy.json"))
+    monkeypatch.setattr(policy, "decide", lambda *args: (_ for _ in ()).throw(RuntimeError("policy")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_ignored_event_writes_no_row(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    ignored = SimpleNamespace(
+        parse=lambda raw, event: None,
+        render=lambda response, event: (_ for _ in ()).throw(AssertionError("rendered")),
+    )
+    monkeypatch.setitem(ADAPTERS, "ignored", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"session_id": "s1", "cwd": str(project), "prompt": "ignore me"},
+        "ignored",
+        "prompt",
+    )
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not (project / ".magnolia" / "transcripts").exists()
+
+
+def test_commit_failure_keeps_block_exit_code(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook import __main__ as cli
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_output_failure_keeps_policy_block_exit_code(
+    tmp_path, monkeypatch, isolated_cli_state,
+):
+    from compchem_memory.hook import __main__ as cli
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setattr(cli, "_write_rendered", lambda *args: (_ for _ in ()).throw(OSError("pipe")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    assert _invoke_main(monkeypatch, payload, "json", "pre-tool") == 2
+
+
+@pytest.mark.parametrize(
+    "native_tool",
+    [
+        {"tool_name": "Bash"},
+        {"tool": {"raw_name": "Bash"}},
+        {"tool": {"name": "Bash"}},
+    ],
+)
+def test_unparseable_named_bash_payload_is_blocked(
+    tmp_path, monkeypatch, capfd, isolated_cli_state, native_tool,
+):
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+
+    code = _invoke_main(
+        monkeypatch,
+        {"cwd": str(project), **native_tool},
+        "json",
+        "pre-tool",
+    )
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_ignored_named_bash_payload_is_blocked(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+    ignored = SimpleNamespace(parse=lambda raw, event: None, render=json_adapter.render)
+    monkeypatch.setitem(ADAPTERS, "ignored-policy", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"cwd": str(project), "tool": {"name": "Bash"}},
+        "ignored-policy",
+        "pre-tool",
+    )
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_unparseable_payload_without_tool_name_is_allowed_and_logged(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+
+    code = _invoke_main(monkeypatch, {"cwd": str(project)}, "json", "pre-tool")
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    error_log = isolated_cli_state / "magnolia" / "hook-errors.jsonl"
+    rows = [json.loads(line) for line in error_log.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["event"] == "pre-tool"
 
 
 def test_json_adapter_parses_cli_harness_and_emits_present_fields():
@@ -456,3 +641,26 @@ def test_cli_cold_start_under_budget(tmp_path):
 
     assert medians["session-start"] < 1.0
     assert medians["post-tool"] < 1.0
+
+
+def test_ignored_pre_tool_without_tool_name_writes_nothing_under_policy(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    """An adapter-ignored pre-tool event with no recoverable tool is not an error."""
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools": ["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    ignored = SimpleNamespace(
+        parse=lambda raw, event: None,
+        render=lambda response, event: (_ for _ in ()).throw(AssertionError("rendered")),
+    )
+    monkeypatch.setitem(ADAPTERS, "ignored", ignored)
+
+    code = _invoke_main(monkeypatch, {"session_id": "s1", "cwd": str(project)}, "ignored", "pre-tool")
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not list(tmp_path.rglob("hook-errors.jsonl"))

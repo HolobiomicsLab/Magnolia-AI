@@ -72,19 +72,24 @@ def _trace_item(row: dict, is_current: bool, status: str) -> dict:
     return item
 
 
-def _tool_items(rows: list[tuple[int, dict]], boundary: int) -> list[dict]:
+def _tool_items(
+    rows: list[tuple[int, dict]],
+    boundary: int,
+    turn_id: str | None = None,
+) -> list[dict]:
     items: list[dict] = []
     pending: dict[tuple[object, object], list[int]] = {}
     for index, row in rows:
         if row.get("kind") != "tool" or row.get("phase") not in {"pre", "post"}:
             continue
         key = (row.get("call_id"), row.get("name"))
+        is_current = row.get("turn_id") == turn_id if turn_id is not None else index > boundary
         if row["phase"] == "pre":
             pending.setdefault(key, []).append(len(items))
-            items.append(_trace_item(row, index > boundary, "unfinished"))
+            items.append(_trace_item(row, is_current, "unfinished"))
             continue
         status = "error" if row.get("is_error") else "completed"
-        item = _trace_item(row, index > boundary, status)
+        item = _trace_item(row, is_current, status)
         positions = pending.get(key) or []
         if positions:
             items[positions.pop(0)] = item
@@ -93,11 +98,37 @@ def _tool_items(rows: list[tuple[int, dict]], boundary: int) -> list[dict]:
     return items
 
 
-def _trace(rows: list[dict], agent_id: str | None) -> tuple[str, str, int]:
+def _trace(
+    rows: list[dict],
+    agent_id: str | None,
+    turn_id: str | None = None,
+) -> tuple[str, str, int]:
     selected = [(index, row) for index, row in enumerate(rows) if _matches_agent(row, agent_id)]
-    boundary = _current_boundary(selected, agent_id)
-    report = _report(selected, boundary)
-    items = _tool_items(selected, boundary)
+    has_turns = any(row.get("turn_id") is not None for _, row in selected)
+    report_rows = (
+        [(index, row) for index, row in selected if row.get("turn_id") == turn_id]
+        if turn_id is not None and has_turns
+        else selected
+    )
+    boundary = _current_boundary(report_rows, agent_id)
+    report = _report(report_rows, boundary)
+    current_turn = turn_id if turn_id is not None and has_turns else None
+    trace_rows = selected
+    if current_turn is not None and report_rows:
+        first_turn_index = min(index for index, _ in report_rows)
+        last_turn_index = max(index for index, _ in report_rows)
+        # Rows of another turn recorded after this turn began belong to a
+        # later turn (a late, asynchronous Stop): they are not evidence here.
+        trace_rows = [
+            (index, row) for index, row in selected
+            if index <= last_turn_index
+            and not (
+                index > first_turn_index
+                and row.get("turn_id") is not None
+                and row.get("turn_id") != current_turn
+            )
+        ]
+    items = _tool_items(trace_rows, boundary, current_turn)
     trace_text = json.dumps(items, ensure_ascii=False, indent=1)
     if len(trace_text) > MAX_TRACE_CHARS:
         trace_text = trace_text[:MAX_TRACE_CHARS] + "\n…(truncated)"
@@ -194,6 +225,7 @@ def run_critic(
     harness: str,
     session_id: str,
     agent_id: str | None,
+    turn_id: str | None = None,
 ) -> None:
     """Run the enabled critic and persist its verdict without raising."""
     try:
@@ -202,7 +234,7 @@ def run_critic(
         path = transcript_path(paths.store, harness, session_id)
         if not path.exists():
             return
-        report, trace_text, n_tools = _trace(read_turns(path), agent_id)
+        report, trace_text, n_tools = _trace(read_turns(path), agent_id, turn_id)
         if len(report) < MIN_REPORT_CHARS or (route := resolve_route("critic")) is None:
             return
         result = _judge(route, report, trace_text)

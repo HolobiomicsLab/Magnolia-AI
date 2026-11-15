@@ -161,10 +161,10 @@ def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
 
     guard(
         "application-probe", probe_application,
-        paths, event.harness, event.session_id, event.assistant_text or "",
+        paths, event.harness, event.session_id, event.assistant_text or "", event.turn_id,
     )
     agent_id = None if event.agent is None else event.agent.id
-    guard("critic", run_critic, paths, event.harness, event.session_id, agent_id)
+    guard("critic", run_critic, paths, event.harness, event.session_id, agent_id, event.turn_id)
     return Handled(HookResponse(), None)
 
 

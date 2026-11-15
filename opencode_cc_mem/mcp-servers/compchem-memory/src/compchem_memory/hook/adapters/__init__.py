@@ -21,8 +21,8 @@ class Rendered:
 class Adapter(Protocol):
     """Translate one client payload and render one neutral response."""
 
-    def parse(self, raw: dict, event: str) -> HookEvent:
-        """Build a neutral event from a native payload."""
+    def parse(self, raw: dict, event: str) -> HookEvent | None:
+        """Build a neutral event, or ignore a native event with ``None``."""
         ...
 
     def render(self, resp: HookResponse, event: HookEvent) -> Rendered:
