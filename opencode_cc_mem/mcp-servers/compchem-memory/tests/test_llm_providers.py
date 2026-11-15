@@ -33,6 +33,7 @@ def _clean_env(monkeypatch):
         "ZAI_BASE_URL",
         "OPENROUTER_API_KEY",
         "OPENROUTER_BASE_URL",
+        "MAGNOLIA_OPENROUTER_PROVIDER",
         "OPENROUTER_CODING_API_KEY",
     ]:
         monkeypatch.delenv(k, raising=False)

@@ -55,6 +55,8 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
 - Kimi is the Kimi-for-Coding plan endpoint (`https://api.kimi.com/coding/v1`),
   which speaks the Anthropic Messages schema — key from
   `KIMI_PLAN_MAGNOLIA_API_KEY` (Magnolia-specific) or `KIMI_API_KEY`.
+- `MAGNOLIA_OPENROUTER_PROVIDER` optionally holds an OpenRouter provider JSON
+  object. Invalid JSON is ignored with one stderr warning.
 - All errors are swallowed and surface as `None` — callers must handle the
   None case. (The heuristic extractor and prompt-fallback in the wrapper
   both rely on this contract.)
@@ -299,6 +301,30 @@ class CallResult:
     resolved_model: str | None
     error: str | None
     status: int | None
+    upstream_provider: str | None = None
+
+
+_INVALID_OPENROUTER_PROVIDER_WARNED: set[str] = set()
+
+
+def _openrouter_provider() -> dict | None:
+    """Parse the optional OpenRouter provider preference without raising."""
+    raw = _trimmed_env("MAGNOLIA_OPENROUTER_PROVIDER")
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+        if isinstance(value, dict):
+            return value
+        raise ValueError("expected a JSON object")
+    except (TypeError, ValueError) as error:
+        if not _INVALID_OPENROUTER_PROVIDER_WARNED:
+            _INVALID_OPENROUTER_PROVIDER_WARNED.add(raw)
+            print(
+                f"[llm] ignoring invalid MAGNOLIA_OPENROUTER_PROVIDER: {error}",
+                file=sys.stderr,
+            )
+        return None
 
 
 _ANTHROPIC_BASE = "https://api.anthropic.com/v1"
@@ -433,6 +459,12 @@ def _route_request(
         body["temperature"] = temperature
     if json_mode:
         body["response_format"] = {"type": "json_object"}
+    if route.provider == PROVIDER_OPENROUTER:
+        provider = _openrouter_provider()
+        if provider is not None:
+            body["provider"] = provider
+        if disable_thinking:
+            body["reasoning"] = {"enabled": False}
     if disable_thinking and route.provider in (PROVIDER_DEEPSEEK, PROVIDER_ZAI):
         body["thinking"] = {"type": "disabled"}
     return headers, body
@@ -440,17 +472,23 @@ def _route_request(
 
 def _route_response(route: Route, data: dict, status: int) -> CallResult:
     resolved_model = data.get("model")
+    upstream_provider = data.get("provider")
+    if not isinstance(upstream_provider, str):
+        upstream_provider = None
     if route.schema == "anthropic":
         text = next((block.get("text") for block in (data.get("content") or [])
                      if block.get("type") == "text"), None)
-        return CallResult(text, data.get("stop_reason"), resolved_model, None, status)
+        return CallResult(
+            text, data.get("stop_reason"), resolved_model, None, status,
+            upstream_provider,
+        )
     choices = data.get("choices") or []
     if not choices:
-        return CallResult(None, None, resolved_model, None, status)
+        return CallResult(None, None, resolved_model, None, status, upstream_provider)
     choice = choices[0]
     return CallResult(
         (choice.get("message") or {}).get("content"), choice.get("finish_reason"),
-        resolved_model, None, status,
+        resolved_model, None, status, upstream_provider,
     )
 
 
@@ -487,7 +525,16 @@ def call_route(
             error = f"HTTP {status} from {route.provider}"
             if detail:
                 error += f": {detail}"
-            return CallResult(None, None, None, _scrub_route_error(error, route.key), status)
+            try:
+                upstream_provider = response.json().get("provider")
+            except Exception:  # noqa: BLE001 - error bodies need not be JSON
+                upstream_provider = None
+            if not isinstance(upstream_provider, str):
+                upstream_provider = None
+            return CallResult(
+                None, None, None, _scrub_route_error(error, route.key), status,
+                upstream_provider,
+            )
         return _route_response(route, response.json(), status)
     except Exception as error:  # noqa: BLE001 - public contract: never raise
         return CallResult(None, None, None, _scrub_route_error(str(error), route.key), status)
@@ -542,10 +589,10 @@ def call_llm(
     off at ``max_tokens`` (``finish_reason == "length"``). On any failure the
     tuple is ``(None, None)``.
 
-    `temperature` (when set) and `disable_thinking` (DeepSeek reasoning models —
-    sends `thinking: {"type": "disabled"}`) make a call deterministic and stop a
-    reasoning model from spending its output budget on reasoning_content. Kimi
-    always sends thinking-disabled (see _call_kimi), so the flag is a no-op there.
+    `temperature` (when set) and `disable_thinking` make a call deterministic and
+    stop reasoning models from spending their output budget on reasoning_content.
+    DeepSeek and Z.ai receive `thinking: {"type": "disabled"}`; OpenRouter receives
+    `reasoning: {"enabled": false}`. Kimi always disables thinking in `_call_kimi`.
 
     Every attempt appends a timing row (see _record_timing), including the
     provider-echoed `resolved_model`, so slow, silently failing, or silently
@@ -559,6 +606,7 @@ def call_llm(
         _record_timing(provider, None, 0, "no_key")
         return (None, None) if return_finish_reason else None
     t0 = time.monotonic()
+    upstream_provider = None
     try:
         if provider == PROVIDER_ANTHROPIC:
             out, finish, resolved = _call_anthropic(
@@ -567,12 +615,13 @@ def call_llm(
             out, finish, resolved = _call_kimi(
                 key, model, system_prompt, user_content, max_tokens, temperature)
         else:
-            out, finish, resolved = _call_openai_compat(
+            out, finish, resolved, upstream_provider = _call_openai_compat(
                 provider, key, model, system_prompt, user_content, max_tokens,
                 temperature, disable_thinking)
         _record_timing(provider, model, (time.monotonic() - t0) * 1000,
                        "ok" if out else "empty", resolved_model=resolved,
-                       chars=len(out) if out else 0)
+                       chars=len(out) if out else 0,
+                       upstream_provider=upstream_provider)
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
@@ -648,7 +697,7 @@ def _call_kimi(
 def _call_openai_compat(
     provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None, disable_thinking: bool = False,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, str | None]:
     """DeepSeek, OpenAI, OpenRouter, Mistral and Z.ai all use the OpenAI chat
     completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
@@ -662,6 +711,12 @@ def _call_openai_compat(
     }
     if temperature is not None:
         body["temperature"] = temperature
+    if provider == PROVIDER_OPENROUTER:
+        provider_preference = _openrouter_provider()
+        if provider_preference is not None:
+            body["provider"] = provider_preference
+        if disable_thinking:
+            body["reasoning"] = {"enabled": False}
     # Reasoning models (DeepSeek v4 flash/pro, GLM) can spend their whole budget
     # on reasoning_content and then return empty content. DeepSeek and Z.ai (GLM) accept the same
     # thinking-disabled switch; OpenAI proper defines no such field, so the
@@ -686,12 +741,15 @@ def _call_openai_compat(
     resp.raise_for_status()
     data = resp.json()
     resolved = data.get("model")
+    upstream_provider = data.get("provider")
+    if not isinstance(upstream_provider, str):
+        upstream_provider = None
     choices = data.get("choices") or []
     if not choices:
-        return None, None, resolved
+        return None, None, resolved, upstream_provider
     choice = choices[0]
     msg = choice.get("message") or {}
-    return msg.get("content"), choice.get("finish_reason"), resolved
+    return msg.get("content"), choice.get("finish_reason"), resolved, upstream_provider
 
 
 def call_llm_json(

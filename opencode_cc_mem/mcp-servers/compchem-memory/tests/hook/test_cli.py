@@ -117,7 +117,7 @@ def test_dropped_notice_is_delivered_on_next_event(tmp_path, monkeypatch):
     push_job_notice(str(project), run_id="run-1", tool="dock", state="completed", category="success")
     with SessionState.open(store, "json", "s1") as state:
         state.data["unshown_notices"] = ["⚠ (high) unsupported ranking"]
-    expected = "✅ dock finished (completed) — run …run-1\n⚠ (high) unsupported ranking"
+    expected = "✅ dock finished (completed) — run run-1\n⚠ (high) unsupported ranking"
 
     def event():
         return HookEvent(

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from compchem_memory.hook.project import ProjectPaths
 
 _RECOVERED_TURN_LIMIT = 200
+_VIBE_TURN_LIMIT = 200
 # Claude Code shows its model only about 2 KB of SessionStart context.
 CLAUDE_CONTEXT_LIMIT = 1800
 
@@ -52,9 +53,16 @@ class _Guard:
         self.event = event
         self.env = env
 
-    def __call__(self, behaviour: str, function: Callable[..., Any], *args: Any, default: Any = None) -> Any:
+    def __call__(
+        self,
+        behaviour: str,
+        function: Callable[..., Any],
+        *args: Any,
+        default: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         try:
-            return function(*args)
+            return function(*args, **kwargs)
         except Exception as error:  # noqa: BLE001 - one behaviour must not stop the others
             from compchem_memory.hook.errors import log_error
 
@@ -279,6 +287,68 @@ def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
     return Handled(HookResponse(), None)
 
 
+def _defer_vibe_turn(paths: ProjectPaths, event: HookEvent) -> None:
+    """Persist one main Vibe turn for a later journal catch-up."""
+    if event.agent is not None or not event.turn_id:
+        return
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        pending = state.data.get("vibe_pending_turns")
+        pending = [turn for turn in pending if isinstance(turn, str)] \
+            if isinstance(pending, list) else []
+        if event.turn_id in pending:
+            pending.remove(event.turn_id)
+        pending.append(event.turn_id)
+        state.data["vibe_pending_turns"] = pending[-_VIBE_TURN_LIMIT:]
+
+
+def _vibe_pending_turns(paths: ProjectPaths, event: HookEvent) -> list[str]:
+    """Read pending Vibe turns while holding the ledger lock only."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        pending = state.data.get("vibe_pending_turns")
+        return [turn for turn in pending if isinstance(turn, str)] \
+            if isinstance(pending, list) else []
+
+
+def _claim_vibe_turn(paths: ProjectPaths, event: HookEvent, turn_id: str) -> bool:
+    """Claim a Vibe turn once, releasing the lock before probe or critic calls."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        completed = state.data.get("vibe_completed_turns")
+        completed = completed if isinstance(completed, dict) else {}
+        if turn_id in completed:
+            return False
+        completed[turn_id] = True
+        state.data["vibe_completed_turns"] = dict(
+            list(completed.items())[-_VIBE_TURN_LIMIT:]
+        )
+        pending = state.data.get("vibe_pending_turns")
+        if isinstance(pending, list):
+            state.data["vibe_pending_turns"] = [turn for turn in pending if turn != turn_id]
+        return True
+
+
+def _catch_up_vibe_turns(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> None:
+    """Recover committed Vibe replies, then probe and judge each turn once."""
+    if event.agent is not None or not event.transcript_ref:
+        return
+    for turn_id in _vibe_pending_turns(paths, event):
+        catch_up = replace(
+            event, event="turn-end", turn_id=turn_id, agent=None, assistant_text=None,
+        )
+        recovered = guard(
+            "client-transcript", _recover_assistant_transcript,
+            paths, catch_up, default=False,
+        )
+        if not recovered or not _claim_vibe_turn(paths, event, turn_id):
+            continue
+        _turn_end(paths, catch_up, guard)
+
+
 def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
     """Return the turn id of this agent's last recorded prompt.
 
@@ -305,6 +375,14 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     completion_event = event.event in {"turn-end", "agent-end"}
     if completion_event and not event.turn_id:
         turn_id = guard("turn-id", _last_prompt_turn, paths, event, default=None)
+        if not turn_id and event.harness == "vibe" and event.transcript_ref:
+            from compchem_memory.hook.client_transcripts import latest_vibe_assistant_turn
+
+            agent_id = None if event.agent is None else event.agent.id
+            turn_id = guard(
+                "turn-id", latest_vibe_assistant_turn,
+                event.transcript_ref, agent_id=agent_id, default=None,
+            )
         if turn_id:
             event = replace(event, turn_id=turn_id)
     guard("session-map", _record_session, paths, event)
@@ -318,11 +396,20 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":
+        if event.harness == "vibe" and event.agent is None:
+            _catch_up_vibe_turns(paths, event, guard)
         handled = _prompt(paths, event, env, guard)
     elif event.event == "post-tool":
         handled = _post_tool(paths, event, deadline, guard)
     elif completion_event:
-        handled = _turn_end(paths, event, guard)
+        if event.harness == "vibe":
+            guard("vibe-turn-ledger", _defer_vibe_turn, paths, event)
+            handled = Handled(HookResponse(), None)
+        else:
+            handled = _turn_end(paths, event, guard)
+    elif event.event == "session-end" and event.harness == "vibe":
+        _catch_up_vibe_turns(paths, event, guard)
+        handled = Handled(HookResponse(), None)
     else:
         handled = Handled(HookResponse(), None)
     handled.paths = paths

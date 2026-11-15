@@ -1,4 +1,9 @@
-"""Vibe's lower-case hooks and snake-case JSON response protocol."""
+"""Vibe's lower-case hooks and snake-case JSON response protocol.
+
+Vibe drops post-tool ``additional_context`` for MCP tools. Those responses use
+Vibe's deny replacement with the original result followed by Magnolia context;
+built-in tools and missing native results keep the normal context response.
+"""
 
 from __future__ import annotations
 
@@ -45,6 +50,15 @@ def render(resp: HookResponse, event: HookEvent) -> Rendered:
     if not present:
         return Rendered("", "", 0, frozenset())
     text = "\n\n".join(value for _, value in present)
+    if _is_mcp_post_tool(event) and event.tool.native_output_text is not None:
+        payload = {
+            "decision": "deny",
+            "reason": f"{event.tool.native_output_text}\n\n{text}",
+        }
+        return Rendered(
+            f"{json.dumps(payload, ensure_ascii=False)}\n", "", 0,
+            frozenset(field for field, _ in present),
+        )
     payload = {"hook_specific_output": {"additional_context": text}}
     return Rendered(
         f"{json.dumps(payload, ensure_ascii=False)}\n", "", 0, frozenset(field for field, _ in present)
@@ -64,4 +78,17 @@ def _tool(raw: dict) -> dict | None:
         "input": raw.get("tool_input"),
         "output": normalise_output(output),
         "is_error": failed,
+        "native_output_text": (
+            raw.get("tool_output_text")
+            if not failed and isinstance(raw.get("tool_output_text"), str)
+            else None
+        ),
     }
+
+
+def _is_mcp_post_tool(event: HookEvent) -> bool:
+    """Whether Vibe named this post-tool event with its MCP wire shape."""
+    if event.event != "post-tool" or event.tool is None:
+        return False
+    raw_name = event.tool.raw_name
+    return raw_name.startswith("mcp_") and "." in raw_name.removeprefix("mcp_")

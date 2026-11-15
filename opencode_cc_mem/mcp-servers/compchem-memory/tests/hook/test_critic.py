@@ -30,6 +30,7 @@ KEY_VARS = (
     "ZAI_BASE_URL", "MAGNOLIA_MEMORY_PROVIDER", "MAGNOLIA_MEMORY_MODEL",
     "MAGNOLIA_LLM_PROVIDER", "MAGNOLIA_LLM_MODEL", "MAGNOLIA_CRITIC_PROVIDER",
     "MAGNOLIA_CRITIC_MODEL", "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
+    "MAGNOLIA_OPENROUTER_PROVIDER",
     "MAGNOLIA_CRITIC", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
 )
 
@@ -267,6 +268,8 @@ def _node_request(tmp_path: Path, env: dict[str, str], reply_kind: str = "openai
 )
 def test_critic_request_matches_plugin(tmp_path, monkeypatch, env, reply_kind):
     node_call = _node_request(tmp_path, env, reply_kind)
+    if env.get("MAGNOLIA_CRITIC_PROVIDER") == "openrouter":
+        node_call["body"]["reasoning"] = {"enabled": False}
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
@@ -542,7 +545,9 @@ def test_run_critic_malformed_verdict_logs_finish_reason_and_length(tmp_path, mo
     truncated = '{"flag": true, "unsupported_claims": ["one", "two'
     monkeypatch.setattr(
         critic, "call_route",
-        lambda *args, **kwargs: CallResult(truncated, "length", "judge", None, 200),
+        lambda *args, **kwargs: CallResult(
+            truncated, "length", "judge", None, 200, "DeepInfra",
+        ),
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
@@ -551,3 +556,4 @@ def test_run_critic_malformed_verdict_logs_finish_reason_and_length(tmp_path, mo
     error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
     assert error["error"] == "judge reply has no JSON object"
     assert error["finish_reason"] == "length" and error["reply_chars"] == len(truncated)
+    assert error["upstream_provider"] == "DeepInfra"

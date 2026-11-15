@@ -134,7 +134,11 @@ def _block_text(block: object) -> str | None:
 
 @dataclass
 class ToolCall:
-    """One tool invocation, with ``output`` already reduced to text."""
+    """One tool invocation, with ``output`` already reduced to text.
+
+    ``native_output_text`` is adapter-private rendering data and is never
+    written into schema-version-1 transcript rows.
+    """
 
     name: str
     server: str | None
@@ -143,6 +147,7 @@ class ToolCall:
     input: dict
     output: str | None = None
     is_error: bool = False
+    native_output_text: str | None = None
 
 
 @dataclass
@@ -245,6 +250,7 @@ def _tool_call(value: object) -> ToolCall | None:
         input=tool_input,
         output=normalise_output(value.get("output")),
         is_error=bool(value.get("is_error", False)),
+        native_output_text=value.get("native_output_text"),
     )
 
 

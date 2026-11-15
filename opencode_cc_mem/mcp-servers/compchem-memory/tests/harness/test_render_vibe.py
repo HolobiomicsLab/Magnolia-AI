@@ -71,6 +71,9 @@ def test_vibe_pre_tool_hook_is_strict(make_render):
     )
     assert hooks["magnolia-post-tool"]["timeout"] == 10
     assert hooks["magnolia-prompt"]["timeout"] == 30
+    assert hooks["magnolia-prompt"]["match"] == "main"
+    assert all("match" not in hook for name, hook in hooks.items()
+               if name != "magnolia-prompt")
 
 
 def test_vibe_policy_env_present(make_render):

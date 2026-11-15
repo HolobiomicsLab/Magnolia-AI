@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from compchem_memory.hook.client_transcripts import assistant_texts
+from compchem_memory.hook.client_transcripts import assistant_texts, latest_vibe_assistant_turn
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "client-transcripts"
@@ -55,6 +55,40 @@ def test_vibe_reply_blocks_exclude_reasoning_entries():
         'note.txt contains exactly one line: "alpha line". '
         "It is a minimal placeholder note with no other content or instructions.",
     ]
+
+
+def test_latest_vibe_assistant_turn_is_agent_scoped_and_bounded(tmp_path):
+    session = tmp_path / "session"
+    journal = session / "journal"
+    journal.mkdir(parents=True)
+    rows = [
+        {"payload": {"delta": [{"entry": {
+            "id": "main", "role": "assistant", "turnId": "main-turn",
+            "content": [{"type": "text", "text": "main"}],
+        }}]}},
+        {"payload": {"delta": [{"entry": {
+            "id": "child-old", "role": "assistant", "turnId": "child-old-turn",
+            "agentId": "child-1", "content": [{"type": "text", "text": "old"}],
+        }}]}},
+        {"payload": {"delta": [{"entry": {
+            "id": "reasoning", "turnId": "ignored", "agentId": "child-1",
+            "content": [{"type": "text", "text": "private"}],
+        }}]}},
+        {"payload": {"delta": [{"entry": {
+            "id": "child-new", "role": "assistant", "turnId": "child-new-turn",
+            "agentId": "child-1", "content": [{"type": "text", "text": "new"}],
+        }}]}},
+    ]
+    text = "".join(json.dumps(row) + "\n" for row in rows)
+    (journal / "001.jsonl").write_text(text, encoding="utf-8")
+
+    assert latest_vibe_assistant_turn(str(session), agent_id=None) == "main-turn"
+    assert latest_vibe_assistant_turn(str(session), agent_id="child-1") == "child-new-turn"
+    assert latest_vibe_assistant_turn(
+        str(session), agent_id="child-1",
+        max_bytes=len((json.dumps(rows[-1]) + "\n").encode()) + 1,
+    ) == "child-new-turn"
+    assert latest_vibe_assistant_turn(str(tmp_path / "missing"), agent_id=None) is None
 
 
 @pytest.mark.parametrize("harness", ["claude", "codex", "vibe", "unknown"])

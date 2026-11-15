@@ -176,12 +176,33 @@ def test_arbitrary_exception_caught(monkeypatch):
     assert "totally unexpected" in out["error"]
 
 
-def test_stdout_truncated_to_4kb(monkeypatch):
-    big = "a" * 10_000  # 10KB
-    _patch(monkeypatch, FakeProc(stdout=big))
+def test_stdout_and_stderr_truncation_is_marked_and_starts_on_line_boundary(monkeypatch):
+    stdout = "cut-prefix" + ("a" * 5000) + "\nkept-one\nkept-two\n"
+    stderr = "cut-prefix" + ("b" * 5000) + "\nerror-one\nerror-two\n"
+    _patch(monkeypatch, FakeProc(stdout=stdout, stderr=stderr))
     out = run_shell("anything")
-    assert len(out["stdout"]) == 4096
-    assert out["stdout"] == big[-4096:]  # tail kept
+
+    for name, original, expected_tail in (
+        ("stdout", stdout, "kept-one\nkept-two\n"),
+        ("stderr", stderr, "error-one\nerror-two\n"),
+    ):
+        marker, shown = out[name].split("\n", 1)
+        assert shown == expected_tail
+        assert marker == (
+            f"[output truncated: showing the last {len(expected_tail)} "
+            f"of {len(original)} characters]"
+        )
+
+
+def test_untruncated_output_is_byte_identical(monkeypatch):
+    stdout = "alpha\nβeta\n"
+    stderr = "warning without newline"
+    _patch(monkeypatch, FakeProc(stdout=stdout, stderr=stderr))
+
+    out = run_shell("anything")
+
+    assert out["stdout"] == stdout
+    assert out["stderr"] == stderr
 
 
 def test_build_local_redirect_shape_and_content():
