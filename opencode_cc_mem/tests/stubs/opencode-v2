@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Test stub: prints argv and cwd as JSON (or `stub 0.0` for --version).
+
+If STUB_LOG names a file, every call also appends one JSON line to it.
+"""
+import json
+import os
+import sys
+
+name = os.path.basename(sys.argv[0])
+log = os.environ.get("STUB_LOG")
+if log:
+    with open(log, "a") as fh:
+        fh.write(json.dumps({"name": name, "argv": sys.argv[1:]}) + "\n")
+if sys.argv[1:] == ["--version"]:
+    print("stub 0.0")
+else:
+    print(json.dumps({"argv": [name] + sys.argv[1:], "cwd": os.getcwd()}))
+sys.exit(0)
