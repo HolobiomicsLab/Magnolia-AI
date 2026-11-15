@@ -209,7 +209,9 @@ def main() -> None:
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
     if event is None:
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
-        if recovered is not None:
+        # An ignored event is an error only when the policy blocks its tool
+        # (e.g. not for Claude's ToolSearch events).
+        if recovered is not None and _policy_response(recovered, os.environ).block is not None:
             _log_error(
                 ValueError("adapter returned no event for configured pre-tool policy"),
                 harness,
