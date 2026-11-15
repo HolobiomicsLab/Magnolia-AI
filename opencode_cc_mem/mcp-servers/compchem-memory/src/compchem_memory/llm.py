@@ -520,6 +520,14 @@ def call_route(
         )
         response = httpx.post(route.url, headers=headers, json=body, timeout=60)
         status = response.status_code
+        if (
+            route.provider == PROVIDER_OPENROUTER and status == 400
+            and "reasoning" in str(getattr(response, "text", "")).lower()
+            and "reasoning" in body
+        ):
+            body = {key: value for key, value in body.items() if key != "reasoning"}
+            response = httpx.post(route.url, headers=headers, json=body, timeout=60)
+            status = response.status_code
         if status < 200 or status >= 300:
             detail = str(getattr(response, "text", "")).strip()
             error = f"HTTP {status} from {route.provider}"
@@ -738,6 +746,23 @@ def _call_openai_compat(
         json=body,
         timeout=60,
     )
+    if (
+        provider == PROVIDER_OPENROUTER and getattr(resp, "status_code", 200) == 400
+        and "reasoning" in str(getattr(resp, "text", "")).lower()
+        and "reasoning" in body
+    ):
+        body = {field: value for field, value in body.items() if field != "reasoning"}
+        resp = httpx.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://magnolia.local"),
+                "X-Title": os.environ.get("OPENROUTER_TITLE", "Magnolia"),
+            },
+            json=body,
+            timeout=60,
+        )
     resp.raise_for_status()
     data = resp.json()
     resolved = data.get("model")

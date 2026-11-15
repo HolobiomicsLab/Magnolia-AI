@@ -163,6 +163,41 @@ def test_provider_routing_and_reasoning_switch_reach_both_request_builders(
     assert timing["upstream_provider"] == "DeepInfra"
 
 
+def test_reasoning_400_retries_once_without_reasoning(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    bodies = []
+
+    class FakeResp:
+        def __init__(self, status, text=""):
+            self.status_code = status
+            self.text = text
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise AssertionError("retry did not recover")
+
+        def json(self):
+            return {
+                "model": "vendor/model", "provider": "DeepInfra",
+                "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+            }
+
+    def fake_post(url, **kwargs):
+        bodies.append(kwargs["json"])
+        return FakeResp(400, "reasoning is unsupported") if len(bodies) % 2 else FakeResp(200)
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    route = llm.resolve_route("memory")
+    assert route is not None
+    assert llm.call_route(route, "s", "u", max_tokens=1, disable_thinking=True).text == "OK"
+    assert llm.call_llm("s", "u", max_tokens=1, disable_thinking=True) == "OK"
+    assert len(bodies) == 4
+    assert "reasoning" in bodies[0] and "reasoning" not in bodies[1]
+    assert "reasoning" in bodies[2] and "reasoning" not in bodies[3]
+
+
 def test_invalid_provider_json_is_ignored_with_one_stderr_line(monkeypatch, capsys):
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("MAGNOLIA_OPENROUTER_PROVIDER", "not-json")

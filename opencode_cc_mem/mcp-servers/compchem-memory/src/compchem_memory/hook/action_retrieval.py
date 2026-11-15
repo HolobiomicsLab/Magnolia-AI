@@ -115,6 +115,54 @@ class ActionNote:
     delivery: _Delivery | None = field(default=None, repr=False)
 
 
+def serialise_note(note: ActionNote) -> dict:
+    """Return the JSON-safe reservation needed to deliver a note later."""
+    delivery = note.delivery
+    if delivery is None:
+        return {"text": note.text, "sources": {}}
+    return {
+        "text": note.text,
+        "sources": {str(store): rows for store, rows in note.sources_by_store.items()},
+        "delivery": {
+            "harness": delivery.harness,
+            "session_id": delivery.session_id,
+            "entry_paths": delivery.entry_paths,
+            "pending": delivery.pending,
+            "coarse_row": delivery.coarse_row,
+            "hits_row": delivery.hits_row,
+        },
+    }
+
+
+def restore_note(payload: dict, paths: ProjectPaths) -> ActionNote | None:
+    """Rebuild a carried note without taking a second reservation."""
+    text = payload.get("text")
+    raw_delivery = payload.get("delivery")
+    if not isinstance(text, str) or not isinstance(raw_delivery, dict):
+        return None
+    sources = payload.get("sources")
+    sources_by_store = {
+        Path(store): rows for store, rows in sources.items()
+        if isinstance(store, str) and isinstance(rows, list)
+    } if isinstance(sources, dict) else {}
+    delivery = _Delivery(
+        paths=paths,
+        harness=str(raw_delivery.get("harness") or "vibe"),
+        session_id=str(raw_delivery.get("session_id") or ""),
+        entry_paths=[str(item) for item in raw_delivery.get("entry_paths", [])],
+        pending=dict(raw_delivery.get("pending") or {}),
+        coarse_row=dict(raw_delivery.get("coarse_row") or {}),
+        hits_row=dict(raw_delivery.get("hits_row") or {}),
+    )
+    return ActionNote(text, sources_by_store, delivery)
+
+
+def note_entry_ids(note: ActionNote) -> list[str]:
+    """Return stable source identifiers for an injected transcript row."""
+    delivery = note.delivery
+    return [] if delivery is None else list(delivery.entry_paths)
+
+
 def args_to_query(args: object) -> str:
     """Collect short string leaves through depth two and cap at 400 chars."""
     parts: list[str] = []

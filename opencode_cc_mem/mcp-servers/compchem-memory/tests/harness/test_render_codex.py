@@ -58,7 +58,10 @@ def test_codex_config_has_no_bypass_and_no_codex_home(make_render):
         "VIBE_HOME", "bypass",
     ):
         assert forbidden not in text
-    assert not launch.links
+    assert launch.links == {
+        context.project_dir / ".agents" / "skills" / "alpha":
+            context.root / ".opencode" / "skills" / "alpha",
+    }
 
 
 def test_codex_config_toml_servers(make_render):
@@ -75,12 +78,38 @@ def test_codex_config_toml_servers(make_render):
     assert memory["args"] == ["-m", "compchem_memory.server"]
     assert memory["tool_timeout_sec"] == 660
     assert memory["env"]["MAGNOLIA_MEMORY_MODEL"] == "mem-model"
+    assert "OPENAI_API_KEY" in memory["env_vars"]
+    assert "MAGNOLIA_CRITIC_API_KEY" in memory["env_vars"]
+    assert "MAGNOLIA_OPENROUTER_PROVIDER" in memory["env_vars"]
 
     neutral, context = make_render(setup={})
     config = tomllib.loads(
         render(neutral, context).files[_dir(context) / "config.toml"].decode()
     )["mcp_servers"]
     assert "compchem-memory" not in config
+
+
+def test_codex_config_never_renders_forwarded_secret_values(make_render, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sentinel-secret-value")
+    neutral, context = make_render()
+    launch = render(neutral, context)
+
+    assert all(b"sentinel-secret-value" not in content for content in launch.files.values())
+
+
+def test_codex_rules_are_developer_instructions_and_member_value_wins(make_render):
+    neutral, context = make_render()
+    path = _dir(context) / "config.toml"
+    config = tomllib.loads(render(neutral, context).files[path].decode())
+    assert config["developer_instructions"].startswith("<!-- magnolia-rules -->")
+    assert "rule a" in config["developer_instructions"]
+    assert "AGENTS BODY" not in config["developer_instructions"]
+
+    path.parent.mkdir(parents=True)
+    path.write_text('developer_instructions = "member instructions"\n', encoding="utf-8")
+    launch = render(neutral, context)
+    assert tomllib.loads(launch.files[path].decode())["developer_instructions"] == "member instructions"
+    assert any("developer_instructions" in conflict for conflict in launch.conflicts)
 
 
 def test_codex_preserves_member_entries_and_is_idempotent(make_render):

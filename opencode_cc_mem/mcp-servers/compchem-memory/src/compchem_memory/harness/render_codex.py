@@ -18,6 +18,7 @@ from compchem_memory.harness.render_common import (
     hook_timeout,
     policy_files,
     split_command,
+    skill_links,
     timeout_seconds,
 )
 
@@ -30,13 +31,22 @@ EVENTS = {
     "Stop": "turn-end",
 }
 # Codex 0.154 parses an ``async`` key but logs "running async <event> hook
-# synchronously": it is not rendered. Skills: no directory is named by its help or
-# bundled documentation, so none are linked (None = Codex gets no skills).
-SKILLS_SUBDIRECTORY: str | None = None
-_STDIO_FIELDS = frozenset({"command", "args", "env"})
+# synchronously": it is not rendered. Codex discovers project skills in
+# ``.agents/skills``; Vibe shares the same links.
+SKILLS_SUBDIRECTORY = ".agents/skills"
+_STDIO_FIELDS = frozenset({"command", "args", "env", "env_vars"})
 _HTTP_FIELDS = frozenset({
     "url", "bearer_token_env_var", "http_headers", "env_http_headers",
 })
+_DEVELOPER_MARKER = "<!-- magnolia-rules -->"
+_MEMORY_ENV_VARS = [
+    "MAGNOLIA_LLM_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY",
+    "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY",
+    "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_CRITIC",
+    "MAGNOLIA_CRITIC_PROVIDER", "MAGNOLIA_CRITIC_MODEL",
+    "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
+]
 
 
 def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
@@ -52,10 +62,19 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     files[hooks_path] = content
     conflicts += found
     servers = _servers(neutral)
+    magnolia = {"mcp_servers": servers}
+    developer = _developer_instructions(context.root)
+    member_developer = _member_developer_instructions(config_path)
+    if member_developer is None or member_developer.startswith(_DEVELOPER_MARKER):
+        magnolia["developer_instructions"] = developer
+    else:
+        conflicts.append(
+            "configuration conflict: developer_instructions (member entry preserved)"
+        )
     content, found, original = merged_toml(
         config_path,
         owned,
-        {"mcp_servers": servers},
+        magnolia,
         lambda current: _reconcile_transport_fields(current, servers),
     )
     files[config_path] = content
@@ -64,7 +83,10 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     argv = ["codex", "-C", str(context.project_dir), "-s", "workspace-write"]
     if context.model:
         argv += ["-m", context.model]
-    return Launch(argv=argv, env=env, files=files, conflicts=conflicts)
+    return Launch(
+        argv=argv, env=env, files=files, conflicts=conflicts,
+        links=skill_links(context, SKILLS_SUBDIRECTORY),
+    )
 
 
 render.binary = "codex"
@@ -110,8 +132,32 @@ def _servers(neutral: NeutralConfig) -> dict:
         else:
             command, args = split_command(server)
             entry = {"command": command, "args": args}
-            if server.env:
-                entry["env"] = dict(server.env)
+        if server.env:
+            entry["env"] = dict(server.env)
+        if server.name == "compchem-memory":
+            entry["env_vars"] = list(_MEMORY_ENV_VARS)
         entry["tool_timeout_sec"] = timeout_seconds(server)
         servers[server.name] = entry
     return servers
+
+
+def _member_developer_instructions(path: Path) -> str | None:
+    """Read the existing scalar without treating a member value as ours."""
+    if not path.exists():
+        return None
+    import tomllib
+
+    value = tomllib.loads(path.read_text(encoding="utf-8")).get("developer_instructions")
+    return value if isinstance(value, str) else None
+
+
+def _developer_instructions(root: Path) -> str:
+    """Return Magnolia-owned static rules; Codex reads AGENTS.md natively."""
+    sections = [_DEVELOPER_MARKER]
+    rules = root / "rules"
+    if rules.is_dir():
+        for path in sorted(rules.glob("*.md")):
+            text = path.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                sections.append(f"--- rules/{path.name} ---\n{text}")
+    return "\n\n".join(sections)

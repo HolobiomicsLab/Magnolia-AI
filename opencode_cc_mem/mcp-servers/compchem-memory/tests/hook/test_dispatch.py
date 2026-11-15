@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from compchem_memory import quick_search
-from compchem_memory.hook import critic
+from compchem_memory.hook import critic, dispatch
+from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.directive import DIRECTIVE
 from compchem_memory.hook.dispatch import handle
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
@@ -54,6 +55,80 @@ def _post_tool(project: Path) -> HookEvent:
             output="completed successfully",
         ),
     )
+
+
+def test_background_turn_is_spawned_once_without_waiting(tmp_path, monkeypatch):
+    project, _ = _workspace(tmp_path)
+    paths = ProjectPaths(project.parent.parent, project, project / ".magnolia", "alpha", False)
+    event = HookEvent("vibe", "turn-end", "s1", str(project), turn_id="t1")
+    calls = []
+
+    class Process:
+        pass
+
+    monkeypatch.setattr(
+        dispatch.subprocess, "Popen",
+        lambda argv, **kwargs: calls.append((argv, kwargs)) or Process(),
+    )
+
+    assert dispatch._schedule_background(paths, event, "final reply")
+    assert not dispatch._schedule_background(paths, event, "final reply")
+    assert len(calls) == 1
+    assert calls[0][1]["start_new_session"] is True
+    assert calls[0][1]["stdin"] is dispatch.subprocess.DEVNULL
+    assert calls[0][1]["stdout"] is dispatch.subprocess.DEVNULL
+    assert calls[0][1]["stderr"] is dispatch.subprocess.DEVNULL
+
+
+def test_prompt_catchup_failure_keeps_other_context(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    monkeypatch.setattr(
+        dispatch, "_catch_up_pending",
+        lambda *args: (_ for _ in ()).throw(OSError("state unavailable")),
+    )
+    with SessionState.open(project / ".magnolia", "vibe", "s1") as state:
+        state.data["unshown_notices"] = ["still delivered"]
+
+    handled = handle(HookEvent(
+        "vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2",
+        transcript_ref=str(tmp_path / "journal"),
+    ), env, time.monotonic() + 8)
+
+    assert DIRECTIVE in handled.response.context
+    assert handled.response.notice == "still delivered"
+
+
+def test_catchup_reads_at_most_two_journals_and_drops_expired(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    store = project / ".magnolia"
+    now = time.time()
+    pending = [
+        {"id": f"main--t{i}", "turn_id": f"t{i}", "transcript_ref": str(tmp_path / f"j{i}"),
+         "agent_id": None, "agent_type": None, "created": now, "attempts": 0}
+        for i in range(5)
+    ]
+    pending.append({
+        "id": "main--old", "turn_id": "old", "transcript_ref": str(tmp_path / "old"),
+        "agent_id": None, "agent_type": None,
+        "created": now - dispatch._CATCHUP_MAX_AGE_SECONDS - 1, "attempts": 0,
+    })
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["catchup_pending"] = pending
+    reads = []
+    monkeypatch.setattr(
+        dispatch, "_recover_assistant_transcript",
+        lambda paths, event: reads.append(event.transcript_ref) or False,
+    )
+
+    handle(HookEvent(
+        "vibe", "prompt", "s1", str(project), prompt="next", turn_id="next",
+    ), env, time.monotonic() + 8)
+
+    assert len(reads) == 2
+    with SessionState.open(store, "vibe", "s1") as state:
+        kept = state.data["catchup_pending"]
+    assert all(row["id"] != "main--old" for row in kept)
+    assert [row["attempts"] for row in kept] == [1, 1, 0, 0, 0]
 
 
 def test_dispatch_session_start_context(tmp_path, monkeypatch):
@@ -173,7 +248,7 @@ def test_dispatch_turn_end_passes_turn_id_to_critic_and_probe(tmp_path, monkeypa
     ]
 
 
-def test_claude_native_subagent_stop_recovers_and_judges_child_reply(
+def test_claude_subagent_stop_defers_reply_until_parent_session_end(
     tmp_path, monkeypatch,
 ):
     from compchem_memory.harness.render_claude import EVENTS
@@ -197,18 +272,10 @@ def test_claude_native_subagent_stop_recovers_and_judges_child_reply(
     })
     observed = []
     monkeypatch.setattr(
-        action_retrieval,
-        "probe_application",
-        lambda paths, harness, session_id, reply, turn_id: observed.append(
-            ("probe", harness, session_id, reply, turn_id)
-        ),
-    )
-    monkeypatch.setattr(
-        critic,
-        "run_critic",
-        lambda paths, harness, session_id, agent_id, turn_id: observed.append(
-            ("critic", harness, session_id, agent_id, turn_id)
-        ),
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: observed.append(
+            (event.agent.id, event.turn_id, reply)
+        ) or True,
     )
 
     for _ in range(2):
@@ -217,16 +284,17 @@ def test_claude_native_subagent_stop_recovers_and_judges_child_reply(
         assert event is not None and event.event == "agent-end"
         handle(event, env, time.monotonic() + 8)
 
+    handle(HookEvent(
+        "claude", "session-end", "session-1", str(project),
+    ), env, time.monotonic() + 8)
+
     rows = _rows(project / ".magnolia" / "transcripts" / "claude" / "session-1.jsonl")
     assistant = [row for row in rows if row["kind"] == "assistant"]
     assert [(row["text"], row["agent"]["id"]) for row in assistant] == [
         ("beta line", "a18415b0acfbb69d4")
     ]
     expected_turn = "4bb02dbd-650d-4e13-a0bc-9511d9c860cb"
-    assert observed == [
-        ("probe", "claude", "session-1", "beta line", expected_turn),
-        ("critic", "claude", "session-1", "a18415b0acfbb69d4", expected_turn),
-    ] * 2
+    assert observed == [("a18415b0acfbb69d4", expected_turn, "beta line")]
 
 
 def test_vibe_turn_end_records_reply_text(tmp_path, monkeypatch):
@@ -302,16 +370,10 @@ def test_vibe_session_end_catches_up_complete_reply_once(tmp_path, monkeypatch):
     project, env = _workspace(tmp_path)
     turn_id = "vibe-late-turn"
     source = _vibe_journal(tmp_path / "vibe-session", turn_id, "partial")
-    observed = []
+    spawned = []
     monkeypatch.setattr(
-        action_retrieval, "probe_application",
-        lambda paths, harness, session_id, reply, event_turn_id:
-            observed.append(("probe", reply, event_turn_id)),
-    )
-    monkeypatch.setattr(
-        critic, "run_critic",
-        lambda paths, harness, session_id, agent_id, event_turn_id:
-            observed.append(("critic", agent_id, event_turn_id)),
+        dispatch.subprocess, "Popen",
+        lambda argv, **kwargs: spawned.append((argv, kwargs)) or object(),
     )
     common = dict(
         harness="vibe", session_id="session-1", cwd=str(project),
@@ -329,13 +391,10 @@ def test_vibe_session_end_catches_up_complete_reply_once(tmp_path, monkeypatch):
     assert [row["text"] for row in rows if row["kind"] == "assistant"] == [
         "partial", "final reply",
     ]
-    assert observed == [
-        ("probe", "final reply", turn_id),
-        ("critic", None, turn_id),
-    ]
+    assert len(spawned) == 1
 
 
-def test_vibe_next_main_prompt_catches_up_before_notices(tmp_path, monkeypatch):
+def test_vibe_next_main_prompt_detaches_critic_for_later_notice(tmp_path, monkeypatch):
     from compchem_memory.hook import action_retrieval
 
     project, env = _workspace(tmp_path)
@@ -344,12 +403,10 @@ def test_vibe_next_main_prompt_catches_up_before_notices(tmp_path, monkeypatch):
     monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
     monkeypatch.setattr(action_retrieval, "probe_application", lambda *args: None)
 
-    def flag_critic(paths, harness, session_id, agent_id, turn_id):
-        observed.append(turn_id)
-        with SessionState.open(paths.store, harness, session_id) as state:
-            state.data["unshown_notices"] = ["critic catch-up"]
-
-    monkeypatch.setattr(critic, "run_critic", flag_critic)
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: observed.append(event.turn_id) or True,
+    )
     common = dict(
         harness="vibe", session_id="session-1", cwd=str(project),
         transcript_ref=str(source),
@@ -364,7 +421,7 @@ def test_vibe_next_main_prompt_catches_up_before_notices(tmp_path, monkeypatch):
     )
 
     assert observed == ["turn-1"]
-    assert handled.response.notice == "critic catch-up"
+    assert handled.response.notice is None
 
 
 def test_client_recovery_keeps_native_final_reply_last(tmp_path, monkeypatch):
@@ -658,12 +715,13 @@ def test_claude_session_start_short_dynamic_part_has_no_pointer(tmp_path, monkey
     assert "RULE TEXT" not in context
 
 
-def test_codex_session_start_full_payload(tmp_path, monkeypatch):
+def test_codex_session_start_caps_dynamic_and_omits_static_rules(tmp_path, monkeypatch):
     monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
     project, env = _boot_fixture(tmp_path, "B" * 5000)
     context = _start(project, env, "codex")
-    assert "B" * 5000 in context and "RULE TEXT" in context and DIRECTIVE in context
-    assert "AGENTS TEXT" not in context
+    assert "B" * 1800 not in context and DIRECTIVE in context
+    assert "The full project memory summary" in context
+    assert "RULE TEXT" not in context and "AGENTS TEXT" not in context
 
 
 def test_vibe_session_start_has_agents_md_first(tmp_path, monkeypatch):
@@ -710,7 +768,7 @@ def test_vibe_turn_end_without_turn_id_takes_the_last_prompt_turn(tmp_path, monk
     assert observed == []
 
 
-def test_vibe_child_turn_end_without_prompt_uses_latest_journal_assistant_turn(
+def test_vibe_child_reply_is_absent_at_post_agent_then_caught_up_from_own_journal(
     tmp_path, monkeypatch,
 ):
     project, env = _workspace(tmp_path)
@@ -718,15 +776,27 @@ def test_vibe_child_turn_end_without_prompt_uses_latest_journal_assistant_turn(
     source = _vibe_journal(
         tmp_path / "vibe-child-session", "child-turn", "child reply",
     )
-    _quiet_turn_end(monkeypatch)
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append((event.turn_id, event.agent.id, reply)) or True,
+    )
 
     handle(HookEvent(
         harness="vibe", event="turn-end", session_id="session-1", cwd=str(project),
         agent=child, transcript_ref=str(source),
     ), env, time.monotonic() + 8)
 
-    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    path = project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl"
+    assert not path.exists()
+
+    handle(HookEvent(
+        harness="vibe", event="session-end", session_id="session-1", cwd=str(project),
+    ), env, time.monotonic() + 8)
+
+    rows = _rows(path)
     replies = [row for row in rows if row["kind"] == "assistant"]
     assert [(row["text"], row["turn_id"], row["agent"]["id"]) for row in replies] == [
         ("child reply", "child-turn", "child-1"),
     ]
+    assert scheduled == [("child-turn", "child-1", "child reply")]

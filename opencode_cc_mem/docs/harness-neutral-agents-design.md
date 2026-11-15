@@ -111,13 +111,13 @@ Anti-goals (a failure even if it works)
 
 | Magnolia behaviour | Core entry | OpenCode | Claude Code | Codex | Vibe |
 |---|---|---|---|---|---|
-| Rules + boot context + audit report | `session-start` | context hook (v2) | SessionStart `additionalContext`; fallback `--append-system-prompt-file` | SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
+| Rules + boot context + audit report | `session-start` | context hook (v2) | static rules through `--append-system-prompt-file`; capped dynamic SessionStart `additionalContext` | rules in `.codex/config.toml` `developer_instructions`; Codex reads `AGENTS.md` natively; capped dynamic SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
 | Session-start retrieval directive | `session-start` | prompt rewrite | SessionStart `additionalContext` | same | `session_start` `additional_context` |
 | Doorbell `@agent` letters | `prompt` | prompt rewrite | letter written + `additionalContext` "already sent, do not act" (no rewrite possible) | same | same, on `pre_agent` (carries the prompt) |
 | Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | `post_tool` `additional_context` |
 | Tool-call capture | MCP `@captured` (unchanged) + `pre-tool`/`post-tool` ledger | yes | yes | yes | yes |
 | Session mapping + Magnolia transcript | all events | yes | yes | yes | yes; assistant text only from the client transcript (`post_agent` carries none) |
-| Claim critic | `turn-end` (async) | yes | Stop, `async: true` (in `-p` runs the process exits first: Plan 3) | Stop, `async: true` | `post_agent`; it carries no `turn_id`, so the turn is the agent's last recorded prompt |
+| Claim critic | `turn-end` | yes | synchronous Stop recovers replies and starts a detached worker | Stop hook | `post_agent` defers recovery; the next main prompt or session end starts a detached worker |
 | Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | `additional_context` at the next `pre_agent` or `post_tool` |
 | Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | child `session_id` + `parent_session_id`, `agent_name` |
 | Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | `--disabled-tools file_system.bash` + a `strict` `pre_tool` deny (P0: no sandbox; an out-of-project write succeeded) |
@@ -252,8 +252,8 @@ the client in the project directory.
 - **Vibe.** Project `config.toml` and `hooks.toml` in a trusted folder; boot context and
   directives in the instructions file. Built only after P0 confirms the files.
 
-Skills: `.opencode/skills/*/SKILL.md` is linked into `.claude/skills/` (same format);
-Codex and Vibe skill locations are recorded in P0. Rules prose that names OpenCode
+Skills: `.opencode/skills/*/SKILL.md` is linked into `.claude/skills/` and the shared
+`.agents/skills/` location used by Codex and Vibe. Rules prose that names OpenCode
 (bash disabled, `compchem-tools_*`, "restart opencode") becomes client-neutral, with a
 short rendered note per client.
 

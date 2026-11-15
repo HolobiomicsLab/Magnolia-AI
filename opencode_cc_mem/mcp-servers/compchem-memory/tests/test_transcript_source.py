@@ -89,6 +89,8 @@ def test_magnolia_exporter_reconstructs_like_opencode(tmp_path):
         {"kind": "tool", "phase": "post", "name": "read", "server": None,
          "input": {"path": "missing"}, "output": "not found", "is_error": True,
          "agent": None},
+        {"kind": "injected", "channel": "action_memory", "entry_ids": ["entry-7"],
+         "text": "known recovery", "agent": None},
     ])
 
     exported = magnolia_exporter(tmp_path)(ref)
@@ -105,9 +107,11 @@ def test_magnolia_exporter_reconstructs_like_opencode(tmp_path):
         "status": "completed", "input": {"query": "sample"}, "output": "one match",
     }
     assert exported["messages"][3]["parts"][0]["state"]["status"] == "error"
+    assert exported["known_entry_ids"] == ["entry-7"]
 
     rendered = reconstruct_transcript(exported, tool_chars=1000)
     assert rendered.split("\n\n") == [
+        "SYSTEM: Magnolia already supplied memory entries entry-7; do not re-stage them.",
         "USER: inspect sample",
         "ASSISTANT: I will inspect it",
         "ASSISTANT (tool:search): one match",

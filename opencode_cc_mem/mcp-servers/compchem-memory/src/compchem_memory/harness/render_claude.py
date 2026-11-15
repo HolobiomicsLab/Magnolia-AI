@@ -30,14 +30,15 @@ EVENTS = {
     "SubagentStop": "agent-end",
     "SessionEnd": "session-end",
 }
-_ASYNC_EVENTS = {"Stop"}
+_ASYNC_EVENTS: set[str] = set()
 _TOOL_NAMES = {"bash": "Bash"}
+_MAGNOLIA_PERMISSIONS = ["mcp__compchem-tools", "mcp__compchem-memory"]
 
 
 def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     folder = harness_dir(context, HARNESS)
     files, env = policy_files(neutral, context, HARNESS)
-    files[folder / "settings.json"] = _json({"hooks": _hooks(context)})
+    files[folder / "settings.json"] = _settings(folder / "settings.json", context)
     files[folder / "mcp.json"] = _json({"mcpServers": _servers(neutral)})
     files[folder / "system-prompt.md"] = _system_prompt(context.root).encode("utf-8")
     denied = ",".join(_TOOL_NAMES.get(name, name) for name in sorted(neutral.deny_tools))
@@ -75,6 +76,24 @@ def _hooks(context: LaunchContext) -> dict:
             hook["async"] = True
         hooks[event] = [{"hooks": [hook]}]
     return hooks
+
+
+def _settings(path: Path, context: LaunchContext) -> bytes:
+    """Keep member settings while replacing Magnolia hooks and permissions."""
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        current = {}
+    if not isinstance(current, dict):
+        current = {}
+    permissions = current.get("permissions")
+    permissions = dict(permissions) if isinstance(permissions, dict) else {}
+    allowed = permissions.get("allow")
+    member = [item for item in allowed if item not in _MAGNOLIA_PERMISSIONS] \
+        if isinstance(allowed, list) else []
+    permissions["allow"] = [*member, *_MAGNOLIA_PERMISSIONS]
+    current.update(hooks=_hooks(context), permissions=permissions)
+    return _json(current)
 
 
 def _servers(neutral: NeutralConfig) -> dict:

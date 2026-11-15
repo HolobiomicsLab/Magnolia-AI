@@ -36,12 +36,17 @@ def _truncate(s: str | bytes | None) -> str:
         return s
     start = len(s) - _OUTPUT_TAIL
     kept = s[start:]
+    first_line_cut = False
     if start and s[start - 1] != "\n":
         boundary = kept.find("\n")
-        kept = kept[boundary + 1:] if boundary >= 0 else ""
+        if boundary >= 0:
+            kept = kept[boundary + 1:]
+        else:
+            first_line_cut = True
+    cut_note = "; first line cut" if first_line_cut else ""
     marker = (
         f"[output truncated: showing the last {len(kept)} "
-        f"of {len(s)} characters]"
+        f"of {len(s)} characters{cut_note}]"
     )
     return f"{marker}\n{kept}" if kept else marker
 

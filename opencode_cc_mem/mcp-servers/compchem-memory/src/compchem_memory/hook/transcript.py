@@ -50,6 +50,41 @@ def append_event(store: Path, event: HookEvent) -> None:
     _append_jsonl(path, row)
 
 
+def append_injected(
+    store: Path,
+    event: HookEvent,
+    *,
+    channel: str,
+    text: str,
+    entry_ids: list[str],
+    tool_call_id: str | None,
+) -> bool:
+    """Append delivered Magnolia context without waiting on another writer."""
+    row = _base_row(event, "injected")
+    row.update(
+        channel=channel,
+        tool_call_id=tool_call_id,
+        entry_ids=[str(entry_id) for entry_id in entry_ids],
+        text=clean_text(text),
+    )
+    try:
+        return _try_append_jsonl(transcript_path(store, event.harness, event.session_id), row)
+    except OSError:
+        return False
+
+
+def append_denied(store: Path, event: HookEvent, reason: str) -> bool:
+    """Append one policy-denied tool row with a non-blocking lock attempt."""
+    if event.tool is None:
+        return False
+    row = _base_row(event, "tool")
+    row.update(_tool_row(event.tool, phase="denied"), output=clean_text(reason, _OUTPUT_LIMIT))
+    try:
+        return _try_append_jsonl(transcript_path(store, event.harness, event.session_id), row)
+    except OSError:
+        return False
+
+
 def read_turns(path: Path) -> list[dict]:
     """Read transcript objects in order, skipping malformed JSONL lines."""
     try:
@@ -70,9 +105,7 @@ def read_turns(path: Path) -> list[dict]:
 
 
 def _event_row(event: HookEvent) -> dict | None:
-    agent = None if event.agent is None else {"id": event.agent.id, "type": event.agent.type}
-    row = {"schema_version": event.schema_version, "ts": _timestamp(),
-           "kind": event.event, "turn_id": event.turn_id, "agent": agent}
+    row = _base_row(event, event.event)
     if event.event in {"pre-tool", "post-tool"}:
         row.update(_tool_row(event.tool, phase="pre" if event.event == "pre-tool" else "post"))
     elif event.event == "prompt":
@@ -82,6 +115,14 @@ def _event_row(event: HookEvent) -> dict | None:
             return None
         row.update(kind="assistant", text=clean_text(event.assistant_text))
     return row
+
+
+def _base_row(event: HookEvent, kind: str) -> dict:
+    agent = None if event.agent is None else {"id": event.agent.id, "type": event.agent.type}
+    return {
+        "schema_version": event.schema_version, "ts": _timestamp(),
+        "kind": kind, "turn_id": event.turn_id, "agent": agent,
+    }
 
 
 def _tool_row(tool: ToolCall, phase: str) -> dict:
@@ -141,5 +182,21 @@ def _append_jsonl(path: Path, row: dict) -> None:
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         os.write(descriptor, line)
+    finally:
+        os.close(descriptor)
+
+
+def _try_append_jsonl(path: Path, row: dict) -> bool:
+    """Append once if the transcript lock is immediately available."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        os.write(descriptor, line)
+        return True
     finally:
         os.close(descriptor)

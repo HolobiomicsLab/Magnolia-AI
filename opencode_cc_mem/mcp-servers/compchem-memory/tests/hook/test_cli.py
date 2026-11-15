@@ -172,6 +172,38 @@ def test_dropped_tool_note_is_offered_again(tmp_path, monkeypatch):
     assert (store / "surfacing.jsonl").exists()
 
 
+def test_vibe_mcp_note_is_carried_to_next_prompt_once(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    event = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(event, env, time.monotonic() + 8)
+    rendered = vibe.render(first.response, event)
+    assert rendered.stdout == ""
+    _commit_delivered(rendered, first, event)
+
+    prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
+    carried = handle(prompt, env, time.monotonic() + 8)
+    assert carried.response.context.startswith("After your earlier `run_shell` call:")
+    _commit_delivered(Rendered("ok", "", 0, frozenset({"context"})), carried, prompt)
+
+    assert "After your earlier" not in (handle(
+        HookEvent("vibe", "prompt", "s1", str(project), prompt="later", turn_id="t3"),
+        env, time.monotonic() + 8,
+    ).response.context or "")
+
+
 def test_block_rendered_by_adapter():
     event = HookEvent("json", "pre-tool", "s1", "/tmp")
 
@@ -241,7 +273,12 @@ def test_cli_policy_block_is_written_before_dispatch(tmp_path, monkeypatch, capf
     assert captured.out == ""
     assert captured.err == REASON + "\n"
     assert dispatched == []
-    assert not (project / ".magnolia" / "transcripts").exists()
+    rows = [json.loads(line) for line in (
+        project / ".magnolia" / "transcripts" / "json" / "s1.jsonl"
+    ).read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["phase"] == "denied"
+    assert rows[0]["output"] == REASON
 
 
 def test_cli_policy_exception_still_blocks_bash(

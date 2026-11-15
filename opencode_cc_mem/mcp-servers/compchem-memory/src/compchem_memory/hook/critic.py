@@ -80,10 +80,23 @@ def _tool_items(
     items: list[dict] = []
     pending: dict[tuple[object, object], list[int]] = {}
     for index, row in rows:
-        if row.get("kind") != "tool" or row.get("phase") not in {"pre", "post"}:
+        if row.get("kind") == "injected":
+            item = {
+                "tool": "MAGNOLIA NOTE", "call_id": row.get("tool_call_id"),
+                "status": "injected", "channel": row.get("channel"),
+                "entry_ids": row.get("entry_ids", []), "output": row.get("text", ""),
+            }
+            items.append(item)
+            continue
+        if row.get("kind") != "tool" or row.get("phase") not in {"pre", "post", "denied"}:
             continue
         key = (row.get("call_id"), row.get("name"))
         is_current = row.get("turn_id") == turn_id if turn_id is not None else index > boundary
+        if row["phase"] == "denied":
+            item = _trace_item(row, is_current, "denied")
+            item["tool"] = f"DENIED: {row.get('name')}"
+            items.append(item)
+            continue
         if row["phase"] == "pre":
             pending.setdefault(key, []).append(len(items))
             items.append(_trace_item(row, is_current, "unfinished"))
@@ -103,24 +116,36 @@ def _trace(
     agent_id: str | None,
     turn_id: str | None = None,
 ) -> tuple[str, str, int]:
-    selected = [(index, row) for index, row in enumerate(rows) if _matches_agent(row, agent_id)]
-    has_turns = any(row.get("turn_id") is not None for _, row in selected)
+    primary = [(index, row) for index, row in enumerate(rows) if _matches_agent(row, agent_id)]
+    has_turns = any(row.get("turn_id") is not None for _, row in primary)
     report_rows = (
-        [(index, row) for index, row in selected if row.get("turn_id") == turn_id]
+        [(index, row) for index, row in primary if row.get("turn_id") == turn_id]
         if turn_id is not None and has_turns
-        else selected
+        else primary
     )
     boundary = _current_boundary(report_rows, agent_id)
     report = _report(report_rows, boundary)
     current_turn = turn_id if turn_id is not None and has_turns else None
-    trace_rows = selected
+    trace_rows = primary
+    if agent_id is None:
+        child_ids = {
+            row["agent"]["id"] for index, row in enumerate(rows)
+            if row.get("kind") == "agent-start"
+            and isinstance(row.get("agent"), dict)
+            and (turn_id is None and index > boundary or row.get("turn_id") == turn_id)
+        }
+        trace_rows = [
+            (index, row) for index, row in enumerate(rows)
+            if _matches_agent(row, None)
+            or (isinstance(row.get("agent"), dict) and row["agent"].get("id") in child_ids)
+        ]
     if current_turn is not None and report_rows:
         first_turn_index = min(index for index, _ in report_rows)
         last_turn_index = max(index for index, _ in report_rows)
         # Rows of another turn recorded after this turn began belong to a
         # later turn (a late, asynchronous Stop): they are not evidence here.
         trace_rows = [
-            (index, row) for index, row in selected
+            (index, row) for index, row in trace_rows
             if index <= last_turn_index
             and not (
                 index > first_turn_index
@@ -190,6 +215,7 @@ def _verdict_row(
     verdict: dict,
     report: str,
     n_tools: int,
+    upstream_provider: str | None,
 ) -> dict:
     severity = verdict.get("severity") if verdict.get("severity") is not None else "none"
     claims = verdict.get("unsupported_claims")
@@ -200,6 +226,7 @@ def _verdict_row(
         "severity": severity, "unsupported_claims": claims if claims is not None else [],
         "why": why, "n_tools": n_tools,
         "report_preview": report[:200],
+        "upstream_provider": upstream_provider,
     }
 
 
@@ -254,7 +281,10 @@ def run_critic(
             )
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
             return
-        row = _verdict_row(harness, session_id, agent_id, route, verdict, report, n_tools)
+        row = _verdict_row(
+            harness, session_id, agent_id, route, verdict, report, n_tools,
+            result.upstream_provider,
+        )
         _append_jsonl(out_dir / f"{safe_component(session_id)}.jsonl", row)
         _save_notice(paths, harness, session_id, row)
     except Exception:  # noqa: BLE001 - a hook failure must never break the client

@@ -151,6 +151,14 @@ def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) ->
     if _looks_like_v2_export(export):
         return _reconstruct_v2(export)
     lines: list[str] = []
+    known_entry_ids = export.get("known_entry_ids")
+    if isinstance(known_entry_ids, list):
+        shown = [str(entry_id) for entry_id in known_entry_ids if isinstance(entry_id, str)]
+        if shown:
+            lines.append(
+                "SYSTEM: Magnolia already supplied memory entries "
+                f"{', '.join(shown)}; do not re-stage them."
+            )
     for m in export.get("messages", []) or []:
         role = ((m.get("info") or {}).get("role") or "?").upper()
         for p in m.get("parts", []) or []:
@@ -533,7 +541,10 @@ def distill_session_transcript(
         return None  # unavailable — let caller fall back
 
     new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
-    transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
+    transcript = scrub_secrets(reconstruct_transcript({
+        "messages": new_msgs,
+        "known_entry_ids": export.get("known_entry_ids", []),
+    }))
     candidates = distiller(transcript) if transcript.strip() else []
     if candidates is None:
         candidates = []
@@ -620,7 +631,10 @@ def ingest_opencode_sessions(
                 _write_progress(rec_path, cursor, prior_count, done=True)
             continue
 
-        transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
+        transcript = scrub_secrets(reconstruct_transcript({
+            "messages": new_msgs,
+            "known_entry_ids": export.get("known_entry_ids", []),
+        }))
         candidates = distiller(transcript) if transcript.strip() else []
         if candidates is None:
             # Distillation FAILED (LLM error / overflow), distinct from succeeding

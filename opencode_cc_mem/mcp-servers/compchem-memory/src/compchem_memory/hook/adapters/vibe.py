@@ -1,8 +1,8 @@
 """Vibe's lower-case hooks and snake-case JSON response protocol.
 
-Vibe drops post-tool ``additional_context`` for MCP tools. Those responses use
-Vibe's deny replacement with the original result followed by Magnolia context;
-built-in tools and missing native results keep the normal context response.
+Vibe drops post-tool context for MCP tools, and replacing their result destroys
+the structured value read by ``run_typescript``. Magnolia therefore renders
+nothing for every MCP post-tool and carries its context to a later event.
 """
 
 from __future__ import annotations
@@ -42,6 +42,8 @@ def render(resp: HookResponse, event: HookEvent) -> Rendered:
         return Rendered(f"{json.dumps(payload, ensure_ascii=False)}\n", "", 0, frozenset())
     if event.event not in _CONTEXT_EVENTS:
         return Rendered("", "", 0, frozenset())
+    if _is_mcp_post_tool(event):
+        return Rendered("", "", 0, frozenset())
     fields = ("context", "tool_note") if event.event == "post-tool" else ("context",)
     texts = [(field, getattr(resp, field)) for field in fields]
     if resp.notice is not None:
@@ -50,15 +52,6 @@ def render(resp: HookResponse, event: HookEvent) -> Rendered:
     if not present:
         return Rendered("", "", 0, frozenset())
     text = "\n\n".join(value for _, value in present)
-    if _is_mcp_post_tool(event) and event.tool.native_output_text is not None:
-        payload = {
-            "decision": "deny",
-            "reason": f"{event.tool.native_output_text}\n\n{text}",
-        }
-        return Rendered(
-            f"{json.dumps(payload, ensure_ascii=False)}\n", "", 0,
-            frozenset(field for field, _ in present),
-        )
     payload = {"hook_specific_output": {"additional_context": text}}
     return Rendered(
         f"{json.dumps(payload, ensure_ascii=False)}\n", "", 0, frozenset(field for field, _ in present)

@@ -12,12 +12,16 @@ the boot context.
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
-from compchem_memory.hook.events import HookEvent, HookResponse
+from compchem_memory.hook.events import AgentRef, HookEvent, HookResponse
 from compchem_memory.hook.project import bind_project
 
 if TYPE_CHECKING:
@@ -27,6 +31,10 @@ if TYPE_CHECKING:
 
 _RECOVERED_TURN_LIMIT = 200
 _VIBE_TURN_LIMIT = 200
+_CATCHUP_ATTEMPT_LIMIT = 3
+_CATCHUP_MAX_AGE_SECONDS = 24 * 60 * 60
+_CATCHUP_JOURNAL_LIMIT = 2
+_WORKER_LEASE_SECONDS = 120
 # Claude Code shows its model only about 2 KB of SessionStart context.
 CLAUDE_CONTEXT_LIMIT = 1800
 
@@ -43,6 +51,30 @@ class Handled:
     pending: ActionNote | None
     notices: Notices | None = field(default=None)
     paths: ProjectPaths | None = field(default=None)
+    carried: list["CarriedNote"] = field(default_factory=list)
+    carried_field: str | None = None
+    injections: list["Injection"] = field(default_factory=list)
+
+
+@dataclass
+class CarriedNote:
+    """One reserved Vibe action note waiting for a deliverable event."""
+
+    id: str
+    text: str
+    call_id: str | None
+    note: ActionNote
+
+
+@dataclass(frozen=True)
+class Injection:
+    """One response fragment to record only after client delivery."""
+
+    field: str
+    channel: str
+    text: str
+    entry_ids: list[str]
+    tool_call_id: str | None
 
 
 class _Guard:
@@ -209,7 +241,7 @@ def _notices(paths: ProjectPaths, event: HookEvent) -> Notices | None:
 def _boot_payload(paths: ProjectPaths, harness: str = "json") -> str | None:
     from compchem_memory.hook.boot_context import build_boot_payload, build_claude_boot_payload
 
-    if harness == "claude":
+    if harness in {"claude", "codex"}:
         return build_claude_boot_payload(paths, CLAUDE_CONTEXT_LIMIT)
     return build_boot_payload(paths, include_agents_md=harness == "vibe")
 
@@ -217,7 +249,9 @@ def _boot_payload(paths: ProjectPaths, harness: str = "json") -> str | None:
 def _session_start(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
     response = HookResponse(context=guard("boot-context", _boot_payload, paths, event.harness))
     response = response.merge(HookResponse(context=guard("directive", _directive, paths, event)))
-    return Handled(response, None)
+    injections = [Injection("context", "boot", response.context, [], None)] \
+        if response.context else []
+    return Handled(response, None, injections=injections)
 
 
 # Prompts a client submits on the agent's behalf, not typed by the person:
@@ -257,24 +291,128 @@ def _doorbell(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> 
 def _prompt(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str], guard: _Guard) -> Handled:
     if not is_person_prompt(event):
         return Handled(HookResponse(), None)
-    response = HookResponse(context=guard("doorbell", _doorbell, paths, event, env))
+    carried = guard("carried-context", _carried_notes, paths, event, default=[])
+    carried_text = "\n\n".join(item.text for item in carried) or None
+    response = HookResponse(context=carried_text)
+    doorbell = guard("doorbell", _doorbell, paths, event, env)
+    response = response.merge(HookResponse(context=doorbell))
     response = response.merge(HookResponse(context=guard("directive", _directive, paths, event)))
     notices = guard("notices", _notices, paths, event)
     response = response.merge(HookResponse(notice=None if notices is None else notices.text))
-    return Handled(response, None, notices)
+    injections = [
+        Injection("context", "action_memory", item.text,
+                  _note_entry_ids(item.note), item.call_id)
+        for item in carried
+    ]
+    if doorbell:
+        injections.append(Injection("context", "doorbell", doorbell, [], None))
+    if notices is not None:
+        injections.append(Injection("notice", "notice", notices.text, [], None))
+    return Handled(
+        response, None, notices, carried=carried, carried_field="context",
+        injections=injections,
+    )
 
 
 def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float, guard: _Guard) -> Handled:
     from compchem_memory.hook.action_retrieval import on_post_tool
 
     pending = guard("action-retrieval", on_post_tool, event, paths, deadline)
-    response = HookResponse(tool_note=None if pending is None else pending.text)
+    carried = guard("carried-context", _carried_notes, paths, event, default=[])
+    notes = [item.text for item in carried]
+    if pending is not None:
+        notes.append(pending.text)
+    response = HookResponse(tool_note="\n\n".join(notes) or None)
     notices = guard("notices", _notices, paths, event) if event.agent is None else None
     response = response.merge(HookResponse(notice=None if notices is None else notices.text))
-    return Handled(response, pending, notices)
+    injections = [
+        Injection("tool_note", "action_memory", item.text,
+                  _note_entry_ids(item.note), item.call_id)
+        for item in carried
+    ]
+    if pending is not None:
+        call_id = event.tool.call_id if event.tool is not None else None
+        injections.append(Injection(
+            "tool_note", "action_memory", pending.text, _note_entry_ids(pending), call_id,
+        ))
+    if notices is not None:
+        injections.append(Injection("notice", "notice", notices.text, [], None))
+    return Handled(
+        response, pending, notices, carried=carried, carried_field="tool_note",
+        injections=injections,
+    )
+
+
+def _note_entry_ids(note: ActionNote) -> list[str]:
+    from compchem_memory.hook.action_retrieval import note_entry_ids
+
+    return note_entry_ids(note)
+
+
+def _carried_notes(paths: ProjectPaths, event: HookEvent) -> list[CarriedNote]:
+    """Restore Vibe notes without consuming them before rendered delivery."""
+    if event.harness != "vibe":
+        return []
+    from compchem_memory.hook.action_retrieval import restore_note
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        payloads = state.data.get("carried_action_notes")
+        payloads = payloads if isinstance(payloads, list) else []
+    carried = []
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+        note = restore_note(payload.get("note", {}), paths)
+        if note is None:
+            continue
+        tool = str(payload.get("tool") or "tool")
+        carried.append(CarriedNote(
+            id=str(payload.get("id") or ""),
+            text=f"After your earlier `{tool}` call: {note.text}",
+            call_id=payload.get("call_id"),
+            note=note,
+        ))
+    return carried
+
+
+def stash_carried_note(paths: ProjectPaths, event: HookEvent, note: ActionNote) -> None:
+    """Persist an undeliverable Vibe MCP note with its original reservation."""
+    import uuid
+    from compchem_memory.hook.action_retrieval import serialise_note
+    from compchem_memory.hook.state import SessionState
+
+    tool = event.tool.name if event.tool is not None else "tool"
+    call_id = event.tool.call_id if event.tool is not None else None
+    payload = {
+        "id": uuid.uuid4().hex, "tool": tool, "call_id": call_id,
+        "note": serialise_note(note),
+    }
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queued = state.data.get("carried_action_notes")
+        queued = queued if isinstance(queued, list) else []
+        state.data["carried_action_notes"] = [*queued, payload][-_VIBE_TURN_LIMIT:]
+
+
+def clear_carried_notes(paths: ProjectPaths, event: HookEvent, ids: list[str]) -> None:
+    """Remove only carried notes whose delivery was committed."""
+    from compchem_memory.hook.state import SessionState
+
+    selected = set(ids)
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queued = state.data.get("carried_action_notes")
+        if isinstance(queued, list):
+            state.data["carried_action_notes"] = [
+                item for item in queued
+                if not isinstance(item, dict) or item.get("id") not in selected
+            ]
 
 
 def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
+    if event.harness in {"claude", "vibe"}:
+        reply = event.assistant_text or _reply_for_turn(paths, event)
+        guard("background-critic", _schedule_background, paths, event, reply)
+        return Handled(HookResponse(), None)
     from compchem_memory.hook.action_retrieval import probe_application
     from compchem_memory.hook.critic import run_critic
 
@@ -287,66 +425,168 @@ def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
     return Handled(HookResponse(), None)
 
 
-def _defer_vibe_turn(paths: ProjectPaths, event: HookEvent) -> None:
-    """Persist one main Vibe turn for a later journal catch-up."""
-    if event.agent is not None or not event.turn_id:
-        return
-    from compchem_memory.hook.state import SessionState
+def _turn_key(event: HookEvent) -> str | None:
+    if not event.turn_id:
+        return None
+    agent_id = "main" if event.agent is None else event.agent.id
+    return f"{agent_id}--{event.turn_id}"
+
+
+def _schedule_background(paths: ProjectPaths, event: HookEvent, reply_text: str) -> bool:
+    """Persist and spawn one detached worker; never wait for its critic."""
+    key = _turn_key(event)
+    if key is None:
+        return False
+    from compchem_memory.atomic_io import atomic_write_text
+    from compchem_memory.hook.state import SessionState, private_mkdir
 
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
-        pending = state.data.get("vibe_pending_turns")
-        pending = [turn for turn in pending if isinstance(turn, str)] \
-            if isinstance(pending, list) else []
-        if event.turn_id in pending:
-            pending.remove(event.turn_id)
-        pending.append(event.turn_id)
-        state.data["vibe_pending_turns"] = pending[-_VIBE_TURN_LIMIT:]
-
-
-def _vibe_pending_turns(paths: ProjectPaths, event: HookEvent) -> list[str]:
-    """Read pending Vibe turns while holding the ledger lock only."""
-    from compchem_memory.hook.state import SessionState
-
-    with SessionState.open(paths.store, event.harness, event.session_id) as state:
-        pending = state.data.get("vibe_pending_turns")
-        return [turn for turn in pending if isinstance(turn, str)] \
-            if isinstance(pending, list) else []
-
-
-def _claim_vibe_turn(paths: ProjectPaths, event: HookEvent, turn_id: str) -> bool:
-    """Claim a Vibe turn once, releasing the lock before probe or critic calls."""
-    from compchem_memory.hook.state import SessionState
-
-    with SessionState.open(paths.store, event.harness, event.session_id) as state:
-        completed = state.data.get("vibe_completed_turns")
-        completed = completed if isinstance(completed, dict) else {}
-        if turn_id in completed:
+        ledger = state.data.get("background_turns")
+        ledger = ledger if isinstance(ledger, dict) else {}
+        current = ledger.get(key)
+        current = current if isinstance(current, dict) else {}
+        if current.get("status") == "done":
             return False
-        completed[turn_id] = True
-        state.data["vibe_completed_turns"] = dict(
-            list(completed.items())[-_VIBE_TURN_LIMIT:]
+        if current.get("status") == "running" and (
+            time.time() - float(current.get("started", time.time())) < _WORKER_LEASE_SECONDS
+        ):
+            return False
+        attempts = int(current.get("attempts", 0)) + 1
+        if attempts > _CATCHUP_ATTEMPT_LIMIT:
+            return False
+        ledger[key] = {"status": "running", "attempts": attempts, "started": time.time()}
+        state.data["background_turns"] = dict(list(ledger.items())[-_VIBE_TURN_LIMIT:])
+    folder = paths.store / "hook-workers"
+    private_mkdir(folder)
+    job_path = folder / f"{key}-{attempts}.json"
+    payload = {
+        "root": str(paths.root), "project_dir": str(paths.project_dir),
+        "store": str(paths.store), "name": paths.name, "root_mode": paths.root_mode,
+        "harness": event.harness, "session_id": event.session_id,
+        "agent_id": None if event.agent is None else event.agent.id,
+        "turn_id": event.turn_id, "reply_text": reply_text, "key": key,
+    }
+    atomic_write_text(job_path, json.dumps(payload, ensure_ascii=False))
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "compchem_memory.hook.background", str(job_path)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
-        pending = state.data.get("vibe_pending_turns")
-        if isinstance(pending, list):
-            state.data["vibe_pending_turns"] = [turn for turn in pending if turn != turn_id]
         return True
+    except Exception as error:  # noqa: BLE001 - caller remains fail-open
+        with SessionState.open(paths.store, event.harness, event.session_id) as state:
+            ledger = state.data.get("background_turns")
+            if isinstance(ledger, dict) and isinstance(ledger.get(key), dict):
+                ledger[key]["status"] = "failed"
+        from compchem_memory.hook.errors import log_error
+
+        log_error(error, event.harness, event.event, paths.store, {}, "catch-up-worker")
+        return False
 
 
-def _catch_up_vibe_turns(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> None:
-    """Recover committed Vibe replies, then probe and judge each turn once."""
-    if event.agent is not None or not event.transcript_ref:
+def _defer_turn(paths: ProjectPaths, event: HookEvent) -> None:
+    """Persist one client-journal turn for bounded later recovery."""
+    if not event.transcript_ref:
         return
-    for turn_id in _vibe_pending_turns(paths, event):
+    from compchem_memory.hook.state import SessionState
+
+    agent_id = None if event.agent is None else event.agent.id
+    identifier = f"{agent_id or 'main'}--{event.turn_id or event.transcript_ref}"
+    item = {
+        "id": identifier, "turn_id": event.turn_id, "transcript_ref": event.transcript_ref,
+        "agent_id": agent_id, "agent_type": None if event.agent is None else event.agent.type,
+        "created": time.time(), "attempts": 0,
+    }
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        pending = state.data.get("catchup_pending")
+        pending = [row for row in pending if isinstance(row, dict)] \
+            if isinstance(pending, list) else []
+        pending = [row for row in pending if row.get("id") != identifier]
+        state.data["catchup_pending"] = [*pending, item][-_VIBE_TURN_LIMIT:]
+
+
+def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
+    """Return pending rows after pruning completed and expired work."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        pending = state.data.get("catchup_pending")
+        pending = [row for row in pending if isinstance(row, dict)] \
+            if isinstance(pending, list) else []
+        ledger = state.data.get("background_turns")
+        ledger = ledger if isinstance(ledger, dict) else {}
+        now = time.time()
+        kept = []
+        for row in pending:
+            turn_id = row.get("turn_id")
+            agent_id = row.get("agent_id") or "main"
+            key = f"{agent_id}--{turn_id}" if turn_id else None
+            status = ledger.get(key, {}).get("status") if key and isinstance(ledger.get(key), dict) else None
+            expired = now - float(row.get("created", now)) >= _CATCHUP_MAX_AGE_SECONDS
+            exhausted = int(row.get("attempts", 0)) >= _CATCHUP_ATTEMPT_LIMIT
+            if status == "done" or expired or exhausted:
+                continue
+            kept.append(row)
+        state.data["catchup_pending"] = kept
+        return kept
+
+
+def _update_pending(paths: ProjectPaths, event: HookEvent, item: dict, *, turn_id: str | None) -> None:
+    """Increment one recovery attempt and retain its resolved turn id."""
+    from compchem_memory.hook.state import SessionState
+
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        pending = state.data.get("catchup_pending")
+        if not isinstance(pending, list):
+            return
+        for row in pending:
+            if isinstance(row, dict) and row.get("id") == item.get("id"):
+                row["attempts"] = int(row.get("attempts", 0)) + 1
+                row["turn_id"] = turn_id
+                break
+
+
+def _reply_for_turn(paths: ProjectPaths, event: HookEvent) -> str:
+    """Return the last recovered assistant block for one agent and turn."""
+    from compchem_memory.hook.transcript import read_turns, transcript_path
+
+    agent_id = None if event.agent is None else event.agent.id
+    replies = []
+    for row in read_turns(transcript_path(paths.store, event.harness, event.session_id)):
+        row_agent = row.get("agent")
+        row_agent_id = row_agent.get("id") if isinstance(row_agent, dict) else None
+        if row.get("kind") == "assistant" and row.get("turn_id") == event.turn_id \
+                and row_agent_id == agent_id:
+            replies.append(str(row.get("text") or ""))
+    return replies[-1] if replies else ""
+
+
+def _catch_up_pending(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> None:
+    """Recover at most two client journals and detach their expensive work."""
+    if event.agent is not None:
+        return
+    from compchem_memory.hook.client_transcripts import latest_vibe_assistant_turn
+
+    for item in _pending_turns(paths, event)[:_CATCHUP_JOURNAL_LIMIT]:
+        turn_id = item.get("turn_id")
+        agent_id = item.get("agent_id")
+        transcript_ref = item.get("transcript_ref")
+        if not turn_id and event.harness == "vibe":
+            turn_id = latest_vibe_assistant_turn(str(transcript_ref), agent_id=agent_id)
+        agent = AgentRef(str(agent_id), item.get("agent_type")) if agent_id else None
         catch_up = replace(
-            event, event="turn-end", turn_id=turn_id, agent=None, assistant_text=None,
+            event, event="turn-end", turn_id=turn_id, agent=agent, assistant_text=None,
+            transcript_ref=str(transcript_ref),
         )
         recovered = guard(
             "client-transcript", _recover_assistant_transcript,
             paths, catch_up, default=False,
         )
-        if not recovered or not _claim_vibe_turn(paths, event, turn_id):
+        _update_pending(paths, event, item, turn_id=turn_id)
+        if not recovered or not turn_id:
             continue
-        _turn_end(paths, catch_up, guard)
+        _schedule_background(paths, catch_up, _reply_for_turn(paths, catch_up))
 
 
 def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
@@ -375,7 +615,8 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
     completion_event = event.event in {"turn-end", "agent-end"}
     if completion_event and not event.turn_id:
         turn_id = guard("turn-id", _last_prompt_turn, paths, event, default=None)
-        if not turn_id and event.harness == "vibe" and event.transcript_ref:
+        if not turn_id and event.harness == "vibe" and event.transcript_ref \
+                and event.agent is None:
             from compchem_memory.hook.client_transcripts import latest_vibe_assistant_turn
 
             agent_id = None if event.agent is None else event.agent.id
@@ -397,18 +638,22 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":
         if event.harness == "vibe" and event.agent is None:
-            _catch_up_vibe_turns(paths, event, guard)
+            guard("catch-up", _catch_up_pending, paths, event, guard)
         handled = _prompt(paths, event, env, guard)
     elif event.event == "post-tool":
         handled = _post_tool(paths, event, deadline, guard)
     elif completion_event:
-        if event.harness == "vibe":
-            guard("vibe-turn-ledger", _defer_vibe_turn, paths, event)
+        if event.harness == "vibe" or (event.harness == "claude" and event.event == "agent-end"):
+            guard("catch-up-ledger", _defer_turn, paths, event)
             handled = Handled(HookResponse(), None)
         else:
+            if event.harness == "claude":
+                guard("catch-up-ledger", _defer_turn, paths, event)
             handled = _turn_end(paths, event, guard)
-    elif event.event == "session-end" and event.harness == "vibe":
-        _catch_up_vibe_turns(paths, event, guard)
+        if event.harness == "claude" and event.event == "turn-end":
+            guard("catch-up", _catch_up_pending, paths, event, guard)
+    elif event.event == "session-end" and event.harness in {"vibe", "claude"}:
+        guard("catch-up", _catch_up_pending, paths, event, guard)
         handled = Handled(HookResponse(), None)
     else:
         handled = Handled(HookResponse(), None)

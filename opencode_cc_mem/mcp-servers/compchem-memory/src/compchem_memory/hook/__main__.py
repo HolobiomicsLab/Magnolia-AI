@@ -25,13 +25,32 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
     An action note that was not emitted spends no budget and is logged with
     ``injected: 0``; notices that were not emitted stay queued for the next event.
     """
-    if getattr(handled, "pending", None) is not None:
+    pending = getattr(handled, "pending", None)
+    is_vibe_mcp = (
+        event.harness == "vibe" and event.event == "post-tool"
+        and event.tool is not None and event.tool.raw_name.startswith("mcp_")
+        and "." in event.tool.raw_name.removeprefix("mcp_")
+    )
+    if pending is not None:
         from compchem_memory.hook.action_retrieval import commit_exposure, discard_note
 
         if "tool_note" in rendered.emitted:
-            commit_exposure(handled.pending, event.session_id)
+            commit_exposure(pending, event.session_id)
+        elif is_vibe_mcp and handled.paths is not None:
+            from compchem_memory.hook.dispatch import stash_carried_note
+
+            stash_carried_note(handled.paths, event, pending)
         else:
-            discard_note(handled.pending)
+            discard_note(pending)
+    carried = getattr(handled, "carried", [])
+    carried_field = getattr(handled, "carried_field", None)
+    if carried and carried_field in rendered.emitted and handled.paths is not None:
+        from compchem_memory.hook.action_retrieval import commit_exposure
+        from compchem_memory.hook.dispatch import clear_carried_notes
+
+        for item in carried:
+            commit_exposure(item.note, event.session_id)
+        clear_carried_notes(handled.paths, event, [item.id for item in carried])
     notices = getattr(handled, "notices", None)
     paths = getattr(handled, "paths", None)
     if notices is not None:
@@ -43,6 +62,16 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
             from compchem_memory.hook.notices import release_notices
 
             release_notices(notices)
+    if paths is not None:
+        from compchem_memory.hook.transcript import append_injected
+
+        for injection in getattr(handled, "injections", []):
+            if injection.field not in rendered.emitted:
+                continue
+            append_injected(
+                paths.store, event, channel=injection.channel, text=injection.text,
+                entry_ids=injection.entry_ids, tool_call_id=injection.tool_call_id,
+            )
 
 
 def _release_unsettled(handled: Any) -> None:
@@ -171,7 +200,21 @@ def _render_policy_block(
         _write_rendered(rendered, None, event, env)
     except Exception as error:  # noqa: BLE001 - preserve the rendered denial exit code
         _log_error(error, event.harness, event.event, event, env)
+    _record_denied(event, response.block.reason, env)
     return rendered.exit_code
+
+
+def _record_denied(event: Any, reason: str, env: Mapping[str, str]) -> None:
+    """Record policy evidence only after the client received the denial."""
+    store = _bound_store(event, env)
+    if store is None:
+        return
+    try:
+        from compchem_memory.hook.transcript import append_denied
+
+        append_denied(store, event, reason)
+    except Exception as error:  # noqa: BLE001 - denial already reached the client
+        _log_error(error, event.harness, event.event, event, env)
 
 
 def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
