@@ -57,6 +57,10 @@ _VALID_RID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")   # wait_for rid: path-safe 
 _TERMINAL_RUN_STATUSES = frozenset(
     {"success", "completed", "pass", "fail", "failed", "error", "cancelled"})
 _TICKET_RE = re.compile(r"^ticket:[ \t]*idea[ \t]*$", re.I | re.M)
+# Optional always-on runtime metadata. Without this header the lane keeps its
+# historical single-session behavior; with it, sessions are isolated per thread.
+_SESSION_KEY_RE = re.compile(
+    r"^session-key:[ \t]*([A-Za-z0-9_.:-]{1,128})[ \t]*$", re.I | re.M)
 _TRAILER_STATUS_RE = re.compile(
     r"^[ \t]*ticket-status:[ \t]*([a-z_-]+)[ \t]*$", re.I | re.M)
 _TRAILER_PARK_RE = re.compile(
@@ -139,6 +143,17 @@ def get_status(text: str) -> str | None:
 
 def is_open_task(text: str) -> bool:
     return get_status(text) == "open"
+
+
+def get_session_key(text: str) -> str | None:
+    """Optional per-thread session key from the letter header.
+
+    Legacy letters have no key and therefore retain the original one-session-
+    per-lane behavior. Keys are data, never paths or session ids supplied by a
+    model; the daemon maps them to OpenCode session ids in its own state file.
+    """
+    m = _SESSION_KEY_RE.search(_header_window(text))
+    return m.group(1) if m else None
 
 
 def is_deferred_task(text: str) -> str | None:
@@ -435,8 +450,28 @@ def _ensure_tools_daemon(root: str, env: dict) -> None:
         pass
 
 
+def _get_lane_session(state: dict, agent: str, session_key: str | None) -> str | None:
+    lane = (state.get("lanes", {}).get(agent) or {})
+    if session_key:
+        return (lane.get("sessions", {}) or {}).get(session_key)
+    return lane.get("session_id")
+
+
+def _set_lane_session(root: str, agent: str, session_key: str | None,
+                      session_id: str | None) -> None:
+    """Persist a session id without clobbering concurrent lane updates."""
+    state = load_state(root)
+    lane = state.setdefault("lanes", {}).setdefault(agent, {})
+    if session_key:
+        lane.setdefault("sessions", {})[session_key] = session_id
+    else:
+        lane["session_id"] = session_id
+    save_state(root, state)
+
+
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
-                   timeout_s: int, model: str | None = None) -> str:
+                   timeout_s: int, model: str | None = None,
+                   session_key: str | None = None) -> str:
     """Real headless run with the answer gate. Separate function so tests
     can stub it.
 
@@ -458,7 +493,11 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     Default deepseek/deepseek-flash = DeepSeek-V4.1-Flash on the official
     api.deepseek.com (verified live 2026-09-29); needs DEEPSEEK_API_KEY in
     the launcher env. Chosen after glm-5.3-flash ended its turn after one
-    60-char message without doing the task (2026-09-29 letter test)."""
+    60-char message without doing the task (2026-09-29 letter test).
+
+    session_key is opt-in always-on metadata. None preserves the legacy
+    state["lanes"][agent]["session_id"]; a key uses the independent
+    state["lanes"][agent]["sessions"][key] slot instead."""
     model = model or os.environ.get("MAGNOLIA_AGENTS_MODEL",
                                     "deepseek/deepseek-flash")
     env = dict(os.environ)
@@ -474,12 +513,10 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
             str(Path.home() / ".local/share/opencode/opencode-v2.db"))
     _render_project_config(root, agent)
     _ensure_tools_daemon(root, env)
-    # Lane session: the lane keeps ONE session across letters — each letter
-    # resumes it (`opencode run --session`), so the lane retains its ticket
-    # history. First letter starts a fresh session; the resulting session id
-    # is stored for the next letter.
+    # Legacy letters resume the lane's one session. Always-on letters may name
+    # a thread key, which gets an independent session slot in the same file.
     state = load_state(root)
-    lane_sid = (state.get("lanes", {}).get(agent) or {}).get("session_id")
+    lane_sid = _get_lane_session(state, agent, session_key)
     try:
         runs_dir(root).mkdir(parents=True, exist_ok=True)
         run_log = runs_dir(root) / (f"{datetime.now(timezone.utc):%Y%m%d_%H%M%S}_"
@@ -496,10 +533,8 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
         parsed = _run_once(model, project_dir, env, timeout_s, args, run_log,
                            binary=_opencode_bin())
         if parsed.get("session_id"):
-            # Lane session persistence: resume next letter in the same session.
-            st = load_state(root)
-            st.setdefault("lanes", {}).setdefault(agent, {})["session_id"] = parsed["session_id"]
-            save_state(root, st)
+            # Resume the next letter in this lane or thread session.
+            _set_lane_session(root, agent, session_key, parsed["session_id"])
         marker = is_final_answer(parsed["final_text"])
         log_line(root, f"[{agent}] attempt {attempt} rc={parsed['rc']} "
                        f"tools={parsed['n_tools']} "
@@ -512,9 +547,7 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                 # retry the SAME letter in a fresh session.
                 healed = True
                 try:
-                    st = load_state(root)
-                    st.setdefault("lanes", {}).setdefault(agent, {})["session_id"] = None
-                    save_state(root, st)
+                    _set_lane_session(root, agent, session_key, None)
                 except Exception:
                     pass
                 log_line(root, f"[{agent}] resume failed rc={parsed['rc']} — "
@@ -560,12 +593,18 @@ def handle_task(task_file: Path, agent: str, root: str,
     )
     status = "done"
     body = ""
-    # Per-lane model (agent.json `model`): forwarded to the runner only when
-    # set, so injected test runners with the 5-arg signature keep working.
+    # Optional kwargs are forwarded only when present, so existing five-arg
+    # runners and legacy letters keep exactly the old call shape.
     lane_model = (lane_cfg or {}).get("model") or None
+    session_key = get_session_key(text)
+    runner_kwargs = {}
+    if lane_model:
+        runner_kwargs["model"] = lane_model
+    if session_key:
+        runner_kwargs["session_key"] = session_key
     try:
         body = runner(agent, project_dir, root, prompt, timeout_s,
-                      **({"model": lane_model} if lane_model else {}))
+                      **runner_kwargs)
         # The agent printed the answer (stdout IS the reply); always
         # overwrite so a re-run never leaves a stale earlier reply.
         write_reply(task_file, agent, body)

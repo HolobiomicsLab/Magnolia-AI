@@ -286,6 +286,12 @@ class ControlEngine:
         run already exists, its result is finalized instead of duplicated.
         """
         wi = self._get_work_item(work_item_id)
+        # Adapters may reject a misrouted Work Item, but must do so before an
+        # assignment, Effect, or RUNNING transition makes that rejection look
+        # like an interrupted real execution.
+        validate = getattr(self.adapter, "validate", None)
+        if validate is not None:
+            validate(wi)
         if wi["state"] == WorkItemState.COMPLETED:
             effect = self.store.find_one(
                 "effects",

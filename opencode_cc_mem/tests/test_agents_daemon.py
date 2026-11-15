@@ -577,3 +577,59 @@ def test_lane_session_persisted_after_run(tmp_path, monkeypatch):
     # second letter resumes the same session
     out2 = d.default_runner("literature", str(tmp_path), root, "next letter", 60)
     assert calls[-1][:2] == ["--session", "ses_lane1"]
+
+
+def test_always_on_session_key_forwarded_only_when_present(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    legacy = _task(inbox, "legacy.task.md")
+    keyed = _task(inbox, "keyed.task.md")
+    keyed.write_text("status: open\nsession-key: thread-a\n\n## Request\nKeyed.\n")
+    seen = []
+
+    def runner(agent, project_dir, root_, prompt, timeout_s, **kw):
+        seen.append(kw)
+        return "FINAL ANSWER: ok"
+
+    d.handle_task(legacy, "literature", root, runner=runner)
+    d.handle_task(keyed, "literature", root, runner=runner)
+    assert seen == [{}, {"session_key": "thread-a"}]
+
+
+def test_session_key_must_be_in_header(tmp_path):
+    assert d.get_session_key("status: open\nsession-key: thread-a\n") == "thread-a"
+    body_mention = "status: open\n\n" + ("\n" * 20) + "session-key: not-state\n"
+    assert d.get_session_key(body_mention) is None
+
+
+def test_thread_sessions_are_independent_and_legacy_is_unchanged(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True})
+    calls = []
+    serial = iter(range(1, 10))
+
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log,
+                      binary="opencode"):
+        calls.append(list(extra_args))
+        sid = f"ses_{next(serial)}"
+        return {"session_id": sid, "final_text": "FINAL ANSWER: ok",
+                "all_text": "x", "n_tools": 0, "rc": 0, "stderr_tail": ""}
+
+    monkeypatch.setattr(d, "_run_once", fake_run_once)
+    d.default_runner("literature", str(tmp_path), root, "legacy", 60)
+    d.default_runner("literature", str(tmp_path), root, "thread A1", 60,
+                     session_key="thread-a")
+    d.default_runner("literature", str(tmp_path), root, "thread B1", 60,
+                     session_key="thread-b")
+    d.default_runner("literature", str(tmp_path), root, "thread A2", 60,
+                     session_key="thread-a")
+    d.default_runner("literature", str(tmp_path), root, "legacy 2", 60)
+
+    assert calls[0] == ["legacy"]
+    assert calls[1] == ["thread A1"]
+    assert calls[2] == ["thread B1"]
+    assert calls[3][:2] == ["--session", "ses_2"]
+    assert calls[4][:2] == ["--session", "ses_1"]
+    state = d.load_state(root)["lanes"]["literature"]
+    assert state["session_id"] == "ses_5"
+    assert state["sessions"] == {"thread-a": "ses_4", "thread-b": "ses_3"}
