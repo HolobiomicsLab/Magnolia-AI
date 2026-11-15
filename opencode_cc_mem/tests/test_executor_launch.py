@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -7,8 +8,13 @@ from pathlib import Path
 import pytest
 
 from campaign_runner.executors import ExecContext, ExecutorRefused
-from campaign_runner.launch import prepare_launch
+from campaign_runner.launch import configuration_identity, prepare_launch
 from campaign_runner.routing import ResolvedRoute
+from compchem_memory.harness import RENDERERS
+from compchem_memory.harness.neutral import NeutralConfig
+from compchem_memory.harness.protocol import LaunchContext
+from compchem_memory.hook.doorbell import process_prompt
+from compchem_memory.hook.project import ProjectPaths
 
 
 FORBIDDEN = {
@@ -17,25 +23,58 @@ FORBIDDEN = {
     "VIBE_HOME": "VIBE-HOME-SENTINEL",
     "CODEX_API_KEY": "CODEX-KEY-SENTINEL",
     "ANTHROPIC_API_KEY": "ANTHROPIC-KEY-SENTINEL",
+    "ANTHROPIC_AUTH_TOKEN": "ANTHROPIC-AUTH-SENTINEL",
 }
 ROOT = Path(__file__).parents[1]
+WORKER_CAPABILITIES = (
+    "native_read",
+    "native_glob",
+    "native_grep",
+    "native_edit",
+    "mcp:compchem-memory.memory_get_context",
+    "mcp:compchem-memory.memory_search",
+    "mcp:compchem-memory.memory_get_run_history",
+)
 
 
-def _context(tmp_path, *, client="claude-code", role="helper", invocation="one", **changes):
+def _context(
+    tmp_path,
+    *,
+    client="claude-code",
+    role="helper",
+    invocation="one",
+    model="selected-model",
+    **changes,
+):
     project = tmp_path / "project"
     run = tmp_path / "run"
     project.mkdir(exist_ok=True)
     (run / "control").mkdir(parents=True, exist_ok=True)
     (run / "work").mkdir(parents=True, exist_ok=True)
-    route = ResolvedRoute(client, "selected-model", "family", client, role, "test")
+    if client == "codex":
+        config_dir = project / ".codex"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.toml").write_text("model_provider = \"subscription\"\n")
+        (config_dir / "hooks.json").write_text('{"hooks": {}}\n')
+    if client == "vibe":
+        config_dir = project / ".vibe"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.toml").write_text("disabled_tools = []\n")
+        (config_dir / "hooks.toml").write_text("[[hooks]]\nname = \"fixture\"\n")
+    route = ResolvedRoute(client, model, "family", client, role, "test")
     capabilities = set(changes.pop("capabilities", ()))
     evidence = {
         "accepted": True,
         "trusted": True,
         "stale": False,
-        "identity": f"{client}-fixture-v1",
+        "identity": "pending",
         "discovery_dir": str(project.resolve()),
         "capabilities": sorted(capabilities),
+        "model_isolation": {
+            "accepted": True,
+            "model": model,
+            "identity": f"{client}-model-isolation-v1",
+        },
     }
     values = {
         "route": route,
@@ -57,7 +96,9 @@ def _context(tmp_path, *, client="claude-code", role="helper", invocation="one",
         "environment": {"PATH": os.environ.get("PATH", ""), **FORBIDDEN},
     }
     values.update(changes)
-    return ExecContext(**values)
+    context = ExecContext(**values)
+    evidence["identity"] = configuration_identity(context)
+    return context
 
 
 def _artifact_text(launch):
@@ -85,23 +126,60 @@ def test_required_role_env_wins(tmp_path):
     assert launch.env["MAGNOLIA_DOORBELL"] == "0"
 
 
+def test_member_oauth_and_openai_key_are_not_filtered(tmp_path):
+    context = _context(
+        tmp_path,
+        environment={
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            "OPENAI_API_KEY": "task-zero-verification-key",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["CLAUDE_CODE_OAUTH_TOKEN"] == "member-subscription-token"
+    assert launch.env["OPENAI_API_KEY"] == "task-zero-verification-key"
+
+
 def test_parallel_roles_and_interactive_render_do_not_cross_contaminate(tmp_path):
-    first = prepare_launch(_context(tmp_path, invocation="helper-1"))
+    first = prepare_launch(
+        _context(tmp_path, invocation="helper-1", model="helper-model")
+    )
     second = prepare_launch(
         _context(
             tmp_path,
             client="vibe",
             role="evaluator",
             invocation="evaluator-1",
+            model="evaluator-model",
         )
+    )
+    interactive_project = tmp_path / "interactive"
+    interactive = RENDERERS["claude"](
+        NeutralConfig([], frozenset({"bash"})),
+        LaunchContext(
+            root=ROOT,
+            project="interactive",
+            project_dir=interactive_project,
+            python=sys.executable,
+            tools_port=8123,
+            model="interactive-model",
+            setup={},
+        ),
     )
 
     assert first.invocation_dir != second.invocation_dir
     assert first.policy_digest != second.policy_digest
-    assert first.env["MAGNOLIA_MODEL"] == "selected-model"
+    assert first.env["MAGNOLIA_MODEL"] == "helper-model"
+    assert second.env["MAGNOLIA_MODEL"] == "evaluator-model"
     assert second.env["MAGNOLIA_ROLE"] == "evaluator"
     assert "helper" not in _artifact_text(second)
-    assert not (tmp_path / "project" / ".vibe" / "config.toml").exists()
+    assert interactive.argv[-2:] == ["--model", "interactive-model"]
+    assert "interactive-model" not in _artifact_text(first)
+    assert "interactive-model" not in _artifact_text(second)
+    assert (tmp_path / "project" / ".vibe" / "config.toml").read_text() == (
+        "disabled_tools = []\n"
+    )
 
 
 def test_resume_keeps_policy_identity(tmp_path):
@@ -114,14 +192,66 @@ def test_resume_keeps_policy_identity(tmp_path):
     assert resumed.required_capability_identity == first.required_capability_identity
 
 
+def test_resume_refuses_tampered_policy_even_with_rewritten_manifest(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+    policy_path = first.invocation_dir / "policy.json"
+    manifest_path = first.invocation_dir / "launch.json"
+    policy_path.chmod(0o644)
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    policy["deny_shell"] = False
+    policy_path.write_text(json.dumps(policy, sort_keys=True) + "\n", encoding="utf-8")
+    policy_path.chmod(0o444)
+    manifest_path.chmod(0o644)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    import hashlib
+
+    manifest["artifacts"]["policy.json"] = hashlib.sha256(
+        policy_path.read_bytes()
+    ).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_path.chmod(0o444)
+
+    with pytest.raises(ExecutorRefused, match="policy.json"):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
+def test_resume_refuses_copy_inside_work_tree(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+    copied = tmp_path / "run" / "work" / "copied-invocation"
+    shutil.copytree(first.invocation_dir, copied)
+
+    with pytest.raises(ExecutorRefused, match="control.*executors"):
+        prepare_launch(_context(tmp_path, resume_from=copied))
+
+
+def test_resume_refuses_other_project_identity(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+
+    with pytest.raises(ExecutorRefused, match="project_identity"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                resume_from=first.invocation_dir,
+                project_identity="other-project",
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("evidence_change", "message"),
-    (({}, "missing"), ({"stale": True}, "stale"), ({"trusted": False}, "untrusted")),
+    (
+        ({}, "missing"),
+        ({"stale": True}, "stale"),
+        ({"stale": None}, "stale"),
+        ({"trusted": False}, "untrusted"),
+    ),
 )
 def test_missing_stale_or_untrusted_launch_refused(tmp_path, evidence_change, message):
     context = _context(tmp_path)
     evidence = context.role_capabilities["claude-code"]["helper"]
-    if evidence_change:
+    if evidence_change == {"stale": None}:
+        evidence.pop("stale")
+    elif evidence_change:
         evidence.update(evidence_change)
     else:
         context = _context(tmp_path, role_capabilities={})
@@ -145,13 +275,83 @@ def test_effective_environment_and_artifacts_reject_sentinels(tmp_path, client):
     assert all(path.stat().st_mode & 0o222 == 0 for path in launch.files)
 
 
+@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+def test_inherited_forbidden_value_cannot_survive_under_other_name(
+    tmp_path, monkeypatch, name
+):
+    sentinel = FORBIDDEN[name]
+    monkeypatch.setenv(name, sentinel)
+    context = _context(
+        tmp_path,
+        environment=None,
+        renderer_env={"COPIED_VALUE": sentinel},
+    )
+
+    with pytest.raises(ExecutorRefused, match="forbidden client environment"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+def test_forbidden_value_in_argv_is_refused(tmp_path, name):
+    with pytest.raises(ExecutorRefused, match="forbidden client environment"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                launch_argv=("stub", "--credential", FORBIDDEN[name]),
+            )
+        )
+
+
+@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+def test_forbidden_value_in_resumed_artifact_is_refused(tmp_path, name):
+    first = prepare_launch(_context(tmp_path))
+    settings = first.invocation_dir / "settings.json"
+    settings.chmod(0o644)
+    settings.write_text(
+        json.dumps({"copied_value": FORBIDDEN[name]}) + "\n", encoding="utf-8"
+    )
+    settings.chmod(0o444)
+
+    with pytest.raises(ExecutorRefused):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
+def test_forbidden_path_value_is_not_matched_as_unrelated_path_prefix(tmp_path):
+    config_root = tmp_path / "project" / "config-root"
+    shared = config_root / "shared-skill.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("skill\n", encoding="utf-8")
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CONFIG_DIR": str(config_root),
+        },
+        shared_skill_files=(shared,),
+    )
+
+    launch = prepare_launch(context)
+
+    assert str(shared.resolve()) in _artifact_text(launch)
+
+
 def test_noninteractive_mention_writes_no_letter(tmp_path):
     context = _context(tmp_path, prompt="Please ask @literature for a source")
 
-    prepare_launch(context)
+    launch = prepare_launch(context)
+    project = tmp_path / "project"
+    result = process_prompt(
+        context.prompt,
+        ProjectPaths(tmp_path, project, project / ".magnolia", "project", False),
+        launch.env,
+    )
 
+    assert result.text == context.prompt
+    assert result.letters == []
     assert not list(tmp_path.rglob("*.letter.md"))
-    assert not list(tmp_path.rglob("agent-letters"))
+    assert not list(tmp_path.rglob("*.task.md"))
 
 
 def test_api_memory_route_survives_client_env_filter(tmp_path):
@@ -170,17 +370,47 @@ def test_api_memory_route_survives_client_env_filter(tmp_path):
         memory_service={
             "transport": "http",
             "url": "http://127.0.0.1:9876/mcp",
-            "authorization_env": "ANTHROPIC_API_KEY",
         },
     )
 
     launch = prepare_launch(context)
     mcp = json.loads((launch.invocation_dir / "mcp.json").read_text(encoding="utf-8"))
 
-    assert mcp["memory_service"]["url"] == "http://127.0.0.1:9876/mcp"
-    assert mcp["memory_service"]["authorization_env"] == "ANTHROPIC_API_KEY"
+    assert mcp["memory_service"] == {
+        "transport": "http",
+        "url": "http://127.0.0.1:9876/mcp",
+    }
+    assert mcp["memory_service"]["url"].startswith("http://127.0.0.1:")
     assert "ANTHROPIC_API_KEY" not in launch.env
     assert "ANTHROPIC-KEY-SENTINEL" not in _artifact_text(launch)
+
+
+def test_memory_role_without_route_is_refused(tmp_path):
+    with pytest.raises(ExecutorRefused, match="memory.*route"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={},
+            )
+        )
+
+
+def test_memory_route_depending_on_filtered_variable_is_refused(tmp_path):
+    with pytest.raises(ExecutorRefused, match="filtered.*ANTHROPIC_API_KEY"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={
+                    "transport": "stdio",
+                    "command": "/venv/bin/python",
+                    "env_vars": ["ANTHROPIC_API_KEY"],
+                },
+            )
+        )
 
 
 def test_memory_config_refuses_embedded_client_secret(tmp_path):
@@ -247,6 +477,161 @@ def test_helper_native_read_requires_proved_lane_root(tmp_path):
     assert policy["canonical_read_roots"][-1] == str(inbox.resolve())
 
 
+@pytest.mark.parametrize(
+    ("path_changes", "message"),
+    (
+        ({"work_dir": "run"}, "canonical run/work"),
+        ({"control_dir": "work-control"}, "canonical run/control"),
+    ),
+)
+def test_run_control_and_work_paths_are_canonical(
+    tmp_path, path_changes, message
+):
+    run = tmp_path / "run"
+    changes = {
+        key: run if value == "run" else run / "work" / "control"
+        for key, value in path_changes.items()
+    }
+
+    with pytest.raises(ExecutorRefused, match=message):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                **changes,
+            )
+        )
+
+
+@pytest.mark.parametrize("kind", ("directory", "home", "config-root", "outside"))
+def test_shared_rule_and_skill_entries_are_bounded_files(tmp_path, kind):
+    project = tmp_path / "project"
+    if kind == "directory":
+        shared = project
+    elif kind == "home":
+        shared = Path.home()
+    elif kind == "config-root":
+        shared = Path.home() / ".config"
+    else:
+        shared = tmp_path / "outside.md"
+        shared.write_text("outside\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match="shared.*file"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                shared_skill_files=(shared,),
+            )
+        )
+
+
+def test_shared_project_and_installation_files_are_allowed(tmp_path):
+    project_file = tmp_path / "project" / "rule.md"
+    project_file.parent.mkdir()
+    project_file.write_text("project rule\n", encoding="utf-8")
+    install_rule = ROOT / "rules" / "memory-setup.md"
+    install_skill = ROOT / ".opencode" / "skills" / "campaign-protocol" / "SKILL.md"
+
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            shared_rule_files=(project_file, install_rule),
+            shared_skill_files=(install_skill,),
+        )
+    )
+    policy = json.loads((launch.invocation_dir / "policy.json").read_text())
+
+    assert str(project_file.resolve()) in policy["canonical_read_roots"]
+    assert str(install_rule.resolve()) in policy["canonical_read_roots"]
+    assert str(install_skill.resolve()) in policy["canonical_read_roots"]
+
+
+def test_configured_cap_can_exceed_default_but_governor_clamps(tmp_path):
+    launch = prepare_launch(_context(tmp_path, role_cap=50, governor_cap=60))
+    clamped = prepare_launch(
+        _context(
+            tmp_path,
+            invocation="clamped",
+            role_cap=75,
+            governor_cap=60,
+        )
+    )
+
+    assert json.loads((launch.invocation_dir / "settings.json").read_text())[
+        "max_turns"
+    ] == 50
+    assert json.loads((clamped.invocation_dir / "settings.json").read_text())[
+        "max_turns"
+    ] == 60
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_discovered_configuration_must_match_evidence_identity(tmp_path, client):
+    context = _context(tmp_path, client=client)
+    evidence = context.role_capabilities[client]["helper"]
+    evidence["identity"] = "wrong-configuration-digest"
+
+    with pytest.raises(ExecutorRefused, match="configuration identity"):
+        prepare_launch(context)
+
+
+def test_project_configuration_change_invalidates_evidence(tmp_path):
+    context = _context(tmp_path, client="codex")
+    hooks = tmp_path / "project" / ".codex" / "hooks.json"
+    hooks.write_text('{"hooks": {"changed": true}}\n', encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match="configuration identity"):
+        prepare_launch(context)
+
+
+def test_selected_model_requires_isolation_evidence(tmp_path):
+    context = _context(tmp_path)
+    evidence = context.role_capabilities["claude-code"]["helper"]
+    evidence.pop("model_isolation")
+
+    with pytest.raises(ExecutorRefused, match="model isolation"):
+        prepare_launch(context)
+
+
+def test_native_default_drops_inherited_model_binding(tmp_path):
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            model=None,
+            environment={"PATH": "/bin", "MAGNOLIA_MODEL": "interactive-model"},
+            renderer_env={"MAGNOLIA_MODEL": "renderer-model"},
+        )
+    )
+
+    assert "MAGNOLIA_MODEL" not in launch.env
+
+
+def test_explicit_empty_environment_remains_empty(tmp_path):
+    launch = prepare_launch(_context(tmp_path, model=None, environment={}))
+
+    assert "HOME" not in launch.env
+    assert "PATH" not in launch.env
+
+
+def test_invocation_mkdir_race_is_executor_refusal(tmp_path, monkeypatch):
+    original_mkdir = Path.mkdir
+
+    def racing_mkdir(path, *args, **kwargs):
+        if path.name == "race":
+            raise FileExistsError(path)
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+
+    with pytest.raises(ExecutorRefused, match="already exists"):
+        prepare_launch(_context(tmp_path, invocation="race"))
+
+
 @pytest.mark.parametrize("entrypoint", ("magnolia-campaign", "magnolia-agents-daemon"))
 def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entrypoint):
     env = {
@@ -255,8 +640,19 @@ def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entry
         "MAGNOLIA_CAMPAIGN_NO_REEXEC": "1",
     }
 
+    script = ROOT / "softwares" / "bin" / entrypoint
+    probe = (
+        "import runpy,sys; "
+        f"sys.argv=[{str(script)!r},'--help']; "
+        "\ntry: runpy.run_path(sys.argv[0], run_name='__main__')"
+        "\nexcept SystemExit as exc:\n assert exc.code in (0, None)"
+        "\nmodule=sys.modules.get('campaign_runner.launch')"
+        "\nassert module is not None"
+        "\nprint('LAUNCH_MODULE=' + module.__file__)"
+    )
+
     result = subprocess.run(
-        [sys.executable, str(ROOT / "softwares" / "bin" / entrypoint), "--help"],
+        [sys.executable, "-c", probe],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -267,3 +663,7 @@ def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entry
 
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout.lower()
+    module_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("LAUNCH_MODULE=")
+    )
+    assert Path(module_line.split("=", 1)[1]).is_relative_to(ROOT)

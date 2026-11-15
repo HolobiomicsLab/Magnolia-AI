@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -29,7 +29,9 @@ class RolePolicy:
     mcp_tool_allowlist: tuple[str, ...]
     delegation_policy: str
     default_cap: int
-    opencode_markdown: str | None = field(default=None, repr=False, compare=False)
+    opencode_description: str | None = None
+    opencode_mode: str | None = None
+    opencode_prose: str | None = None
 
 
 def load_role(role: str, config_dir: Path = CONFIG_DIR) -> RolePolicy:
@@ -52,7 +54,9 @@ def load_role(role: str, config_dir: Path = CONFIG_DIR) -> RolePolicy:
         mcp_tool_allowlist=_strings(value, "mcp_tool_allowlist", path),
         delegation_policy=_text(value, "delegation_policy", path),
         default_cap=_positive_int(value, "default_cap", path),
-        opencode_markdown=_optional_text(value.get("opencode_markdown"), path),
+        opencode_description=_optional_text(value.get("opencode_description"), path),
+        opencode_mode=_optional_text(value.get("opencode_mode"), path),
+        opencode_prose=_optional_text(value.get("opencode_prose"), path),
     )
     if policy.role != role:
         raise ValueError(f"role policy name mismatch in {path}: {policy.role!r}")
@@ -67,13 +71,84 @@ def load_policies(config_dir: Path = CONFIG_DIR) -> dict[str, RolePolicy]:
 
 
 def render_opencode(role: str, config_dir: Path = CONFIG_DIR) -> bytes:
-    """Render a frozen OpenCode campaign agent byte-for-byte."""
+    """Generate an OpenCode campaign agent from its neutral role fields."""
     if role not in OPENCODE_ROLES:
         raise ValueError(f"no OpenCode compatibility target for role: {role}")
-    body = load_role(role, config_dir).opencode_markdown
-    if body is None:
-        raise ValueError(f"missing OpenCode compatibility body for role: {role}")
-    return body.encode("utf-8")
+    policy = load_role(role, config_dir)
+    if not all(
+        (policy.opencode_description, policy.opencode_mode, policy.opencode_prose)
+    ):
+        raise ValueError(f"missing OpenCode compatibility fields for role: {role}")
+    lines = [
+        "---",
+        f"description: {policy.opencode_description}",
+        f"mode: {policy.opencode_mode}",
+        f"steps: {policy.default_cap}",
+        "permissions:",
+    ]
+    for action, resource, effect in _opencode_permissions(policy):
+        lines.extend(
+            (
+                f'  - action: "{action}"' if action == "*" else f"  - action: {action}",
+                f'    resource: "{resource}"',
+                f"    effect: {effect}",
+            )
+        )
+    lines.extend(("---", "", policy.opencode_prose.rstrip(), ""))
+    return "\n".join(lines).encode("utf-8")
+
+
+def _opencode_permissions(policy: RolePolicy) -> list[tuple[str, str, str]]:
+    """Translate neutral role capabilities to the frozen OpenCode schema."""
+    permissions = [("*", "*", "deny")]
+    capabilities = set(policy.allowed_native_capabilities)
+    if "native_read" in capabilities and policy.canonical_read_roots:
+        permissions.append(("read", "*", "allow"))
+    permissions.extend(
+        ("read", resource, "deny")
+        for resource in _opencode_read_denials(policy.read_deny_patterns)
+    )
+    for capability in ("native_glob", "native_grep"):
+        if capability in capabilities:
+            permissions.append((capability.removeprefix("native_"), "*", "allow"))
+    if "native_edit" in capabilities:
+        for root in policy.edit_roots:
+            permissions.extend(
+                ("edit", resource, "allow")
+                for resource in _opencode_edit_resources(root)
+            )
+    permissions.extend(
+        (_opencode_mcp_action(tool), "*", "allow")
+        for tool in policy.mcp_tool_allowlist
+    )
+    return permissions
+
+
+def _opencode_read_denials(patterns: tuple[str, ...]) -> tuple[str, ...]:
+    denials: list[str] = []
+    for pattern in patterns:
+        resource = "*.env*" if pattern in {"**/*.env*", "**/*.env*/**"} else pattern
+        if resource not in denials:
+            denials.append(resource)
+    return tuple(denials)
+
+
+def _opencode_edit_resources(root: str) -> tuple[str, ...]:
+    if root != "{work_dir}":
+        return (root,)
+    return (
+        "projects/*/runs/*/work/**",
+        "runs/*/work/**",
+        "work/**",
+    )
+
+
+def _opencode_mcp_action(tool: str) -> str:
+    prefix = "mcp:"
+    if not tool.startswith(prefix) or "." not in tool:
+        raise ValueError(f"invalid neutral MCP tool name: {tool}")
+    server, name = tool[len(prefix) :].split(".", 1)
+    return f"{server}_{name}"
 
 
 def write_opencode(target: Path, config_dir: Path = CONFIG_DIR) -> None:
@@ -120,7 +195,7 @@ def _optional_text(value: Any, path: Path) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"opencode_markdown must be text in {path}")
+        raise ValueError(f"OpenCode compatibility field must be text in {path}")
     return value
 
 

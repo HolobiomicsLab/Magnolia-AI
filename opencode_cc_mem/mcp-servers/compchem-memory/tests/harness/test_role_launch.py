@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_common import harness_dir, policy_files
@@ -52,3 +54,44 @@ def test_interactive_policy_location_and_environment_stay_compatible(make_render
     expected = context.project_dir / ".magnolia" / "harness" / "codex" / "policy.json"
     assert set(files) == {expected}
     assert env == {"MAGNOLIA_HOOK_POLICY": str(expected)}
+
+
+@pytest.mark.parametrize("missing", ("control", "invocation"))
+def test_noninteractive_policy_requires_run_owned_location(tmp_path, missing):
+    context = LaunchContext(
+        root=tmp_path,
+        project="project-id",
+        project_dir=tmp_path / "project",
+        python="/venv/bin/python",
+        tools_port=8123,
+        model=None,
+        setup={},
+        control_dir=None if missing == "control" else tmp_path / "run" / "control",
+        invocation_id=None if missing == "invocation" else "one",
+        noninteractive=True,
+    )
+
+    with pytest.raises(ValueError, match="control_dir and invocation_id"):
+        harness_dir(context, "claude")
+
+
+def test_role_policy_cannot_weaken_neutral_tool_denial(tmp_path):
+    context = LaunchContext(
+        root=tmp_path,
+        project="project-id",
+        project_dir=tmp_path / "project",
+        python="/venv/bin/python",
+        tools_port=8123,
+        model=None,
+        setup={},
+        control_dir=tmp_path / "run" / "control",
+        invocation_id="one",
+        noninteractive=True,
+        role_policy={"role": "helper", "deny_tools": []},
+    )
+
+    files, _ = policy_files(
+        NeutralConfig([], frozenset({"bash", "shell"})), context, "claude"
+    )
+
+    assert json.loads(next(iter(files.values())))["deny_tools"] == ["bash", "shell"]

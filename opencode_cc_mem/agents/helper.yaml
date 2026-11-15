@@ -1,6 +1,7 @@
 version: magnolia-role-v1
 role: helper
-canonical_read_roots: []
+canonical_read_roots:
+  - "{capability_read_roots}"
 read_deny_patterns:
   - "**/*.env*"
   - "**/*.env*/**"

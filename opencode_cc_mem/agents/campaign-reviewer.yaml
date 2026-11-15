@@ -17,35 +17,9 @@ allowed_native_capabilities:
 mcp_tool_allowlist: []
 delegation_policy: deny
 default_cap: 8
-opencode_markdown: |
-  ---
-  description: Reviews campaign artifacts without changing them
-  mode: primary
-  steps: 8
-  permissions:
-    - action: "*"
-      resource: "*"
-      effect: deny
-    - action: read
-      resource: "*"
-      effect: allow
-    - action: read
-      resource: "*.env*"
-      effect: deny
-    - action: read
-      resource: "**/.magnolia/campaign-service.json"
-      effect: deny
-    - action: read
-      resource: "**/.magnolia/campaign-service.log"
-      effect: deny
-    - action: glob
-      resource: "*"
-      effect: allow
-    - action: grep
-      resource: "*"
-      effect: allow
-  ---
-
+opencode_description: Reviews campaign artifacts without changing them
+opencode_mode: primary
+opencode_prose: |
   You are an independent campaign reviewer.
 
   Read raw artifacts before reading the worker report. Find unsupported claims,
