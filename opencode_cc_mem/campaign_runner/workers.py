@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
-from .executors.contracts import RunOutcome
+from .executors.contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .governor import Admission, AdmissionRequest, Governor, QuotaWaiting
+from .routing import ResolvedRoute
 
 from .process import ProcessControl, run_process
 from .security import redact_paths
@@ -31,6 +35,7 @@ class ParsedRun:
     all_text: str = ""
     tool_calls: int = 0
     usage: dict[str, float] = field(default_factory=dict)
+    usage_observed: bool = False
     parse_errors: int = 0
     errors: list[dict[str, Any]] = field(default_factory=list)
 
@@ -135,9 +140,22 @@ def parse_run_events(text: str) -> ParsedRun:
             parsed.tool_calls += 1
         elif part_type == "step-finish":
             _add_usage(parsed.usage, part)
+            parsed.usage_observed = True
     parsed.all_text = "\n".join(item for message in order for item in texts[message])
     parsed.final_text = "\n".join(texts[order[-1]]) if order else ""
     return parsed
+
+
+@dataclass(frozen=True)
+class InvocationGovernance:
+    """Opt-in governor inputs for each physical worker invocation."""
+
+    governor: Governor
+    route: ResolvedRoute
+    parent_run_id: str
+    project_digest: str
+    role_cap: int | None = None
+    session_identity: SessionIdentity | None = None
 
 
 @dataclass
@@ -151,6 +169,7 @@ class OpenCodeExecutor:
     timeout_seconds: int = 1800
     max_format_retries: int = 2
     max_steps: int | None = None
+    governance: InvocationGovernance | None = None
 
     def run(
         self,
@@ -199,23 +218,56 @@ class OpenCodeExecutor:
         returncode = 0
         timed_out = False
         stopped_reason: str | None = None
+        typed_outcome: RunOutcome | None = None
         current_prompt = prompt
         attempts = 0
+        usage_baseline: UsageRecord | None = None
         for attempt_index in range(retry_limit + 1):
-            attempts += 1
             argv = self._argv(current_prompt, session_id)
             stdout_path = attempt_dir / f"{stem}_{attempt_index + 1}.jsonl"
             stderr_path = attempt_dir / f"{stem}_{attempt_index + 1}.err.log"
-            try:
-                outcome = run_process(
-                    argv=argv,
-                    cwd=cwd,
-                    env=environment,
-                    timeout_seconds=self.timeout_seconds,
-                    stdout_path=stdout_path,
-                    stderr_path=stderr_path,
-                    control=control,
+            admission = self._admit_invocation(
+                attempt_index, stem, session_id, control
+            )
+            if isinstance(admission, QuotaWaiting):
+                typed_outcome = RunOutcome(
+                    "quota",
+                    LimitInfo(
+                        f"governor {admission.reason}",
+                        admission.reset_at,
+                        "usage governor",
+                    ),
                 )
+                stopped_reason = admission.reason
+                break
+            attempts += 1
+            invocation_control = _invocation_control(control, admission)
+            invocation_environment = environment
+            if admission is not None and admission.effective_cap is not None:
+                invocation_environment = _with_step_cap(
+                    environment, self.agent, admission.effective_cap
+                )
+            try:
+                with admission or _NoAdmission():
+                    outcome = run_process(
+                        argv=argv,
+                        cwd=cwd,
+                        env=invocation_environment,
+                        timeout_seconds=self.timeout_seconds,
+                        stdout_path=stdout_path,
+                        stderr_path=stderr_path,
+                        control=invocation_control,
+                    )
+                    parsed = parse_run_events(
+                        stdout_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                    usage_record, usage_baseline = self._usage_record(
+                        parsed,
+                        usage_baseline,
+                        admission,
+                    )
+                    if admission is not None:
+                        admission.release(usage=usage_record, outcome=outcome.outcome)
             except OSError as exc:
                 raise WorkerError(f"cannot start worker: {exc}") from exc
             stdout_paths.append(stdout_path)
@@ -224,16 +276,19 @@ class OpenCodeExecutor:
             returncode = outcome.returncode
             timed_out = outcome.timed_out
             stopped_reason = outcome.stopped_reason
-            parsed = parse_run_events(
-                stdout_path.read_text(encoding="utf-8", errors="replace")
-            )
+            typed_outcome = outcome.outcome
             if parsed.session_id:
                 session_id = parsed.session_id
             final_text = parsed.final_text
             all_text = parsed.all_text
             total_tool_calls += parsed.tool_calls
             errors.extend(parsed.errors)
-            _merge_usage(total_usage, parsed.usage)
+            if self.governance is None:
+                _merge_usage(total_usage, parsed.usage)
+            elif usage_record is not None:
+                _merge_usage_record(total_usage, usage_record)
+            if typed_outcome and typed_outcome.overrides_repair:
+                break
             if outcome.stopped_reason:
                 break
             if outcome.timed_out or outcome.returncode != 0:
@@ -260,7 +315,57 @@ class OpenCodeExecutor:
             stderr_paths=stderr_paths,
             stopped_reason=stopped_reason,
             errors=errors,
+            outcome=typed_outcome,
         )
+
+    def _admit_invocation(
+        self,
+        attempt_index: int,
+        stem: str,
+        session_id: str | None,
+        control: ProcessControl | None,
+    ) -> Admission | QuotaWaiting | None:
+        governance = self.governance
+        if governance is None:
+            return None
+        invocation_id = (
+            f"{governance.parent_run_id}:{stem}:{attempt_index + 1}:{uuid.uuid4().hex}"
+        )
+        identity = governance.session_identity
+        if identity is not None and session_id and identity.session_id != session_id:
+            identity = None
+        request = AdmissionRequest(
+            route=governance.route,
+            invocation_id=invocation_id,
+            parent_run_id=governance.parent_run_id,
+            project_digest=governance.project_digest,
+            run_kind=governance.route.role,
+            role_cap=governance.role_cap or self.max_steps,
+            session_identity=identity,
+        )
+        return governance.governor.admit(request, control)
+
+    def _usage_record(
+        self,
+        parsed: ParsedRun,
+        baseline: UsageRecord | None,
+        admission: Admission | None,
+    ) -> tuple[UsageRecord | None, UsageRecord | None]:
+        if admission is None or not parsed.usage_observed:
+            return None, baseline
+        raw = _raw_usage(parsed.usage)
+        absolute = UsageRecord.from_raw(raw)
+        record = UsageRecord.from_raw(
+            raw,
+            baseline=baseline,
+            session_identity=admission.request.session_identity,
+            invocation_id=admission.request.invocation_id,
+            parent_run_id=admission.request.parent_run_id,
+            subscription_key=admission.request.route.subscription_key,
+            run_kind=admission.request.run_kind,
+            project_digest=admission.request.project_digest,
+        )
+        return record, absolute
 
     def _argv(self, prompt: str, session_id: str | None) -> list[str]:
         argv = [
@@ -287,3 +392,86 @@ def _merge_usage(total: dict[str, float], item: Mapping[str, Any]) -> None:
         value = item.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             total[key] += float(value)
+
+
+def _merge_usage_record(total: dict[str, float], usage: UsageRecord) -> None:
+    values = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "reasoning_tokens": usage.reasoning_tokens,
+        "cache_read_tokens": usage.cached_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
+        "cost_usd": usage.cost,
+    }
+    _merge_usage(total, values)
+
+
+def _raw_usage(usage: Mapping[str, float]) -> dict[str, Any]:
+    return {
+        "schema_version": "opencode-usage-v1",
+        "tokens": {
+            "input": usage.get("input_tokens"),
+            "output": usage.get("output_tokens"),
+            "reasoning": usage.get("reasoning_tokens"),
+            "cache": {
+                "read": usage.get("cache_read_tokens"),
+                "write": usage.get("cache_write_tokens"),
+            },
+        },
+        "cost": usage.get("cost_usd"),
+    }
+
+
+def _with_step_cap(
+    environment: Mapping[str, str], agent: str, cap: int
+) -> dict[str, str]:
+    updated = dict(environment)
+    try:
+        config = json.loads(updated.get("OPENCODE_CONFIG_CONTENT", "{}"))
+    except json.JSONDecodeError:
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+    agents = config.setdefault("agents", {})
+    if not isinstance(agents, dict):
+        agents = {}
+        config["agents"] = agents
+    agent_config = agents.setdefault(agent, {})
+    if not isinstance(agent_config, dict):
+        agent_config = {}
+        agents[agent] = agent_config
+    agent_config["steps"] = cap
+    updated["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
+    return updated
+
+
+def _invocation_control(
+    control: ProcessControl | None, admission: Admission | None
+) -> ProcessControl | None:
+    if admission is None:
+        return control
+
+    def on_start(pid: int, pgid: int) -> None:
+        admission.mark_started(
+            pid=pid,
+            pgid=pgid,
+            process_start_token=f"{pid}:{time.time_ns()}",
+        )
+        if control and control.on_start:
+            control.on_start(pid, pgid)
+
+    return ProcessControl(
+        should_stop=control.should_stop if control else None,
+        on_start=on_start,
+        on_heartbeat=control.on_heartbeat if control else None,
+        observe=control.observe if control else None,
+        poll_interval=control.poll_interval if control else 0.2,
+    )
+
+
+class _NoAdmission:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
+        return False
