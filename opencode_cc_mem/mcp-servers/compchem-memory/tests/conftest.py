@@ -35,6 +35,11 @@ _LLM_ENV_VARS = (
     "KIMI_PLAN_MAGNOLIA_API_KEY",
     "KIMI_API_KEY",
     "KIMI_BASE_URL",
+    "MISTRAL_API_KEY",
+    "MISTRAL_BASE_URL",
+    "ZHIPU_API_KEY",
+    "ZAI_API_KEY",
+    "ZAI_BASE_URL",
 )
 
 # The magnolia wrapper exports a cwd-relative project pin ("projects/<name>").

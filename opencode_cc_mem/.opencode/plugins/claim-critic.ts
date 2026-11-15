@@ -14,6 +14,23 @@
  * Enable per-session by exporting MAGNOLIA_CRITIC=1 (the `magnolia --critic`
  * wrapper flag does this). Without it the plugin is a no-op.
  *
+ * JUDGE PROVIDER (2026-11-15). Resolution mirrors the memory client
+ * (compchem_memory/llm.py):
+ *   1. MAGNOLIA_CRITIC_PROVIDER — deepseek | openai | anthropic | kimi |
+ *      openrouter | mistral | zai;
+ *   2. otherwise the prefix of MAGNOLIA_CRITIC_MODEL (deepseek*, claude*,
+ *      gpt-, kimi, mistral, devstral and the other Mistral families, glm,
+ *      and vendor/model ids → openrouter);
+ *   3. otherwise the first key present, DeepSeek first (the historical
+ *      behaviour), then Anthropic, OpenAI, Kimi, OpenRouter, Mistral, Z.ai.
+ * MAGNOLIA_CRITIC_MODEL overrides the provider's default model,
+ * MAGNOLIA_CRITIC_API_KEY its key and MAGNOLIA_CRITIC_BASE_URL its endpoint
+ * (any OpenAI-compatible service through provider "openai"). The provider
+ * base-URL variables of the memory client (DEEPSEEK_BASE_URL, ZAI_BASE_URL, …)
+ * are honoured too. A judge from another model family than the main agent
+ * keeps the audit independent. Failed judge calls are appended to
+ * <claim-critic dir>/errors.jsonl so a misconfigured critic is visible.
+ *
  * Why a judge that sees the tool OUTPUTS (not just summaries): validated in
  * projects/probability_entropy/derisk_judge.py — with only summaries the judge
  * over-flags legitimate computed values; with the real outputs it cleanly passes
@@ -36,7 +53,6 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
-const JUDGE_MODEL = process.env.MAGNOLIA_CRITIC_MODEL || "deepseek-v4-flash"
 const MAX_OUTPUT_CHARS = 2000        // per-tool-output cap for most tools
 const MAX_OUTPUT_CHARS_OLD = 500    // tighter cap for older non-evidence tools
 const MAX_OUTPUT_CHARS_EVIDENCE = 0  // uncapped for tools that carry evidence (0 = no cap)
@@ -65,6 +81,66 @@ const SYSTEM =
   'Respond with strict JSON: {"flag": boolean, "severity": "none|low|high", ' +
   '"unsupported_claims": [string], "why": string}.'
 
+type Schema = "openai" | "anthropic"
+type ProviderSpec = { base: string; baseEnv: string; keys: string[]; model: string; schema: Schema }
+
+// Defaults match compchem_memory/llm.py so both background roles behave alike.
+const PROVIDERS: Record<string, ProviderSpec> = {
+  deepseek: { base: "https://api.deepseek.com/v1", baseEnv: "DEEPSEEK_BASE_URL", keys: ["DEEPSEEK_API_KEY"], model: "deepseek-flash", schema: "openai" },
+  anthropic: { base: "https://api.anthropic.com/v1", baseEnv: "ANTHROPIC_BASE_URL", keys: ["ANTHROPIC_API_KEY"], model: "claude-haiku-4-5-20251001", schema: "anthropic" },
+  openai: { base: "https://api.openai.com/v1", baseEnv: "OPENAI_BASE_URL", keys: ["OPENAI_API_KEY"], model: "gpt-4o-mini", schema: "openai" },
+  kimi: { base: "https://api.kimi.com/coding/v1", baseEnv: "KIMI_BASE_URL", keys: ["KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY"], model: "k3", schema: "anthropic" },
+  openrouter: { base: "https://openrouter.ai/api/v1", baseEnv: "OPENROUTER_BASE_URL", keys: ["OPENROUTER_API_KEY"], model: "deepseek/deepseek-v4.1-flash", schema: "openai" },
+  mistral: { base: "https://api.mistral.ai/v1", baseEnv: "MISTRAL_BASE_URL", keys: ["MISTRAL_API_KEY"], model: "mistral-small-latest", schema: "openai" },
+  zai: { base: "https://api.z.ai/api/paas/v4", baseEnv: "ZAI_BASE_URL", keys: ["ZHIPU_API_KEY", "ZAI_API_KEY"], model: "glm-5.3-flash", schema: "openai" },
+}
+const AUTODETECT_ORDER = ["deepseek", "anthropic", "openai", "kimi", "openrouter", "mistral", "zai"]
+const MODEL_PREFIXES: [string, string][] = [
+  ["deepseek", "deepseek"], ["claude", "anthropic"], ["gpt-", "openai"], ["o1", "openai"],
+  ["o3", "openai"], ["o4", "openai"], ["chatgpt", "openai"], ["kimi", "kimi"], ["k3", "kimi"],
+  ["moonshot", "kimi"], ["mistral", "mistral"], ["ministral", "mistral"], ["magistral", "mistral"],
+  ["devstral", "mistral"], ["codestral", "mistral"], ["pixtral", "mistral"],
+  ["open-mistral", "mistral"], ["glm", "zai"],
+]
+
+type JudgeRoute = { provider: string; model: string; url: string; key: string; schema: Schema }
+
+const env = (name: string): string => (process.env[name] ?? "").trim()
+const firstKey = (spec: ProviderSpec): string => spec.keys.map(env).find(Boolean) ?? ""
+
+function normaliseBase(raw: string): string {
+  const base = raw.replace(/\/+$/, "")
+  return /\/v\d+$/.test(base) ? base : `${base}/v1`
+}
+
+function resolveJudge(): JudgeRoute | null {
+  const requestedModel = env("MAGNOLIA_CRITIC_MODEL")
+  const explicit = env("MAGNOLIA_CRITIC_PROVIDER").toLowerCase()
+  let provider = PROVIDERS[explicit] ? explicit : ""
+  if (!provider && requestedModel) {
+    const m = requestedModel.toLowerCase()
+    if (m.includes("/")) provider = "openrouter"
+    else provider = MODEL_PREFIXES.find(([prefix]) => m.startsWith(prefix))?.[1] ?? ""
+  }
+  if (!provider) provider = AUTODETECT_ORDER.find((name) => firstKey(PROVIDERS[name])) ?? ""
+  if (!provider) return null
+  const spec = PROVIDERS[provider]
+  const key = env("MAGNOLIA_CRITIC_API_KEY") || firstKey(spec)
+  if (!key) return null
+  const rawBase = env("MAGNOLIA_CRITIC_BASE_URL") || env(spec.baseEnv)
+  const base = rawBase ? normaliseBase(rawBase) : spec.base
+  const path = spec.schema === "anthropic" ? "/messages" : "/chat/completions"
+  return { provider, model: requestedModel || spec.model, url: base + path, key, schema: spec.schema }
+}
+
+/** The verdict object inside a reply that may carry code fences or prose. */
+function parseVerdict(text: string): any {
+  const start = text.indexOf("{")
+  const end = text.lastIndexOf("}")
+  if (start < 0 || end <= start) throw new Error("judge reply has no JSON object")
+  return JSON.parse(text.slice(start, end + 1))
+}
+
 function criticDir(directory: string): string {
   // Project-root mode: cwd is the project store itself.
   if (
@@ -84,23 +160,59 @@ function criticDir(directory: string): string {
     : join(directory, ".magnolia", "claim-critic")
 }
 
-async function judge(apiKey: string, report: string, traceText: string): Promise<any> {
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: JUDGE_MODEL,
-      temperature: 0,
-      max_tokens: 500,
+async function judge(route: JudgeRoute, report: string, traceText: string): Promise<any> {
+  const user = `TOOL_TRACE:\n${traceText}\n\nREPORT:\n${report}\n\nReturn only the JSON.`
+  let headers: Record<string, string>
+  let body: any
+  if (route.schema === "anthropic") {
+    // Anthropic Messages schema (Anthropic, Kimi-for-Coding). Kimi accepts
+    // either auth header, Anthropic needs x-api-key.
+    headers = {
+      "Content-Type": "application/json",
+      "x-api-key": route.key,
+      "anthropic-version": "2023-06-01",
+      ...(route.provider === "kimi" ? { Authorization: `Bearer ${route.key}` } : {}),
+    }
+    body = {
+      model: route.model, max_tokens: 500, temperature: 0, system: SYSTEM,
+      messages: [{ role: "user", content: user }],
+      ...(route.provider === "kimi" ? { thinking: { type: "disabled" } } : {}),
+    }
+  } else {
+    headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${route.key}`,
+      ...(route.provider === "openrouter" ? { "HTTP-Referer": "https://magnolia.local", "X-Title": "Magnolia" } : {}),
+    }
+    body = {
+      model: route.model, temperature: 0, max_tokens: 500,
       response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `TOOL_TRACE:\n${traceText}\n\nREPORT:\n${report}\n\nReturn only the JSON.` },
-      ],
-    }),
-  })
+      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: user }],
+      // Reasoning models can spend the whole 500-token budget thinking and
+      // return empty content; DeepSeek and GLM accept this switch.
+      ...(route.provider === "deepseek" || route.provider === "zai" ? { thinking: { type: "disabled" } } : {}),
+    }
+  }
+  const res = await fetch(route.url, { method: "POST", headers, body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
   const data: any = await res.json()
-  return JSON.parse(data.choices[0].message.content)
+  const text = route.schema === "anthropic"
+    ? (data?.content ?? []).find((b: any) => b?.type === "text")?.text ?? ""
+    : data?.choices?.[0]?.message?.content ?? ""
+  return parseVerdict(String(text))
+}
+
+function logError(outDir: string, sessionID: string, route: JudgeRoute, err: unknown) {
+  try {
+    mkdirSync(outDir, { recursive: true })
+    const rec = {
+      ts: new Date().toISOString(), sessionID, provider: route.provider, model: route.model,
+      error: String((err as any)?.message ?? err).slice(0, 300),
+    }
+    appendFileSync(join(outDir, "errors.jsonl"), JSON.stringify(rec) + "\n")
+  } catch {
+    /* never throw into opencode */
+  }
 }
 
 // Shape-tolerant accessors: v1 messages are {info:{role}, parts:[...]}; v2
@@ -110,11 +222,11 @@ const roleOf = (m: any): string => String(m?.info?.role ?? m?.role ?? "").toLowe
 const partsOf = (m: any): any[] => m?.parts ?? []
 
 async function auditSession(
-  msgs: any[], sessionID: string, outDir: string, apiKey: string,
+  msgs: any[], sessionID: string, outDir: string, route: JudgeRoute | null,
   toast: (title: string, message: string, variant?: string) => void,
 ) {
+  if (!route) return
   try {
-    if (!apiKey) return
     if (!Array.isArray(msgs) || msgs.length === 0) return
 
     // The current turn = everything after the last user message (for the report text).
@@ -159,14 +271,21 @@ async function auditSession(
     let traceText = JSON.stringify(traceItems, null, 1)
     if (traceText.length > MAX_TRACE_CHARS) traceText = traceText.slice(0, MAX_TRACE_CHARS) + "\n…(truncated)"
 
-    const verdict = await judge(apiKey, report, traceText)
+    let verdict: any
+    try {
+      verdict = await judge(route, report, traceText)
+    } catch (err) {
+      logError(outDir, sessionID, route, err)
+      return
+    }
 
     // Observe-only: log EVERY verdict (flagged or not) so we can measure precision later.
     mkdirSync(outDir, { recursive: true })
     const rec = {
       ts: new Date().toISOString(),
       sessionID,
-      model: JUDGE_MODEL,
+      provider: route.provider,
+      model: route.model,
       flag: !!verdict?.flag,
       severity: verdict?.severity ?? "none",
       unsupported_claims: verdict?.unsupported_claims ?? [],
@@ -191,7 +310,7 @@ export default {
   async setup(ctx: any) {
     if (!ENABLED) return
     if (!ctx?.event?.subscribe) return // v1.18.34 also calls setup() with a limited ctx — v1 runs server()
-    const apiKey = process.env.DEEPSEEK_API_KEY
+    const route = resolveJudge()
     const outDir = criticDir(ctx.location?.directory ?? process.cwd())
     const toast = (title: string, message: string, variant?: string) => {
       const t = (ctx as any)?.tui?.showToast
@@ -217,7 +336,7 @@ export default {
           // In-process capture (v2 exports lack assistant text + tool parts —
           // gate-1 finding): read messages through the session domain.
           const messages = await ctx.session.context({ sessionID: String(sid) }).catch(() => [])
-          await auditSession(messages ?? [], String(sid), outDir, apiKey, toast)
+          await auditSession(messages ?? [], String(sid), outDir, route, toast)
         }
       } catch {
         /* aborted or stream error — never break the session */
@@ -229,7 +348,7 @@ export default {
   /** opencode v1: original event hook + client.session.messages. */
   async server({ client, directory }: any) {
     if (!ENABLED) return {}
-    const apiKey = process.env.DEEPSEEK_API_KEY
+    const route = resolveJudge()
     const outDir = criticDir(directory)
     const toast = (title: string, message: string, variant?: string) => {
       client.tui.showToast({ body: { title, message, variant } }).catch(() => {})
@@ -242,7 +361,7 @@ export default {
           try {
             const resp: any = await client.session.messages({ path: { id: sid } })
             const msgs: any[] = resp?.data ?? resp ?? []
-            await auditSession(msgs, sid, outDir, apiKey, toast)
+            await auditSession(msgs, sid, outDir, route, toast)
           } catch {
             /* never throw into opencode */
           }

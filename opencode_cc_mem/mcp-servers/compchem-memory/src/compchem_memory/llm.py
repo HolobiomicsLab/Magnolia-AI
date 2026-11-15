@@ -1,4 +1,5 @@
-"""LLM integration: provider-aware (DeepSeek / Anthropic / OpenAI / Kimi).
+"""LLM integration: provider-aware (DeepSeek / Anthropic / OpenAI / Kimi /
+OpenRouter / Mistral / Z.ai).
 
 Magnolia uses the LLM for memory extraction, retrieval re-ranking,
 compaction, and (via the magnolia wrapper) GOAL.md scaffolding. Until
@@ -12,20 +13,24 @@ the heuristic fallback then flooded staging with content-free entries
 The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
 *derived from the model name* (step 2) and normally never configured.
 
-1. `MAGNOLIA_LLM_PROVIDER` (`deepseek`/`anthropic`/`openai`/`kimi`) —
+1. `MAGNOLIA_MEMORY_PROVIDER` (`deepseek`/`anthropic`/`openai`/`kimi`/
+   `openrouter`/`mistral`/`zai`) —
    explicit override, for proxy/OpenAI-compatible endpoints where the model
    name does not identify the vendor. Not part of normal setup.
 2. Model-name prefix: `deepseek-*` → deepseek, `claude*` → anthropic,
    `gpt-*`/`o1-*`/`o3-*`/`o4-*`/`chatgpt*` → openai, `kimi*`/`k3*`/
-   `moonshot*` → kimi.
+   `moonshot*` → kimi, `mistral*`/`ministral*`/`magistral*`/`devstral*`/
+   `codestral*`/`pixtral*`/`open-mistral*` → mistral, `glm*` → zai, and any
+   `vendor/model` id → openrouter.
 3. Autodetect by first key present, in order: `MAGNOLIA_LLM_API_KEY`
    (backward-compat: this was the old hardcoded Anthropic path) →
    `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Kimi
-   (`KIMI_PLAN_MAGNOLIA_API_KEY` / `KIMI_API_KEY`). DeepSeek-first is
+   (`KIMI_PLAN_MAGNOLIA_API_KEY` / `KIMI_API_KEY`) → `OPENROUTER_API_KEY`
+   → `MISTRAL_API_KEY` → Z.ai (`ZHIPU_API_KEY` / `ZAI_API_KEY`). DeepSeek-first is
    intentional: it's the cheapest and the most commonly-configured key in
-   the Magnolia user environment. Kimi is last so adding a Kimi key never
-   hijacks an existing setup — select it explicitly via `MAGNOLIA_LLM_PROVIDER=kimi`
-   or a `kimi-*` model name.
+   the Magnolia user environment. Later providers never hijack an existing
+   setup: adding a Kimi, Mistral or Z.ai key changes nothing until it is
+   selected explicitly (`MAGNOLIA_MEMORY_PROVIDER`) or by model name.
 4. No `MAGNOLIA_LLM_MODEL` → the per-provider default model.
 
 ## Configuration
@@ -37,9 +42,16 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
 - `MAGNOLIA_MEMORY_PROVIDER` — explicit provider override for proxy /
   OpenAI-compatible endpoints where the model name doesn't identify the
   vendor. (Legacy `MAGNOLIA_LLM_PROVIDER` still honored, warns once.)
-- `DEEPSEEK_BASE_URL` / `OPENAI_BASE_URL` / `KIMI_BASE_URL` override the API
-  base URL; `/v1` is appended automatically if missing (DeepSeek's docs show
-  both forms).
+- `DEEPSEEK_BASE_URL` / `OPENAI_BASE_URL` / `KIMI_BASE_URL` /
+  `OPENROUTER_BASE_URL` / `MISTRAL_BASE_URL` / `ZAI_BASE_URL` override the API
+  base URL; `/v1` is appended automatically if no `/vN` suffix is present
+  (DeepSeek's docs show both forms).
+- Mistral (`https://api.mistral.ai/v1`): a key created in Mistral Studio draws
+  on the account's plan, whose monthly usage is shared across Vibe, Studio and
+  the API.
+- Z.ai defaults to the pay-as-you-go endpoint (`https://api.z.ai/api/paas/v4`).
+  A GLM Coding Plan key needs `ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4`;
+  check the plan's terms before pointing background work at it.
 - Kimi is the Kimi-for-Coding plan endpoint (`https://api.kimi.com/coding/v1`),
   which speaks the Anthropic Messages schema — key from
   `KIMI_PLAN_MAGNOLIA_API_KEY` (Magnolia-specific) or `KIMI_API_KEY`.
@@ -63,8 +75,13 @@ PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI = "openai"
 PROVIDER_KIMI = "kimi"
 PROVIDER_OPENROUTER = "openrouter"
+PROVIDER_MISTRAL = "mistral"
+PROVIDER_ZAI = "zai"
 
-_VALID_PROVIDERS = {PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI, PROVIDER_OPENROUTER}
+_VALID_PROVIDERS = {
+    PROVIDER_DEEPSEEK, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_KIMI,
+    PROVIDER_OPENROUTER, PROVIDER_MISTRAL, PROVIDER_ZAI,
+}
 
 _DEFAULT_MODEL = {
     # deepseek-flash is the direct API's name for DeepSeek-V4.1-Flash (the
@@ -78,6 +95,9 @@ _DEFAULT_MODEL = {
     # OpenRouter (openrouter.ai): any vendor/model id is accepted; default is
     # DeepSeek-V4.1-Flash via the gateway, same role as the direct provider.
     PROVIDER_OPENROUTER: "deepseek/deepseek-v4.1-flash",
+    # Cheapest current general model on each (models.dev, 2026-11-15).
+    PROVIDER_MISTRAL: "mistral-small-latest",
+    PROVIDER_ZAI: "glm-5.3-flash",
 }
 
 _DEFAULT_BASE = {
@@ -85,6 +105,8 @@ _DEFAULT_BASE = {
     PROVIDER_OPENAI: "https://api.openai.com/v1",
     PROVIDER_KIMI: "https://api.kimi.com/coding/v1",
     PROVIDER_OPENROUTER: "https://openrouter.ai/api/v1",
+    PROVIDER_MISTRAL: "https://api.mistral.ai/v1",
+    PROVIDER_ZAI: "https://api.z.ai/api/paas/v4",
 }
 
 _BASE_URL_ENV = {
@@ -92,6 +114,8 @@ _BASE_URL_ENV = {
     PROVIDER_OPENAI: "OPENAI_BASE_URL",
     PROVIDER_KIMI: "KIMI_BASE_URL",
     PROVIDER_OPENROUTER: "OPENROUTER_BASE_URL",
+    PROVIDER_MISTRAL: "MISTRAL_BASE_URL",
+    PROVIDER_ZAI: "ZAI_BASE_URL",
 }
 
 
@@ -124,6 +148,10 @@ def _autodetect_provider() -> str | None:
         return PROVIDER_KIMI
     if os.environ.get("OPENROUTER_API_KEY"):
         return PROVIDER_OPENROUTER
+    if os.environ.get("MISTRAL_API_KEY"):
+        return PROVIDER_MISTRAL
+    if os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY"):
+        return PROVIDER_ZAI
     return None
 
 
@@ -144,6 +172,11 @@ def _get_api_key(provider: str) -> str | None:
         return os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY")
     if provider == PROVIDER_OPENROUTER:
         return os.environ.get("OPENROUTER_API_KEY")
+    if provider == PROVIDER_MISTRAL:
+        return os.environ.get("MISTRAL_API_KEY")
+    if provider == PROVIDER_ZAI:
+        # ZHIPU_API_KEY is the name OpenCode/models.dev use for Z.ai.
+        return os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY")
     return None
 
 
@@ -167,6 +200,14 @@ _MODEL_PREFIX_PROVIDERS: tuple[tuple[str, str], ...] = (
     ("kimi", PROVIDER_KIMI),
     ("k3", PROVIDER_KIMI),
     ("moonshot", PROVIDER_KIMI),
+    ("mistral", PROVIDER_MISTRAL),
+    ("ministral", PROVIDER_MISTRAL),
+    ("magistral", PROVIDER_MISTRAL),
+    ("devstral", PROVIDER_MISTRAL),
+    ("codestral", PROVIDER_MISTRAL),
+    ("pixtral", PROVIDER_MISTRAL),
+    ("open-mistral", PROVIDER_MISTRAL),
+    ("glm", PROVIDER_ZAI),
 )
 
 
@@ -390,7 +431,8 @@ def _call_openai_compat(
     provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None, disable_thinking: bool = False,
 ) -> tuple[str | None, str | None, str | None]:
-    """DeepSeek + OpenAI both use the OpenAI chat completions schema."""
+    """DeepSeek, OpenAI, OpenRouter, Mistral and Z.ai all use the OpenAI chat
+    completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
     body: dict = {
         "model": model,
@@ -402,13 +444,12 @@ def _call_openai_compat(
     }
     if temperature is not None:
         body["temperature"] = temperature
-    # DeepSeek reasoning models (v4-flash/pro) put output in reasoning_content and
-    # Reasoning models spend their whole budget on reasoning_content and then
-    # return empty content. DeepSeek and Z.ai (GLM) accept the same
+    # Reasoning models (DeepSeek v4 flash/pro, GLM) can spend their whole budget
+    # on reasoning_content and then return empty content. DeepSeek and Z.ai (GLM) accept the same
     # thinking-disabled switch; OpenAI proper defines no such field, so the
     # allowlist avoids 400s on unknown parameters.
     _disable_base = _get_base_url(provider)
-    if disable_thinking and (provider == PROVIDER_DEEPSEEK
+    if disable_thinking and (provider in (PROVIDER_DEEPSEEK, PROVIDER_ZAI)
                              or "z.ai" in _disable_base or "bigmodel" in _disable_base):
         body["thinking"] = {"type": "disabled"}
     resp = httpx.post(

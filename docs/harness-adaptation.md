@@ -182,8 +182,10 @@ as well as the event API; a successful parse alone does not prove it can execute
 
 Action retrieval is advisory feedback after an action, not a pre-execution gate.
 If prior knowledge must change the parameters of the current action, retrieve it
-explicitly before execution. The critic is also flag-only. It currently uses its own
-DeepSeek call and environment, rather than inheriting every memory-provider option.
+explicitly before execution. The critic is also flag-only. Its judge has its own
+variables (`MAGNOLIA_CRITIC_PROVIDER`, `MAGNOLIA_CRITIC_MODEL`, `MAGNOLIA_CRITIC_API_KEY`,
+`MAGNOLIA_CRITIC_BASE_URL`) but the same seven providers and defaults as the memory
+client; failed calls are logged to `.magnolia/claim-critic/errors.jsonl`.
 Enable it only with a suitable model and permission to send that report/tool trace.
 
 A duplicate `join` import previously prevented the action plugin from parsing; it is

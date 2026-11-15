@@ -239,7 +239,7 @@ sys.stdout.write(out or '')
 " 2> >(while IFS= read -r line; do
     case "$line" in
         (PROVIDER=*) echo "  expanding goal via Magnolia's LLM (${line#*MODEL=})…" >&2 ;;
-        (NO_PROVIDER) echo "  note: no LLM provider configured (set DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY) — skipping LLM expansion" >&2 ;;
+        (NO_PROVIDER) echo "  note: no LLM provider configured (set DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY or ZHIPU_API_KEY) — skipping LLM expansion" >&2 ;;
         (*) echo "  llm stderr: $line" >&2 ;;
     esac
 done))" || true
