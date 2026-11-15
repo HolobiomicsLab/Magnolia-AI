@@ -20,6 +20,10 @@ behavior); MAGNOLIA_HANDOVER_SKIP_EXPORT=0 forces that fallback.
 Defensive by design: generate_handover returns None on any no-op/failure logic
 path; the boot worker additionally wraps each step in try/except, so even a hard
 filesystem error in the final write cannot crash the launch.
+
+Hook-fed sessions use the same per-consumer cursor principle with a local
+size/mtime fingerprint. An unchanged hook transcript is skipped before open;
+growth invalidates the fingerprint and follows the normal cursor merge path.
 """
 
 import hashlib
@@ -526,16 +530,34 @@ def _read_session_cursor(store: Path, sid: str) -> str | None:
     return record.get("cursor") if record else None
 
 
-def _write_session_cursor(store: Path, sid: str, cursor: str | None,
-                          sealed_at_ms: int | None = None) -> None:
-    """Write the per-session cursor record. `sealed_at_ms` (epoch ms captured
-    BEFORE the export that drained the session) marks it as skippable; omit it
-    for the active session and for never-drained sessions."""
+def _write_session_cursor(
+    store: Path,
+    sid: str,
+    cursor: str | None,
+    sealed_at_ms: int | None = None,
+    *,
+    fingerprint: dict[str, int] | None = None,
+    closed: bool | None = None,
+) -> None:
+    """Write a backward-compatible per-session cursor record.
+
+    ``sealed_at_ms`` marks drained OpenCode sessions. Hook records instead add
+    ``transcript_fingerprint`` and descriptive ``closed`` fields when known.
+    """
+    from compchem_memory.transcript_source import (
+        SESSION_CLOSED_KEY,
+        SESSION_FINGERPRINT_KEY,
+    )
+
     d = Path(store) / HANDOVER_CURSORS_DIR
     d.mkdir(parents=True, exist_ok=True)
     payload: dict = {"cursor": cursor, "updated": _now_iso()}
     if sealed_at_ms is not None:
         payload["sealed_at_ms"] = int(sealed_at_ms)
+    if fingerprint is not None:
+        payload[SESSION_FINGERPRINT_KEY] = fingerprint
+    if closed is not None:
+        payload[SESSION_CLOSED_KEY] = closed
     atomic_write_text(d / f"{sid}.json", json.dumps(payload) + "\n")
 
 
@@ -949,6 +971,9 @@ def generate_handover(
     )
     from compchem_memory.transcript_source import (
         active_opencode_sid,
+        fingerprint_matches,
+        hook_session_closed,
+        hook_transcript_fingerprint,
         list_sessions,
         session_activity,
     )
@@ -1038,11 +1063,16 @@ def generate_handover(
 
     wrote = False
     skipped = 0
+    hook_skipped = 0
     merged_infos: list[tuple[str, str, str]] = []
     for ref in refs:
         sid = ref.key
         record = _read_cursor_record(store, sid)
         cursor = record.get("cursor") if record else None
+        fingerprint = hook_transcript_fingerprint(store, ref)
+        if fingerprint_matches(record, fingerprint):
+            hook_skipped += 1
+            continue
         if (ref.sealable
                 and _should_skip_export(ref.session_id, record, updates, active_sid or "")):
             skipped += 1
@@ -1062,6 +1092,16 @@ def generate_handover(
             if not new_msgs:
                 if can_seal:
                     _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+                elif not ref.sealable:
+                    _write_session_cursor(
+                        store,
+                        sid,
+                        cursor,
+                        fingerprint=fingerprint,
+                        closed=hook_session_closed(
+                            store, ref, fingerprint=fingerprint,
+                        ),
+                    )
                 continue
             transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
         except Exception as e:  # noqa: BLE001 - malformed transcript is a skip, not a crash
@@ -1071,6 +1111,16 @@ def generate_handover(
         if not transcript.strip():
             if can_seal:
                 _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+            elif not ref.sealable:
+                _write_session_cursor(
+                    store,
+                    sid,
+                    cursor,
+                    fingerprint=fingerprint,
+                    closed=hook_session_closed(
+                        store, ref, fingerprint=fingerprint,
+                    ),
+                )
             continue
 
         user_content = (
@@ -1121,11 +1171,23 @@ def generate_handover(
         merged_infos.append((sid, _session_ref_date(ref), _topic_from_transcript(transcript)))
         header = _handover_header(merged_infos, len(merged_infos))
         atomic_write_text(state_path, header + "\n\n" + base + "\n")
-        _write_session_cursor(store, sid, _last_message_id(new_msgs) or cursor,
-                              sealed_at_ms=(t0_ms if can_seal else None))
+        _write_session_cursor(
+            store,
+            sid,
+            _last_message_id(new_msgs) or cursor,
+            sealed_at_ms=(t0_ms if can_seal else None),
+            fingerprint=fingerprint,
+            closed=(
+                hook_session_closed(store, ref, fingerprint=fingerprint)
+                if not ref.sealable else None
+            ),
+        )
         wrote = True
 
     if skipped:
         print(f"[handover] skip-export: {skipped}/{len(refs)} drained sessions "
               f"not re-exported", file=sys.stderr)
+    if hook_skipped:
+        print(f"[handover] fingerprint-skip: {hook_skipped}/{len(refs)} hook "
+              f"transcripts unchanged", file=sys.stderr)
     return str(state_path) if wrote else None

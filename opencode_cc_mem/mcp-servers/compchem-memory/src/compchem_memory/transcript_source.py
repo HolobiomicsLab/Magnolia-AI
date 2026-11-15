@@ -1,14 +1,19 @@
 """Identify and export legacy OpenCode and harness-neutral transcripts.
 
-Hook-fed sessions are never sealed, so every sweep rereads their local
-transcripts; that cost grows with transcript history. In a mixed store where
-OpenCode is unavailable, dialogue mode processes hook sessions only: legacy
-OpenCode sessions do not receive the tool-event fallback in that sweep.
+Hook-fed sessions remain appendable after they close. Each consumer records a
+size/mtime fingerprint after a successful pass so unchanged transcripts can be
+skipped without opening them and grown transcripts reopen automatically. In a
+mixed store where OpenCode is unavailable, dialogue mode processes hook sessions
+only: legacy OpenCode sessions do not receive the tool-event fallback in that
+sweep.
 """
 
 from __future__ import annotations
 
 import json
+import math
+import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +31,10 @@ from compchem_memory.opencode_ingest import (
 Export = dict | None
 LegacyExporter = Callable[[str], Export]
 SessionExporter = Callable[["SessionRef"], Export]
+
+SESSION_FINGERPRINT_KEY = "transcript_fingerprint"
+SESSION_CLOSED_KEY = "closed"
+DEFAULT_SESSION_IDLE_CLOSE_HOURS = 24.0
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,54 @@ def active_opencode_sid(store: str | Path) -> str | None:
 def session_activity(ref: SessionRef) -> str:
     """Return the best sortable activity timestamp carried by a session."""
     return ref.last_ts or ref.first_ts or ""
+
+
+def hook_transcript_fingerprint(
+    store: str | Path,
+    ref: SessionRef,
+) -> dict[str, int] | None:
+    """Return a hook transcript's size/mtime fingerprint without opening it."""
+    if ref.sealable:
+        return None
+    path = transcript_path(Path(store), ref.harness, ref.session_id)
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+
+
+def fingerprint_matches(
+    record: dict | None,
+    fingerprint: dict[str, int] | None,
+) -> bool:
+    """Whether a backward-compatible cursor record covers this exact file."""
+    if not record or fingerprint is None:
+        return False
+    stored = record.get(SESSION_FINGERPRINT_KEY)
+    return isinstance(stored, dict) and stored == fingerprint
+
+
+def hook_session_closed(
+    store: str | Path,
+    ref: SessionRef,
+    *,
+    fingerprint: dict[str, int] | None = None,
+    now_ns: int | None = None,
+) -> bool:
+    """Whether a hook transcript ended explicitly or exceeded its idle TTL."""
+    if ref.sealable:
+        return False
+    current = fingerprint or hook_transcript_fingerprint(store, ref)
+    if current is None:
+        return False
+    idle_ns = (now_ns if now_ns is not None else time.time_ns()) - current["mtime_ns"]
+    if idle_ns > _session_idle_close_hours() * 60 * 60 * 1_000_000_000:
+        return True
+    if ref.harness == "codex":
+        return False
+    path = transcript_path(Path(store), ref.harness, ref.session_id)
+    return _last_jsonl_kind(path) == "session-end"
 
 
 def current_session(store: str | Path) -> SessionRef | None:
@@ -228,6 +285,46 @@ def _mapping_timestamps(mapping: Path) -> tuple[dict[str, str | None], dict[str,
             first[session_id] = timestamp
         last[session_id] = timestamp
     return first, last
+
+
+def _session_idle_close_hours() -> float:
+    """Resolve the idle-close TTL, falling back on invalid environment values."""
+    raw = os.environ.get("MAGNOLIA_SESSION_IDLE_CLOSE_HOURS", "")
+    try:
+        hours = float(raw) if raw else DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    except (TypeError, ValueError):
+        return DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    if not math.isfinite(hours) or hours <= 0:
+        return DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    return hours
+
+
+def _last_jsonl_kind(path: Path) -> str | None:
+    """Read only the final non-empty JSONL row and return its kind."""
+    lines: list[bytes] = []
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            position = stream.tell()
+            suffix = b""
+            while position > 0:
+                chunk_size = min(4096, position)
+                position -= chunk_size
+                stream.seek(position)
+                suffix = stream.read(chunk_size) + suffix
+                lines = suffix.splitlines()
+                if position == 0 or len(lines) > 1:
+                    break
+    except OSError:
+        return None
+    lines = [line for line in lines if line.strip()]
+    if not lines:
+        return None
+    try:
+        row = json.loads(lines[-1])
+    except (TypeError, ValueError):
+        return None
+    return row.get("kind") if isinstance(row, dict) else None
 
 
 def _mtime_utc(path: Path) -> str | None:
