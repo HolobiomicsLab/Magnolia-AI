@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from compchem_memory.hook.project import ProjectPaths
 
 _RECOVERED_TURN_LIMIT = 200
+# Claude Code shows its model only about 2 KB of SessionStart context.
+CLAUDE_CONTEXT_LIMIT = 1800
 
 
 @dataclass
@@ -195,14 +197,16 @@ def _notices(paths: ProjectPaths, event: HookEvent) -> Notices | None:
         return peek_notices(paths, state)
 
 
-def _boot_payload(paths: ProjectPaths) -> str | None:
-    from compchem_memory.hook.boot_context import build_boot_payload
+def _boot_payload(paths: ProjectPaths, harness: str = "json") -> str | None:
+    from compchem_memory.hook.boot_context import build_boot_payload, build_claude_boot_payload
 
-    return build_boot_payload(paths)
+    if harness == "claude":
+        return build_claude_boot_payload(paths, CLAUDE_CONTEXT_LIMIT)
+    return build_boot_payload(paths, include_agents_md=harness == "vibe")
 
 
 def _session_start(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
-    response = HookResponse(context=guard("boot-context", _boot_payload, paths))
+    response = HookResponse(context=guard("boot-context", _boot_payload, paths, event.harness))
     response = response.merge(HookResponse(context=guard("directive", _directive, paths, event)))
     return Handled(response, None)
 

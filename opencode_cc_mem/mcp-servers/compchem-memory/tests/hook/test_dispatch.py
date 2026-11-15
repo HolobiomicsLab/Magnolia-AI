@@ -474,3 +474,59 @@ def test_subagent_post_tool_leaves_notices_queued(tmp_path, monkeypatch):
 
     assert handled.response.notice is None
     assert handle(_post_tool(project), env, time.monotonic() + 8).response.notice == "critic flag"
+
+
+def _start(project: Path, env: dict[str, str], harness: str) -> str:
+    event = _event(project, "session-start")
+    event.harness = harness
+    return handle(event, env, time.monotonic() + 8).response.context
+
+
+def _boot_fixture(tmp_path: Path, boot: str) -> tuple[Path, dict[str, str]]:
+    project, env = _workspace(tmp_path)
+    (project / ".magnolia" / "boot-context.md").write_text(boot, encoding="utf-8")
+    (tmp_path / "workspace" / "rules" / "r.md").write_text("RULE TEXT\n", encoding="utf-8")
+    (tmp_path / "workspace" / "AGENTS.md").write_text("AGENTS TEXT\n", encoding="utf-8")
+    return project, env
+
+
+def test_claude_session_start_caps_dynamic_part_and_points(tmp_path, monkeypatch):
+    from compchem_memory.hook.dispatch import CLAUDE_CONTEXT_LIMIT
+
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    assert CLAUDE_CONTEXT_LIMIT == 1800
+    project, env = _boot_fixture(tmp_path, "B" * 5000)
+    context = _start(project, env, "claude")
+    assert DIRECTIVE in context
+    label = "--- boot-context.md ---\n"  # the section label counts toward the limit
+    assert "B" * (1800 - len(label)) in context and "B" * (1801 - len(label)) not in context
+    assert "RULE TEXT" not in context and "AGENTS TEXT" not in context
+    assert (
+        f"[Magnolia] The full project memory summary is in {project}/.magnolia/boot-context.md"
+        " and audit-report.md: read both before your first task."
+    ) in context
+
+
+def test_claude_session_start_short_dynamic_part_has_no_pointer(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    project, env = _boot_fixture(tmp_path, "short boot")
+    context = _start(project, env, "claude")
+    assert "short boot" in context and DIRECTIVE in context
+    assert "The full project memory summary" not in context
+    assert "RULE TEXT" not in context
+
+
+def test_codex_session_start_full_payload(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    project, env = _boot_fixture(tmp_path, "B" * 5000)
+    context = _start(project, env, "codex")
+    assert "B" * 5000 in context and "RULE TEXT" in context and DIRECTIVE in context
+    assert "AGENTS TEXT" not in context
+
+
+def test_vibe_session_start_has_agents_md_first(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    project, env = _boot_fixture(tmp_path, "boot")
+    context = _start(project, env, "vibe")
+    assert "RULE TEXT" in context and DIRECTIVE in context
+    assert context.index("AGENTS TEXT") < context.index("--- boot-context.md ---")
