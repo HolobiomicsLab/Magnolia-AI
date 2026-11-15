@@ -11,6 +11,7 @@ from pathlib import Path
 from compchem_memory import quick_search
 from compchem_memory.hook.action_retrieval import (
     ActionNote,
+    _cache_key,
     args_to_query,
     commit_exposure,
     on_post_tool,
@@ -212,9 +213,28 @@ def test_action_cache_evicts_oldest_after_50(tmp_path, monkeypatch) -> None:
     with SessionState.open(paths.store, "claude", "s1") as state:
         cache = state.data["query_cache"]
     assert len(cache) == 50
-    assert "run_shell unique 0" not in cache
-    assert "run_shell unique 1" in cache
+    assert _cache_key("run_shell", {"cmd": "unique 0"}) not in cache
+    assert _cache_key("run_shell", {"cmd": "unique 1"}) in cache
     assert len(calls) == 51
+
+
+def test_action_state_holds_no_argument_text(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    queries = []
+    monkeypatch.setattr(
+        quick_search, "search", lambda query, project_dir, k=5: queries.append(query) or [],
+    )
+    secret = "hunter2-fabricated-pw"
+    tool_input = {"cmd": "haddock3 run workflow", "env": {"password": secret}}
+
+    _call(_event(paths, tool_input=tool_input), paths)
+    _call(_event(paths, call_id="c2", tool_input=tool_input), paths)
+
+    assert len(queries) == 1
+    state_text = "".join(p.read_text(encoding="utf-8") for p in (paths.store / "hook-state").glob("*.json"))
+    assert state_text and secret not in state_text and "haddock3" not in state_text
+    assert all(secret not in p.read_text(encoding="utf-8")
+               for p in paths.store.rglob("*") if p.is_file())
 
 
 def test_action_retrieval_ignores_non_action_tools(tmp_path, monkeypatch) -> None:

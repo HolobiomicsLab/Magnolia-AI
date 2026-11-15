@@ -8,11 +8,14 @@ process. When ``MAGNOLIA_HOOK_TEST == "1"``, the test-only environment variable
 
 Deliberate change: OpenCode starts retrieval before a tool and injects after it;
 the portable hook runs at post-tool time because one-shot clients cannot retain
-that promise. Its 120-second, 50-entry cache therefore lives in session state.
+that promise. Its 120-second, 50-entry cache therefore lives in session state,
+keyed by a SHA-256 of the query after the transcript's secret redaction, so no
+tool argument text is written to the state file.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -111,6 +114,15 @@ def args_to_query(args: object) -> str:
 
     walk(args, 0)
     return " ".join(parts)[:400]
+
+
+def _cache_key(tool_name: str, args: object) -> str:
+    """Hash the query text after key-aware secret redaction; store no argument text."""
+    from compchem_memory.hook.transcript import _redact_secret_keys
+    from compchem_memory.opencode_ingest import scrub_secrets
+
+    text = scrub_secrets(f"{tool_name} {args_to_query(_redact_secret_keys(args))}")
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def commit_exposure(note: ActionNote, session_id: str) -> None:
@@ -277,12 +289,13 @@ def on_post_tool(
     ledger_tool = event.tool.raw_name
 
     query_text = f"{event.tool.name} {args_to_query(event.tool.input)}"
+    query_key = _cache_key(event.tool.name, event.tool.input)
     now = time.time()
     cached_hits: list[dict] | None = None
     with SessionState.open(paths.store, event.harness, event.session_id) as current:
         cache = current.data.get("query_cache", {})
         if isinstance(cache, dict):
-            cached = cache.get(query_text)
+            cached = cache.get(query_key)
             if (
                 isinstance(cached, dict)
                 and isinstance(cached.get("ts"), (int, float))
@@ -313,8 +326,8 @@ def on_post_tool(
             if not isinstance(cache, dict):
                 cache = {}
                 current.data["query_cache"] = cache
-            cache.pop(query_text, None)
-            cache[query_text] = {"ts": time.time(), "hits": hits}
+            cache.pop(query_key, None)
+            cache[query_key] = {"ts": time.time(), "hits": hits}
             while len(cache) > MAX_CACHE_ENTRIES:
                 cache.pop(next(iter(cache)))
 
