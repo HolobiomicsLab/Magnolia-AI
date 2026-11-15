@@ -664,3 +664,28 @@ def test_ignored_pre_tool_without_tool_name_writes_nothing_under_policy(
     assert code == 0
     assert capfd.readouterr() == ("", "")
     assert not list(tmp_path.rglob("hook-errors.jsonl"))
+
+
+def test_ignored_allowed_tool_writes_no_error_row(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    """Live finding: Claude's ignored ToolSearch pre-tool events logged spurious errors."""
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools": ["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    ignored = SimpleNamespace(parse=lambda raw, event: None, render=json_adapter.render)
+    monkeypatch.setitem(ADAPTERS, "ignored-search", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"session_id": "s1", "cwd": str(project), "tool_name": "ToolSearch"},
+        "ignored-search",
+        "pre-tool",
+    )
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not list(tmp_path.rglob("hook-errors.jsonl"))
