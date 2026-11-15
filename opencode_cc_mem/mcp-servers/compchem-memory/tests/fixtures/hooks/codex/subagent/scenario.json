@@ -1,0 +1,6 @@
+{
+ "client": "codex",
+ "version": "0.154.0",
+ "command": "not run",
+ "observed": "not probed: project hooks need persisted hook trust (see report)"
+}

@@ -1,0 +1,23 @@
+{
+ "item": {
+  "arguments": {
+   "text": "fail"
+  },
+  "error": null,
+  "id": "item_2",
+  "result": {
+   "content": [
+    {
+     "text": "Error calling tool 'echo': probe failure requested",
+     "type": "text"
+    }
+   ],
+   "structured_content": null
+  },
+  "server": "probe",
+  "status": "failed",
+  "tool": "echo",
+  "type": "mcp_tool_call"
+ },
+ "type": "item.completed"
+}

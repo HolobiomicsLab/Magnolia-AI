@@ -1,0 +1,11 @@
+{
+ "item": {
+  "aggregated_output": "",
+  "command": "/bin/zsh -lc 'echo x > /TMPDIR/probe-outside/x.txt'",
+  "exit_code": 0,
+  "id": "item_2",
+  "status": "completed",
+  "type": "command_execution"
+ },
+ "type": "item.completed"
+}

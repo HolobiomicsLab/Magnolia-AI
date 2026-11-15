@@ -1,0 +1,8 @@
+{
+ "item": {
+  "id": "item_1",
+  "text": "I\u2019ll call the probe echo tool.\n",
+  "type": "agent_message"
+ },
+ "type": "item.completed"
+}

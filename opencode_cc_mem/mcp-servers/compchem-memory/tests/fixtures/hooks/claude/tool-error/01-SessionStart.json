@@ -1,0 +1,8 @@
+{
+ "cwd": "/TMPDIR/probe-claude-tool-error",
+ "hook_event_name": "SessionStart",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-2",
+ "source": "startup",
+ "transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-tool-error/ses-fixture-2.jsonl"
+}

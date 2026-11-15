@@ -1,0 +1,28 @@
+{
+ "agent_id": "a5d2e2e2b28d1e668",
+ "agent_type": "general-purpose",
+ "cwd": "/TMPDIR/probe-claude-parent",
+ "duration_ms": 1,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "auto",
+ "prompt_id": "d71be0f3-1725-4712-a6a4-135b61323059",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-1",
+ "tool_input": {
+  "max_results": 1,
+  "query": "select:mcp__probe__echo"
+ },
+ "tool_name": "ToolSearch",
+ "tool_response": {
+  "matches": [
+   "mcp__probe__echo"
+  ],
+  "query": "select:mcp__probe__echo",
+  "total_deferred_tools": 12
+ },
+ "tool_use_id": "toolu_01VWZqzHaprN5hsZNkZ6sjFS",
+ "transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-parent/ses-fixture-1.jsonl"
+}

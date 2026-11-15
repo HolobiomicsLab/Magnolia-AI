@@ -1,0 +1,6 @@
+{
+ "client": "codex",
+ "version": "0.154.0",
+ "command": "run_probes.sh codex_run deny-write <prompt> [-m gpt-5.6-luna]  (codex exec --json -C <dir> -s workspace-write)",
+ "observed": "event stream only; project .codex/hooks.json did NOT load (no hook trust), so there are no hook payloads"
+}

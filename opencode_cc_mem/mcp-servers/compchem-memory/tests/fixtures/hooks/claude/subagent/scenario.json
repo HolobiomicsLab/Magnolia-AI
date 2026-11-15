@@ -1,0 +1,6 @@
+{
+ "client": "claude",
+ "version": "2.1.325",
+ "command": "run_probes.sh claude_parent_sub  (claude -p <prompt> --settings <f> --setting-sources user --mcp-config <f> --strict-mcp-config --output-format stream-json --verbose --allowedTools mcp__probe__echo Task [--model haiku])",
+ "observed": "tool events inside the subagent carry agent_id and agent_type"
+}

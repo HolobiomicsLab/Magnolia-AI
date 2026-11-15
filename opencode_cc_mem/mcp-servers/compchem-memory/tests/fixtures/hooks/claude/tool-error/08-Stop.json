@@ -1,0 +1,16 @@
+{
+ "background_tasks": [],
+ "cwd": "/TMPDIR/probe-claude-tool-error",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "Stop",
+ "last_assistant_message": "The echo call failed: \"Error calling tool 'echo': probe failure requested\". That is five words, as you asked.",
+ "permission_mode": "auto",
+ "prompt_id": "71a02140-b801-4f06-b3e4-e315ae15bac3",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_crons": [],
+ "session_id": "ses-fixture-2",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.claude/projects/-private-var-folders-xz-39wpflms7nx98fkd5c2dvh2w0000gp-T-probe-claude-tool-error/ses-fixture-2.jsonl"
+}
