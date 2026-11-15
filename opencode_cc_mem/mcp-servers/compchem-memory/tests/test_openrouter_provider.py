@@ -22,7 +22,7 @@ def _clear_provider_env(monkeypatch):
         "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "MAGNOLIA_LLM_API_KEY",
         "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
         "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_OPENROUTER_STICKY",
-        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
     ):
         monkeypatch.delenv(var, raising=False)
     llm._INVALID_OPENROUTER_PROVIDER_WARNED.clear()
@@ -104,6 +104,10 @@ def test_openai_compat_call_uses_gateway(monkeypatch):
     assert captured["headers"]["X-Title"] == "Magnolia"
     assert captured["headers"]["HTTP-Referer"] == "https://magnolia.local"
     assert captured["json"]["model"] == "deepseek/deepseek-v4.1-flash"
+    assert captured["json"]["provider"] == {
+        "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
+    }
+    assert captured["json"]["session_id"] == llm._openrouter_session_id("memory")
 
 
 def test_base_url_override(monkeypatch):
@@ -201,7 +205,7 @@ def test_reasoning_400_retries_once_without_reasoning(monkeypatch):
     assert "reasoning" in bodies[2] and "reasoning" not in bodies[3]
 
 
-def test_invalid_provider_json_is_ignored_with_one_stderr_line(monkeypatch, capsys):
+def test_invalid_provider_json_uses_default_floor_with_one_stderr_line(monkeypatch, capsys):
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("MAGNOLIA_OPENROUTER_PROVIDER", "not-json")
     route = llm.Route(
@@ -211,7 +215,9 @@ def test_invalid_provider_json_is_ignored_with_one_stderr_line(monkeypatch, caps
     first = llm._route_request(route, "s", "u", 1, None, False, False)[1]
     second = llm._route_request(route, "s", "u", 1, None, False, False)[1]
 
-    assert "provider" not in first and "provider" not in second
+    expected = {"quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"]}
+    assert first["provider"] == expected
+    assert second["provider"] == expected
     assert capsys.readouterr().err.count("MAGNOLIA_OPENROUTER_PROVIDER") == 1
 
 
@@ -244,6 +250,56 @@ def test_openrouter_session_id_is_stable_per_project_and_role(monkeypatch, tmp_p
     assert len({memory_id, critic_id, other_id}) == 3
     assert str(first_project) not in memory_id
     assert first_project.name not in memory_id
+
+
+def test_openrouter_session_id_reuses_project_resolver(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    workspace = tmp_path / "workspace"
+    project = workspace / "projects" / "active"
+    marker_dir = workspace / ".magnolia"
+    project.mkdir(parents=True)
+    marker_dir.mkdir()
+    (marker_dir / ".active-project").write_text("active")
+    monkeypatch.chdir(workspace)
+
+    active_id = llm._openrouter_session_id("memory")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", "projects/active")
+    relative_id = llm._openrouter_session_id("memory")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", "")
+    empty_id = llm._openrouter_session_id("memory")
+
+    assert active_id == relative_id == empty_id
+
+
+def test_openrouter_session_id_normalises_symlinked_project(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    project = tmp_path / "project"
+    alias = tmp_path / "alias"
+    project.mkdir()
+    alias.symlink_to(project, target_is_directory=True)
+
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(project))
+    direct_id = llm._openrouter_session_id("memory")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(alias))
+
+    assert llm._openrouter_session_id("memory") == direct_id
+
+
+def test_openrouter_session_id_honours_root_mode_marker(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    project = tmp_path / "project"
+    other = tmp_path / "other"
+    (project / ".magnolia").mkdir(parents=True)
+    (project / ".magnolia" / "GOAL.md").write_text("goal")
+    other.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(other))
+
+    marked_id = llm._openrouter_session_id("memory")
+    (project / ".magnolia" / "GOAL.md").unlink()
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(project))
+
+    assert llm._openrouter_session_id("memory") == marked_id
 
 
 @pytest.mark.parametrize("disabled", ["0", "false", "NO", "off"])
@@ -298,8 +354,8 @@ def test_reasoning_and_floor_retries_never_exceed_three_posts(monkeypatch):
             }
 
     responses = [
-        Response(400, "reasoning is unsupported"),
-        Response(404, "No endpoints found"),
+        Response(400, "reasoning is unsupported; no endpoints found"),
+        Response(400, "No endpoints found"),
         Response(200),
     ]
     monkeypatch.setattr(
@@ -317,6 +373,73 @@ def test_reasoning_and_floor_retries_never_exceed_three_posts(monkeypatch):
     assert len(bodies) == 3
     assert "reasoning" in bodies[0] and "reasoning" not in bodies[1]
     assert "provider" in bodies[1] and "provider" not in bodies[2]
+
+
+def test_member_provider_is_never_dropped(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    member_value = {"order": ["DeepInfra"], "allow_fallbacks": False, "zdr": True}
+    monkeypatch.setenv("MAGNOLIA_OPENROUTER_PROVIDER", json.dumps(member_value))
+    bodies = []
+
+    class Response:
+        status_code = 404
+        text = "No endpoints found"
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(
+        llm.httpx, "post",
+        lambda url, **kwargs: bodies.append(kwargs["json"].copy()) or Response(),
+    )
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key", "openai",
+    )
+
+    result = llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert result.status == 404
+    assert result.quality_floor_dropped is False
+    assert len(bodies) == 1
+    assert bodies[0]["provider"] == member_value
+
+
+@pytest.mark.parametrize(
+    ("status", "text"),
+    [
+        (400, "This endpoint's maximum context length is 128000 tokens"),
+        (400, "max tokens exceeds the endpoint limit"),
+        (400, "endpoint rate limit exceeded"),
+        (404, "Model not found"),
+    ],
+)
+def test_unrelated_openrouter_errors_do_not_drop_floor(monkeypatch, status, text):
+    _clear_provider_env(monkeypatch)
+    bodies = []
+
+    class Response:
+        status_code = status
+
+        def __init__(self):
+            self.text = text
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(
+        llm.httpx, "post",
+        lambda url, **kwargs: bodies.append(kwargs["json"].copy()) or Response(),
+    )
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key", "openai",
+    )
+
+    result = llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert result.status == status
+    assert result.quality_floor_dropped is False
+    assert len(bodies) == 1
+    assert bodies[0]["provider"] == llm._OPENROUTER_QUALITY_FLOOR
 
 
 def test_call_llm_drops_quality_floor_on_endpoint_400_and_records_it(
@@ -358,6 +481,62 @@ def test_call_llm_drops_quality_floor_on_endpoint_400_and_records_it(
     assert timing["quality_floor_dropped"] is True
 
 
+def test_floor_drop_survives_transport_error_for_route(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    calls = 0
+
+    class Response:
+        status_code = 404
+        text = "No endpoints found"
+
+    def fake_post(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return Response()
+        raise RuntimeError("transport failed")
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key", "openai",
+    )
+
+    result = llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert calls == 2
+    assert result.error == "transport failed"
+    assert result.quality_floor_dropped is True
+
+
+def test_floor_drop_survives_transport_error_in_timing(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+    calls = 0
+
+    class Response:
+        status_code = 404
+        text = "No endpoints found"
+
+    def fake_post(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return Response()
+        raise RuntimeError("transport failed")
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+
+    assert llm.call_llm("s", "u", max_tokens=1) is None
+    timing = json.loads(
+        (tmp_path / ".magnolia" / "llm-timing.jsonl").read_text().splitlines()[-1]
+    )
+    assert calls == 2
+    assert timing["outcome"] == "error"
+    assert timing["quality_floor_dropped"] is True
+
+
 @pytest.mark.parametrize("model", ["deepseek/deepseek-v4.1-flash", "openai/gpt-5"])
 def test_automatic_cache_models_keep_plain_user_string(monkeypatch, model):
     _clear_provider_env(monkeypatch)
@@ -388,6 +567,20 @@ def test_openrouter_anthropic_cache_prefix_marks_only_first_block(monkeypatch):
         },
         {"type": "text", "text": " plus instruction"},
     ]
+
+
+def test_cache_prefix_is_ignored_when_user_does_not_start_with_it(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "anthropic/claude-sonnet-4.5",
+        "https://router/chat", "key", "openai",
+    )
+    body = llm._route_request(
+        route, "s", "different text", 1, None, False, False,
+        cache_prefix="transcript",
+    )[1]
+
+    assert body["messages"][1]["content"] == "different text"
 
 
 def test_native_anthropic_route_marks_prefix_but_kimi_does_not(monkeypatch):
