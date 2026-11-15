@@ -4,8 +4,12 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import pytest
+
+from compchem_memory.hook import project as project_module
 from compchem_memory.hook.project import ProjectPaths, bind_project, resolve_project, state_home
 
 
@@ -72,6 +76,31 @@ def test_resolve_project_env_relative_to_cwd(tmp_path):
 
 def test_resolve_project_none_outside_workspace(tmp_path):
     assert resolve_project(tmp_path, {}) is None
+
+
+def test_resolve_project_outside_root_mode_keeps_cwd_as_root(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    cwd = workspace / "nested"
+    cwd.mkdir()
+    _activate(cwd, "alpha")
+
+    resolved = resolve_project(cwd, {})
+
+    assert resolved.root == cwd
+    assert resolved.project_dir == cwd / "projects" / "alpha"
+    assert not resolved.root_mode
+
+
+def test_state_home_uses_home_from_supplied_env(tmp_path, monkeypatch):
+    home = tmp_path / "client-home"
+    process_home = tmp_path / "process-home"
+    monkeypatch.setenv("HOME", str(process_home))
+
+    resolved = state_home({"HOME": str(home)})
+
+    assert resolved == home / ".local" / "state" / "magnolia"
+    assert resolved.is_dir()
+    assert not (process_home / ".local" / "state" / "magnolia").exists()
 
 
 _BIND_SCRIPT = """
@@ -174,3 +203,38 @@ def test_binding_none_is_persistent_and_sanitised(tmp_path):
     assert json.loads(binding.read_text(encoding="utf-8")) == {"project": None}
     assert binding.parent.stat().st_mode & 0o777 == 0o700
     assert state_home({"XDG_STATE_HOME": str(state)}).stat().st_mode & 0o777 == 0o700
+
+
+@pytest.mark.parametrize("contents", [b"", b"{}", b"\xff\xfe garbage"])
+def test_binding_damaged_file_is_no_project(tmp_path, contents):
+    state = tmp_path / "state"
+    bindings = state_home({"XDG_STATE_HOME": str(state)}) / "bindings"
+    bindings.mkdir()
+    (bindings / "codex-damaged.json").write_bytes(contents)
+    started = time.monotonic()
+
+    bound = bind_project("codex", "damaged", tmp_path, {"XDG_STATE_HOME": str(state)})
+
+    assert bound is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_binding_creation_fsyncs_before_link(tmp_path, monkeypatch):
+    state = tmp_path / "state"
+    events = []
+    real_fsync = os.fsync
+    real_link = os.link
+
+    def recording_fsync(descriptor):
+        events.append("fsync")
+        real_fsync(descriptor)
+
+    def recording_link(source, destination):
+        events.append("link")
+        real_link(source, destination)
+
+    monkeypatch.setattr(project_module.os, "fsync", recording_fsync)
+    monkeypatch.setattr(project_module.os, "link", recording_link)
+
+    assert bind_project("codex", "synced", tmp_path, {"XDG_STATE_HOME": str(state)}) is None
+    assert events == ["fsync", "link"]

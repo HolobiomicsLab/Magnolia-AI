@@ -1,7 +1,8 @@
 """Resolve a workspace project and bind it to a harness session.
 
 Bindings use a same-directory temporary file and ``os.link`` for atomic,
-exclusive creation. A partial or empty read is retried for up to 200 ms.
+exclusive creation after ``fsync``. A partial or empty read is retried for up
+to 200 ms; a still-damaged binding is treated as no project.
 Deliberate change: root mode uses the first ancestor holding
 ``mcp-servers/compchem-memory`` or ``rules``; this normalises the differing
 plugin root rules and removes the ``projects/xiulian`` fallback.
@@ -34,7 +35,8 @@ class ProjectPaths:
 
 def state_home(env: Mapping[str, str]) -> Path:
     """Return the Magnolia state directory from the supplied environment."""
-    base = Path(env["XDG_STATE_HOME"]) if env.get("XDG_STATE_HOME") else Path.home() / ".local" / "state"
+    default_home = Path(env["HOME"]) if env.get("HOME") else Path.home()
+    base = Path(env["XDG_STATE_HOME"]) if env.get("XDG_STATE_HOME") else default_home / ".local" / "state"
     home = base.absolute() / "magnolia"
     home.mkdir(mode=0o700, parents=True, exist_ok=True)
     return home
@@ -84,7 +86,7 @@ def resolve_project(cwd: Path, env: Mapping[str, str]) -> ProjectPaths | None:
             project_dir = cwd / project_dir
     if project_dir is None:
         return None
-    return _project_paths(_workspace_root(cwd), project_dir.absolute(), False)
+    return _project_paths(cwd, project_dir.absolute(), False)
 
 
 def _safe_component(value: str) -> str:
@@ -125,9 +127,9 @@ def _read_binding(path: Path) -> ProjectPaths | None:
             return _deserialise(json.loads(path.read_text(encoding="utf-8")))
         except FileNotFoundError:
             return None
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, ValueError):
             if time.monotonic() >= deadline:
-                raise
+                return None
             time.sleep(_READ_RETRY_INTERVAL_SECONDS)
 
 
@@ -136,6 +138,8 @@ def _create_binding(path: Path, project: ProjectPaths | None) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
             json.dump(_serialise(project), temporary)
+            temporary.flush()
+            os.fsync(temporary.fileno())
         os.link(temporary_name, path)
     finally:
         os.unlink(temporary_name)
