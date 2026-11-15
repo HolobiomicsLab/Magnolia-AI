@@ -1,7 +1,7 @@
 # Harness-neutral Magnolia: one core, four agent harnesses
 
-Status: **Draft, design for review** (2026-11-15). Branch `design/harness-neutral-agents`,
-on top of `feat/llm-providers-mistral-zai`. Product owner: LFX. Repository owner and
+Status: **Approved by LFX** (2026-11-15); P0 and P1 built on `feat/hook-core-p0-p1`, on top of
+`design/harness-neutral-agents` and `feat/llm-providers-mistral-zai`. Product owner: LFX. Repository owner and
 reviewer: Tao. Nothing reaches Magnolia's shared branches without Tao (Collegium D-059).
 
 ## 1. Intent
@@ -87,10 +87,12 @@ Anti-goals (a failure even if it works)
     `[mcp_servers.<id>]`; `codex exec --json` (`thread.started`, `item.*`,
     `turn.completed` with token usage), `codex exec resume <id>`; AGENTS.md native;
     custom agents as TOML in `.codex/agents/`.
-  - Vibe (not installed here; docs only): MCP servers (stdio, http) in `config.toml`;
-    `hooks.toml` with hooks before and after tool calls and after each assistant turn,
-    project hooks only in a trusted folder; `vibe --prompt` non-interactive with JSON
-    output; sub-agents. No session-start or prompt hook found.
+  - Mistral Vibe 3.1.2 (probed in P0): MCP servers in `.vibe/config.toml`; hooks in
+    `.vibe/hooks.toml` of types `session_start`, `session_end`, `pre_agent` (carries the
+    prompt), `post_agent`, `pre_tool`, `post_tool`, `notification`; project files are read
+    only from a trusted folder (`--trust` per run); `vibe -p --output json` non-interactive,
+    `--max-turns`, `--max-price`, `--output-dir` (an `export.json` with usage, cost and
+    outcome); sub-agents through `agents.spawn`. No sandbox.
 
 ## 4. Approaches considered
 
@@ -109,22 +111,21 @@ Anti-goals (a failure even if it works)
 
 | Magnolia behaviour | Core entry | OpenCode | Claude Code | Codex | Vibe |
 |---|---|---|---|---|---|
-| Rules + boot context + audit report | `session-start` | context hook (v2) | SessionStart `additionalContext`; fallback `--append-system-prompt-file` | SessionStart `additionalContext` | instructions file rendered at launch (P0 confirms the file) |
-| Session-start retrieval directive | `session-start` | prompt rewrite | SessionStart `additionalContext` | same | in the instructions file |
-| Doorbell `@agent` letters | `prompt` | prompt rewrite | letter written + `additionalContext` "already sent, do not act" (no rewrite possible) | same | not available (no prompt hook): `@agent` handled by an MCP tool `memory_send_letter` the rules point to |
-| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | after-tool hook output (P0 confirms what reaches the model) |
+| Rules + boot context + audit report | `session-start` | context hook (v2) | SessionStart `additionalContext`; fallback `--append-system-prompt-file` | SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
+| Session-start retrieval directive | `session-start` | prompt rewrite | SessionStart `additionalContext` | same | `session_start` `additional_context` |
+| Doorbell `@agent` letters | `prompt` | prompt rewrite | letter written + `additionalContext` "already sent, do not act" (no rewrite possible) | same | same, on `pre_agent` (carries the prompt) |
+| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | `post_tool` `additional_context` |
 | Tool-call capture | MCP `@captured` (unchanged) + `pre-tool`/`post-tool` ledger | yes | yes | yes | yes |
-| Session mapping + Magnolia transcript | all events | yes | yes | yes | tool events + turn end only |
-| Claim critic | `turn-end` (async) | yes | Stop, `async: true` | Stop, `async: true` | after-turn hook |
-| Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | at next tool event |
-| Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | P0 (not probed) |
-| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | tool disable in config (P0) |
+| Session mapping + Magnolia transcript | all events | yes | yes | yes | yes; assistant text only from the client transcript (`post_agent` carries none) |
+| Claim critic | `turn-end` (async) | yes | Stop, `async: true` | Stop, `async: true` | `post_agent` |
+| Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | `additional_context` at the next `pre_agent` or `post_tool` |
+| Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | child `session_id` + `parent_session_id`, `agent_name` |
+| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | `--disabled-tools file_system.bash` + a `strict` `pre_tool` deny (P0: no sandbox; an out-of-project write succeeded) |
 
 ### 5.1 What P0 observed
 
-Source: `harness-probes-2026-11.md` (Claude Code 2.1.325, Codex 0.154.0, 15 Nov 2026). Vibe was
-not probed (awaiting the owner's go to install it), so its column above is still a plan. What was
-not observed is unknown, not absent.
+Source: `harness-probes-2026-11.md` (Claude Code 2.1.325, Codex 0.154.0, Mistral Vibe 3.1.2,
+15 Nov 2026). What was not observed is unknown, not absent.
 
 - Tool names: MCP tools are `mcp__<server>__<tool>` on both clients. Claude adds an `mcp_server`
   object; Codex does not. Claude's sub-agent tool is `Agent`; Codex's is `spawn_agent`. The core
@@ -148,6 +149,19 @@ not observed is unknown, not absent.
   the tail marker of the same payload. The payload was 256 000 identical letters, which tokenise
   compactly, so this is weak evidence: a realistic payload is still to be measured. Until then
   the boot payload should be a short pointer plus a file or `--append-system-prompt-file` on Claude.
+- Vibe: all seven hook types fire. MCP tools are `mcp_<server>.<tool>`, the shell is
+  `file_system.bash`, the sub-agent tool `agents.spawn`; a child's events carry its own
+  `session_id` and the parent's in `parent_session_id`. A failing tool is an ordinary `post_tool`
+  with `tool_status: "failure"`. Headless MCP calls are denied without `--auto-approve`, and
+  `--enabled-tools mcp_...` hides the MCP tool, so non-interactive runs use `--auto-approve` with
+  explicit `--disabled-tools`. A `pre_tool` deny stops the shell, but there is no sandbox: an
+  out-of-project write succeeded. A 256 KB `session_start` context reached the model (about 63 k
+  extra input tokens). `export.json` gives tokens, cost, outcome and stop reason per run and per
+  sub-agent; the price cap was not exercised (free default model). Two sub-agents were reported
+  `failed` although each finished its call (cause unknown).
+- Prompts: the doorbell, the session-start directive and the notices act only on the person's
+  prompts. A prompt event that carries a sub-agent (`agent` set) is captured in the transcript and
+  otherwise ignored, so a helper's instructions never ring a letter or receive the person's notices.
 
 ## 6. The core
 
@@ -288,7 +302,10 @@ cannot enforce them does not run that role:
   refused as a campaign worker and stays available as reviewer and helper agent).
   `codex exec --json` in the project with its `.codex/` layer, `codex exec resume <id>`
   for retries. Parses `thread.started`, `item.completed`, `turn.completed` usage.
-- `VibeExecutor`: `vibe --prompt` with JSON output, after P0, under the same rule.
+- `VibeExecutor`: `vibe -p --output json --auto-approve --output-dir <run>` with
+  `--disabled-tools` for the shell, write and edit tools and a `strict` `pre_tool` hook
+  enforcing the role's path rules, since Vibe has no sandbox (P0); `--max-turns` and
+  `--max-price` from the governor; usage and outcome read from `export.json`.
 
 Stage type `"opencode"` gains the alias `"agent"`; `model_family` learns the prefixes so
 reviewer independence works across clients (a Codex worker can be reviewed by Claude).
@@ -335,8 +352,8 @@ A4 is relaxed here by LFX's decision; the change is announced in the release not
 
 | Phase | Content | Proof |
 |---|---|---|
-| P0 (done, c7596eb, 75b0aa6, c6c9db4) | Probes, no Magnolia change: each client's hooks around an MCP tool call and inside a sub-agent, tool-name format, size limit of injected context, Codex shell-tool control, Vibe install and files, usage-limit texts where documented | probe report in `opencode_cc_mem/docs/` with commands and captured payloads |
-| P1 (done, b2311d9 to 1345638) | `magnolia-hook`, normalised schema, Python behaviours, Magnolia transcript; OpenCode plugins untouched | parity tests: on recorded OpenCode payloads the core produces what the TS plugins produce; existing suites green |
+| P0 (done) | Probes, no Magnolia change: each client's hooks around an MCP tool call and inside a sub-agent, tool-name format, size limit of injected context, Codex shell-tool control, Vibe install and files, usage-limit texts where documented | probe report in `opencode_cc_mem/docs/` with commands and captured payloads |
+| P1 (done) | `magnolia-hook`, normalised schema, Python behaviours, Magnolia transcript; OpenCode plugins untouched | parity tests: on recorded OpenCode payloads the core produces what the TS plugins produce; existing suites green |
 | P2 | Claude Code adapter + `--harness` launcher + `setup` support | live session on a demo project: boot context visible, retrieval note after a `run_shell` call, capture rows, critic row, transcript file; distillation of that session compared with an OpenCode session on the same task (same candidate kinds found) |
 | P3 | Codex adapter | same live checklist |
 | P4 | Executor registry, governor, campaigns and daemon on Claude Code and Codex | unit tests on recorded event streams; one small campaign per client; governor stops on a simulated limit |
@@ -345,12 +362,13 @@ A4 is relaxed here by LFX's decision; the change is announced in the release not
 
 Status of P0 and P1 (branch `feat/hook-core-p0-p1`, nothing pushed, awaiting Tao's review):
 
-- P0: Claude Code and Codex probed; Vibe not probed. Findings in section 5.1; usage-limit texts
-  not recorded (no limit hit, none found in the help texts consulted).
+- P0: Claude Code, Codex and Vibe probed. Findings in section 5.1; usage-limit texts not
+  recorded (no limit hit, none found in the help texts consulted).
 - P1: package `compchem_memory.hook` (events, project, state, boot_context, directive, doorbell,
   action_retrieval, transcript, sessions, critic, notices, dispatch, `__main__`, JSON adapter).
-  Full package suite at 1345638: 1046 passed, 4 skipped. Cold start, median of 5 on one Mac:
-  0.041 s for session-start, 0.078 s for post-tool.
+  Overlapping post-tool hooks of one session reserve their retrieval budget at selection, so
+  parallel tool calls cannot exceed the per-entry and per-session caps. Cold start, median of 5
+  on one Mac: 0.041 s for session-start, 0.078 s for post-tool.
 - Not done: the OpenCode plugins are untouched and still run the TypeScript path; distillation
   and handover do not yet read the Magnolia transcripts (section 6.3, Plan 2); no client adapter
   or launcher exists yet (P2 onward).
