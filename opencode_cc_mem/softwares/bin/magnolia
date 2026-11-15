@@ -58,7 +58,8 @@ MAGNOLIA_SUBDIRS=(entries staging runs sessions queue archive backups session-no
 
 usage() {
     cat <<EOF
-Usage: magnolia [--profile NAME] [setup] [--critic] <project>
+Usage: magnolia [--harness opencode|claude|codex|vibe] [--profile NAME] [setup] [--critic] <project>
+       magnolia setup --harness claude|codex|vibe [--model M] <project>
        magnolia memory set <model> [--provider P]
        magnolia memory status
 
@@ -76,6 +77,14 @@ Setup (two-step, run once):
                    opencode.json on every launch.
 
 Options:
+  --harness H      Client to launch: opencode (default), claude, codex or vibe.
+                   Beats the "harness" key of .magnolia/llm-setup.json, which
+                   beats the default. A non-OpenCode client runs on your own
+                   login (Magnolia never reads or moves it); the daemon, hooks
+                   and memory are the same. `setup --harness H [--model M]`
+                   checks the client with one call, then records the choice.
+  --model M        Model for the client (setup, or one launch). Else the
+                   "models.<harness>" key of llm-setup.json.
   --opencode-v2    Launch the opencode v2 binary (pinned at
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
@@ -309,7 +318,7 @@ prompt_create_project() {
     goal_line="$(_read_from_tty "Briefly describe the project goal in one line (or press Enter to skip): " || true)"
     write_goal_md "$proj" "$goal_line"
     echo >&2
-    echo "Project '$proj' ready. Launching opencode…" >&2
+    echo "Project '$proj' ready. Launching ${CLIENT_NAME:-opencode}…" >&2
     echo >&2
 }
 
@@ -345,6 +354,50 @@ for kv in sys.argv[1:]:
     d[k] = v
 sp.parent.mkdir(parents=True, exist_ok=True)
 sp.write_text(json.dumps(d, indent=2) + "\n")
+PY
+}
+
+# Read one (dotted) key from the setup side file: strings print as is, other
+# JSON values as JSON; "" when unset/missing.
+setup_get_json() {
+    [ -f "$LLM_SETUP" ] || return 0
+    MAG_SETUP="$LLM_SETUP" "$PYTHON_CMD" - "$1" <<'PY' 2>/dev/null || true
+import json, os, sys
+try:
+    v = json.load(open(os.environ["MAG_SETUP"]))
+    for part in sys.argv[1].split("."):
+        v = v[part]
+    print(v if isinstance(v, str) else json.dumps(v))
+except Exception:
+    pass
+PY
+}
+
+# Set one (dotted) key of the setup side file to a JSON value, keeping every
+# other key. Atomic: temporary file, then replace.
+setup_set_json() {
+    MAG_SETUP="$LLM_SETUP" "$PYTHON_CMD" - "$1" "$2" <<'PY'
+import json, os, pathlib, sys
+sp = pathlib.Path(os.environ["MAG_SETUP"])
+d = {}
+if sp.exists():
+    try:
+        d = json.loads(sp.read_text())
+    except (OSError, json.JSONDecodeError):
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+parts = sys.argv[1].split(".")
+node = d
+for part in parts[:-1]:
+    if not isinstance(node.get(part), dict):
+        node[part] = {}
+    node = node[part]
+node[parts[-1]] = json.loads(sys.argv[2])
+sp.parent.mkdir(parents=True, exist_ok=True)
+tmp = sp.with_name(sp.name + ".tmp")
+tmp.write_text(json.dumps(d, indent=2) + "\n")
+os.replace(tmp, sp)
 PY
 }
 
@@ -610,6 +663,55 @@ except Exception:
     fi
 }
 
+# Setup for a non-OpenCode client: one call checks it (on the member's own
+# login), then `harness` and `models.<H>` are recorded. Nothing is written
+# unless the client answered.
+setup_run_harness() {
+    local harness="$1" model="$2" reply="" rc=0 prompt='Reply with exactly: MAIN_MODEL_OK'
+    local -a cmd
+    case "$harness" in
+        claude) cmd=(claude -p "$prompt") ;;
+        codex)  cmd=(codex exec)
+                [ -z "$model" ] || cmd+=(-m "$model")
+                cmd+=("$prompt") ;;
+        vibe)   cmd=(env VIBE_DISABLE_TELEMETRY=true vibe -p "$prompt") ;;
+    esac
+    if [ "$harness" != "codex" ] && [ -n "$model" ]; then
+        cmd+=(--model "$model")
+    fi
+    # `timeout` is GNU coreutils and absent on stock macOS: without it the
+    # check runs unbounded (stdin is /dev/null either way). No dependency added.
+    if command -v timeout >/dev/null 2>&1; then
+        cmd=(timeout 180 "${cmd[@]}")
+    fi
+    echo "verifying $harness with one real call (may take ~1 min)…" >&2
+    reply="$("${cmd[@]}" 2>/dev/null </dev/null)" || rc=$?
+    # Success = exit 0 AND a stdout line that is exactly MAIN_MODEL_OK. A
+    # client that merely echoes the prompt ("Reply with exactly: …") fails.
+    local line ok=0
+    if [ "$rc" -eq 0 ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+            if [ "$line" = "MAIN_MODEL_OK" ]; then ok=1; fi
+        done <<EOF2
+$reply
+EOF2
+    fi
+    if [ "$ok" != "1" ]; then
+        echo "error: $harness did not pass the check${model:+ with model '$model'} (exit $rc); log in to $harness yourself and check the model id." >&2
+        return 1
+    fi
+    # models.<H> first: a failed second write never leaves a harness without its model.
+    if [ -n "$model" ]; then
+        local quoted
+        quoted="$(MAG_V="$model" "$PYTHON_CMD" -c 'import json, os; print(json.dumps(os.environ["MAG_V"]))')"
+        setup_set_json "models.$harness" "$quoted"
+    fi
+    setup_set_json harness "\"$harness\""
+    echo "setup: $harness checked on your own $harness login (its subscription); recorded harness=$harness${model:+ model=$model}."
+}
+
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     usage
     exit 0
@@ -643,6 +745,8 @@ SETUP=0
 PROFILE=""
 PROJECT=""
 PRINT_ENV=0
+HARNESS_FLAG=""
+MODEL_FLAG=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --critic) CRITIC=1 ;;
@@ -659,6 +763,24 @@ while [ "$#" -gt 0 ]; do
             PROFILE="$1"
             ;;
         --profile=*) PROFILE="${1#--profile=}" ;;
+        --harness)
+            shift
+            if [ -z "${1:-}" ]; then
+                echo "error: --harness requires a name (opencode|claude|codex|vibe)" >&2
+                exit 1
+            fi
+            HARNESS_FLAG="$1"
+            ;;
+        --harness=*) HARNESS_FLAG="${1#--harness=}" ;;
+        --model)
+            shift
+            if [ -z "${1:-}" ]; then
+                echo "error: --model requires a model id" >&2
+                exit 1
+            fi
+            MODEL_FLAG="$1"
+            ;;
+        --model=*) MODEL_FLAG="${1#--model=}" ;;
         --*) echo "error: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
             if [ -n "$PROJECT" ]; then
@@ -676,6 +798,23 @@ if [ -z "$PROJECT" ]; then
     echo >&2
     usage >&2
     exit 1
+fi
+
+# Harness: the flag beats the setup key, which beats the default (opencode).
+# (setup_get returns "" for a null or non-string key, which is then ignored.)
+HARNESS="${HARNESS_FLAG:-$(setup_get harness)}"
+HARNESS="${HARNESS:-opencode}"
+case "$HARNESS" in
+    opencode) CLIENT_NAME="opencode" ;;
+    claude|codex|vibe) CLIENT_NAME="$HARNESS" ;;
+    *)
+        echo "error: unknown harness '$HARNESS' (opencode|claude|codex|vibe)" >&2
+        exit 1
+        ;;
+esac
+if [ "$HARNESS" = "opencode" ] && [ -n "$MODEL_FLAG" ]; then
+    echo "error: unknown option '--model' (it applies to --harness claude|codex|vibe)" >&2
+    echo >&2; usage >&2; exit 1
 fi
 
 if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
@@ -709,12 +848,12 @@ fi
 OPENCODE_BIN="opencode"
 if [ "${MAGNOLIA_OPENCODE_V2:-}" = "1" ]; then
     V2_BIN="${MAGNOLIA_OPENCODE_V2_BIN:-$HOME/.local/share/magnolia-v2/bin/opencode}"
-    if [ ! -x "$V2_BIN" ]; then
+    if [ "$HARNESS" = "opencode" ] && [ ! -x "$V2_BIN" ]; then
         echo "error: v2 binary not found at $V2_BIN (set MAGNOLIA_OPENCODE_V2_BIN)" >&2
         exit 1
     fi
     OPENCODE_BIN="$V2_BIN"
-    if [ -z "${OPENCODE_DB:-}" ]; then
+    if [ "$HARNESS" = "opencode" ] && [ -z "${OPENCODE_DB:-}" ]; then
         OPENCODE_DB="$HOME/.local/share/opencode/opencode-v2.db"
         mkdir -p "$(dirname "$OPENCODE_DB")"
         export OPENCODE_DB
@@ -737,12 +876,25 @@ if [ -z "${COMPCHEM_TOOLS_PORT:-}" ]; then
     [ "$_branch" = "master" ] || _base=8101
     export COMPCHEM_TOOLS_PORT="$(tools_port_for_project "$PROJECT" "$_base")"
 fi
-if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
-    echo "error: opencode binary not found: $OPENCODE_BIN" >&2
+if [ "$HARNESS" = "opencode" ]; then
+    if ! command -v "$OPENCODE_BIN" >/dev/null 2>&1 && [ ! -x "$OPENCODE_BIN" ]; then
+        echo "error: opencode binary not found: $OPENCODE_BIN" >&2
+        exit 1
+    fi
+elif ! command -v "$CLIENT_NAME" >/dev/null 2>&1; then
+    # Before any daemon starts: a missing client must cost nothing. Exit 1 here
+    # (plan Review Focus); the launch CLI's own exit 2 (binary missing) is
+    # passed through unchanged below if it ever occurs.
+    echo "error: $CLIENT_NAME binary not found on PATH (install it, or pick another --harness)" >&2
     exit 1
 fi
 
 # Two-step interactive setup (step 2 can be deferred to the agent).
+if [ "$SETUP" = "1" ] && [ "$HARNESS" != "opencode" ]; then
+    MODEL_SETUP="${MODEL_FLAG:-}"
+    setup_run_harness "$HARNESS" "$MODEL_SETUP" || exit 1
+    exit 0
+fi
 if [ "$SETUP" = "1" ]; then
     setup_run
     if [ -z "$PROJECT" ]; then
@@ -772,7 +924,7 @@ fi
 # Render template + LLM policy → opencode.json (atomic; echoes on/off).
 MEMORY_STATE="$(render_config "$PROJECT")"
 if [ "$MEMORY_STATE" = "off" ]; then
-    echo "note: memory is NOT configured — the agent will offer setup when opencode starts." >&2
+    echo "note: memory is NOT configured — the agent will offer setup when $CLIENT_NAME starts." >&2
 fi
 
 # Wrapper argument wins over any pre-set env var. Absolute (2026-10-05,
@@ -863,11 +1015,19 @@ flags_banner() {
 
 apply_profile "$PROFILE"
 flags_banner
-OPENCODE_VERSION="$("$OPENCODE_BIN" --version 2>/dev/null | head -1)"
-echo "opencode: ${OPENCODE_VERSION:-unknown}  db: ${OPENCODE_DB:-default (v1 shared)}" >&2
+if [ "$HARNESS" = "opencode" ]; then
+    OPENCODE_VERSION="$("$OPENCODE_BIN" --version 2>/dev/null | head -1)"
+    echo "opencode: ${OPENCODE_VERSION:-unknown}  db: ${OPENCODE_DB:-default (v1 shared)}" >&2
+else
+    echo "client: $CLIENT_NAME (own login; no OpenCode binary or database involved)" >&2
+fi
 if [ "${PRINT_ENV:-0}" = "1" ]; then
-    echo "binary:  $OPENCODE_BIN"
-    echo "db:      ${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
+    if [ "$HARNESS" = "opencode" ]; then
+        echo "binary:  $OPENCODE_BIN"
+        echo "db:      ${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db (v1 shared — v1-only mode)}"
+    else
+        echo "binary:  $CLIENT_NAME"
+    fi
     echo "project: $PROJECT -> $MAGNOLIA_PROJECT_DIR"
     echo "workspace: $PROJECT_WORKSPACE"
     echo "config:  $CONFIG"
@@ -891,7 +1051,42 @@ if [ -n "${HTTPS_PROXY:-}${https_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]; then
   esac
 fi
 
-# Ensure the compchem-tools MCP daemon is up before opencode connects to it.
+# Non-OpenCode client: render its files and read its command from the launch
+# CLI before anything starts. The CLI writes the client's files, then prints
+# the argv items NUL-terminated, an empty item, and KEY=VALUE env items
+# NUL-terminated. Exit 2 = client binary missing, 1 = other failure; either
+# way it printed one stderr line and no daemon has run yet.
+ARGV=()
+if [ "$HARNESS" != "opencode" ]; then
+    LAUNCH_MODEL="${MODEL_FLAG:-$(setup_get_json "models.$HARNESS")}"
+    LAUNCH_OUT="$(mktemp "${TMPDIR:-/tmp}/magnolia-launch.XXXXXX")"
+    trap 'rm -f "$LAUNCH_OUT"' EXIT
+    LAUNCH_ARGS=(launch --harness "$HARNESS" --root "$OPENCODE_DIR" --project "$PROJECT"
+                 --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT")
+    [ -z "$LAUNCH_MODEL" ] || LAUNCH_ARGS+=(--model "$LAUNCH_MODEL")
+    LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
+    LAUNCH_RC=0
+    PYTHONPATH="${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m compchem_memory.harness "${LAUNCH_ARGS[@]}" >"$LAUNCH_OUT" || LAUNCH_RC=$?
+    if [ "$LAUNCH_RC" -ne 0 ]; then
+        # The CLI already printed its one stderr line; pass its exit code through.
+        exit "$LAUNCH_RC"
+    fi
+    in_env=0
+    while IFS= read -r -d '' item; do
+        if [ "$in_env" = "0" ]; then
+            if [ -z "$item" ]; then in_env=1; else ARGV+=("$item"); fi
+        else
+            export "$item"
+        fi
+    done <"$LAUNCH_OUT"
+    if [ "${#ARGV[@]}" -eq 0 ]; then
+        echo "error: $CLIENT_NAME launch command came back empty" >&2
+        exit 1
+    fi
+fi
+
+# Ensure the compchem-tools MCP daemon is up before the client connects to it.
 # Idempotent: returns immediately when already running. The daemon inherits
 # this process's MAGNOLIA_PROJECT_DIR (exported above) for its background
 # poller default. Non-fatal by design — opencode still launches if the daemon
@@ -923,6 +1118,19 @@ cd "$PROJECT_WORKSPACE"
 # Dry run: print what exec would receive (argv, cwd, allowlisted env) and stop.
 # Values are read from the environment, so no quoting is involved. Names that
 # look like secrets are never printed.
+if [ "${MAGNOLIA_DRY_RUN:-0}" = "1" ] && [ "$HARNESS" != "opencode" ]; then
+    "$PYTHON_CMD" - "${ARGV[@]}" <<'PY'
+import json, os, sys
+allow = ["MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
+         "MAGNOLIA_WORKSPACE_ROOT", "MAGNOLIA_HOOK_POLICY",
+         "MAGNOLIA_OPENCODE_V2", "COMPCHEM_TOOLS_PORT", "MCP_TOOL_TIMEOUT"]
+secret = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+env = {k: os.environ[k] for k in allow
+       if k in os.environ and not any(w in k for w in secret)}
+print(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd(), "env": env}))
+PY
+    exit 0
+fi
 if [ "${MAGNOLIA_DRY_RUN:-0}" = "1" ]; then
     MAG_ARGV0="$OPENCODE_BIN" MAGNOLIA_PROJECT_DIR="." "$PYTHON_CMD" - <<'PY'
 import json, os
@@ -935,5 +1143,11 @@ env = {k: os.environ[k] for k in allow
 print(json.dumps({"argv": [os.environ["MAG_ARGV0"]], "cwd": os.getcwd(), "env": env}))
 PY
     exit 0
+fi
+if [ "$HARNESS" != "opencode" ]; then
+    # The trap would not survive exec; the files are already read.
+    rm -f "$LAUNCH_OUT"
+    trap - EXIT
+    exec "${ARGV[@]}"
 fi
 MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"
