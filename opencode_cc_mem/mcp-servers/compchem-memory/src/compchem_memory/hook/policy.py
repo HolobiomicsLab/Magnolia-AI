@@ -7,9 +7,9 @@ adapter cannot parse the payload but a tool name is recoverable from it.
 Remaining paths on which a denied shell still runs, each a deliberate
 fail-open choice: stdin that is not a JSON object, or an unknown harness; a
 payload with no recoverable tool name (``tool_name``, ``tool.raw_name``,
-``tool.name``); the adapter's ``render`` raising; ``handle`` running past the
-client's own hook timeout; and, for clients whose denial is stdout-only with
-exit 0, a failed stdout write. Clients without a sandbox (Vibe) also get the
+``tool.name``); the adapter's ``render`` raising; and, for clients whose denial
+is stdout-only with exit 0, a failed stdout write. A known denial is written
+before ``handle`` runs, so slow capture cannot delay it. Clients without a sandbox (Vibe) also get the
 shell removed from their tool list by the rendered configuration.
 """
 

@@ -10,7 +10,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from compchem_memory.harness.files import atomic_write
+from compchem_memory.harness.files import atomic_write, validate_project_paths
 from compchem_memory.harness.neutral import NeutralConfig, load
 from compchem_memory.harness.protocol import RENDERERS, Launch, LaunchContext, Renderer
 
@@ -21,11 +21,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = _parse(argv)
         launch, renderer = _render(args)
         _validate(launch)
+        project_dir = args.root.resolve() / "projects" / args.project
+        validate_project_paths(launch.files, project_dir)
         for conflict in launch.conflicts:
             print(f"warning: {str(conflict).splitlines()[0]}", file=sys.stderr)
         for path, content in launch.files.items():
             atomic_write(path, content)
-        _link(launch.links, args.root.resolve() / "projects" / args.project)
+        _link(launch.links, project_dir)
         _emit(launch)
         return 0
     except MissingBinary as error:

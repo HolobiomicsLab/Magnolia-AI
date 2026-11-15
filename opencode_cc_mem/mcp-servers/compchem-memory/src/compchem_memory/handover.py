@@ -944,7 +944,8 @@ def generate_handover(
     """
     from compchem_memory.opencode_ingest import (
         plugin_dump_exporter, reconstruct_transcript, scrub_secrets,
-        _last_message_id, _messages_after_cursor, _session_exporter, v2_mode,
+        _last_message_id, _messages_after_cursor, _read_mapping_ids, _session_exporter,
+        v2_mode,
     )
     from compchem_memory.transcript_source import (
         active_opencode_sid,
@@ -988,7 +989,11 @@ def generate_handover(
 
     _migrate_legacy_cursor(store)
 
-    active_sid = active_opencode_sid(store)
+    if all(ref.sealable for ref in refs):
+        legacy_ids = _read_mapping_ids(store / "opencode-sessions.jsonl")
+        active_sid = legacy_ids[-1] if legacy_ids else None
+    else:
+        active_sid = active_opencode_sid(store)
 
     # One cheap listing replaces the per-session exports for drained sessions.
     # Any failure, or a listing that lacks the newest mapped session (a cap or

@@ -209,6 +209,41 @@ def test_cli_policy_block_survives_handle_failure(tmp_path, monkeypatch, capfd):
     assert captured.err == REASON + "\n"
 
 
+def test_cli_policy_block_is_written_before_dispatch(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook import dispatch
+    from compchem_memory.hook.policy import REASON
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    dispatched = []
+
+    def blocked_dispatch(*args):
+        dispatched.append(args)
+        raise AssertionError("dispatch must not run")
+
+    monkeypatch.setattr(
+        dispatch,
+        "handle",
+        blocked_dispatch,
+    )
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+    captured = capfd.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert captured.err == REASON + "\n"
+    assert dispatched == []
+    assert not (project / ".magnolia" / "transcripts").exists()
+
+
 def test_cli_policy_exception_still_blocks_bash(
     tmp_path, monkeypatch, capfd, isolated_cli_state,
 ):

@@ -155,6 +155,13 @@ def _render_recovered_policy(adapter: Any, event: Any, env: Mapping[str, str]) -
     response = _policy_response(event, env)
     if response.block is None:
         return 0
+    return _render_policy_block(adapter, event, response, env)
+
+
+def _render_policy_block(
+    adapter: Any, event: Any, response: Any, env: Mapping[str, str]
+) -> int:
+    """Write a known denial immediately, before optional hook side effects."""
     try:
         rendered = adapter.render(response, event)
     except Exception as error:  # noqa: BLE001 - render failure is an unavoidable fail-open
@@ -222,6 +229,8 @@ def main() -> None:
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
 
     policy_response = _policy_response(event, os.environ)
+    if policy_response.block is not None:
+        os._exit(_render_policy_block(adapter, event, policy_response, os.environ))
     try:
         from compchem_memory.hook.dispatch import handle
 

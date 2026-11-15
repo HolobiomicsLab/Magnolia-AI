@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -58,17 +58,38 @@ def merge_toml(path: Path, owned: Owned, magnolia: dict) -> list[str]:
 
 
 def merged_toml(
-    path: Path, owned: Owned, magnolia: dict
+    path: Path,
+    owned: Owned,
+    magnolia: dict,
+    prepare: Callable[[dict], dict] | None = None,
 ) -> tuple[bytes, list[str], bytes | None]:
     """Return the bytes :func:`merge_toml` would write, its conflicts, and the original
     bytes to back up (or None when no backup is due); write nothing."""
     original = path.read_bytes() if path.exists() else b""
     current = tomllib.loads(original.decode("utf-8")) if original else {}
+    if prepare is not None:
+        current = prepare(current)
     conflicts: list[str] = []
     merged = _merge_dict(current, owned, magnolia, conflicts=conflicts)
     content = _toml_bytes(merged)
     due = content != original and original and _has_comment(original.decode("utf-8"))
     return content, conflicts, (original if due else None)
+
+
+def validate_project_path(path: Path, project_dir: Path) -> None:
+    """Reject a file whose resolved path or parent leaves its project."""
+    boundary = project_dir.resolve()
+    if (
+        not path.resolve().is_relative_to(boundary)
+        or not path.parent.resolve().is_relative_to(boundary)
+    ):
+        raise ValueError(f"configuration path leaves the project: {path}")
+
+
+def validate_project_paths(paths: Iterable[Path], project_dir: Path) -> None:
+    """Validate every path in an iterable before any one of them is written."""
+    for path in paths:
+        validate_project_path(Path(path), project_dir)
 
 
 def atomic_write(path: Path, content: bytes) -> None:
