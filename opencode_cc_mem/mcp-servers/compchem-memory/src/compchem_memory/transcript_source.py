@@ -1,4 +1,10 @@
-"""Identify and export legacy OpenCode and harness-neutral transcripts."""
+"""Identify and export legacy OpenCode and harness-neutral transcripts.
+
+Hook-fed sessions are never sealed, so every sweep rereads their local
+transcripts; that cost grows with transcript history. In a mixed store where
+OpenCode is unavailable, dialogue mode processes hook sessions only: legacy
+OpenCode sessions do not receive the tool-event fallback in that sweep.
+"""
 
 from __future__ import annotations
 
@@ -46,7 +52,10 @@ def list_sessions(store: str | Path) -> list[SessionRef]:
             session_id=sid,
             key=sid,
             first_ts=first_by_sid.get(sid),
-            last_ts=last_by_sid.get(sid),
+            last_ts=(
+                _mtime_utc(root / "opencode-transcripts" / f"{sid}.json")
+                or last_by_sid.get(sid)
+            ),
             sealable=True,
         )
         for sid in legacy_ids
@@ -86,6 +95,47 @@ def list_sessions(store: str | Path) -> list[SessionRef]:
 def active_opencode_sid(store: str | Path) -> str | None:
     """Return the active legacy OpenCode id using the existing mapping rule."""
     return _latest_sid(Path(store) / "opencode-sessions.jsonl")
+
+
+def session_activity(ref: SessionRef) -> str:
+    """Return the best sortable activity timestamp carried by a session."""
+    return ref.last_ts or ref.first_ts or ""
+
+
+def current_session(store: str | Path) -> SessionRef | None:
+    """Choose the caller session using activity and the OpenCode capture hint.
+
+    The last mapping row identifies the active OpenCode session. Prefer that
+    session on ties or when hook activity is older; a hook-fed session wins only
+    when its transcript activity is strictly newer.
+    """
+    refs = list_sessions(store)
+    if not refs:
+        return None
+
+    active_sid = active_opencode_sid(store)
+    active = next(
+        (ref for ref in refs if ref.sealable and ref.session_id == active_sid),
+        None,
+    )
+    indexed_hooks = [
+        (index, ref) for index, ref in enumerate(refs) if not ref.sealable
+    ]
+    if active is None:
+        return max(
+            enumerate(refs),
+            key=lambda item: (session_activity(item[1]), item[0]),
+        )[1]
+    if not indexed_hooks:
+        return active
+
+    _, latest_hook = max(
+        indexed_hooks,
+        key=lambda item: (session_activity(item[1]), item[0]),
+    )
+    if session_activity(latest_hook) > session_activity(active):
+        return latest_hook
+    return active
 
 
 def exporter_for(

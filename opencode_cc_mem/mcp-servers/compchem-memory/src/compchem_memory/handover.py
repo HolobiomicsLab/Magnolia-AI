@@ -631,6 +631,27 @@ def _mapping_session_dates(mapping: Path) -> list[str]:
     return sorted(dates)
 
 
+def _session_ref_dates(refs: list) -> list[str]:
+    """Deduplicated dates carried by the client-neutral session contract."""
+    dates = {
+        timestamp[:10]
+        for ref in refs
+        for timestamp in (ref.first_ts, ref.last_ts)
+        if isinstance(timestamp, str) and len(timestamp) >= 10
+    }
+    return sorted(dates)
+
+
+def _session_ref_date(ref) -> str:
+    """Best source timestamp date for the generated handover header."""
+    if ref.sealable:
+        return _today()
+    timestamp = ref.last_ts or ref.first_ts
+    if isinstance(timestamp, str) and len(timestamp) >= 10:
+        return timestamp[:10]
+    return _today()
+
+
 def _iter_working_items(state_text: str):
     """Yield (heading, item_text) for every item in the working sections
     (Done / In progress / To do / Parked / Held). Reference sections
@@ -923,7 +944,12 @@ def generate_handover(
     """
     from compchem_memory.opencode_ingest import (
         plugin_dump_exporter, reconstruct_transcript, scrub_secrets,
-        _read_mapping_ids, _messages_after_cursor, _last_message_id, v2_mode,
+        _last_message_id, _messages_after_cursor, _session_exporter, v2_mode,
+    )
+    from compchem_memory.transcript_source import (
+        active_opencode_sid,
+        list_sessions,
+        session_activity,
     )
     from compchem_memory.llm import call_llm
 
@@ -938,9 +964,18 @@ def generate_handover(
     v1_cli_unsafe = v2_mode() and not opencode_cli.is_v2()
 
     store = Path(project_dir) / ".magnolia"
-    mapping = store / "opencode-sessions.jsonl"
-    if not mapping.exists():
+    refs = list_sessions(store)
+    if not refs:
         return None
+    # OpenCode-only stores keep their mapping (first-seen) order unchanged; only a
+    # store that also holds hook-fed sessions is merged in activity order.
+    if any(not ref.sealable for ref in refs):
+        refs = [
+            ref for _, ref in sorted(
+                enumerate(refs),
+                key=lambda item: (session_activity(item[1]), item[0]),
+            )
+        ]
 
     # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
     # resolved from PATH is v1.18.35 in the memory-server process, so
@@ -948,31 +983,29 @@ def generate_handover(
     # falls back to that v1 CLI (2026-11-16: it could take down the MCP
     # connection); under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with
     # --standalone; v1-only setups still use the CLI as before.
-    exporter = exporter or plugin_dump_exporter(str(store))
+    legacy_exporter = exporter or plugin_dump_exporter(str(store))
+    export_session_ref = _session_exporter(str(store), legacy_exporter)
 
     _migrate_legacy_cursor(store)
 
-    sids = _read_mapping_ids(mapping)
-    if not sids:
-        return None
-
-    latest_sid = sids[-1]
+    active_sid = active_opencode_sid(store)
 
     # One cheap listing replaces the per-session exports for drained sessions.
     # Any failure, or a listing that lacks the newest mapped session (a cap or
     # scope change), yields None -> export every session (the legacy behavior).
-    if session_updates is not None:
+    has_legacy_sessions = any(ref.sealable for ref in refs)
+    if session_updates is not None and has_legacy_sessions:
         updates = session_updates()
-    elif _skip_export_enabled() and not v1_cli_unsafe:
+    elif _skip_export_enabled() and has_legacy_sessions and not v1_cli_unsafe:
         updates = _list_session_updates()
     else:
         updates = None
-    if updates is not None and latest_sid not in updates:
+    if updates is not None and active_sid and active_sid not in updates:
         updates = None
     if (updates is None and session_updates is None and _skip_export_enabled()
-            and not v1_cli_unsafe):
+            and has_legacy_sessions and not v1_cli_unsafe):
         print(f"[handover] session list unavailable or untrusted — exporting "
-              f"all {len(sids)} sessions", file=sys.stderr)
+              f"all {len(refs)} sessions", file=sys.stderr)
 
     state_path = store / HANDOVER_STATE_FILE
     base = ""
@@ -986,7 +1019,9 @@ def generate_handover(
     # HOLD_BACK_MIN_UNCHANGED_MERGES merges with ≥ HOLD_BACK_MIN_SESSIONS_SINCE
     # sessions since their touched date are offered to the merge LLM as
     # candidates for 'Parked / Held' (allowed, not required; never deleted).
-    session_dates = _mapping_session_dates(mapping)
+    mapping_dates = _mapping_session_dates(store / "opencode-sessions.jsonl")
+    hook_dates = _session_ref_dates([ref for ref in refs if not ref.sealable])
+    session_dates = sorted(set(mapping_dates) | set(hook_dates))
     eligible = _hold_back_eligible(base, _load_ledger(store), session_dates)
     holdback_block = ""
     if eligible:
@@ -999,25 +1034,28 @@ def generate_handover(
     wrote = False
     skipped = 0
     merged_infos: list[tuple[str, str, str]] = []
-    for sid in sids:
+    for ref in refs:
+        sid = ref.key
         record = _read_cursor_record(store, sid)
         cursor = record.get("cursor") if record else None
-        if _should_skip_export(sid, record, updates, latest_sid):
+        if (ref.sealable
+                and _should_skip_export(ref.session_id, record, updates, active_sid or "")):
             skipped += 1
             continue
         t0_ms = _now_ms()                # seal timestamp: captured BEFORE the export
         try:
-            export = exporter(sid)
+            export = export_session_ref(ref)
         except Exception as e:  # noqa: BLE001 - one bad session must not stop the sweep
             print(f"[handover] export {sid} failed: {type(e).__name__}: {e}",
                   file=sys.stderr)
             continue
         if not export:
             continue                     # export failed — retry this session next boot
+        can_seal = ref.sealable and ref.session_id != active_sid
         try:
             new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
             if not new_msgs:
-                if sid != latest_sid:
+                if can_seal:
                     _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
                 continue
             transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
@@ -1026,7 +1064,7 @@ def generate_handover(
                   file=sys.stderr)
             continue
         if not transcript.strip():
-            if sid != latest_sid:
+            if can_seal:
                 _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
             continue
 
@@ -1075,14 +1113,14 @@ def generate_handover(
 
         merged = _post_merge_validate(merged, base, store, project_dir)
         base = merged.strip()
-        merged_infos.append((sid, _today(), _topic_from_transcript(transcript)))
+        merged_infos.append((sid, _session_ref_date(ref), _topic_from_transcript(transcript)))
         header = _handover_header(merged_infos, len(merged_infos))
         atomic_write_text(state_path, header + "\n\n" + base + "\n")
         _write_session_cursor(store, sid, _last_message_id(new_msgs) or cursor,
-                              sealed_at_ms=(t0_ms if sid != latest_sid else None))
+                              sealed_at_ms=(t0_ms if can_seal else None))
         wrote = True
 
     if skipped:
-        print(f"[handover] skip-export: {skipped}/{len(sids)} drained sessions "
+        print(f"[handover] skip-export: {skipped}/{len(refs)} drained sessions "
               f"not re-exported", file=sys.stderr)
     return str(state_path) if wrote else None

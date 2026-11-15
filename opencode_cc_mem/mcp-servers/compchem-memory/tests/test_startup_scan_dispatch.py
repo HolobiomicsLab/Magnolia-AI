@@ -98,3 +98,45 @@ def test_falls_back_when_no_mapping(project_dir, monkeypatch):
     assert called["ingest"] == 0
     assert called["commit"] == 1
     assert result["mode"] == "tool_event"
+
+
+def test_startup_scan_dialogue_for_hook_sessions_without_opencode(
+    project_dir, monkeypatch,
+):
+    store = project_dir / ".magnolia"
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+        "transcript_ref": None,
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "hello"}) + "\n")
+    monkeypatch.setattr(startup_scan, "is_llm_available", lambda: True)
+    monkeypatch.setattr(startup_scan, "_opencode_available", lambda: False)
+    called = _track(monkeypatch)
+
+    result = startup_scan.scan_and_distill(str(project_dir))
+
+    assert called["ingest"] == 1
+    assert called["commit"] == 0
+    assert result["mode"] == "dialogue"
+
+
+def test_hook_source_check_does_not_rescan_session_registry(project_dir, monkeypatch):
+    store = project_dir / ".magnolia"
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "hello"}) + "\n")
+    monkeypatch.setattr(
+        "compchem_memory.transcript_source.resolve_transcript",
+        lambda *args: (_ for _ in ()).throw(AssertionError("registry rescanned")),
+    )
+
+    assert startup_scan._has_dialogue_source(store) is True

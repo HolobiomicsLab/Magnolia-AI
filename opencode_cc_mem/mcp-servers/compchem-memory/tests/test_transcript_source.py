@@ -237,3 +237,20 @@ def test_hook_last_ts_keeps_milliseconds(tmp_path):
     ref = [r for r in list_sessions(tmp_path) if r.harness == "claude"][0]
 
     assert ref.last_ts == "2023-11-14T22:13:20.000Z"
+
+
+def test_legacy_activity_uses_materialised_transcript_mtime(tmp_path):
+    _write_jsonl(tmp_path / "opencode-sessions.jsonl", [{
+        "ts": "2026-11-15T09:00:00Z",
+        "opencode_session_id": "ses-resumed",
+    }])
+    transcript = tmp_path / "opencode-transcripts" / "ses-resumed.json"
+    transcript.parent.mkdir()
+    transcript.write_text('{"messages": []}', encoding="utf-8")
+    activity = datetime(2026, 11, 15, 10, 30, tzinfo=timezone.utc).timestamp()
+    os.utime(transcript, (activity, activity))
+
+    ref = list_sessions(tmp_path)[0]
+
+    assert ref.first_ts == "2026-11-15T09:00:00Z"
+    assert ref.last_ts == "2026-11-15T10:30:00.000Z"

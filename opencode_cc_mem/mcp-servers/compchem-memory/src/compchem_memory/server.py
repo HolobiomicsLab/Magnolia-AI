@@ -97,7 +97,7 @@ from compchem_memory.storage import (
 from compchem_memory.project_guard import check_project
 from compchem_memory.startup_scan import scan_and_distill, _opencode_available
 from compchem_memory.llm import is_llm_available
-from compchem_memory.opencode_ingest import _latest_sid, distill_session_transcript
+from compchem_memory.opencode_ingest import distill_session_transcript
 
 RULES_DIR = resolved_rules_dir()
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
@@ -1001,9 +1001,17 @@ def memory_distill_session(
     # path the timer/startup sweep uses — the manual tool just forces a sweep of
     # the current session now.
     store = Path(pd) / ".magnolia"
-    sid = _latest_sid(store / "opencode-sessions.jsonl")
-    if sid and is_llm_available() and _opencode_available():
-        res = distill_session_transcript(str(store), sid, commit=commit)
+    from compchem_memory.transcript_source import current_session, resolve_transcript
+
+    ref = current_session(store)
+    has_source = False
+    if ref and is_llm_available():
+        has_source = (
+            (ref.sealable and _opencode_available())
+            or (not ref.sealable and resolve_transcript(store, ref.key) is not None)
+        )
+    if ref and has_source:
+        res = distill_session_transcript(str(store), ref, commit=commit)
         if res is not None:
             if res["status"] == "committed":
                 _safe_version_commit(store, f"manual distill: {len(res['saved'])} dialogue")

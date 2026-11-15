@@ -67,3 +67,79 @@ def test_commit_saves_dialogue_and_advances_cursor(project):
     assert len(list((project / ".magnolia" / "staging").glob("*.md"))) >= 1
     rec = json.loads((project / ".magnolia" / "opencode-distilled" / "ses_live.json").read_text())
     assert rec["cursor"] == "m1"
+
+
+def test_hook_session_uses_dialogue_distillation_without_opencode(tmp_path, monkeypatch):
+    from compchem_memory import opencode_ingest as oi
+    from compchem_memory import server
+    from compchem_memory.storage import ensure_project_store
+
+    pd = tmp_path / "hook-project"
+    ensure_project_store(str(pd))
+    store = pd / ".magnolia"
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({
+        "kind": "prompt", "text": "HOOK_DIALOGUE_MARKER",
+    }) + "\n")
+    monkeypatch.setattr(server, "is_llm_available", lambda: True)
+    monkeypatch.setattr(server, "_opencode_available", lambda: False)
+    monkeypatch.setattr(oi, "_default_distiller", lambda text: [{
+        "title": "Hook dialogue", "content": text, "type": "scientific_finding",
+    }])
+
+    payload = json.loads(_tool(server)(project_dir=str(pd)))
+
+    assert payload["status"] == "preview"
+    assert payload["source"] == "dialogue"
+    assert "HOOK_DIALOGUE_MARKER" in json.dumps(payload["candidates"])
+
+
+def test_distill_prefers_resumed_active_opencode_by_activity(tmp_path, monkeypatch):
+    import os
+    from datetime import datetime, timezone
+
+    from compchem_memory import server
+    from compchem_memory.storage import ensure_project_store
+
+    pd = tmp_path / "mixed-project"
+    ensure_project_store(str(pd))
+    store = pd / ".magnolia"
+    (store / "opencode-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T09:00:00Z", "opencode_session_id": "ses-a",
+    }) + "\n")
+    opencode = store / "opencode-transcripts" / "ses-a.json"
+    opencode.parent.mkdir(exist_ok=True)
+    opencode.write_text('{"messages": []}')
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T09:30:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n")
+    claude = store / "transcripts" / "claude" / "claude-one.jsonl"
+    claude.parent.mkdir(parents=True)
+    claude.write_text(json.dumps({"kind": "prompt", "text": "hello"}) + "\n")
+
+    def timestamp(hour, minute=0):
+        return datetime(2026, 11, 15, hour, minute, tzinfo=timezone.utc).timestamp()
+
+    os.utime(claude, (timestamp(10), timestamp(10)))
+    os.utime(opencode, (timestamp(10, 30), timestamp(10, 30)))
+    selected = []
+    monkeypatch.setattr(server, "is_llm_available", lambda: True)
+    monkeypatch.setattr(server, "_opencode_available", lambda: True)
+    monkeypatch.setattr(server, "distill_session_transcript", lambda store, ref, **kwargs: (
+        selected.append(ref.key) or {"status": "preview", "candidates": []}
+    ))
+
+    _tool(server)(project_dir=str(pd))
+    assert selected == ["ses-a"]
+
+    os.utime(claude, (timestamp(11), timestamp(11)))
+    _tool(server)(project_dir=str(pd))
+    assert selected == ["ses-a", "claude-claude-one"]
