@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
     from campaign_runner.routing import ResolvedRoute
+    from compchem_memory.transcript_source import SessionRef
 
 
 @dataclass
@@ -70,9 +71,18 @@ class SessionIdentity:
     def hook_harness(self) -> str:
         return "claude" if self.client == "claude-code" else self.client
 
-    def transcript_ref(self) -> dict[str, str]:
-        """The harness-qualified identity required by the existing SessionRef shape."""
-        return {"harness": self.client, "session_id": self.session_id}
+    def transcript_ref(self) -> "SessionRef":
+        """Return the stable transcript identity for this client session."""
+        from compchem_memory.hook.state import safe_component
+        from compchem_memory.transcript_source import SessionRef
+
+        harness = self.hook_harness
+        key = (
+            self.session_id
+            if harness == "opencode"
+            else f"{harness}-{safe_component(self.session_id)}"
+        )
+        return SessionRef(harness, self.session_id, key, None, None, False)
 
     def permits_resume(self, other: "SessionIdentity") -> bool:
         return (
@@ -146,7 +156,8 @@ class UsageRecord:
         if baseline is not None:
             for key, value in tuple(counters.items()):
                 previous = getattr(baseline, key)
-                counters[key] = value - previous if value is not None and previous is not None else None
+                delta = value - previous if value is not None and previous is not None else None
+                counters[key] = delta if delta is not None and delta >= 0 else None
         known = [key for key in counters if key != "cost"]
         completeness = "complete" if all(counters[key] is not None for key in known) else "partial"
         values = {
