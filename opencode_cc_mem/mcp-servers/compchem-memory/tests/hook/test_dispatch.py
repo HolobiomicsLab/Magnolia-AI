@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from compchem_memory import quick_search
@@ -14,6 +15,7 @@ from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
 from compchem_memory.hook.state import SessionState
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "hooks"
+CLIENT_TRANSCRIPTS = Path(__file__).resolve().parents[1] / "fixtures" / "client-transcripts"
 
 
 def _workspace(tmp_path: Path) -> tuple[Path, dict[str, str]]:
@@ -169,6 +171,234 @@ def test_dispatch_turn_end_passes_turn_id_to_critic_and_probe(tmp_path, monkeypa
         ("probe", "json", "session-1", "The completed report.", "turn-7"),
         ("critic", "json", "session-1", "agent-7", "turn-7"),
     ]
+
+
+def test_vibe_turn_end_records_reply_text(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+    from compchem_memory.hook.transcript import append_event
+
+    project, env = _workspace(tmp_path)
+    turn_id = "turn-2c40443c7526b229e2076d661938b73f"
+    observed = []
+
+    monkeypatch.setattr(
+        action_retrieval,
+        "probe_application",
+        lambda paths, harness, session_id, reply, event_turn_id: observed.append(
+            ("probe", reply, event_turn_id)
+        ),
+    )
+    monkeypatch.setattr(
+        critic,
+        "run_critic",
+        lambda paths, harness, session_id, agent_id, event_turn_id: observed.append(
+            ("critic", agent_id, event_turn_id)
+        ),
+    )
+    event = HookEvent(
+        harness="vibe",
+        event="turn-end",
+        session_id="session-1",
+        cwd=str(project),
+        turn_id=turn_id,
+        transcript_ref=str(CLIENT_TRANSCRIPTS / "vibe" / "session"),
+    )
+    append_event(
+        project / ".magnolia",
+        HookEvent(
+            harness="vibe", event="turn-end", session_id="session-1",
+            cwd=str(project), turn_id=turn_id, assistant_text="CHECKING.",
+        ),
+    )
+
+    handle(event, env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "vibe" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == [
+        "CHECKING.",
+        'note.txt contains exactly one line: "alpha line". '
+        "It is a minimal placeholder note with no other content or instructions.",
+    ]
+    assert observed == [
+        ("probe", rows[-1]["text"], turn_id),
+        ("critic", None, turn_id),
+    ]
+
+
+def test_client_recovery_keeps_native_final_reply_last(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    turn_id = "01a1df67-264d-7472-b477-66828e7d31b6"
+    final = (
+        "```sh\ncat note.txt\n```\n\n> “alpha line”\n\n"
+        "The note contains a single line: “alpha line.”"
+    )
+    monkeypatch.setattr(action_retrieval, "probe_application", lambda *args: None)
+    monkeypatch.setattr(critic, "run_critic", lambda *args: None)
+    event = HookEvent(
+        harness="codex",
+        event="turn-end",
+        session_id="session-1",
+        cwd=str(project),
+        turn_id=turn_id,
+        assistant_text=final,
+        transcript_ref=str(CLIENT_TRANSCRIPTS / "codex" / "rollout.jsonl"),
+    )
+
+    handle(event, env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == ["CHECKING.", final]
+
+
+def _codex_transcript(path: Path, turn_id: str, *texts: str) -> Path:
+    rows = [{"type": "event_msg", "payload": {"type": "task_started", "turn_id": turn_id}}]
+    rows.extend({"type": "response_item", "payload": {
+        "type": "message", "role": "assistant",
+        "content": [{"type": "output_text", "text": text}],
+    }} for text in texts)
+    rows.append({"type": "event_msg", "payload": {"type": "task_complete", "turn_id": turn_id}})
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def _quiet_turn_end(monkeypatch) -> None:
+    from compchem_memory.hook import action_retrieval
+
+    monkeypatch.setattr(action_retrieval, "probe_application", lambda *args: None)
+    monkeypatch.setattr(critic, "run_critic", lambda *args: None)
+
+
+def test_client_recovery_basic_auth_is_idempotent_across_two_stops(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    turn_id = "basic-turn"
+    reply = "Authorization: Basic ZmFrZS1jcmVkZW50aWFscw=="
+    transcript = _codex_transcript(tmp_path / "codex.jsonl", turn_id, reply)
+    _quiet_turn_end(monkeypatch)
+
+    for _ in range(2):
+        handle(HookEvent(
+            harness="codex", event="turn-end", session_id="session-1",
+            cwd=str(project), turn_id=turn_id, assistant_text=reply,
+            transcript_ref=str(transcript),
+        ), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == [
+        "Authorization: Basic [REDACTED_SECRET]",
+    ]
+
+
+def test_second_stop_appends_only_newly_visible_block(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    turn_id = "late-block-turn"
+    transcript = _codex_transcript(tmp_path / "codex.jsonl", turn_id, "first")
+    _quiet_turn_end(monkeypatch)
+
+    handle(HookEvent(
+        harness="codex", event="turn-end", session_id="session-1",
+        cwd=str(project), turn_id=turn_id, assistant_text="first",
+        transcript_ref=str(transcript),
+    ), env, time.monotonic() + 8)
+    _codex_transcript(transcript, turn_id, "first", "second")
+    handle(HookEvent(
+        harness="codex", event="turn-end", session_id="session-1",
+        cwd=str(project), turn_id=turn_id, assistant_text="second",
+        transcript_ref=str(transcript),
+    ), env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == ["first", "second"]
+
+
+def test_client_recovery_collapses_whitespace_for_comparison_only(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    turn_id = "whitespace-turn"
+    transcript = _codex_transcript(tmp_path / "codex.jsonl", turn_id, "alpha\n\n  beta")
+    _quiet_turn_end(monkeypatch)
+    event = HookEvent(
+        harness="codex", event="turn-end", session_id="session-1",
+        cwd=str(project), turn_id=turn_id, assistant_text="  alpha beta  ",
+        transcript_ref=str(transcript),
+    )
+
+    handle(event, env, time.monotonic() + 8)
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == ["  alpha beta  "]
+
+
+def test_client_recovery_two_concurrent_stops_append_each_block_once(tmp_path, monkeypatch):
+    from compchem_memory.hook import transcript as transcript_module
+
+    project, env = _workspace(tmp_path)
+    turn_id = "concurrent-turn"
+    source = _codex_transcript(tmp_path / "codex.jsonl", turn_id, "first", "last")
+    _quiet_turn_end(monkeypatch)
+    original_read_turns = transcript_module.read_turns
+
+    def delayed_read_turns(path):
+        rows = original_read_turns(path)
+        time.sleep(0.05)
+        return rows
+
+    monkeypatch.setattr(transcript_module, "read_turns", delayed_read_turns)
+
+    def stop(_index):
+        return handle(HookEvent(
+            harness="codex", event="turn-end", session_id="session-1",
+            cwd=str(project), turn_id=turn_id, assistant_text="last",
+            transcript_ref=str(source),
+        ), env, time.monotonic() + 8)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(stop, range(2)))
+
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == ["first", "last"]
+    with SessionState.open(project / ".magnolia", "codex", "session-1") as state:
+        assert len(state.data["recovered_turns"]) == 1
+
+
+def test_client_recovery_keeps_only_last_200_turn_keys(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    turn_id = "new-turn"
+    source = _codex_transcript(tmp_path / "codex.jsonl", turn_id, "reply")
+    _quiet_turn_end(monkeypatch)
+    with SessionState.open(project / ".magnolia", "codex", "session-1") as state:
+        state.data["recovered_turns"] = [
+            ["session-1", f"old-{index}", None] for index in range(200)
+        ]
+
+    handle(HookEvent(
+        harness="codex", event="turn-end", session_id="session-1",
+        cwd=str(project), turn_id=turn_id, assistant_text="reply",
+        transcript_ref=str(source),
+    ), env, time.monotonic() + 8)
+
+    with SessionState.open(project / ".magnolia", "codex", "session-1") as state:
+        assert len(state.data["recovered_turns"]) == 200
+        assert state.data["recovered_turns"][0] == ["session-1", "old-1", None]
+        assert state.data["recovered_turns"][-1] == ["session-1", turn_id, None]
+
+
+def test_non_vibe_recovery_does_not_fill_missing_assistant_text(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    turn_id = "missing-native-turn"
+    source = _codex_transcript(tmp_path / "codex.jsonl", turn_id, "recovered")
+    _quiet_turn_end(monkeypatch)
+    event = HookEvent(
+        harness="codex", event="turn-end", session_id="session-1",
+        cwd=str(project), turn_id=turn_id, assistant_text=None,
+        transcript_ref=str(source),
+    )
+
+    handle(event, env, time.monotonic() + 8)
+
+    assert event.assistant_text is None
+    rows = _rows(project / ".magnolia" / "transcripts" / "codex" / "session-1.jsonl")
+    assert [row["text"] for row in rows if row["kind"] == "assistant"] == ["recovered"]
 
 
 def test_dispatch_binds_on_first_event_of_any_kind(tmp_path, monkeypatch):

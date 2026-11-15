@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
-from compchem_memory.hook.transcript import append_event, read_turns, transcript_path
+from compchem_memory.hook.transcript import append_event, clean_text, read_turns, transcript_path
 
 
 def test_transcript_paths_are_private_regardless_of_umask(tmp_path):
@@ -111,6 +111,14 @@ def test_transcript_scrubs_secrets(tmp_path):
     assert rows[0]["input"]["assignment"] == "OPENAI_API_KEY=[REDACTED_SECRET]"
     assert len(rows[1]["output"]) == 2000
     assert "[REDACTED_SECRET]" in rows[1]["output"]
+
+
+def test_public_clean_text_matches_assistant_row_storage(tmp_path):
+    raw = " Authorization: Basic ZmFrZS1jcmVkZW50aWFscw==\x00 "
+    append_event(tmp_path, _event("turn-end", assistant_text=raw))
+
+    row = read_turns(transcript_path(tmp_path, "opencode", "ses-1"))[0]
+    assert clean_text(raw) == row["text"] == " Authorization: Basic [REDACTED_SECRET] "
 
 
 def test_transcript_redacts_secret_keys_recursively(tmp_path):
