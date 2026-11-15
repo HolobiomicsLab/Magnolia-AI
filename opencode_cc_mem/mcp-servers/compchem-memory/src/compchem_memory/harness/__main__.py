@@ -68,7 +68,10 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         raise MissingBinary(f"missing client binary: {renderer.binary}")
     root = args.root.resolve()
     setup = _setup(root)
-    model = args.model or setup.get("main_model")
+    # main_model is an OpenCode provider/model id: it never reaches another client.
+    client_models = setup.get("models")
+    client_model = client_models.get(args.harness) if isinstance(client_models, dict) else None
+    model = args.model or (client_model if isinstance(client_model, str) and client_model else None)
     project_dir = root / "projects" / args.project
     context = LaunchContext(
         root=root,

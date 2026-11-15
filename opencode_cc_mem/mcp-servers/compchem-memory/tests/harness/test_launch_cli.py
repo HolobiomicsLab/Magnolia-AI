@@ -98,7 +98,8 @@ def test_launch_loads_setup_and_model(tmp_path, monkeypatch, capsysbinary):
     setup_dir = root / ".magnolia"
     setup_dir.mkdir()
     (setup_dir / "llm-setup.json").write_text(
-        json.dumps({"memory_enabled": True, "memory_model": "memory", "main_model": "main"}),
+        json.dumps({"memory_enabled": True, "memory_model": "memory", "main_model": "deepseek/main",
+                    "models": {"codex": "gpt-codex", "claude": "opus"}}),
         encoding="utf-8",
     )
     renderer = FakeRenderer()
@@ -110,7 +111,8 @@ def test_launch_loads_setup_and_model(tmp_path, monkeypatch, capsysbinary):
     assert launch_cli.main(args) == 0
     capsysbinary.readouterr()
 
-    assert renderer.context.model == "main"
+    # The OpenCode main_model never reaches another client; models.<harness> does.
+    assert renderer.context.model == "gpt-codex"
     assert renderer.neutral.servers[1].enabled is True
     assert renderer.neutral.servers[1].env["MAGNOLIA_MEMORY_MODEL"] == "memory"
 
@@ -301,3 +303,21 @@ def test_launch_prints_one_warning_per_merge_conflict_and_exits_zero(
         b"warning: configuration conflict: mcp.compchem-memory (member entry preserved)\n"
         b"warning: configuration conflict: mcpServers.member (member entry preserved)\n"
     )
+
+
+def test_launch_without_client_model_passes_none(tmp_path, monkeypatch, capsysbinary):
+    root = _root(tmp_path)
+    (root / ".magnolia").mkdir()
+    (root / ".magnolia" / "llm-setup.json").write_text(
+        json.dumps({"main_model": "deepseek/main"}), encoding="utf-8",
+    )
+    renderer = FakeRenderer()
+    monkeypatch.setitem(RENDERERS, "codex", renderer)
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    args = _args(root)
+    args[args.index("claude")] = "codex"
+
+    assert launch_cli.main(args) == 0
+    capsysbinary.readouterr()
+
+    assert renderer.context.model is None
