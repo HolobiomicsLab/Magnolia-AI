@@ -70,9 +70,32 @@ def _session_start(paths: ProjectPaths, event: HookEvent) -> Handled:
     return Handled(response, None)
 
 
+# Prompts a client submits on the agent's behalf, not typed by the person:
+# Claude Code's sub-agent hand-back (observed, ``claude/parent/21-UserPromptSubmit.json``)
+# and its background-task notification turn (its result line has
+# ``origin.kind: task-notification``; the prompt itself was not captured, so that
+# prefix is defensive). Provisional until the Claude adapter (Plan 2) marks a
+# prompt's origin itself.
+_HARNESS_PROMPT_PREFIXES = ("<agent-message ", "<agent-message>", "<task-notification>")
+
+
+def is_person_prompt(event: HookEvent) -> bool:
+    """Whether a prompt event is the main agent's prompt from the person.
+
+    A sub-agent's prompt (``event.agent`` set, as Codex sends inside a spawned
+    agent) and a harness-generated prompt are not: model output must never ring
+    the doorbell, take the session's one directive or consume notices.
+    """
+    if event.agent is not None:
+        return False
+    return not (event.prompt or "").lstrip().startswith(_HARNESS_PROMPT_PREFIXES)
+
+
 def _prompt(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> Handled:
     from compchem_memory.hook.doorbell import process_prompt
 
+    if not is_person_prompt(event):
+        return Handled(HookResponse(), None)
     result = process_prompt(event.prompt or "", paths, env)
     context = None
     if result.sent:
@@ -93,7 +116,7 @@ def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float) -> Handle
 
     pending = on_post_tool(event, paths, deadline)
     response = HookResponse(tool_note=None if pending is None else pending.text)
-    notices = _notices(paths, event)
+    notices = _notices(paths, event) if event.agent is None else None
     response = response.merge(HookResponse(notice=None if notices is None else notices.text))
     return Handled(response, pending, notices)
 

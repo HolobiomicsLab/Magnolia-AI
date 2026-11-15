@@ -11,6 +11,9 @@ from compchem_memory.hook import critic
 from compchem_memory.hook.directive import DIRECTIVE
 from compchem_memory.hook.dispatch import handle
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
+from compchem_memory.hook.state import SessionState
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "hooks"
 
 
 def _workspace(tmp_path: Path) -> tuple[Path, dict[str, str]]:
@@ -142,3 +145,66 @@ def test_dispatch_binds_on_first_event_of_any_kind(tmp_path, monkeypatch):
     assert json.loads(binding.read_text(encoding="utf-8"))["project"]["project_dir"] == str(project)
     assert len(_rows(project / ".magnolia" / "agent-sessions.jsonl")) == 1
 
+
+
+def _letters(project: Path) -> list[Path]:
+    return list((project.parent / "literature" / "inbox").rglob("*.task.md"))
+
+
+def _queue_notice(project: Path, text: str = "critic flag") -> None:
+    with SessionState.open(project / ".magnolia", "json", "session-1") as state:
+        state.data["unshown_notices"] = [text]
+
+
+def test_subagent_prompt_rings_nothing(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    _queue_notice(project)
+    # Shape of codex/subagent/01-UserPromptSubmit.sub.json: a prompt carrying agent_id.
+    sub = json.loads((FIXTURES / "codex" / "subagent" / "01-UserPromptSubmit.sub.json").read_text())
+    event = _event(project, "prompt", prompt="@literature find three papers",
+                   agent=AgentRef(sub["agent_id"], sub.get("agent_type")))
+
+    handled = handle(event, env, time.monotonic() + 8)
+
+    assert handled.response.context is None and handled.response.notice is None
+    assert handled.notices is None
+    assert _letters(project) == []
+    rows = _rows(project / ".magnolia" / "transcripts" / "json" / "session-1.jsonl")
+    assert rows[-1]["kind"] == "prompt" and rows[-1]["agent"]["id"] == sub["agent_id"]
+
+    main = handle(_event(project, "prompt", prompt="hello"), env, time.monotonic() + 8)
+    assert DIRECTIVE in main.response.context
+    assert main.response.notice == "critic flag"
+
+
+def test_claude_hand_back_prompt_rings_nothing(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
+    monkeypatch.delenv("MAGNOLIA_AUTORETRIEVE", raising=False)
+    _queue_notice(project)
+    hand_back = json.loads((FIXTURES / "claude" / "parent" / "21-UserPromptSubmit.json").read_text())["prompt"]
+    assert hand_back.startswith("<agent-message ")
+    prompt = hand_back.replace('{"result":"sub"}', "@literature find three papers")
+
+    handled = handle(_event(project, "prompt", prompt=prompt), env, time.monotonic() + 8)
+
+    assert handled.response.context is None and handled.response.notice is None
+    assert _letters(project) == []
+    with SessionState.open(project / ".magnolia", "json", "session-1") as state:
+        assert state.data["unshown_notices"] == ["critic flag"]
+
+
+def test_subagent_post_tool_leaves_notices_queued(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_JOB_NOTIFY", "0")
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [])
+    _queue_notice(project)
+    event = _post_tool(project)
+    event.agent = AgentRef("child-1", "Explore")
+
+    handled = handle(event, env, time.monotonic() + 8)
+
+    assert handled.response.notice is None
+    assert handle(_post_tool(project), env, time.monotonic() + 8).response.notice == "critic flag"
