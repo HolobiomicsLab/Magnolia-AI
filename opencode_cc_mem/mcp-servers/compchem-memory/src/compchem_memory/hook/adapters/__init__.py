@@ -31,7 +31,13 @@ class Adapter(Protocol):
 
 
 from compchem_memory.hook.adapters import json_adapter  # noqa: E402
+from compchem_memory.hook.adapters import claude, codex, vibe  # noqa: E402
 
-ADAPTERS: dict[str, Adapter] = {"json": json_adapter}
+ADAPTERS: dict[str, Adapter] = {
+    "json": json_adapter,
+    "claude": claude,
+    "codex": codex,
+    "vibe": vibe,
+}
 
 __all__ = ["ADAPTERS", "Adapter", "Rendered"]
