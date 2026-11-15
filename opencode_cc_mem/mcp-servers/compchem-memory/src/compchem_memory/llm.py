@@ -65,7 +65,7 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -286,7 +286,7 @@ class Route:
     provider: str
     model: str
     url: str
-    key: str
+    key: str = field(repr=False)
     schema: Literal["openai", "anthropic"]
 
 

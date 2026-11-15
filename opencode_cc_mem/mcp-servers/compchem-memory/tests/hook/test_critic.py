@@ -411,3 +411,9 @@ def test_run_critic_dot_dot_session_id_stays_in_store(tmp_path, monkeypatch):
     assert all(paths.store in p.parents for p in written)
     [row_file] = (paths.store / "claim-critic").glob("*.jsonl")
     assert json.loads(row_file.read_text())["sessionID"] == session
+
+
+def test_route_repr_hides_the_key():
+    route = Route("deepseek", "judge", "https://judge/chat", "sk-fabricated-route-key", "openai")
+    assert "sk-fabricated-route-key" not in repr(route)
+    assert route.key == "sk-fabricated-route-key"

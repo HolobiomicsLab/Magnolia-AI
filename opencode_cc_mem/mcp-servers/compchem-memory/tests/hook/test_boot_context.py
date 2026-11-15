@@ -54,4 +54,3 @@ def test_boot_payload_truncates_prefix_before_adding_suffix(tmp_path):
     assert len(payload) == MAX_PAYLOAD_CHARS + len("\n\n[truncated at 256k chars]")
     assert payload.endswith("\n\n[truncated at 256k chars]")
     assert build_boot_payload(paths)[:MAX_PAYLOAD_CHARS] == payload[:MAX_PAYLOAD_CHARS]
-

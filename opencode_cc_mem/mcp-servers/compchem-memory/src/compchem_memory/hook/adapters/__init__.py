@@ -35,4 +35,3 @@ from compchem_memory.hook.adapters import json_adapter  # noqa: E402
 ADAPTERS: dict[str, Adapter] = {"json": json_adapter}
 
 __all__ = ["ADAPTERS", "Adapter", "Rendered"]
-
