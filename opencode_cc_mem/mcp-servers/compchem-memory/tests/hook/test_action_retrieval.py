@@ -535,3 +535,24 @@ def test_a_note_is_settled_once(tmp_path, monkeypatch) -> None:
         assert len(state.data["pending_application"]) == 1
     assert sum(row.get("injected", 0) > 0 for row in _rows(paths.store)) == 1
     assert sum(row.get("injected") == 0 for row in _rows(paths.store)) == 0
+
+
+def test_failed_note_build_releases_the_reservation(tmp_path, monkeypatch) -> None:
+    import pytest
+
+    from compchem_memory.hook import action_retrieval
+
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "broken.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    def broken_block(tool_name: str, hits: list[dict]) -> str:
+        raise RuntimeError("block")
+
+    monkeypatch.setattr(action_retrieval, "_block", broken_block)
+    with pytest.raises(RuntimeError):
+        _call(_event(paths), paths)
+
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data.get("injections", 0) == 0
+        assert state.data.get("entry_counts", {}) == {}

@@ -181,24 +181,33 @@ def commit_exposure(note: ActionNote, session_id: str) -> None:
         )
 
 
+def _release(paths: ProjectPaths, harness: str, session_id: str, entry_paths: list[str]) -> None:
+    """Give back one budget unit and one use of each entry reserved at selection."""
+    with SessionState.open(paths.store, harness, session_id) as current:
+        used = current.data.get("injections", 0)
+        if isinstance(used, int) and used > 0:
+            current.data["injections"] = used - 1
+        entry_counts = current.data.get("entry_counts")
+        if isinstance(entry_counts, dict):
+            for entry in entry_paths:
+                count = entry_counts.get(entry, 0)
+                if isinstance(count, int) and count > 1:
+                    entry_counts[entry] = count - 1
+                else:
+                    entry_counts.pop(entry, None)
+
+
 def discard_note(note: ActionNote) -> None:
-    """Release a note the client did not emit and log it with ``injected: 0``."""
+    """Release a note the client did not emit and log it with ``injected: 0``.
+
+    The note is marked settled before the release, so a failed state write
+    keeps the reservation: one showing fewer at most, never one more.
+    """
     delivery = _settle(note)
     if delivery is None:
         return
     try:
-        with SessionState.open(delivery.paths.store, delivery.harness, delivery.session_id) as current:
-            used = current.data.get("injections", 0)
-            if isinstance(used, int) and used > 0:
-                current.data["injections"] = used - 1
-            entry_counts = current.data.get("entry_counts")
-            if isinstance(entry_counts, dict):
-                for entry in delivery.entry_paths:
-                    count = entry_counts.get(entry, 0)
-                    if isinstance(count, int) and count > 1:
-                        entry_counts[entry] = count - 1
-                    else:
-                        entry_counts.pop(entry, None)
+        _release(delivery.paths, delivery.harness, delivery.session_id, delivery.entry_paths)
     finally:
         _log(delivery.paths, {**delivery.coarse_row, "injected": 0})
 
@@ -428,38 +437,42 @@ def on_post_tool(
         _log(paths, _coarse_row(event, ledger_tool, 0))
         return None
 
-    delivery = _Delivery(
-        paths=paths,
-        harness=event.harness,
-        session_id=event.session_id,
-        entry_paths=[hit["path"] for hit in selected],
-        pending={
-            "callID": str(event.tool.call_id or ""),
-            "tool": ledger_tool,
-            "titles": [str(hit.get("title") or "") for hit in selected],
-            "paths": [str(hit.get("path") or "") for hit in selected],
-        },
-        coarse_row=_coarse_row(event, ledger_tool, len(selected)),
-        hits_row={
-            "sessionID": event.session_id,
-            "tool": ledger_tool,
-            "callID": event.tool.call_id,
-            "ms": elapsed_ms,
-            "hits": len(selected),
-            "titles": [hit.get("title") for hit in selected][:4],
-            "entries": [
-                {
-                    "path": hit["path"],
-                    "tier": hit.get("tier"),
-                    "score": hit.get("score"),
-                    "confidence": hit.get("confidence"),
-                    "provisional": bool(hit.get("provisional")),
-                }
-                for hit in selected
-            ],
-        },
-    )
-    return ActionNote(_block(event.tool.name, selected), _sources(selected), delivery)
+    try:
+        delivery = _Delivery(
+            paths=paths,
+            harness=event.harness,
+            session_id=event.session_id,
+            entry_paths=[hit["path"] for hit in selected],
+            pending={
+                "callID": str(event.tool.call_id or ""),
+                "tool": ledger_tool,
+                "titles": [str(hit.get("title") or "") for hit in selected],
+                "paths": [str(hit.get("path") or "") for hit in selected],
+            },
+            coarse_row=_coarse_row(event, ledger_tool, len(selected)),
+            hits_row={
+                "sessionID": event.session_id,
+                "tool": ledger_tool,
+                "callID": event.tool.call_id,
+                "ms": elapsed_ms,
+                "hits": len(selected),
+                "titles": [hit.get("title") for hit in selected][:4],
+                "entries": [
+                    {
+                        "path": hit["path"],
+                        "tier": hit.get("tier"),
+                        "score": hit.get("score"),
+                        "confidence": hit.get("confidence"),
+                        "provisional": bool(hit.get("provisional")),
+                    }
+                    for hit in selected
+                ],
+            },
+        )
+        return ActionNote(_block(event.tool.name, selected), _sources(selected), delivery)
+    except Exception:
+        _release(paths, event.harness, event.session_id, [hit["path"] for hit in selected])
+        raise
 
 
 def _distinctive_tokens(titles: list[str], paths: list[str]) -> list[str]:
