@@ -12,6 +12,7 @@ the boot context.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from compchem_memory.hook.action_retrieval import ActionNote
     from compchem_memory.hook.notices import Notices
     from compchem_memory.hook.project import ProjectPaths
+
+_RECOVERED_TURN_LIMIT = 200
 
 
 @dataclass
@@ -69,6 +72,109 @@ def _append_transcript(paths: ProjectPaths, event: HookEvent) -> None:
     from compchem_memory.hook.transcript import append_event
 
     append_event(paths.store, event)
+
+
+def _normalise_reply(text: str) -> str:
+    """Normalise stored text for comparison without changing recorded content."""
+    from compchem_memory.hook.transcript import clean_text
+
+    return " ".join(clean_text(text).split())
+
+
+def _reply_candidates(event: HookEvent, recovered: list[str]) -> list[str]:
+    """Return recovered blocks followed by the native final reply, if any."""
+    if event.harness == "vibe" and event.assistant_text is None:
+        event.assistant_text = recovered[-1]
+
+    candidates = list(recovered)
+    if not event.assistant_text:
+        return candidates
+    final_text = _normalise_reply(event.assistant_text)
+    for index in range(len(candidates) - 1, -1, -1):
+        if _normalise_reply(candidates[index]) == final_text:
+            candidates.pop(index)
+            break
+    candidates.append(event.assistant_text)
+    return candidates
+
+
+def _existing_reply_counts(paths: ProjectPaths, event: HookEvent, agent_id: str | None) -> Counter:
+    """Count comparable assistant rows already stored for this turn and agent."""
+    from compchem_memory.hook.transcript import read_turns, transcript_path
+
+    existing = Counter()
+    path = transcript_path(paths.store, event.harness, event.session_id)
+    for row in read_turns(path):
+        row_agent = row.get("agent")
+        row_agent_id = row_agent.get("id") if isinstance(row_agent, dict) else None
+        text = row.get("text")
+        if (row.get("kind") == "assistant" and row.get("turn_id") == event.turn_id
+                and row_agent_id == agent_id and isinstance(text, str)):
+            existing[_normalise_reply(text)] += 1
+    return existing
+
+
+def _append_missing_replies(
+    paths: ProjectPaths, event: HookEvent, candidates: list[str], existing: Counter,
+) -> None:
+    """Append candidate occurrences not represented in existing assistant rows."""
+    from compchem_memory.hook.transcript import append_event
+
+    for text in candidates:
+        normalised = _normalise_reply(text)
+        if existing[normalised]:
+            existing[normalised] -= 1
+            continue
+        append_event(paths.store, HookEvent(
+            harness=event.harness,
+            event="turn-end",
+            session_id=event.session_id,
+            cwd=event.cwd,
+            schema_version=event.schema_version,
+            turn_id=event.turn_id,
+            agent=event.agent,
+            assistant_text=text,
+        ))
+
+
+def _commit_recovered_replies(
+    paths: ProjectPaths, event: HookEvent, agent_id: str | None, candidates: list[str],
+) -> None:
+    """Serialise reply deduplication and its bounded completion ledger."""
+    from compchem_memory.hook.state import SessionState
+
+    recovery_key = [event.session_id, event.turn_id, agent_id]
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        recovered_turns = state.data.get("recovered_turns")
+        if not isinstance(recovered_turns, list):
+            recovered_turns = []
+        was_recovered = recovery_key in recovered_turns
+        existing = _existing_reply_counts(paths, event, agent_id)
+        _append_missing_replies(paths, event, candidates, existing)
+        if was_recovered:
+            recovered_turns.remove(recovery_key)
+        recovered_turns.append(recovery_key)
+        state.data["recovered_turns"] = recovered_turns[-_RECOVERED_TURN_LIMIT:]
+
+
+def _recover_assistant_transcript(paths: ProjectPaths, event: HookEvent) -> bool:
+    """Atomically append missing client blocks and the hook's final reply row."""
+    from compchem_memory.hook.client_transcripts import assistant_texts
+
+    if not event.transcript_ref:
+        return False
+    agent_id = None if event.agent is None else event.agent.id
+    recovered = assistant_texts(
+        event.harness,
+        event.transcript_ref,
+        turn_id=event.turn_id,
+        agent_id=agent_id,
+    )
+    if not recovered:
+        return False
+    candidates = _reply_candidates(event, recovered)
+    _commit_recovered_replies(paths, event, agent_id, candidates)
+    return True
 
 
 def _directive(paths: ProjectPaths, event: HookEvent) -> str | None:
@@ -175,7 +281,13 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         return Handled(HookResponse(), None)
     guard = _Guard(paths, event, env)
     guard("session-map", _record_session, paths, event)
-    guard("transcript", _append_transcript, paths, event)
+    transcript_handled = False
+    if event.event == "turn-end":
+        transcript_handled = guard(
+            "client-transcript", _recover_assistant_transcript, paths, event, default=False,
+        )
+    if not transcript_handled:
+        guard("transcript", _append_transcript, paths, event)
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":

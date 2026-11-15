@@ -76,11 +76,11 @@ def _event_row(event: HookEvent) -> dict | None:
     if event.event in {"pre-tool", "post-tool"}:
         row.update(_tool_row(event.tool, phase="pre" if event.event == "pre-tool" else "post"))
     elif event.event == "prompt":
-        row["text"] = _clean_text(event.prompt or "")
+        row["text"] = clean_text(event.prompt or "")
     elif event.event == "turn-end":
         if not event.assistant_text:
             return None
-        row.update(kind="assistant", text=_clean_text(event.assistant_text))
+        row.update(kind="assistant", text=clean_text(event.assistant_text))
     return row
 
 
@@ -91,7 +91,7 @@ def _tool_row(tool: ToolCall, phase: str) -> dict:
         row["truncated"] = True
     if phase == "post":
         limit = None if tool.name in _EVIDENCE_TOOLS else _OUTPUT_LIMIT
-        row.update(output=_clean_text(tool.output or "", limit), is_error=tool.is_error)
+        row.update(output=clean_text(tool.output or "", limit), is_error=tool.is_error)
     return row
 
 
@@ -123,7 +123,8 @@ def _redact_secret_keys(value):
     return value
 
 
-def _clean_text(text: str, limit: int | None = None) -> str:
+def clean_text(text: str, limit: int | None = None) -> str:
+    """Apply the same secret redaction and cleanup used for stored text rows."""
     scrubbed = _BASIC_AUTHORIZATION.sub(r"\1" + _REDACTION, scrub_secrets(text))
     if limit is not None:
         scrubbed = scrubbed[:limit]
