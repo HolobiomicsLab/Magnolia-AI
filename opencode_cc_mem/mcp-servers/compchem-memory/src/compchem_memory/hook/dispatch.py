@@ -35,7 +35,7 @@ _CATCHUP_ATTEMPT_LIMIT = 3
 _CATCHUP_MAX_AGE_SECONDS = 24 * 60 * 60
 _CATCHUP_JOURNAL_LIMIT = 2
 _WORKER_LEASE_SECONDS = 300
-_CARRIED_RESERVATION_TTL_SECONDS = 30
+_CARRIED_RESERVATION_TTL_SECONDS = 60
 # Claude Code shows its model only about 2 KB of SessionStart context.
 CLAUDE_CONTEXT_LIMIT = 1800
 
@@ -244,7 +244,10 @@ def _boot_payload(paths: ProjectPaths, harness: str = "json") -> str | None:
 
     if harness in {"claude", "codex"}:
         return build_claude_boot_payload(paths, CLAUDE_CONTEXT_LIMIT)
-    return build_boot_payload(paths, include_agents_md=harness == "vibe")
+    return build_boot_payload(
+        paths, include_agents_md=harness == "vibe",
+        harness=harness if harness == "vibe" else None,
+    )
 
 
 def _session_start(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
@@ -483,14 +486,48 @@ def _drop_child_carried_notes(paths: ProjectPaths, event: HookEvent) -> None:
         state.data["carried_action_notes"] = [
             item for item in queued if item.get("agent_id") != event.agent.id
         ]
+        in_flight = state.data.get("carried_action_notes_in_flight")
+        in_flight = in_flight if isinstance(in_flight, dict) else {}
+        for note_id, reservation in list(in_flight.items()):
+            payload = reservation.get("payload") if isinstance(reservation, dict) else None
+            if isinstance(payload, dict) and payload.get("agent_id") == event.agent.id:
+                dropped.append(payload)
+                in_flight.pop(note_id, None)
+        state.data["carried_action_notes_in_flight"] = in_flight
     for payload in dropped:
         note = restore_note(payload.get("note", {}), paths)
         if note is not None:
             discard_note(note, reason="child ended before a deliverable post-tool event")
 
 
+def _drop_session_carried_notes(paths: ProjectPaths, event: HookEvent) -> None:
+    """Discard every undelivered Vibe reservation when its session closes."""
+    if event.harness != "vibe":
+        return
+    from compchem_memory.hook.action_retrieval import discard_note, restore_note
+    from compchem_memory.hook.state import SessionState
+
+    dropped = []
+    with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        queued = state.data.get("carried_action_notes")
+        if isinstance(queued, list):
+            dropped.extend(item for item in queued if isinstance(item, dict))
+        in_flight = state.data.get("carried_action_notes_in_flight")
+        if isinstance(in_flight, dict):
+            dropped.extend(
+                reservation["payload"] for reservation in in_flight.values()
+                if isinstance(reservation, dict) and isinstance(reservation.get("payload"), dict)
+            )
+        state.data["carried_action_notes"] = []
+        state.data["carried_action_notes_in_flight"] = {}
+    for payload in dropped:
+        note = restore_note(payload.get("note", {}), paths)
+        if note is not None:
+            discard_note(note, reason="session ended before a deliverable event")
+
+
 def _turn_end(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> Handled:
-    if event.harness in {"claude", "vibe"}:
+    if event.harness in {"claude", "vibe", "codex"}:
         reply = event.assistant_text or _reply_for_turn(paths, event)
         guard("background-critic", _schedule_background, paths, event, reply)
         return Handled(HookResponse(), None)
@@ -573,13 +610,24 @@ def _defer_turn(paths: ProjectPaths, event: HookEvent) -> None:
     from compchem_memory.hook.state import SessionState
 
     agent_id = None if event.agent is None else event.agent.id
-    identifier = f"{agent_id or 'main'}--{event.turn_id or event.transcript_ref}"
-    item = {
-        "id": identifier, "turn_id": event.turn_id, "transcript_ref": event.transcript_ref,
-        "agent_id": agent_id, "agent_type": None if event.agent is None else event.agent.type,
-        "created": time.time(), "attempts": 0,
-    }
+    seen_turn_ids: list[str] = []
+    if event.harness == "vibe" and not event.turn_id:
+        from compchem_memory.hook.client_transcripts import vibe_assistant_turns
+
+        seen_turn_ids = vibe_assistant_turns(event.transcript_ref, agent_id=agent_id)
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
+        sequence = int(state.data.get("catchup_sequence", 0)) + 1
+        state.data["catchup_sequence"] = sequence
+        identifier = (
+            f"{agent_id or 'main'}--{event.turn_id}"
+            if event.turn_id else f"{agent_id or 'main'}--pending-{sequence}"
+        )
+        item = {
+            "id": identifier, "turn_id": event.turn_id, "transcript_ref": event.transcript_ref,
+            "agent_id": agent_id,
+            "agent_type": None if event.agent is None else event.agent.type,
+            "created": time.time(), "attempts": 0, "seen_turn_ids": seen_turn_ids,
+        }
         pending = state.data.get("catchup_pending")
         pending = [row for row in pending if isinstance(row, dict)] \
             if isinstance(pending, list) else []
@@ -617,15 +665,18 @@ def _pending_turns(paths: ProjectPaths, event: HookEvent) -> list[dict]:
             if not is_running:
                 available.append(row)
         state.data["catchup_pending"] = kept
-        main = [row for row in available if row.get("agent_id") is None]
-        children = [row for row in available if row.get("agent_id") is not None]
-        newest_main = max(
-            enumerate(main), key=lambda item: (float(item[1].get("created", 0)), item[0]),
-        )[1] if main else None
-        ordered = [newest_main] if newest_main is not None else []
-        ordered.extend(sorted(
-            children, key=lambda row: float(row.get("created", 0)), reverse=True,
-        ))
+        def newest(rows: list[dict]) -> list[dict]:
+            return [row for _, row in sorted(
+                enumerate(rows),
+                key=lambda item: (float(item[1].get("created", 0)), item[0]),
+                reverse=True,
+            )]
+
+        main = newest([row for row in available if row.get("agent_id") is None])
+        children = newest([row for row in available if row.get("agent_id") is not None])
+        ordered = main[:1]
+        ordered.extend(children)
+        ordered.extend(main[1:])
         return ordered
 
 
@@ -663,14 +714,18 @@ def _catch_up_pending(paths: ProjectPaths, event: HookEvent, guard: _Guard) -> N
     """Recover at most two client journals and detach their expensive work."""
     if event.agent is not None:
         return
-    from compchem_memory.hook.client_transcripts import latest_vibe_assistant_turn
+    from compchem_memory.hook.client_transcripts import vibe_assistant_turns
 
     for item in _pending_turns(paths, event)[:_CATCHUP_JOURNAL_LIMIT]:
         turn_id = item.get("turn_id")
         agent_id = item.get("agent_id")
         transcript_ref = item.get("transcript_ref")
         if not turn_id and event.harness == "vibe":
-            turn_id = latest_vibe_assistant_turn(str(transcript_ref), agent_id=agent_id)
+            seen = item.get("seen_turn_ids")
+            seen = set(seen) if isinstance(seen, list) else set()
+            turn_id = next((candidate for candidate in vibe_assistant_turns(
+                str(transcript_ref), agent_id=agent_id,
+            ) if candidate not in seen), None)
         agent = AgentRef(str(agent_id), item.get("agent_type")) if agent_id else None
         catch_up = replace(
             event, event="turn-end", turn_id=turn_id, agent=agent, assistant_text=None,
@@ -733,6 +788,8 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         guard("transcript", _append_transcript, paths, event)
     if completion_event and event.agent is not None:
         guard("carried-context", _drop_child_carried_notes, paths, event)
+    if event.event == "session-end" and event.harness == "vibe":
+        guard("carried-context", _drop_session_carried_notes, paths, event)
     if event.event == "session-start":
         handled = _session_start(paths, event, guard)
     elif event.event == "prompt":

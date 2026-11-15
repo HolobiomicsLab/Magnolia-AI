@@ -14,6 +14,7 @@ from compchem_memory.harness.ownership import owned, strip_owned_hooks
 from compchem_memory.harness.protocol import Launch, LaunchContext
 from compchem_memory.harness.render_common import (
     active_servers,
+    delivered_rule_text,
     hook_command,
     hook_timeout,
     policy_files,
@@ -163,5 +164,7 @@ def _developer_instructions(root: Path) -> str:
         for path in sorted(rules.glob("*.md")):
             text = path.read_text(encoding="utf-8", errors="replace").strip()
             if text:
-                sections.append(f"--- rules/{path.name} ---\n{text}")
+                sections.append(
+                    f"--- rules/{path.name} ---\n{delivered_rule_text(text, HARNESS)}"
+                )
     return "\n\n".join(sections)

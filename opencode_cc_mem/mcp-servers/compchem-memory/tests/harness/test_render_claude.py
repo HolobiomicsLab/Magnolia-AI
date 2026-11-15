@@ -125,6 +125,23 @@ def test_claude_system_prompt_is_agents_then_sorted_rules(make_render):
     assert prompt == "AGENTS BODY\n\n--- rules/a.md ---\nrule a\n\n--- rules/b.md ---\nrule b\n"
 
 
+def test_claude_system_prompt_rewrites_rule_tool_names(make_render):
+    neutral, context = make_render()
+    source = context.root / "rules" / "a.md"
+    original = (
+        "Use compchem-tools_run_shell and compchem-memory_memory_search.\n\n"
+        "## Tool names in other clients\nDo not deliver this paragraph.\n\n## Keep\nKept.\n"
+    )
+    source.write_text(original, encoding="utf-8")
+
+    prompt = render(neutral, context).files[_harness(context) / "system-prompt.md"].decode()
+
+    assert "mcp__compchem-tools__run_shell" in prompt
+    assert "mcp__compchem-memory__memory_search" in prompt
+    assert "Tool names in other clients" not in prompt
+    assert source.read_text(encoding="utf-8") == original
+
+
 def test_claude_links_each_skill(make_render):
     neutral, context = make_render()
     launch = render(neutral, context)

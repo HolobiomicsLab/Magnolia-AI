@@ -77,7 +77,9 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
             )
 
 
-def _release_unsettled(handled: Any, event: Any = None) -> None:
+def _release_unsettled(
+    handled: Any, event: Any = None, *, release_carried: bool = True,
+) -> None:
     """Release action-note and notice reservations after a failure; never raise."""
     pending = getattr(handled, "pending", None)
     if pending is not None:
@@ -90,7 +92,7 @@ def _release_unsettled(handled: Any, event: Any = None) -> None:
     notices = getattr(handled, "notices", None)
     paths = getattr(handled, "paths", None)
     carried = getattr(handled, "carried", [])
-    if carried and paths is not None and event is not None:
+    if release_carried and carried and paths is not None and event is not None:
         try:
             from compchem_memory.hook.dispatch import release_carried_notes
 
@@ -120,7 +122,9 @@ def _write_rendered(
             _commit_delivered(rendered, handled, event)
         except Exception as error:  # noqa: BLE001 - rendered denial must keep its exit code
             _log_error(error, event.harness, event.event, event, env or os.environ)
-            _release_unsettled(handled, event)
+            # stdout already reached the client. Re-queueing this context can
+            # deliver it twice; keep the at-most-once direction on commit failure.
+            _release_unsettled(handled, event, release_carried=False)
     sys.stderr.buffer.write(rendered.stderr.encode("utf-8"))
     sys.stderr.buffer.flush()
 

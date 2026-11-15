@@ -63,6 +63,7 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -302,6 +303,69 @@ class CallResult:
     error: str | None
     status: int | None
     upstream_provider: str | None = None
+    usage: dict | None = None
+
+
+def _usage_value(usage: object, key: str) -> object:
+    """Read one usage field from an SDK object or decoded JSON object."""
+    if isinstance(usage, dict):
+        return usage.get(key)
+    return getattr(usage, key, None)
+
+
+def _usage_number(value: object) -> int | float | None:
+    """Keep stated finite numbers without manufacturing missing zeroes."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def normalise_usage(usage: object) -> dict | None:
+    """Return Magnolia's provider-neutral token/cache/cost fields.
+
+    Anthropic input totals are additive only when ``input_tokens`` is present;
+    absent cache components then count as zero for that sum. Invalid shapes are
+    ignored field by field and never escape into the caller.
+    """
+    try:
+        if usage is None:
+            return None
+        result: dict[str, int | float] = {}
+        input_tokens = _usage_number(_usage_value(usage, "input_tokens"))
+        cache_read = _usage_number(_usage_value(usage, "cache_read_input_tokens"))
+        cache_write = _usage_number(_usage_value(usage, "cache_creation_input_tokens"))
+        output_tokens = _usage_number(_usage_value(usage, "output_tokens"))
+        if input_tokens is not None:
+            result["prompt_tokens"] = input_tokens + (cache_read or 0) + (cache_write or 0)
+        else:
+            prompt_tokens = _usage_number(_usage_value(usage, "prompt_tokens"))
+            if prompt_tokens is not None:
+                result["prompt_tokens"] = prompt_tokens
+
+        details = _usage_value(usage, "prompt_tokens_details")
+        detail_cached = _usage_number(_usage_value(details, "cached_tokens"))
+        detail_write = _usage_number(_usage_value(details, "cache_write_tokens"))
+        deepseek_cached = _usage_number(_usage_value(usage, "prompt_cache_hit_tokens"))
+        cached = cache_read if cache_read is not None else (
+            detail_cached if detail_cached is not None else deepseek_cached
+        )
+        written = cache_write if cache_write is not None else detail_write
+        if cached is not None:
+            result["cached_tokens"] = cached
+        if written is not None:
+            result["cache_write_tokens"] = written
+
+        completion = output_tokens if output_tokens is not None else _usage_number(
+            _usage_value(usage, "completion_tokens")
+        )
+        cost = _usage_number(_usage_value(usage, "cost"))
+        if completion is not None:
+            result["completion_tokens"] = completion
+        if cost is not None:
+            result["cost"] = cost
+        return result or None
+    except Exception:  # noqa: BLE001 - malformed provider telemetry is non-critical
+        return None
 
 
 _INVALID_OPENROUTER_PROVIDER_WARNED: set[str] = set()
@@ -480,15 +544,18 @@ def _route_response(route: Route, data: dict, status: int) -> CallResult:
                      if block.get("type") == "text"), None)
         return CallResult(
             text, data.get("stop_reason"), resolved_model, None, status,
-            upstream_provider,
+            upstream_provider, normalise_usage(data.get("usage")),
         )
     choices = data.get("choices") or []
     if not choices:
-        return CallResult(None, None, resolved_model, None, status, upstream_provider)
+        return CallResult(
+            None, None, resolved_model, None, status, upstream_provider,
+            normalise_usage(data.get("usage")),
+        )
     choice = choices[0]
     return CallResult(
         (choice.get("message") or {}).get("content"), choice.get("finish_reason"),
-        resolved_model, None, status, upstream_provider,
+        resolved_model, None, status, upstream_provider, normalise_usage(data.get("usage")),
     )
 
 
@@ -534,14 +601,16 @@ def call_route(
             if detail:
                 error += f": {detail}"
             try:
-                upstream_provider = response.json().get("provider")
+                error_data = response.json()
+                upstream_provider = error_data.get("provider")
             except Exception:  # noqa: BLE001 - error bodies need not be JSON
+                error_data = {}
                 upstream_provider = None
             if not isinstance(upstream_provider, str):
                 upstream_provider = None
             return CallResult(
                 None, None, None, _scrub_route_error(error, route.key), status,
-                upstream_provider,
+                upstream_provider, normalise_usage(error_data.get("usage")),
             )
         return _route_response(route, response.json(), status)
     except Exception as error:  # noqa: BLE001 - public contract: never raise
@@ -615,21 +684,22 @@ def call_llm(
         return (None, None) if return_finish_reason else None
     t0 = time.monotonic()
     upstream_provider = None
+    usage = None
     try:
         if provider == PROVIDER_ANTHROPIC:
-            out, finish, resolved = _call_anthropic(
+            out, finish, resolved, usage = _call_anthropic(
                 key, model, system_prompt, user_content, max_tokens, temperature)
         elif provider == PROVIDER_KIMI:
-            out, finish, resolved = _call_kimi(
+            out, finish, resolved, usage = _call_kimi(
                 key, model, system_prompt, user_content, max_tokens, temperature)
         else:
-            out, finish, resolved, upstream_provider = _call_openai_compat(
+            out, finish, resolved, upstream_provider, usage = _call_openai_compat(
                 provider, key, model, system_prompt, user_content, max_tokens,
                 temperature, disable_thinking)
         _record_timing(provider, model, (time.monotonic() - t0) * 1000,
                        "ok" if out else "empty", resolved_model=resolved,
                        chars=len(out) if out else 0,
-                       upstream_provider=upstream_provider)
+                       upstream_provider=upstream_provider, **(usage or {}))
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
@@ -640,7 +710,7 @@ def call_llm(
 def _call_anthropic(
     key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, dict | None]:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
     kwargs: dict = {
@@ -653,15 +723,16 @@ def _call_anthropic(
         kwargs["temperature"] = temperature
     resp = client.messages.create(**kwargs)
     resolved = getattr(resp, "model", None)
+    usage = normalise_usage(getattr(resp, "usage", None))
     if not resp.content:
-        return None, resp.stop_reason, resolved
-    return resp.content[0].text, resp.stop_reason, resolved
+        return None, resp.stop_reason, resolved, usage
+    return resp.content[0].text, resp.stop_reason, resolved, usage
 
 
 def _call_kimi(
     key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, dict | None]:
     """Kimi-for-Coding speaks the Anthropic Messages schema (models.dev lists its
     sdk as @ai-sdk/anthropic). Plain httpx, mirroring _call_openai_compat, so no
     Anthropic-SDK base_url semantics sneak in. Sends both auth header styles —
@@ -695,17 +766,18 @@ def _call_kimi(
     resp.raise_for_status()
     data = resp.json()
     resolved = data.get("model")
+    usage = normalise_usage(data.get("usage"))
     # Thinking models may lead with a non-text block; take the first text block.
     for block in data.get("content") or []:
         if block.get("type") == "text":
-            return block.get("text"), data.get("stop_reason"), resolved
-    return None, data.get("stop_reason"), resolved
+            return block.get("text"), data.get("stop_reason"), resolved, usage
+    return None, data.get("stop_reason"), resolved, usage
 
 
 def _call_openai_compat(
     provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None, disable_thinking: bool = False,
-) -> tuple[str | None, str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, str | None, dict | None]:
     """DeepSeek, OpenAI, OpenRouter, Mistral and Z.ai all use the OpenAI chat
     completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
@@ -771,10 +843,13 @@ def _call_openai_compat(
         upstream_provider = None
     choices = data.get("choices") or []
     if not choices:
-        return None, None, resolved, upstream_provider
+        return None, None, resolved, upstream_provider, normalise_usage(data.get("usage"))
     choice = choices[0]
     msg = choice.get("message") or {}
-    return msg.get("content"), choice.get("finish_reason"), resolved, upstream_provider
+    return (
+        msg.get("content"), choice.get("finish_reason"), resolved, upstream_provider,
+        normalise_usage(data.get("usage")),
+    )
 
 
 def call_llm_json(

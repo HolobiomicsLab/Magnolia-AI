@@ -136,15 +136,20 @@ def process_prompt(
     now = datetime.now(timezone.utc)
     sent: list[str] = []
     letters: list[Path] = []
+    delivered: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:
         agent, request = match.group(1), (match.group(2) or "").strip()
         if not request:
             return match.group(0)
+        target = agent.lower()
+        if target in delivered:
+            return _REPLACEMENT.format(agent=agent)
         try:
-            letters.append(_deliver(paths, agent.lower(), request, now))
+            letters.append(_deliver(paths, target, request, now))
         except OSError:
             return match.group(0)
+        delivered.add(target)
         sent.append(f"@{agent}")
         return _REPLACEMENT.format(agent=agent)
 

@@ -133,6 +133,22 @@ def test_codex_rules_are_developer_instructions_and_member_value_wins(make_rende
     assert any("developer_instructions" in conflict for conflict in launch.conflicts)
 
 
+def test_codex_developer_rules_use_codex_tool_names(make_render):
+    neutral, context = make_render()
+    (context.root / "rules" / "a.md").write_text(
+        "Use compchem-tools_run_shell and compchem-memory_memory_search.\n\n"
+        "## Tool names in other clients\nDrop this.\n\n## Keep\nKept.\n",
+        encoding="utf-8",
+    )
+
+    config = tomllib.loads(render(neutral, context).files[_dir(context) / "config.toml"].decode())
+    rules = config["developer_instructions"]
+
+    assert "mcp__compchem_tools__run_shell" in rules
+    assert "mcp__compchem_memory__memory_search" in rules
+    assert "Tool names in other clients" not in rules
+
+
 def test_codex_preserves_member_entries_and_is_idempotent(make_render):
     neutral, context = make_render()
     folder = _dir(context)

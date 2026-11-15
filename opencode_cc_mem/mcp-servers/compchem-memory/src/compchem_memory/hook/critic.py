@@ -189,6 +189,21 @@ def _parent_window(
     return start, len(rows) - 1
 
 
+def _agent_window(
+    primary: list[tuple[int, dict]], report_rows: list[tuple[int, dict]], turn_id: str | None,
+) -> tuple[int, int] | None:
+    """Bound a child's current Vibe turn when its tool rows have no turn id."""
+    if turn_id is None or not report_rows:
+        return None
+    first = min(index for index, _ in report_rows)
+    end = max(index for index, _ in report_rows)
+    previous = [
+        index for index, row in primary
+        if index < first and row.get("kind") in {"assistant", "agent-start"}
+    ]
+    return (max(previous) + 1 if previous else 0, end)
+
+
 def _fit_trace(items: list[dict]) -> str:
     """Drop oldest evidence until the trace is valid JSON within its budget."""
     # In an indent=1 JSON list each item's block does not depend on its neighbours, so the
@@ -202,9 +217,21 @@ def _fit_trace(items: list[dict]) -> str:
     kept = list(items[start:])
     trace_text = json.dumps(kept, ensure_ascii=False, indent=1)
     if len(trace_text) > MAX_TRACE_CHARS and kept:
-        kept[0] = {**kept[0], "output": (
-            "... [trace item truncated]\n" + str(kept[0].get("output", ""))[-40_000:]
-        )}
+        original = str(kept[0].get("output", ""))
+        marker = "... [trace item truncated]\n"
+        low, high = 0, len(original)
+        best = {**kept[0], "output": marker}
+        while low <= high:
+            middle = (low + high) // 2
+            suffix = original[-middle:] if middle else ""
+            candidate = {**kept[0], "output": marker + suffix}
+            candidate_text = json.dumps([candidate], ensure_ascii=False, indent=1)
+            if len(candidate_text) <= MAX_TRACE_CHARS:
+                best = candidate
+                low = middle + 1
+            else:
+                high = middle - 1
+        kept[0] = best
         trace_text = json.dumps(kept, ensure_ascii=False, indent=1)
     return trace_text
 
@@ -225,7 +252,10 @@ def _trace(
     report = _report(report_rows, boundary)
     current_turn = turn_id if turn_id is not None and has_turns else None
     trace_rows = primary
-    current_window = _parent_window(rows, report_rows, current_turn) if agent_id is None else None
+    current_window = (
+        _parent_window(rows, report_rows, current_turn)
+        if agent_id is None else _agent_window(primary, report_rows, current_turn)
+    )
     if agent_id is None:
         child_ids = {
             row["agent"]["id"] for index, row in enumerate(rows)
@@ -306,6 +336,7 @@ def _error_row(
         "finish_reason": result.finish_reason,
         "reply_chars": len(result.text or ""),
         "upstream_provider": result.upstream_provider,
+        "usage": result.usage,
     }
 
 
@@ -318,6 +349,7 @@ def _verdict_row(
     report: str,
     n_tools: int,
     upstream_provider: str | None,
+    usage: dict | None,
 ) -> dict:
     severity = verdict.get("severity") if verdict.get("severity") is not None else "none"
     claims = verdict.get("unsupported_claims")
@@ -329,6 +361,7 @@ def _verdict_row(
         "why": why, "n_tools": n_tools,
         "report_preview": report[:200],
         "upstream_provider": upstream_provider,
+        "usage": usage,
     }
 
 
@@ -379,13 +412,14 @@ def run_critic(
         except Exception as error:  # noqa: BLE001 - malformed judge output is logged
             malformed = CallResult(
                 result.text, result.finish_reason, result.resolved_model, str(error), result.status,
-                result.upstream_provider,
+                result.upstream_provider, result.usage,
             )
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
             return
         row = _verdict_row(
             harness, session_id, agent_id, route, verdict, report, n_tools,
             result.upstream_provider,
+            result.usage,
         )
         _append_jsonl(out_dir / f"{safe_component(session_id)}.jsonl", row)
         _save_notice(paths, harness, session_id, row)

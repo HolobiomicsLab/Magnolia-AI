@@ -11,20 +11,26 @@ MAX_PAYLOAD_CHARS = 256_000
 _TRUNCATION_SUFFIX = "\n\n[truncated at 256k chars]"
 
 
-def _section(name: str, path: Path) -> str | None:
+def _section(name: str, path: Path, harness: str | None = None) -> str | None:
     try:
         text = path.read_bytes().decode("utf-8", errors="replace").strip()
     except OSError:
         return None
+    if text and harness:
+        from compchem_memory.harness.render_common import delivered_rule_text
+
+        text = delivered_rule_text(text, harness)
     return f"--- {name} ---\n{text}" if text else None
 
 
-def _rule_sections(paths: ProjectPaths) -> list[str]:
+def _rule_sections(paths: ProjectPaths, harness: str | None = None) -> list[str]:
     try:
         names = sorted(path.name for path in (paths.root / "rules").iterdir() if path.name.endswith(".md"))
     except OSError:
         return []
-    sections = (_section(f"rules/{name}", paths.root / "rules" / name) for name in names)
+    sections = (
+        _section(f"rules/{name}", paths.root / "rules" / name, harness) for name in names
+    )
     return [section for section in sections if section is not None]
 
 
@@ -58,7 +64,9 @@ def build_claude_boot_payload(paths: ProjectPaths, limit: int) -> str:
     return "\n\n".join(parts)
 
 
-def build_boot_payload(paths: ProjectPaths, include_agents_md: bool = False) -> str:
+def build_boot_payload(
+    paths: ProjectPaths, include_agents_md: bool = False, harness: str | None = None,
+) -> str:
     """Return the plugin-compatible boot payload, truncated to a 256k prefix.
 
     ``include_agents_md`` puts the workspace ``AGENTS.md`` first, for a client
@@ -66,11 +74,11 @@ def build_boot_payload(paths: ProjectPaths, include_agents_md: bool = False) -> 
     """
     parts = _header(paths)
     if include_agents_md:
-        agents = _section("AGENTS.md", paths.root / "AGENTS.md")
+        agents = _section("AGENTS.md", paths.root / "AGENTS.md", harness)
         if agents is not None:
             parts.append(agents)
     parts.extend(_dynamic_sections(paths))
-    parts.extend(_rule_sections(paths))
+    parts.extend(_rule_sections(paths, harness))
     payload = "\n\n".join(parts)
     encoded = payload.encode("utf-16-le")
     if len(encoded) > 2 * MAX_PAYLOAD_CHARS:
