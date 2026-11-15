@@ -131,10 +131,13 @@ class TestMCPServerStartup:
             "memory_get_run_history",
             "memory_record_run",
             "memory_consolidate",
-            "post_run_assess",
             "memory_confirm",
         ]:
             assert name in tool_names, f"Missing tool: {name}"
+
+        # Assessment moved to compchem-tools in 457f25a (2026-11-13): memory
+        # owns storage/promotion, while tools owns domain-specific analysis.
+        assert "post_run_assess" not in tool_names
 
         # skill tier retired 2026-09: raw-copy promotion tool is gone
         assert "memory_promote" not in tool_names
@@ -155,6 +158,7 @@ class TestMCPServerStartup:
             "check_environment",
             "stage_gate",
             "check_run_status",
+            "post_run_assess",
         ]:
             assert name in tool_names, f"Missing tool: {name}"
 
