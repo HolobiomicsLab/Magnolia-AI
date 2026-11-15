@@ -2,11 +2,13 @@
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.hook.doorbell import (
     DEFAULT_AGENTS,
     DoorbellResult,
+    _letter,
     doorbell_disabled,
     process_prompt,
     registry_agents,
@@ -49,6 +51,29 @@ def test_doorbell_writes_letter_and_rewrites(tmp_path, monkeypatch):
         "",
     ]
     assert letter.read_text(encoding="utf-8").endswith("metabolomics.\n\n")
+
+
+def test_doorbell_appends_colliding_letters(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_DOORBELL", raising=False)
+    paths = _project(tmp_path)
+    prompt = "@literature find three recent papers on A\n@literature find three recent papers on B"
+
+    result = process_prompt(prompt, paths)
+
+    assert len(result.letters) == 2
+    assert result.letters[0] == result.letters[1]
+    letter = result.letters[0]
+    contents = letter.read_bytes()
+    date_line = re.search(rb"- date: ([^\n]+)", contents)
+    assert date_line is not None
+    now = datetime.strptime(date_line.group(1).decode("ascii"), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+        tzinfo=timezone.utc
+    )
+    expected = (
+        _letter("find three recent papers on A", "alpha", now)
+        + _letter("find three recent papers on B", "alpha", now)
+    ).encode("utf-8")
+    assert contents == expected
 
 
 def test_doorbell_bare_mention_untouched(tmp_path, monkeypatch):

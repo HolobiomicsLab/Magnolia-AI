@@ -8,11 +8,8 @@ with ``status: open``. The daemon picks the letter up and runs it headlessly.
 The mention set is the default pair plus every ``projects/<name>/agent.json``
 that does not say ``enabled: false``. ``MAGNOLIA_DOORBELL=0`` disables the
 doorbell. Delivery failures are swallowed: a doorbell must never break a
-session.
-
-Deliberate change: a letter is written with a temporary file and
-``os.replace`` (the plugin appends), so a reader never sees a partial letter
-and a repeated write in the same second does not append a second copy.
+session. Like the plugin, delivery appends the complete letter in one write so
+colliding filenames retain every request.
 """
 
 from __future__ import annotations
@@ -20,7 +17,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -106,26 +102,17 @@ def _letter(request: str, source: str, now: datetime) -> str:
     )
 
 
-def _write_atomic(path: Path, content: str) -> None:
+def _append_letter(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=".letter-", suffix=".tmp")
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
-            temporary.write(content)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-        os.replace(temporary_name, path)
-    finally:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o666)
+    with os.fdopen(descriptor, "wb", closefd=True) as letter:
+        os.write(letter.fileno(), content.encode("utf-8"))
 
 
 def _deliver(paths: ProjectPaths, agent: str, request: str, now: datetime) -> Path:
     directory = paths.root / "projects" / agent / "inbox" / f"from-{paths.name}"
     letter = directory / f"{_slug(request, now)}.task.md"
-    _write_atomic(letter, _letter(request, paths.name, now))
+    _append_letter(letter, _letter(request, paths.name, now))
     return letter
 
 
