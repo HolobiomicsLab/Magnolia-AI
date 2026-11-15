@@ -56,6 +56,26 @@ class ExecContext:
     opencode_db: str | None = None
     agent: str = "worker"
     role_capabilities: Mapping[str, Any] = field(default_factory=dict)
+    installation_root: Path | None = None
+    workspace_root: Path | None = None
+    project_identity: str | None = None
+    python_executable: str | None = None
+    tools_port: int | None = None
+    setup: Mapping[str, Any] = field(default_factory=dict)
+    control_dir: Path | None = None
+    work_dir: Path | None = None
+    cancellation: Any = None
+    memory_service: Mapping[str, Any] = field(default_factory=dict)
+    required_capabilities: tuple[str, ...] = ()
+    capability_read_roots: tuple[Path, ...] = ()
+    shared_rule_files: tuple[Path, ...] = ()
+    shared_skill_files: tuple[Path, ...] = ()
+    invocation_id: str | None = None
+    launch_argv: tuple[str, ...] = ()
+    environment: Mapping[str, str] = field(default_factory=dict)
+    renderer_env: Mapping[str, str] = field(default_factory=dict)
+    resume_from: Path | None = None
+    prompt: str | None = None
 
 
 @dataclass(frozen=True)
