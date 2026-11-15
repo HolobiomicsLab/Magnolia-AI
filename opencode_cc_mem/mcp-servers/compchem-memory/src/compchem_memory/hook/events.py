@@ -46,6 +46,12 @@ _MCP_PREFIX = "mcp__"
 _VIBE_MCP_PREFIX = "mcp_"
 
 
+def _known_server(server: str) -> str:
+    """Restore a known server's hyphens: Codex reports ``compchem_tools``."""
+    hyphenated = server.replace("_", "-")
+    return hyphenated if hyphenated in _KNOWN_SERVERS else server
+
+
 def canonical_tool(raw: str) -> tuple[str | None, str]:
     """Return ``(server, name)`` for a client's raw tool name.
 
@@ -59,12 +65,12 @@ def canonical_tool(raw: str) -> tuple[str | None, str]:
     if raw.startswith(_MCP_PREFIX):
         server, separator, tool = raw[len(_MCP_PREFIX):].partition("__")
         if separator and server and tool:
-            return server, tool
+            return _known_server(server), tool
 
     if raw.startswith(_VIBE_MCP_PREFIX):
         server, separator, tool = raw[len(_VIBE_MCP_PREFIX):].partition(".")
         if separator and server and tool:
-            return server, tool
+            return _known_server(server), tool
 
     if raw.startswith("file_system."):
         tool = raw.removeprefix("file_system.").lower()
