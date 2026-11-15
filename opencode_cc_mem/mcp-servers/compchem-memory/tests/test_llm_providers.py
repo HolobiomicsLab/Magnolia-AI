@@ -389,6 +389,18 @@ def test_call_llm_json_returns_none_when_text_is_none(monkeypatch):
     assert llm.call_llm_json("s", "u") is None
 
 
+def test_call_llm_json_passes_cache_prefix_through(monkeypatch):
+    captured = {}
+
+    def fake_call(*args, **kwargs):
+        captured.update(kwargs)
+        return ('{"ok": true}', "stop")
+
+    monkeypatch.setattr(llm, "call_llm", fake_call)
+    assert llm.call_llm_json("s", "transcript", cache_prefix="transcript") == {"ok": True}
+    assert captured["cache_prefix"] == "transcript"
+
+
 def test_disable_thinking_and_temperature_sent_for_deepseek(monkeypatch):
     """call_llm_json(disable_thinking=True, temperature=0) must send DeepSeek's
     thinking-disabled param and temperature in the request body."""
@@ -642,6 +654,40 @@ def test_call_anthropic_returns_resolved_model(monkeypatch):
         "k", "claude-haiku-4-5", "s", "u", 10)
     assert (out, finish, resolved) == ("hello", "end_turn", "claude-haiku-4-5-20251001")
     assert usage is None
+
+
+def test_call_anthropic_marks_reused_prefix(monkeypatch):
+    import anthropic
+
+    captured = {}
+
+    class FakeMessage:
+        content = [type("Block", (), {"text": "hello"})()]
+        stop_reason = "end_turn"
+        model = "claude-haiku-4-5-20251001"
+        usage = None
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return FakeMessage()
+
+    class FakeAnthropic:
+        def __init__(self, api_key):
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
+    llm._call_anthropic(
+        "k", "claude-haiku-4-5", "s", "transcript plus instruction", 10,
+        cache_prefix="transcript",
+    )
+    assert captured["messages"][0]["content"] == [
+        {
+            "type": "text", "text": "transcript",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": " plus instruction"},
+    ]
 
 
 # ============ mistral and zai providers =============

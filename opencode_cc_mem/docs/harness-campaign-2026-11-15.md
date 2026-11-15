@@ -36,18 +36,29 @@ by an independent model and re-tested live. The acceptance record of the first l
 
 ## Caching of Magnolia's own calls
 
-Measured on 15 November with `deepseek/deepseek-v4.1-flash` through OpenRouter. With
-`MAGNOLIA_OPENROUTER_PROVIDER` pinned to DeepInfra and GMICloud, a repeated identical critic call served
-12,416 of 12,508 prompt tokens from cache and cost fell from USD 0.00184 to USD 0.00014. A new turn's
-critic trace shared only the roughly 200-token system prompt, below the host's cache block, and therefore
-reported zero cached tokens. The conversation extractor consistently cached 768 of 2,646 prompt tokens
-(its roughly 850-token system prompt); because its second pass appends to the transcript, a pinned host can
-then reuse the whole prior transcript prefix.
+Measured on 15 November with `deepseek/deepseek-v4.1-flash` through OpenRouter. With one sticky session per
+role and no manual provider order, a repeated identical critic call served 12,416 of 12,489 prompt tokens
+from cache. The extractor's second pass, which sends the transcript followed by an additive instruction,
+served 2,560 of 2,661 prompt tokens from cache. Without a session id or provider order, nine calls were
+answered by seven hosts and none hit cache. OpenRouter stickiness starts with the first successful request
+carrying `session_id`, expires after 60 minutes without activity, and is disabled when a manual provider
+`order` is supplied; a quantization filter alone preserves it.
 
-Without a host pin, nine calls were answered by seven hosts and none of the four repeat-eligible calls hit
-a cache. Host pinning made caching work and also made judge replies reliable. The memory selector supplies
-only the 15 best candidates per task (about 1,000 tokens), so candidate prompt order is immaterial in
-practice.
+Magnolia therefore sends a path-private `magnolia-<role>-<digest>` session id by default for memory and
+critic calls. Set `MAGNOLIA_OPENROUTER_STICKY=0` (also `false`, `no` or `off`) to omit it. The default
+provider quality floor accepts fp8, bf16, fp16, fp32 and endpoints whose quantization is unknown, avoiding
+the fp4 hosts that returned degenerate JSON during the campaign. `MAGNOLIA_OPENROUTER_PROVIDER` replaces
+that filter entirely, including with an explicit host order. If no endpoint matches, Magnolia retries once
+without the provider filter and records the fallback.
+
+OpenRouter caches DeepSeek, OpenAI, Gemini 2.5+, Grok, Moonshot and Z.AI models automatically. Anthropic
+models require an explicit breakpoint, so Magnolia marks only the conversation extractor's transcript and
+only when its second pass is enabled. Critic, handover merge, consolidation and promotion calls have no
+reused prefix; marking them would pay Anthropic's 1.25x five-minute cache-write price without a later read
+(a cache read costs 0.1x, and a prefix below the model minimum is neither cached nor charged extra).
+
+The memory selector supplies only the 15 best candidates per task (about 1,000 tokens), so candidate prompt
+order is immaterial in practice.
 
 `.magnolia/llm-timing.jsonl` now adds any stated `prompt_tokens`, `cached_tokens`,
 `cache_write_tokens`, `completion_tokens` and `cost` at the top level. Claim-critic verdict and error rows

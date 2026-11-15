@@ -337,6 +337,7 @@ def _error_row(
         "reply_chars": len(result.text or ""),
         "upstream_provider": result.upstream_provider,
         "usage": result.usage,
+        "quality_floor_dropped": result.quality_floor_dropped,
     }
 
 
@@ -350,6 +351,7 @@ def _verdict_row(
     n_tools: int,
     upstream_provider: str | None,
     usage: dict | None,
+    quality_floor_dropped: bool,
 ) -> dict:
     severity = verdict.get("severity") if verdict.get("severity") is not None else "none"
     claims = verdict.get("unsupported_claims")
@@ -362,6 +364,7 @@ def _verdict_row(
         "report_preview": report[:200],
         "upstream_provider": upstream_provider,
         "usage": usage,
+        "quality_floor_dropped": quality_floor_dropped,
     }
 
 
@@ -412,7 +415,7 @@ def run_critic(
         except Exception as error:  # noqa: BLE001 - malformed judge output is logged
             malformed = CallResult(
                 result.text, result.finish_reason, result.resolved_model, str(error), result.status,
-                result.upstream_provider, result.usage,
+                result.upstream_provider, result.usage, result.quality_floor_dropped,
             )
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
             return
@@ -420,6 +423,7 @@ def run_critic(
             harness, session_id, agent_id, route, verdict, report, n_tools,
             result.upstream_provider,
             result.usage,
+            result.quality_floor_dropped,
         )
         _append_jsonl(out_dir / f"{safe_component(session_id)}.jsonl", row)
         _save_notice(paths, harness, session_id, row)

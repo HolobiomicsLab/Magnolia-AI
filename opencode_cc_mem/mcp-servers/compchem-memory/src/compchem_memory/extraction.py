@@ -337,14 +337,18 @@ class AutomaticMemoryExtractor:
         """
         if not transcript or not transcript.strip():
             return []
-        result = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000,
-                               disable_thinking=True)
+        second_pass_enabled = _second_pass_enabled()
+        cache_prefix = transcript if second_pass_enabled else None
+        result = call_llm_json(
+            CONVERSATION_EXTRACTION_PROMPT, transcript, max_tokens=4000,
+            disable_thinking=True, cache_prefix=cache_prefix,
+        )
         if result is None:
             return None  # LLM failed — distinct from "ran and found nothing"
         if not isinstance(result, list):
             return []
         pass1 = [r for r in result if isinstance(r, dict) and "title" in r]
-        if not _second_pass_enabled():
+        if not second_pass_enabled:
             return pass1
 
         pass1_brief = json.dumps(
@@ -357,7 +361,8 @@ class AutomaticMemoryExtractor:
         try:
             extra, finish = call_llm_json(CONVERSATION_EXTRACTION_PROMPT, user2,
                                           max_tokens=4000, disable_thinking=True,
-                                          return_finish_reason=True)
+                                          return_finish_reason=True,
+                                          cache_prefix=cache_prefix)
         except Exception as e:  # noqa: BLE001 - pass 2 must never lose pass 1
             print(f"[second-pass] call failed: {e}")
             extra = None
