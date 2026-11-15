@@ -896,7 +896,9 @@ fi
 # this process's MAGNOLIA_PROJECT_DIR (exported above) for its background
 # poller default. Non-fatal by design — opencode still launches if the daemon
 # can't start; the MCP server will simply be unreachable until it does.
-if [ -f "$SCRIPT_DIR/compchem-tools-daemon.sh" ]; then
+if [ "${MAGNOLIA_DRY_RUN:-0}" = "1" ]; then
+    :  # dry run: start no daemon
+elif [ -f "$SCRIPT_DIR/compchem-tools-daemon.sh" ]; then
     bash "$SCRIPT_DIR/compchem-tools-daemon.sh" start >&2 \
         || echo "warning: compchem-tools daemon failed to start — MCP tools may be unavailable" >&2
 else
@@ -906,7 +908,7 @@ fi
 # Start the helper-agents daemon (mailbox watcher for literature/xiulian).
 # Single-instance via its own flock; a second launch is a quiet no-op.
 # Kill switch: MAGNOLIA_AGENTS=0. Non-fatal by design.
-if [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemon" ]; then
+if [ "${MAGNOLIA_DRY_RUN:-0}" != "1" ] && [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemon" ]; then
     nohup python3 "$SCRIPT_DIR/magnolia-agents-daemon" \
         --root "$REPO_ROOT" >/dev/null 2>&1 &
     disown || true
@@ -918,4 +920,20 @@ fi
 export MAGNOLIA_PROJECT_WORKSPACE=1
 export MAGNOLIA_WORKSPACE_ROOT="$OPENCODE_DIR"
 cd "$PROJECT_WORKSPACE"
+# Dry run: print what exec would receive (argv, cwd, allowlisted env) and stop.
+# Values are read from the environment, so no quoting is involved. Names that
+# look like secrets are never printed.
+if [ "${MAGNOLIA_DRY_RUN:-0}" = "1" ]; then
+    MAG_ARGV0="$OPENCODE_BIN" MAGNOLIA_PROJECT_DIR="." "$PYTHON_CMD" - <<'PY'
+import json, os
+allow = ["MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
+         "MAGNOLIA_WORKSPACE_ROOT", "MAGNOLIA_HOOK_POLICY",
+         "MAGNOLIA_OPENCODE_V2", "COMPCHEM_TOOLS_PORT", "MCP_TOOL_TIMEOUT"]
+secret = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+env = {k: os.environ[k] for k in allow
+       if k in os.environ and not any(w in k for w in secret)}
+print(json.dumps({"argv": [os.environ["MAG_ARGV0"]], "cwd": os.getcwd(), "env": env}))
+PY
+    exit 0
+fi
 MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"
