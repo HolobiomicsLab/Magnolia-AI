@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import errno
+import json
 import os
 import shutil
 import signal
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,41 @@ from .executors.contracts import RunOutcome
 
 
 BARRIER_FAILURE_EXIT = 125
+BARRIER_EXEC_FAILURE_EXIT = 126
+BARRIER_EXEC_NOT_FOUND_EXIT = 127
+_BARRIER_ENV_SNAPSHOT = "MAGNOLIA_BARRIER_ORIGINAL_ENV"
+_BARRIER_STUB = f"""
+import errno, json, os, sys
+fd = int(sys.argv[1])
+client_path = sys.argv[2]
+try:
+    released = os.read(fd, 1)
+except OSError:
+    os._exit({BARRIER_FAILURE_EXIT})
+if released != b"\\n":
+    os._exit({BARRIER_FAILURE_EXIT})
+try:
+    os.close(fd)
+except OSError:
+    os._exit({BARRIER_FAILURE_EXIT})
+snapshot = json.loads(os.environ.pop({_BARRIER_ENV_SNAPSHOT!r}))
+original_keys = set(snapshot["keys"])
+for key in tuple(os.environ):
+    if key not in original_keys:
+        del os.environ[key]
+if snapshot["marker_present"]:
+    os.environ[{_BARRIER_ENV_SNAPSHOT!r}] = snapshot["marker_value"]
+try:
+    os.execv(client_path, [client_path, *sys.argv[3:]])
+except OSError as exc:
+    code = {BARRIER_EXEC_NOT_FOUND_EXIT} if exc.errno == errno.ENOENT else {BARRIER_EXEC_FAILURE_EXIT}
+    detail = os.strerror(exc.errno or errno.EIO).replace("\\n", " ")
+    try:
+        os.write(2, ("magnolia governed exec failed: " + detail + "\\n").encode())
+    except OSError:
+        pass
+    os._exit(code)
+"""
 
 
 class ProcessStartError(OSError):
@@ -162,26 +199,33 @@ def _start_governed_process(
     control: ProcessControl,
 ) -> subprocess.Popen:
     try:
-        _validate_executable(argv[0], cwd, env)
+        client_path = _resolve_executable(argv[0], cwd, env)
         read_fd, write_fd = os.pipe()
     except OSError as exc:
         raise _process_start_error(exc) from exc
-    script = (
-        f"IFS= read -r _ <&{read_fd} || exit {BARRIER_FAILURE_EXIT}; "
-        f"exec {read_fd}<&-; exec \"$@\""
-    )
     launch_argv = [
-        "/bin/sh",
+        sys.executable,
+        "-I",
+        "-S",
         "-c",
-        script,
-        "magnolia-governed-launch",
-        *argv,
+        _BARRIER_STUB,
+        str(read_fd),
+        client_path,
+        *argv[1:],
     ]
+    launch_env = dict(env)
+    launch_env[_BARRIER_ENV_SNAPSHOT] = json.dumps(
+        {
+            "keys": tuple(env),
+            "marker_present": _BARRIER_ENV_SNAPSHOT in env,
+            "marker_value": env.get(_BARRIER_ENV_SNAPSHOT),
+        }
+    )
     try:
         process = subprocess.Popen(
             launch_argv,
             cwd=str(cwd),
-            env=dict(env),
+            env=launch_env,
             stdout=stdout,
             stderr=stderr,
             start_new_session=True,
@@ -201,7 +245,11 @@ def _start_governed_process(
             raise ProcessStartError(
                 errno.EIO, "governed process exited before barrier release"
             )
-        if os.write(write_fd, b"\n") != 1:
+        try:
+            written = os.write(write_fd, b"\n")
+        except OSError as exc:
+            raise _process_start_error(exc) from exc
+        if written != 1:
             raise ProcessStartError(errno.EIO, "short barrier release write")
     except BaseException as exc:
         os.close(write_fd)
@@ -215,9 +263,9 @@ def _start_governed_process(
     return process
 
 
-def _validate_executable(
+def _resolve_executable(
     executable: str, cwd: str | Path, env: Mapping[str, str]
-) -> None:
+) -> str:
     if os.path.dirname(executable):
         candidate = Path(executable)
         if not candidate.is_absolute():
@@ -230,10 +278,12 @@ def _validate_executable(
             raise PermissionError(
                 errno.EACCES, os.strerror(errno.EACCES), executable
             )
-        return
+        return str(candidate.resolve())
     search_path = os.pathsep.join(os.get_exec_path(env))
-    if shutil.which(executable, path=search_path) is None:
+    resolved = shutil.which(executable, path=search_path)
+    if resolved is None:
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), executable)
+    return str(Path(resolved).resolve())
 
 
 def _process_start_error(exc: OSError) -> ProcessStartError:
@@ -241,7 +291,8 @@ def _process_start_error(exc: OSError) -> ProcessStartError:
 
 
 def _kill_and_reap(process: subprocess.Popen) -> None:
-    _signal_group(process.pid, signal.SIGKILL)
+    if process.returncode is None:
+        _signal_group(process.pid, signal.SIGKILL)
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -258,11 +309,19 @@ def _signal_group(pid: int, sig: signal.Signals) -> None:
 
 def _proc_state(pid: int) -> str | None:
     try:
-        body = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        body = Path(f"/proc/{pid}/stat").read_bytes()
     except OSError:
         return None
-    fields = body.rsplit(")", 1)[-1].split()
-    return fields[0] if fields else None
+    parts = body.rsplit(b")", 1)
+    if len(parts) != 2:
+        return None
+    fields = parts[1].split()
+    if not fields or len(fields[0]) != 1:
+        return None
+    try:
+        return fields[0].decode("ascii")
+    except UnicodeDecodeError:
+        return None
 
 
 def _group_alive(pgid: int) -> bool:
@@ -272,11 +331,18 @@ def _group_alive(pgid: int) -> bool:
             if not entry.name.isdigit():
                 continue
             try:
-                body = (entry / "stat").read_text(encoding="utf-8")
+                body = (entry / "stat").read_bytes()
             except OSError:
                 continue
-            fields = body.rsplit(")", 1)[-1].split()
-            if len(fields) >= 3 and fields[2] == str(pgid) and fields[0] != "Z":
+            parts = body.rsplit(b")", 1)
+            if len(parts) != 2:
+                return True
+            fields = parts[1].split()
+            if (
+                len(fields) >= 3
+                and fields[2] == str(pgid).encode("ascii")
+                and fields[0] != b"Z"
+            ):
                 return True
         return False
     try:
