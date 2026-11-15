@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -13,6 +14,21 @@ from compchem_memory.harness.protocol import LaunchContext
 POST_TOOL_TIMEOUT_S = 10
 DEFAULT_HOOK_TIMEOUT_S = 30
 MCP_TOOL_TIMEOUT_MS = "660000"
+_OPEN_CODE_TOOL = re.compile(r"\b(compchem-(?:tools|memory))_([A-Za-z][A-Za-z0-9_]*)\b")
+_OTHER_CLIENTS = re.compile(
+    r"(?ms)^## Tool names in other clients\s*\n.*?(?=^##\s|\Z)"
+)
+
+
+def delivered_rule_text(text: str, harness: str) -> str:
+    """Adapt OpenCode-authored rule prose for one rendered client copy."""
+    from compchem_memory.hook.events import native_tool
+
+    without_cross_client_help = _OTHER_CLIENTS.sub("", text)
+    return _OPEN_CODE_TOOL.sub(
+        lambda match: native_tool(harness, match.group(1), match.group(2)),
+        without_cross_client_help,
+    ).strip()
 
 
 def hook_command(context: LaunchContext, harness: str, event: str) -> str:

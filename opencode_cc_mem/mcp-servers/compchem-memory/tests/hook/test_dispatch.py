@@ -124,11 +124,84 @@ def test_catchup_reads_at_most_two_journals_and_drops_expired(tmp_path, monkeypa
         "vibe", "prompt", "s1", str(project), prompt="next", turn_id="next",
     ), env, time.monotonic() + 8)
 
-    assert reads == [str(tmp_path / "j4")]
+    assert reads == [str(tmp_path / "j4"), str(tmp_path / "j3")]
     with SessionState.open(store, "vibe", "s1") as state:
         kept = state.data["catchup_pending"]
     assert all(row["id"] != "main--old" for row in kept)
-    assert [row["attempts"] for row in kept] == [0, 0, 0, 0, 1]
+    assert [row["attempts"] for row in kept] == [0, 0, 0, 1, 1]
+
+
+def test_codex_turn_end_detaches_probe_and_critic(tmp_path, monkeypatch):
+    from compchem_memory.hook import action_retrieval
+
+    project, env = _workspace(tmp_path)
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append((event.harness, event.turn_id, reply)) or True,
+    )
+    monkeypatch.setattr(
+        action_retrieval, "probe_application",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("inline probe")),
+    )
+    monkeypatch.setattr(
+        critic, "run_critic",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("inline critic")),
+    )
+
+    handle(HookEvent(
+        "codex", "turn-end", "s1", str(project), turn_id="t1", assistant_text="reply",
+    ), env, time.monotonic() + 8)
+
+    assert scheduled == [("codex", "t1", "reply")]
+
+
+def test_session_end_appends_one_row_for_claude_and_vibe(tmp_path):
+    project, env = _workspace(tmp_path)
+    for harness in ("claude", "vibe"):
+        handle(HookEvent(harness, "session-end", f"{harness}-s", str(project)),
+               env, time.monotonic() + 8)
+        rows = _rows(project / ".magnolia" / "transcripts" / harness / f"{harness}-s.jsonl")
+        assert [row["kind"] for row in rows] == ["session-end"]
+        assert rows[0]["ts"].endswith("Z")
+
+
+def test_vibe_consecutive_child_turns_keep_distinct_turn_ids(tmp_path, monkeypatch):
+    project, env = _workspace(tmp_path)
+    child = AgentRef("c1", "worker")
+    source = tmp_path / "child"
+    (source / "journal").mkdir(parents=True)
+    common = dict(harness="vibe", event="turn-end", session_id="s1", cwd=str(project),
+                  agent=child, transcript_ref=str(source))
+
+    handle(HookEvent(**common), env, time.monotonic() + 8)
+    _vibe_journal(source, "t1", "first")
+    handle(HookEvent(**common), env, time.monotonic() + 8)
+    _vibe_journal(source, "t1", "first")
+    journal = source / "journal" / "001.jsonl"
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    rows.append({
+        "payload": {"delta": [{"entry": {
+            "id": "assistant-second", "role": "assistant", "turnId": "t2",
+            "content": [{"type": "text", "text": "second"}],
+        }}]},
+    })
+    journal.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    with SessionState.open(project / ".magnolia", "vibe", "s1") as state:
+        pending = state.data["catchup_pending"]
+    assert len(pending) == 2
+    assert pending[0]["id"] != pending[1]["id"]
+    scheduled = []
+    monkeypatch.setattr(
+        dispatch, "_schedule_background",
+        lambda paths, event, reply: scheduled.append((event.turn_id, reply)) or True,
+    )
+
+    handle(HookEvent("vibe", "session-end", "s1", str(project)),
+           env, time.monotonic() + 8)
+
+    assert sorted(scheduled) == [("t1", "first"), ("t2", "second")]
 
 
 def test_catchup_prioritises_latest_main_then_newest_idle_child(tmp_path, monkeypatch):

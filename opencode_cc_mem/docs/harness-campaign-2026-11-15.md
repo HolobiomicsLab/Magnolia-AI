@@ -34,16 +34,36 @@ by an independent model and re-tested live. The acceptance record of the first l
 - job-notice run ids were cut from the left: shown in full up to 64 characters;
 - Claude Code prompted for Magnolia's own MCP tools: they are pre-allowed in the rendered settings.
 
+## Caching of Magnolia's own calls
+
+Measured on 15 November with `deepseek/deepseek-v4.1-flash` through OpenRouter. With
+`MAGNOLIA_OPENROUTER_PROVIDER` pinned to DeepInfra and GMICloud, a repeated identical critic call served
+12,416 of 12,508 prompt tokens from cache and cost fell from USD 0.00184 to USD 0.00014. A new turn's
+critic trace shared only the roughly 200-token system prompt, below the host's cache block, and therefore
+reported zero cached tokens. The conversation extractor consistently cached 768 of 2,646 prompt tokens
+(its roughly 850-token system prompt); because its second pass appends to the transcript, a pinned host can
+then reuse the whole prior transcript prefix.
+
+Without a host pin, nine calls were answered by seven hosts and none of the four repeat-eligible calls hit
+a cache. Host pinning made caching work and also made judge replies reliable. The memory selector supplies
+only the 15 best candidates per task (about 1,000 tokens), so candidate prompt order is immaterial in
+practice.
+
+`.magnolia/llm-timing.jsonl` now adds any stated `prompt_tokens`, `cached_tokens`,
+`cache_write_tokens`, `completion_tokens` and `cost` at the top level. Claim-critic verdict and error rows
+store the same normalized fields under `usage`; omitted provider fields remain unknown rather than zero.
+
 ## Still open (Plan 3)
 
 - Vibe's memory server has no way to receive the memory model's key without writing it to a file.
 - In Vibe, a sub-agent that calls only MCP tools receives no action notes (Vibe defect above).
 - OpenCode in `opencode run`: job notices are consumed but shown only as toasts (lost), and no critic row was
   written (the process likely exits first). Both are in the frozen OpenCode plugins (Tao's call).
-- The doorbell sends two letters when a prompt mentions `@literature` twice (shared with the OpenCode plugin).
+- The hook-core doorbell now sends one letter per target per prompt. The frozen OpenCode plugin can still
+  send duplicate letters; changing that plugin remains Tao's call.
 - Distillation promoted a note from a member's own MCP server into project memory: provenance rules needed.
-- `rules/magnolia.md` names OpenCode's tool spelling (`compchem-tools_run_shell`); Vibe and Codex also show the
-  member's ~90 global skills next to Magnolia's.
+- Vibe and Codex show the member's global skills next to Magnolia's; this is the clients' intended discovery
+  behaviour. Magnolia-rendered rule copies now use each client's native tool spelling, while OpenCode's source
+  rules remain unchanged.
 - Hook sessions are never sealed and are re-read in full on each sweep; proposed: size/mtime/offset cursors,
   close on session end or idle, archive after distillation.
-- Codex's critic still runs inside its turn-end hook; a Vibe child's consecutive turns need a stable turn id.

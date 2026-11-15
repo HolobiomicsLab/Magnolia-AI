@@ -155,7 +155,7 @@ def test_call_route_shapes(monkeypatch):
     replies = [
         FakeResponse({"model": "claude-resolved", "content": [{"type": "thinking"}, {"type": "text", "text": "anthropic"}], "stop_reason": "max_tokens"}),
         FakeResponse({"model": "gpt-resolved", "choices": [{"message": {"content": "openai"}, "finish_reason": "length"}]}),
-        FakeResponse({}, status=401, text="bad credential"),
+        FakeResponse({"usage": {"prompt_tokens": 7}}, status=401, text="bad credential"),
         FakeResponse({"choices": []}),
     ]
 
@@ -180,6 +180,7 @@ def test_call_route_shapes(monkeypatch):
     assert calls[1][1]["json"]["response_format"] == {"type": "json_object"}
     assert calls[1][1]["headers"]["HTTP-Referer"] == "https://magnolia.local"
     assert unauthorized.status == 401 and "401" in unauthorized.error and "bad credential" in unauthorized.error
+    assert unauthorized.usage == {"prompt_tokens": 7}
     assert empty.text is None and empty.error is None and empty.status == 200
     assert all(call[1]["timeout"] == 60 for call in calls)
 
@@ -533,6 +534,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
         critic, "call_route",
         lambda *args, **kwargs: CallResult(
             f"```json\n{verdict}\n```", "stop", "resolved", None, 200, "DeepInfra",
+            {"prompt_tokens": 12, "cached_tokens": 8},
         ),
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
@@ -546,6 +548,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row["sessionID"] == "s1" and row["harness"] == "claude" and row["agent"] is None
     assert row["provider"] == "deepseek" and row["model"] == "judge"
     assert row["upstream_provider"] == "DeepInfra"
+    assert row["usage"] == {"prompt_tokens": 12, "cached_tokens": 8}
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
@@ -578,7 +581,12 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
     route = Route("mistral", "judge", "https://judge/chat", "key", "openai")
     monkeypatch.setattr(critic, "resolve_route", lambda role: route)
-    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(None, None, None, "HTTP 401: denied", 401))
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(
+            None, None, None, "HTTP 401: denied", 401, usage={"prompt_tokens": 9},
+        ),
+    )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
     critic.run_critic(paths, "claude", "s1", None)
@@ -586,6 +594,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
     assert error["status"] == 401 and error["error"] == "HTTP 401: denied"
+    assert error["usage"] == {"prompt_tokens": 9}
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
 
 
@@ -683,7 +692,24 @@ def test_fit_trace_matches_the_reference_on_varied_inputs():
                   "output": "x\n" * rng.randint(0, 3000)} for i in range(size)]
         assert critic._fit_trace(items) == _naive_fit_trace(items)
     huge = [{"tool": "big", "output": "y" * 200_000}]
-    assert critic._fit_trace(huge) == _naive_fit_trace(huge)
+    assert len(critic._fit_trace(huge)) <= critic.MAX_TRACE_CHARS
+
+
+def test_vibe_child_tool_rows_in_its_turn_window_are_current():
+    rows = [
+        {"kind": "assistant", "turn_id": "old", "agent": {"id": "c1"}, "text": "old"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "current", "input": {}, "output": "x" * 1000},
+        {"kind": "assistant", "turn_id": "new", "agent": {"id": "c1"}, "text": "new"},
+    ]
+
+    report, trace_text, _ = critic._trace(rows, "c1", "new")
+
+    assert report == "new"
+    [item] = json.loads(trace_text)
+    assert item["call_id"] == "current"
+    assert "turn" not in item
+    assert len(item["output"]) == 1000
 
 
 def test_fit_trace_is_linear_on_thousands_of_items():

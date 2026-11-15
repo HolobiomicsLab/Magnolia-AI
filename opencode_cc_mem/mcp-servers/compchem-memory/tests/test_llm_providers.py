@@ -3,6 +3,7 @@ backward compat, error containment, and HTTP shapes."""
 import json
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -40,6 +41,40 @@ def _clean_env(monkeypatch):
 
 
 from compchem_memory import llm  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    [
+        (
+            {"prompt_tokens": 12508, "completion_tokens": 31, "cost": 0.00184,
+             "prompt_tokens_details": {"cached_tokens": 12416, "cache_write_tokens": 7}},
+            {"prompt_tokens": 12508, "cached_tokens": 12416, "cache_write_tokens": 7,
+             "completion_tokens": 31, "cost": 0.00184},
+        ),
+        (
+            {"prompt_tokens": 80, "completion_tokens": 9,
+             "prompt_cache_hit_tokens": 60},
+            {"prompt_tokens": 80, "cached_tokens": 60, "completion_tokens": 9},
+        ),
+        (
+            SimpleNamespace(input_tokens=10, cache_read_input_tokens=3,
+                            cache_creation_input_tokens=2, output_tokens=4),
+            {"prompt_tokens": 15, "cached_tokens": 3, "cache_write_tokens": 2,
+             "completion_tokens": 4},
+        ),
+        (
+            {"input_tokens": 10, "cache_read_input_tokens": 3,
+             "cache_creation_input_tokens": 2, "output_tokens": 4},
+            {"prompt_tokens": 15, "cached_tokens": 3, "cache_write_tokens": 2,
+             "completion_tokens": 4},
+        ),
+        (None, None),
+        ({"prompt_tokens": "many", "prompt_tokens_details": []}, None),
+    ],
+)
+def test_normalise_usage_shapes_and_malformed_values(usage, expected):
+    assert llm.normalise_usage(usage) == expected
 
 
 # ============ _resolve_provider =============
@@ -530,6 +565,10 @@ def test_call_llm_records_resolved_model_deepseek(monkeypatch, tmp_path):
         resp.json = lambda: {
             "model": "deepseek-v4.1-flash",
             "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 100, "completion_tokens": 5, "cost": 0.25,
+                "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 4},
+            },
         }
         return resp
 
@@ -539,6 +578,12 @@ def test_call_llm_records_resolved_model_deepseek(monkeypatch, tmp_path):
     assert row["model"] == "deepseek-flash"
     assert row["resolved_model"] == "deepseek-v4.1-flash"
     assert row["outcome"] == "ok"
+    assert {key: row[key] for key in (
+        "prompt_tokens", "cached_tokens", "cache_write_tokens", "completion_tokens", "cost",
+    )} == {
+        "prompt_tokens": 100, "cached_tokens": 80, "cache_write_tokens": 4,
+        "completion_tokens": 5, "cost": 0.25,
+    }
 
 
 def test_call_llm_records_resolved_model_kimi(monkeypatch, tmp_path):
@@ -593,9 +638,10 @@ def test_call_anthropic_returns_resolved_model(monkeypatch):
             self.messages = FakeMessages()
 
     monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
-    out, finish, resolved = llm._call_anthropic(
+    out, finish, resolved, usage = llm._call_anthropic(
         "k", "claude-haiku-4-5", "s", "u", 10)
     assert (out, finish, resolved) == ("hello", "end_turn", "claude-haiku-4-5-20251001")
+    assert usage is None
 
 
 # ============ mistral and zai providers =============

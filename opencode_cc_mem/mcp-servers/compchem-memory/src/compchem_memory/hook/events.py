@@ -85,6 +85,21 @@ def canonical_tool(raw: str) -> tuple[str | None, str]:
     return None, raw.lower()
 
 
+def native_tool(harness: str, server: str, tool: str) -> str:
+    """Render an observed client spelling and verify it round-trips canonically."""
+    if harness == "claude":
+        raw = f"mcp__{server}__{tool}"
+    elif harness == "codex":
+        raw = f"mcp__{server.replace('-', '_')}__{tool}"
+    elif harness == "vibe":
+        raw = f"mcp_{server}.{tool}"
+    else:
+        raw = f"{server}_{tool}"
+    if canonical_tool(raw) != (server, tool):
+        raise ValueError(f"cannot render {server}.{tool} for {harness}")
+    return raw
+
+
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
 
 

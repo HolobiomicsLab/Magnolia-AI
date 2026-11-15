@@ -67,3 +67,20 @@ def test_agents_md_first_when_requested_and_fail_open(tmp_path):
     sections = payload.split("\n\n")
     assert sections[2] == "--- AGENTS.md ---\nAgents rules"
     assert sections[3] == "--- boot-context.md ---\nBoot text"
+
+
+def test_vibe_boot_rules_use_vibe_tool_names_and_drop_cross_client_paragraph(tmp_path):
+    paths = _project(tmp_path)
+    (tmp_path / "AGENTS.md").write_text(
+        "Use compchem-tools_run_shell and compchem-memory_memory_search.\n\n"
+        "## Tool names in other clients\nIgnore this cross-client explanation.\n\n"
+        "## Keep\nStill here.\n",
+        encoding="utf-8",
+    )
+
+    payload = build_boot_payload(paths, include_agents_md=True, harness="vibe")
+
+    assert "mcp_compchem-tools.run_shell" in payload
+    assert "mcp_compchem-memory.memory_search" in payload
+    assert "Tool names in other clients" not in payload
+    assert "## Keep" in payload

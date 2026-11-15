@@ -57,21 +57,37 @@ def latest_vibe_assistant_turn(
     """Return the latest Vibe assistant turn for one agent, without raising."""
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
         return None
+    turns = vibe_assistant_turns(
+        transcript_ref, agent_id=agent_id, max_bytes=max_bytes,
+    )
+    return turns[-1] if turns else None
+
+
+def vibe_assistant_turns(
+    transcript_ref: str,
+    *,
+    agent_id: str | None,
+    max_bytes: int = 2_000_000,
+) -> list[str]:
+    """Return one ordered occurrence of each visible Vibe assistant turn."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+        return []
     try:
         session = Path(transcript_ref)
         if not session.is_dir():
-            return None
+            return []
         rows = _json_rows_many(_vibe_tail_texts(session, max_bytes))
         entries = _vibe_assistant_entries(rows)
         has_exact_agent = any(_vibe_exact_agent(entry, agent_id) for entry in entries)
-        for entry in reversed(entries):
+        turns = []
+        for entry in entries:
             turn_id = entry.get("turnId")
             if (_vibe_matches_agent(entry, agent_id, has_exact_agent)
-                    and isinstance(turn_id, str) and turn_id):
-                return turn_id
+                    and isinstance(turn_id, str) and turn_id and turn_id not in turns):
+                turns.append(turn_id)
+        return turns
     except Exception:  # noqa: BLE001 - a client transcript must never break its session
-        return None
-    return None
+        return []
 
 
 def _tail_text(path: Path, max_bytes: int) -> str:

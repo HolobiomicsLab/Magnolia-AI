@@ -15,7 +15,9 @@ from types import SimpleNamespace
 import pytest
 
 from compchem_memory import quick_search
-from compchem_memory.hook.__main__ import _commit_delivered, _log_error, _render_handled
+from compchem_memory.hook.__main__ import (
+    _commit_delivered, _log_error, _render_handled, _write_rendered,
+)
 from compchem_memory.hook.adapters import Rendered
 from compchem_memory.hook.adapters import json_adapter
 from compchem_memory.hook.dispatch import handle
@@ -273,6 +275,13 @@ def test_vibe_child_note_is_dropped_when_child_ends(tmp_path, monkeypatch):
     first = handle(mcp, env, time.monotonic() + 8)
     _commit_delivered(vibe.render(first.response, mcp), first, mcp)
 
+    child_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("read_file", None, "read_file", "child-read", {"path": "x"}, "text"),
+    )
+    reserved = handle(child_builtin, env, time.monotonic() + 8)
+    assert reserved.carried
+
     prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
     assert "After your earlier" not in (handle(prompt, env, time.monotonic() + 8).response.context or "")
     handle(HookEvent("vibe", "turn-end", "s1", str(project), agent=child),
@@ -284,6 +293,40 @@ def test_vibe_child_note_is_dropped_when_child_ends(tmp_path, monkeypatch):
     assert dropped[0]["reason"] == "child ended before a deliverable post-tool event"
     with SessionState.open(store, "vibe", "s1") as state:
         assert state.data.get("carried_action_notes") == []
+        assert state.data.get("carried_action_notes_in_flight") == {}
+
+
+def test_commit_failure_after_stdout_does_not_requeue_emitted_carried_note(
+    tmp_path, monkeypatch,
+):
+    from compchem_memory.hook import __main__ as cli
+    from compchem_memory.hook import dispatch
+
+    project = _workspace(tmp_path)
+    event = HookEvent("vibe", "prompt", "s1", str(project), prompt="next")
+    handled = SimpleNamespace(
+        pending=None, notices=None,
+        paths=SimpleNamespace(store=project / ".magnolia"),
+        carried=[SimpleNamespace(id="n1")], carried_field="context", injections=[],
+    )
+    released = []
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    monkeypatch.setattr(cli, "_log_error", lambda *args: None)
+    monkeypatch.setattr(
+        dispatch, "release_carried_notes",
+        lambda *args: released.append(args),
+    )
+
+    _write_rendered(Rendered("delivered", "", 0, frozenset({"context"})), handled, event, {})
+
+    assert released == []
+
+
+def test_carried_reservation_ttl_exceeds_hook_timeout():
+    from compchem_memory.hook import dispatch
+    from compchem_memory.harness.render_common import DEFAULT_HOOK_TIMEOUT_S
+
+    assert dispatch._CARRIED_RESERVATION_TTL_SECONDS >= 2 * DEFAULT_HOOK_TIMEOUT_S
 
 
 def test_vibe_overlapping_post_tools_deliver_carried_note_once(tmp_path, monkeypatch):

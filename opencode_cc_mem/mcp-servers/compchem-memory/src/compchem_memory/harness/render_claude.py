@@ -10,6 +10,7 @@ from compchem_memory.harness.protocol import Launch, LaunchContext
 from compchem_memory.harness.render_common import (
     MCP_TOOL_TIMEOUT_MS,
     active_servers,
+    delivered_rule_text,
     harness_dir,
     hook_command,
     hook_timeout,
@@ -111,13 +112,13 @@ def _servers(neutral: NeutralConfig) -> dict:
 
 
 def _system_prompt(root: Path) -> str:
-    sections = [_read(root / "AGENTS.md")]
+    sections = [delivered_rule_text(_read(root / "AGENTS.md"), HARNESS)]
     rules = root / "rules"
     names = sorted(path.name for path in rules.iterdir() if path.name.endswith(".md")) if rules.is_dir() else []
     for name in names:
         text = _read(rules / name)
         if text:
-            sections.append(f"--- rules/{name} ---\n{text}")
+            sections.append(f"--- rules/{name} ---\n{delivered_rule_text(text, HARNESS)}")
     return "\n\n".join(section for section in sections if section) + "\n"
 
 

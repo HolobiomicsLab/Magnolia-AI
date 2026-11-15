@@ -37,11 +37,14 @@ with one of those names is kept and reported as a conflict.
 | Skills | `.claude/skills` | `.agents/skills` | `.agents/skills` |
 | Reply text for the transcript | client transcript | client rollout | Vibe session journal |
 
+Vibe and Codex list the member's own global skills next to Magnolia's project links. This is by design in
+those clients; Magnolia does not hide or replace the member's skills.
+
 The hook command is `python -m compchem_memory.hook <harness> <event>`. It never breaks the
 client: a failure is logged to `.magnolia/hook-errors.jsonl` and the event passes, except that a
 configured shell policy still denies the built-in shell.
 
-Known limits, from the live acceptance: the Claude Code Stop hook is synchronous only long enough
+Known limits, from the live acceptance: Claude Code and Codex Stop hooks are synchronous only long enough
 to recover replies and launch Magnolia's detached critic worker; the worker records its verdict at
 a later event. Earlier asynchronous Stop hooks did not finish, and the critic judge sometimes
 returns no JSON. Vibe cannot attach context to an MCP result safely, so Magnolia carries an action
