@@ -24,6 +24,15 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+_INSTALLATION_ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [
+    str(_INSTALLATION_ROOT),
+    str(_INSTALLATION_ROOT / "mcp-servers" / "compchem-memory" / "src"),
+    str(_INSTALLATION_ROOT / "mcp-servers" / "compchem-tools" / "src"),
+]
+
+from campaign_runner import launch as _launch
+
 AGENTS: tuple[str, ...] = ()
 
 

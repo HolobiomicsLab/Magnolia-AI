@@ -51,6 +51,7 @@ class ExecContext:
     run_dir: Path | None = None
     timeout_seconds: int = 1800
     role_cap: int | None = None
+    governor_cap: int | None = None
     opencode_binary: str | None = None
     opencode_server: str | None = None
     opencode_db: str | None = None
@@ -72,7 +73,7 @@ class ExecContext:
     shared_skill_files: tuple[Path, ...] = ()
     invocation_id: str | None = None
     launch_argv: tuple[str, ...] = ()
-    environment: Mapping[str, str] = field(default_factory=dict)
+    environment: Mapping[str, str] | None = None
     renderer_env: Mapping[str, str] = field(default_factory=dict)
     resume_from: Path | None = None
     prompt: str | None = None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,8 +28,11 @@ FORBIDDEN_CLIENT_ENV = frozenset(
         "VIBE_HOME",
         "CODEX_API_KEY",
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
     }
 )
+FILTERED_CLIENT_ENV = FORBIDDEN_CLIENT_ENV | {"MAGNOLIA_MODEL"}
+DEFAULT_GOVERNOR_CAP = 60
 ROLE_CONFIG_NAMES = {
     "worker": "campaign-worker",
     "reviewer": "campaign-reviewer",
@@ -36,6 +40,10 @@ ROLE_CONFIG_NAMES = {
     "evaluator": "evaluator",
 }
 ARTIFACT_NAMES = ("policy.json", "settings.json", "mcp.json")
+CLIENT_CONFIG_FILES = {
+    "codex": (".codex/config.toml", ".codex/hooks.json"),
+    "vibe": (".vibe/config.toml", ".vibe/hooks.toml"),
+}
 
 
 @dataclass(frozen=True)
@@ -74,9 +82,12 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
     policy_body = _policy_body(context, invocation_dir, policy_payload)
     settings_body = _json_bytes(_settings_payload(context, policy, required))
     mcp_body = _json_bytes(_mcp_payload(context, policy))
-    _reject_forbidden_values(context, policy_body, settings_body, mcp_body)
     policy_digest = _digest(policy_body)
-    config_digest = _digest(settings_body + b"\0" + mcp_body)
+    config_digest = _configuration_identity(context, settings_body, mcp_body)
+    if evidence["identity"] != config_digest:
+        raise ExecutorRefused(
+            "capability configuration identity does not match discovered configuration"
+        )
     env = _effective_environment(context, invocation_dir / "policy.json")
     if context.resume_from is not None:
         return _resume_launch(
@@ -87,6 +98,11 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
             policy_digest,
             config_digest,
             capability_identity,
+            {
+                "policy.json": policy_body,
+                "settings.json": settings_body,
+                "mcp.json": mcp_body,
+            },
         )
     if invocation_dir.exists():
         raise ExecutorRefused(f"launch invocation already exists: {invocation_dir}")
@@ -105,6 +121,7 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
         artifact_bodies,
     )
     artifact_bodies[invocation_dir / "launch.json"] = _json_bytes(metadata)
+    _reject_forbidden_data(context, env, artifact_bodies.values())
     _materialize(invocation_dir, artifact_bodies)
     return _prepared(
         context,
@@ -116,6 +133,17 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
         config_digest,
         capability_identity,
     )
+
+
+def configuration_identity(context: ExecContext) -> str:
+    """Return the digest of configuration this client launch will discover."""
+    if context.route is None:
+        raise ExecutorRefused("configuration identity requires a resolved route")
+    policy = load_role(ROLE_CONFIG_NAMES[context.role])
+    required = _required_capabilities(policy, context)
+    settings = _json_bytes(_settings_payload(context, policy, required))
+    mcp = _json_bytes(_mcp_payload(context, policy))
+    return _configuration_identity(context, settings, mcp)
 
 
 def _require_context(context: ExecContext) -> None:
@@ -140,8 +168,19 @@ def _require_context(context: ExecContext) -> None:
         raise ExecutorRefused("missing Python executable or tools port")
     if not context.launch_argv:
         raise ExecutorRefused("missing proved client launch argv")
+    if context.role_cap is not None and context.role_cap < 1:
+        raise ExecutorRefused("configured role cap must be positive")
+    if context.governor_cap is not None and context.governor_cap < 1:
+        raise ExecutorRefused("governor cap must be positive")
     if _is_cancelled(context.cancellation):
         raise ExecutorRefused("launch cancelled before preparation")
+    run_dir = context.run_dir.resolve()
+    work_dir = context.work_dir.resolve()
+    control_dir = context.control_dir.resolve()
+    if work_dir != run_dir / "work":
+        raise ExecutorRefused("work directory must be canonical run/work")
+    if control_dir != run_dir / "control":
+        raise ExecutorRefused("control directory must be canonical run/control")
 
 
 def _is_cancelled(cancellation: Any) -> bool:
@@ -176,7 +215,7 @@ def _capability_evidence(
     evidence = client.get(context.role) if isinstance(client, Mapping) else None
     if not isinstance(evidence, Mapping) or evidence.get("accepted") is not True:
         raise ExecutorRefused("missing accepted launch capability evidence")
-    if evidence.get("stale") is True:
+    if evidence.get("stale") is not False:
         raise ExecutorRefused("stale launch capability evidence")
     if evidence.get("trusted") is not True:
         raise ExecutorRefused("untrusted launch capability evidence")
@@ -188,6 +227,12 @@ def _capability_evidence(
     missing = sorted(set(required) - set(supported))
     if missing:
         raise ExecutorRefused("unsupported required capabilities: " + ", ".join(missing))
+    if context.route.model is not None:
+        isolation = evidence.get("model_isolation")
+        if not isinstance(isolation, Mapping) or isolation.get("accepted") is not True:
+            raise ExecutorRefused("missing accepted model isolation evidence")
+        if isolation.get("model") != context.route.model or not isolation.get("identity"):
+            raise ExecutorRefused("model isolation evidence does not match selected model")
     return evidence
 
 
@@ -195,21 +240,67 @@ def _canonical_read_roots(
     policy: RolePolicy, context: ExecContext, required: tuple[str, ...]
 ) -> tuple[str, ...]:
     assert context.project_dir is not None
-    roots: list[Path] = []
-    if policy.role in {"campaign-worker", "campaign-reviewer"}:
-        roots.append(context.project_dir)
-        roots.extend(context.shared_rule_files)
-        roots.extend(context.shared_skill_files)
-    if context.role == "helper" and "native_read" in required:
-        roots.extend(context.capability_read_roots)
-    return tuple(str(path.resolve()) for path in roots)
+    shared_rules = _validated_shared_files(context, context.shared_rule_files)
+    shared_skills = _validated_shared_files(context, context.shared_skill_files)
+    values = {
+        "{project_dir}": (context.project_dir.resolve(),),
+        "{shared_rule_files}": shared_rules,
+        "{shared_skill_files}": shared_skills,
+        "{capability_read_roots}": tuple(
+            path.resolve() for path in context.capability_read_roots
+        )
+        if "native_read" in required
+        else (),
+    }
+    roots: list[str] = []
+    for template in policy.canonical_read_roots:
+        if template not in values:
+            raise ExecutorRefused(f"unsupported canonical read-root field: {template}")
+        for path in values[template]:
+            resolved = str(path)
+            if resolved not in roots:
+                roots.append(resolved)
+    return tuple(roots)
 
 
 def _canonical_edit_roots(policy: RolePolicy, context: ExecContext) -> tuple[str, ...]:
-    if not policy.edit_roots:
-        return ()
     assert context.work_dir is not None
-    return (str(context.work_dir.resolve()),)
+    assert context.control_dir is not None
+    values = {"{work_dir}": context.work_dir.resolve()}
+    roots: list[str] = []
+    for template in policy.edit_roots:
+        if template not in values:
+            raise ExecutorRefused(f"unsupported canonical edit-root field: {template}")
+        edit_root = values[template]
+        if context.control_dir.resolve().is_relative_to(edit_root):
+            raise ExecutorRefused("control directory must be outside every edit root")
+        roots.append(str(edit_root))
+    return tuple(roots)
+
+
+def _validated_shared_files(
+    context: ExecContext, paths: tuple[Path, ...]
+) -> tuple[Path, ...]:
+    """Resolve explicitly named shared files within approved source trees."""
+    assert context.project_dir is not None
+    assert context.installation_root is not None
+    allowed = (
+        context.project_dir.resolve(),
+        (context.installation_root / "rules").resolve(),
+        (context.installation_root / "skills").resolve(),
+        (context.installation_root / ".opencode" / "skills").resolve(),
+    )
+    resolved: list[Path] = []
+    for path in paths:
+        candidate = path.resolve()
+        if not candidate.is_file() or not any(
+            candidate.is_relative_to(root) for root in allowed
+        ):
+            raise ExecutorRefused(
+                f"shared rule/skill entry must be an approved file: {path}"
+            )
+        resolved.append(candidate)
+    return tuple(resolved)
 
 
 def _capability_identity(
@@ -222,9 +313,11 @@ def _capability_identity(
     value = {
         "client": context.route.client,
         "role": context.role,
+        "project_identity": context.project_identity,
         "evidence": evidence["identity"],
         "discovery_dir": str(discovery_dir),
         "required": list(required),
+        "model_isolation": evidence.get("model_isolation"),
     }
     return _digest(_json_bytes(value))
 
@@ -291,13 +384,16 @@ def _settings_payload(
     context: ExecContext, policy: RolePolicy, required: tuple[str, ...]
 ) -> dict[str, Any]:
     assert context.route is not None
-    cap = context.role_cap if context.role_cap is not None else policy.default_cap
+    configured_cap = (
+        context.role_cap if context.role_cap is not None else policy.default_cap
+    )
+    governor_cap = context.governor_cap or DEFAULT_GOVERNOR_CAP
     return {
         "schema_version": "magnolia-launch-settings-v1",
         "client": context.route.client,
         "model": context.route.model,
         "role": context.role,
-        "max_turns": min(cap, policy.default_cap),
+        "max_turns": min(configured_cap, governor_cap),
         "no_tools": not required,
         "one_turn": context.role == "evaluator",
         "stdout_reply": context.role == "helper",
@@ -306,7 +402,11 @@ def _settings_payload(
 
 def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
     service = None
-    if policy.mcp_tool_allowlist and context.memory_service:
+    if policy.mcp_tool_allowlist:
+        if not context.memory_service:
+            raise ExecutorRefused(
+                "role requires memory tools but no usable memory route was supplied"
+            )
         allowed = {
             "transport",
             "url",
@@ -318,6 +418,7 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
         service = {
             key: value for key, value in context.memory_service.items() if key in allowed
         }
+        _validate_memory_service(service)
     return {
         "schema_version": "magnolia-launch-mcp-v1",
         "memory_service": service,
@@ -325,29 +426,70 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
     }
 
 
+def _validate_memory_service(service: Mapping[str, Any]) -> None:
+    transport = service.get("transport")
+    dependencies = []
+    authorization = service.get("authorization_env")
+    if isinstance(authorization, str):
+        dependencies.append(authorization)
+    env_vars = service.get("env_vars", ())
+    if isinstance(env_vars, (list, tuple)):
+        dependencies.extend(str(value) for value in env_vars)
+    filtered = sorted(set(dependencies) & FORBIDDEN_CLIENT_ENV)
+    if filtered:
+        raise ExecutorRefused(
+            "memory route depends on filtered client variable(s): "
+            + ", ".join(filtered)
+        )
+    if transport == "http":
+        url = service.get("url")
+        if not isinstance(url, str) or not re.match(
+            r"^https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:/|$)", url
+        ):
+            raise ExecutorRefused("memory HTTP route must be a project-bound loopback URL")
+        return
+    if transport == "stdio":
+        if not isinstance(service.get("command"), str) or not service["command"]:
+            raise ExecutorRefused("memory stdio route requires a command")
+        return
+    raise ExecutorRefused("memory route must use proved HTTP or stdio transport")
+
+
 def _invocation_dir(context: ExecContext) -> Path:
     assert context.control_dir is not None
+    control = context.control_dir.resolve()
+    executors = (control / "executors").resolve()
+    if not executors.is_relative_to(control):
+        raise ExecutorRefused("canonical control/executors escapes control directory")
     if context.resume_from is not None:
         path = context.resume_from
-        return path.parent.resolve() if path.name == "launch.json" else path.resolve()
+        invocation = path.parent.resolve() if path.name == "launch.json" else path.resolve()
+        if not invocation.is_relative_to(executors):
+            raise ExecutorRefused(
+                "resume invocation must be under canonical control/executors"
+            )
+        return invocation
     invocation = context.invocation_id or uuid.uuid4().hex
     if not invocation or invocation in {".", ".."} or Path(invocation).name != invocation:
         raise ExecutorRefused("invalid launch invocation id")
-    return (context.control_dir / "executors" / invocation).resolve()
+    path = (executors / invocation).resolve()
+    if not path.is_relative_to(executors):
+        raise ExecutorRefused("launch invocation escaped canonical control/executors")
+    return path
 
 
 def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str, str]:
-    inherited = context.environment or os.environ
+    inherited = os.environ if context.environment is None else context.environment
     env = {
         str(key): str(value)
         for key, value in inherited.items()
-        if key not in FORBIDDEN_CLIENT_ENV
+        if key not in FILTERED_CLIENT_ENV
     }
     env.update(
         {
             str(key): str(value)
             for key, value in context.renderer_env.items()
-            if key not in FORBIDDEN_CLIENT_ENV
+            if key not in FILTERED_CLIENT_ENV
         }
     )
     assert context.route is not None
@@ -375,6 +517,42 @@ def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str,
         explicit["MAGNOLIA_MODEL"] = context.route.model
     env.update({key: str(value) for key, value in explicit.items()})
     return env
+
+
+def _configuration_identity(
+    context: ExecContext, settings_body: bytes, mcp_body: bytes
+) -> str:
+    assert context.route is not None
+    assert context.project_dir is not None
+    if context.route.client == "claude-code":
+        return _digest_named_bodies(
+            (("settings.json", settings_body), ("mcp.json", mcp_body))
+        )
+    relative_paths = CLIENT_CONFIG_FILES.get(context.route.client)
+    if relative_paths is None:
+        raise ExecutorRefused(
+            f"no discovered configuration identity for {context.route.client}"
+        )
+    bodies = []
+    for relative in relative_paths:
+        path = context.project_dir / relative
+        try:
+            bodies.append((relative, path.read_bytes()))
+        except OSError as exc:
+            raise ExecutorRefused(
+                f"missing discovered client configuration: {relative}"
+            ) from exc
+    return _digest_named_bodies(bodies)
+
+
+def _digest_named_bodies(bodies: Any) -> str:
+    digest = hashlib.sha256()
+    for name, body in bodies:
+        digest.update(str(name).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(body)
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _launch_metadata(
@@ -414,6 +592,7 @@ def _resume_launch(
     policy_digest: str,
     config_digest: str,
     capability_identity: str,
+    expected_artifacts: Mapping[str, bytes],
 ) -> PreparedLaunch:
     metadata_path = invocation_dir / "launch.json"
     try:
@@ -422,6 +601,7 @@ def _resume_launch(
         raise ExecutorRefused("missing or invalid resume launch reference") from exc
     expected = {
         "trusted": True,
+        "project_identity": context.project_identity,
         "policy_digest": policy_digest,
         "config_digest": config_digest,
         "required_capability_identity": capability_identity,
@@ -443,9 +623,15 @@ def _resume_launch(
             raise ExecutorRefused(f"missing resume launch artifact: {name}") from exc
         if path.stat().st_mode & 0o222:
             raise ExecutorRefused(f"untrusted writable resume launch artifact: {name}")
-        if name != "launch.json" and recorded.get(name) != _digest(body):
-            raise ExecutorRefused(f"stale resume launch artifact: {name}")
+        if name != "launch.json":
+            if body != expected_artifacts[name]:
+                raise ExecutorRefused(
+                    f"stale resume launch artifact differs from recomputed {name}"
+                )
+            if recorded.get(name) != _digest(body):
+                raise ExecutorRefused(f"stale resume launch artifact manifest: {name}")
         files[path] = body
+    _reject_forbidden_data(context, env, files.values())
     return _prepared(
         context,
         discovery_dir,
@@ -459,22 +645,49 @@ def _resume_launch(
 
 
 def _materialize(invocation_dir: Path, artifacts: Mapping[Path, bytes]) -> None:
-    invocation_dir.mkdir(parents=True, mode=0o700)
+    invocation_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        invocation_dir.mkdir(mode=0o700)
+    except FileExistsError as exc:
+        raise ExecutorRefused(
+            f"launch invocation already exists: {invocation_dir}"
+        ) from exc
     for path, body in artifacts.items():
         path.write_bytes(body)
         path.chmod(0o444)
 
 
-def _reject_forbidden_values(context: ExecContext, *bodies: bytes) -> None:
-    """Refuse a filtered client credential copied into argv or an artifact."""
+def _reject_forbidden_data(
+    context: ExecContext, env: Mapping[str, str], bodies: Any
+) -> None:
+    """Refuse filtered names or whole credential tokens in launch outputs."""
+    inherited = os.environ if context.environment is None else context.environment
     values = {
-        str(context.environment[name])
+        str(inherited[name])
         for name in FORBIDDEN_CLIENT_ENV
-        if context.environment.get(name)
+        if inherited.get(name)
     }
-    destinations = [*context.launch_argv, *(body.decode("utf-8") for body in bodies)]
-    if any(value in destination for value in values for destination in destinations):
+    destinations = [*context.launch_argv, *env.keys(), *env.values()]
+    destinations.extend(body.decode("utf-8", errors="replace") for body in bodies)
+    if any(_contains_token(destination, name) for destination in destinations for name in FORBIDDEN_CLIENT_ENV):
+        raise ExecutorRefused("forbidden client environment name in launch contract")
+    if any(_contains_value(destination, value) for destination in destinations for value in values):
         raise ExecutorRefused("forbidden client environment value in launch contract")
+
+
+def _contains_token(destination: str, token: str) -> bool:
+    return re.search(
+        rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", destination
+    ) is not None
+
+
+def _contains_value(destination: str, value: str) -> bool:
+    if destination == value:
+        return True
+    return re.search(
+        rf"(?<![A-Za-z0-9_./-]){re.escape(value)}(?![A-Za-z0-9_./-])",
+        destination,
+    ) is not None
 
 
 def _prepared(

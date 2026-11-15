@@ -22,7 +22,10 @@ def _capable(context: ExecContext, client: str, role: str) -> bool:
     if capabilities is None:
         return False
     if isinstance(capabilities, dict):
-        return bool(capabilities.get(role, False))
+        evidence = capabilities.get(role, False)
+        if isinstance(evidence, dict):
+            return evidence.get("accepted") is True
+        return evidence is True
     return role in capabilities
 
 

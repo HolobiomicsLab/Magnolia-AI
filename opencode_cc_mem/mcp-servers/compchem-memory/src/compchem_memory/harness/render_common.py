@@ -42,7 +42,11 @@ def hook_timeout(event: str) -> int:
 
 
 def harness_dir(context: LaunchContext, harness: str) -> Path:
-    if context.noninteractive and context.control_dir and context.invocation_id:
+    if context.noninteractive:
+        if context.control_dir is None or not context.invocation_id:
+            raise ValueError(
+                "noninteractive launch requires control_dir and invocation_id"
+            )
         return context.control_dir / "executors" / context.invocation_id
     return context.project_dir / ".magnolia" / "harness" / harness
 
@@ -52,9 +56,8 @@ def policy_files(
 ) -> tuple[dict[Path, bytes], dict[str, str]]:
     """The hook policy file and the environment variable that points the hook at it."""
     path = harness_dir(context, harness) / "policy.json"
-    body = {"deny_tools": sorted(neutral.deny_tools)}
-    if context.role_policy:
-        body.update(context.role_policy)
+    body = dict(context.role_policy or {})
+    body["deny_tools"] = sorted(neutral.deny_tools)
     env = {"MAGNOLIA_HOOK_POLICY": str(path.resolve())}
     if context.noninteractive:
         env.update(
