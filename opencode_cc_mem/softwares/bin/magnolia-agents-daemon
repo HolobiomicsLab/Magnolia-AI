@@ -31,8 +31,6 @@ sys.path[:0] = [
     str(_INSTALLATION_ROOT / "mcp-servers" / "compchem-tools" / "src"),
 ]
 
-from campaign_runner import launch as _launch
-
 AGENTS: tuple[str, ...] = ()
 
 

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,7 @@ FORBIDDEN_CLIENT_ENV = frozenset(
         "ANTHROPIC_AUTH_TOKEN",
     }
 )
+FORBIDDEN_PATH_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME"})
 FILTERED_CLIENT_ENV = FORBIDDEN_CLIENT_ENV | {"MAGNOLIA_MODEL"}
 DEFAULT_GOVERNOR_CAP = 60
 ROLE_CONFIG_NAMES = {
@@ -618,10 +620,18 @@ def _resume_launch(
     for name in (*ARTIFACT_NAMES, "launch.json"):
         path = invocation_dir / name
         try:
+            artifact_stat = path.lstat()
+        except OSError as exc:
+            raise ExecutorRefused(f"missing resume launch artifact: {name}") from exc
+        if not stat.S_ISREG(artifact_stat.st_mode):
+            raise ExecutorRefused(
+                f"resume launch artifact is not a regular file: {name}"
+            )
+        try:
             body = path.read_bytes()
         except OSError as exc:
             raise ExecutorRefused(f"missing resume launch artifact: {name}") from exc
-        if path.stat().st_mode & 0o222:
+        if artifact_stat.st_mode & 0o222:
             raise ExecutorRefused(f"untrusted writable resume launch artifact: {name}")
         if name != "launch.json":
             if body != expected_artifacts[name]:
@@ -663,7 +673,7 @@ def _reject_forbidden_data(
     """Refuse filtered names or whole credential tokens in launch outputs."""
     inherited = os.environ if context.environment is None else context.environment
     values = {
-        str(inherited[name])
+        (name, str(inherited[name]))
         for name in FORBIDDEN_CLIENT_ENV
         if inherited.get(name)
     }
@@ -671,7 +681,11 @@ def _reject_forbidden_data(
     destinations.extend(body.decode("utf-8", errors="replace") for body in bodies)
     if any(_contains_token(destination, name) for destination in destinations for name in FORBIDDEN_CLIENT_ENV):
         raise ExecutorRefused("forbidden client environment name in launch contract")
-    if any(_contains_value(destination, value) for destination in destinations for value in values):
+    if any(
+        _contains_value(destination, value, is_path=name in FORBIDDEN_PATH_ENV)
+        for destination in destinations
+        for name, value in values
+    ):
         raise ExecutorRefused("forbidden client environment value in launch contract")
 
 
@@ -681,13 +695,26 @@ def _contains_token(destination: str, token: str) -> bool:
     ) is not None
 
 
-def _contains_value(destination: str, value: str) -> bool:
-    if destination == value:
-        return True
-    return re.search(
-        rf"(?<![A-Za-z0-9_./-]){re.escape(value)}(?![A-Za-z0-9_./-])",
-        destination,
-    ) is not None
+def _contains_value(destination: str, value: str, *, is_path: bool) -> bool:
+    """Find a complete secret token without mistaking path prefixes for values."""
+    punctuation = set("./-") if is_path else {
+        character
+        for character in value
+        if not character.isalnum() and not character.isspace()
+    }
+
+    def continues_token(character: str) -> bool:
+        return character.isalnum() or character == "_" or character in punctuation
+
+    start = 0
+    while (index := destination.find(value, start)) >= 0:
+        end = index + len(value)
+        has_left_boundary = index == 0 or not continues_token(destination[index - 1])
+        has_right_boundary = end == len(destination) or not continues_token(destination[end])
+        if has_left_boundary and has_right_boundary:
+            return True
+        start = index + 1
+    return False
 
 
 def _prepared(

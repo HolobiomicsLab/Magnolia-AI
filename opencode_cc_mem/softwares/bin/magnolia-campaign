@@ -18,7 +18,6 @@ sys.path[:0] = [
     str(root / "mcp-servers" / "compchem-tools" / "src"),
 ]
 
-from campaign_runner import launch as _launch
 from campaign_runner.cli import main
 
 raise SystemExit(main())
