@@ -56,12 +56,16 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
   which speaks the Anthropic Messages schema — key from
   `KIMI_PLAN_MAGNOLIA_API_KEY` (Magnolia-specific) or `KIMI_API_KEY`.
 - `MAGNOLIA_OPENROUTER_PROVIDER` optionally holds an OpenRouter provider JSON
-  object. Invalid JSON is ignored with one stderr warning.
+  object and replaces Magnolia's default fp8/bf16/fp16/fp32/unknown quality
+  floor. Invalid JSON is ignored with one stderr warning.
+- `MAGNOLIA_OPENROUTER_STICKY=0` (also false/no/off) disables the default
+  role-specific, project-private OpenRouter session id.
 - All errors are swallowed and surface as `None` — callers must handle the
   None case. (The heuristic extractor and prompt-fallback in the wrapper
   both rely on this contract.)
 """
 
+import hashlib
 import json
 import math
 import os
@@ -291,6 +295,7 @@ class Route:
     url: str
     key: str = field(repr=False)
     schema: Literal["openai", "anthropic"]
+    role: Literal["memory", "critic"] = "memory"
 
 
 @dataclass(frozen=True)
@@ -304,6 +309,7 @@ class CallResult:
     status: int | None
     upstream_provider: str | None = None
     usage: dict | None = None
+    quality_floor_dropped: bool = False
 
 
 def _usage_value(usage: object, key: str) -> object:
@@ -369,13 +375,17 @@ def normalise_usage(usage: object) -> dict | None:
 
 
 _INVALID_OPENROUTER_PROVIDER_WARNED: set[str] = set()
+_OPENROUTER_QUALITY_FLOOR = {
+    "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
+}
+_FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def _openrouter_provider() -> dict | None:
-    """Parse the optional OpenRouter provider preference without raising."""
+    """Return the member's provider preference or Magnolia's quality floor."""
     raw = _trimmed_env("MAGNOLIA_OPENROUTER_PROVIDER")
     if not raw:
-        return None
+        return {key: list(value) for key, value in _OPENROUTER_QUALITY_FLOOR.items()}
     try:
         value = json.loads(raw)
         if isinstance(value, dict):
@@ -389,6 +399,37 @@ def _openrouter_provider() -> dict | None:
                 file=sys.stderr,
             )
         return None
+
+
+def _openrouter_session_id(role: Literal["memory", "critic"]) -> str | None:
+    """Return a path-private sticky-routing id for one project and LLM role."""
+    if _trimmed_env("MAGNOLIA_OPENROUTER_STICKY").lower() in _FALSE_VALUES:
+        return None
+    project = Path(os.environ.get("MAGNOLIA_PROJECT_DIR") or ".").resolve()
+    digest = hashlib.sha256(str(project).encode("utf-8")).hexdigest()[:16]
+    return f"magnolia-{role}-{digest}"
+
+
+def _user_content(
+    provider: str,
+    model: str,
+    user: str,
+    cache_prefix: str | None,
+) -> str | list[dict]:
+    """Add an ephemeral breakpoint only for Anthropic targets that need one."""
+    needs_marker = (
+        provider == PROVIDER_ANTHROPIC
+        or (provider == PROVIDER_OPENROUTER and model.lower().startswith("anthropic/"))
+    )
+    if not needs_marker or not cache_prefix or not user.startswith(cache_prefix):
+        return user
+    blocks = [{
+        "type": "text", "text": cache_prefix,
+        "cache_control": {"type": "ephemeral"},
+    }]
+    if remainder := user[len(cache_prefix):]:
+        blocks.append({"type": "text", "text": remainder})
+    return blocks
 
 
 _ANTHROPIC_BASE = "https://api.anthropic.com/v1"
@@ -421,12 +462,18 @@ def _normalise_base(raw: str) -> str:
     return base if re.search(r"/v\d+$", base) else f"{base}/v1"
 
 
-def _route(provider: str, model: str, key: str, base: str) -> Route:
+def _route(
+    provider: str,
+    model: str,
+    key: str,
+    base: str,
+    role: Literal["memory", "critic"],
+) -> Route:
     schema: Literal["openai", "anthropic"] = (
         "anthropic" if provider in (PROVIDER_ANTHROPIC, PROVIDER_KIMI) else "openai"
     )
     path = "/messages" if schema == "anthropic" else "/chat/completions"
-    return Route(provider, model, f"{base}{path}", key, schema)
+    return Route(provider, model, f"{base}{path}", key, schema, role)
 
 
 def _memory_route() -> Route | None:
@@ -441,7 +488,7 @@ def _memory_route() -> Route | None:
         base = _normalise_base(raw_base) if raw_base else _ANTHROPIC_BASE
     else:
         base = _get_base_url(provider)
-    return _route(provider, model, key, base)
+    return _route(provider, model, key, base, "memory")
 
 
 def _critic_route() -> Route | None:
@@ -466,7 +513,7 @@ def _critic_route() -> Route | None:
         base = _ANTHROPIC_BASE
     else:
         base = _DEFAULT_BASE[provider]
-    return _route(provider, requested_model or _DEFAULT_MODEL[provider], key, base)
+    return _route(provider, requested_model or _DEFAULT_MODEL[provider], key, base, "critic")
 
 
 def resolve_route(role: Literal["memory", "critic"]) -> Route | None:
@@ -486,7 +533,9 @@ def _route_request(
     temperature: float | None,
     json_mode: bool,
     disable_thinking: bool,
+    cache_prefix: str | None = None,
 ) -> tuple[dict[str, str], dict]:
+    user_content = _user_content(route.provider, route.model, user, cache_prefix)
     if route.schema == "anthropic":
         headers = {
             "Content-Type": "application/json",
@@ -496,7 +545,7 @@ def _route_request(
         }
         body = {
             "model": route.model, "max_tokens": max_tokens, "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "messages": [{"role": "user", "content": user_content}],
         }
         if temperature is not None:
             body["temperature"] = temperature
@@ -516,7 +565,7 @@ def _route_request(
         "model": route.model, "max_tokens": max_tokens,
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user", "content": user_content},
         ],
     }
     if temperature is not None:
@@ -527,6 +576,8 @@ def _route_request(
         provider = _openrouter_provider()
         if provider is not None:
             body["provider"] = provider
+        if session_id := _openrouter_session_id(route.role):
+            body["session_id"] = session_id
         if disable_thinking:
             body["reasoning"] = {"enabled": False}
     if disable_thinking and route.provider in (PROVIDER_DEEPSEEK, PROVIDER_ZAI):
@@ -534,7 +585,12 @@ def _route_request(
     return headers, body
 
 
-def _route_response(route: Route, data: dict, status: int) -> CallResult:
+def _route_response(
+    route: Route,
+    data: dict,
+    status: int,
+    quality_floor_dropped: bool = False,
+) -> CallResult:
     resolved_model = data.get("model")
     upstream_provider = data.get("provider")
     if not isinstance(upstream_provider, str):
@@ -544,18 +600,19 @@ def _route_response(route: Route, data: dict, status: int) -> CallResult:
                      if block.get("type") == "text"), None)
         return CallResult(
             text, data.get("stop_reason"), resolved_model, None, status,
-            upstream_provider, normalise_usage(data.get("usage")),
+            upstream_provider, normalise_usage(data.get("usage")), quality_floor_dropped,
         )
     choices = data.get("choices") or []
     if not choices:
         return CallResult(
             None, None, resolved_model, None, status, upstream_provider,
-            normalise_usage(data.get("usage")),
+            normalise_usage(data.get("usage")), quality_floor_dropped,
         )
     choice = choices[0]
     return CallResult(
         (choice.get("message") or {}).get("content"), choice.get("finish_reason"),
         resolved_model, None, status, upstream_provider, normalise_usage(data.get("usage")),
+        quality_floor_dropped,
     )
 
 
@@ -569,6 +626,43 @@ def _scrub_route_error(text: str, key: str) -> str:
     return _BEARER_CREDENTIAL.sub("Bearer [REDACTED]", redacted)[:300]
 
 
+def _reasoning_rejected(response: object, body: dict) -> bool:
+    return (
+        getattr(response, "status_code", None) == 400
+        and "reasoning" in str(getattr(response, "text", "")).lower()
+        and "reasoning" in body
+    )
+
+
+def _provider_filter_rejected(response: object, body: dict) -> bool:
+    if "provider" not in body:
+        return False
+    status = getattr(response, "status_code", None)
+    text = str(getattr(response, "text", "")).lower()
+    return status == 404 or (
+        status == 400 and ("endpoint" in text or "quantization" in text)
+    )
+
+
+def _post_openrouter(url: str, headers: dict, body: dict) -> tuple[object, bool]:
+    """Post with at most one reasoning and one provider-filter fallback."""
+    current = body
+    reasoning_retried = False
+    quality_floor_dropped = False
+    for _ in range(3):
+        response = httpx.post(url, headers=headers, json=current, timeout=60)
+        if not reasoning_retried and _reasoning_rejected(response, current):
+            current = {key: value for key, value in current.items() if key != "reasoning"}
+            reasoning_retried = True
+            continue
+        if not quality_floor_dropped and _provider_filter_rejected(response, current):
+            current = {key: value for key, value in current.items() if key != "provider"}
+            quality_floor_dropped = True
+            continue
+        return response, quality_floor_dropped
+    return response, quality_floor_dropped
+
+
 def call_route(
     route: Route,
     system: str,
@@ -578,23 +672,21 @@ def call_route(
     temperature: float | None = None,
     json_mode: bool = False,
     disable_thinking: bool = False,
+    cache_prefix: str | None = None,
 ) -> CallResult:
     """Call one resolved route and contain every HTTP or decoding failure."""
     status = None
+    quality_floor_dropped = False
     try:
         headers, body = _route_request(
             route, system, user, max_tokens, temperature, json_mode, disable_thinking,
+            cache_prefix,
         )
-        response = httpx.post(route.url, headers=headers, json=body, timeout=60)
-        status = response.status_code
-        if (
-            route.provider == PROVIDER_OPENROUTER and status == 400
-            and "reasoning" in str(getattr(response, "text", "")).lower()
-            and "reasoning" in body
-        ):
-            body = {key: value for key, value in body.items() if key != "reasoning"}
+        if route.provider == PROVIDER_OPENROUTER:
+            response, quality_floor_dropped = _post_openrouter(route.url, headers, body)
+        else:
             response = httpx.post(route.url, headers=headers, json=body, timeout=60)
-            status = response.status_code
+        status = response.status_code
         if status < 200 or status >= 300:
             detail = str(getattr(response, "text", "")).strip()
             error = f"HTTP {status} from {route.provider}"
@@ -611,10 +703,14 @@ def call_route(
             return CallResult(
                 None, None, None, _scrub_route_error(error, route.key), status,
                 upstream_provider, normalise_usage(error_data.get("usage")),
+                quality_floor_dropped,
             )
-        return _route_response(route, response.json(), status)
+        return _route_response(route, response.json(), status, quality_floor_dropped)
     except Exception as error:  # noqa: BLE001 - public contract: never raise
-        return CallResult(None, None, None, _scrub_route_error(str(error), route.key), status)
+        return CallResult(
+            None, None, None, _scrub_route_error(str(error), route.key), status,
+            quality_floor_dropped=quality_floor_dropped,
+        )
 
 
 def is_llm_available() -> bool:
@@ -656,6 +752,7 @@ def call_llm(
     temperature: float | None = None,
     disable_thinking: bool = False,
     return_finish_reason: bool = False,
+    cache_prefix: str | None = None,
 ) -> str | None | tuple[str | None, str | None]:
     """Call the resolved LLM provider. Returns text on success or None on
     any failure (no provider configured, missing key, network error,
@@ -671,6 +768,9 @@ def call_llm(
     DeepSeek and Z.ai receive `thinking: {"type": "disabled"}`; OpenRouter receives
     `reasoning: {"enabled": false}`. Kimi always disables thinking in `_call_kimi`.
 
+    `cache_prefix` marks a reused leading user-content span only for native
+    Anthropic and OpenRouter `anthropic/*` targets; all other bodies stay plain.
+
     Every attempt appends a timing row (see _record_timing), including the
     provider-echoed `resolved_model`, so slow, silently failing, or silently
     re-routed calls are decomposable after the fact instead of invisible."""
@@ -685,31 +785,42 @@ def call_llm(
     t0 = time.monotonic()
     upstream_provider = None
     usage = None
+    quality_floor_dropped = False
     try:
         if provider == PROVIDER_ANTHROPIC:
             out, finish, resolved, usage = _call_anthropic(
-                key, model, system_prompt, user_content, max_tokens, temperature)
+                key, model, system_prompt, user_content, max_tokens, temperature,
+                cache_prefix)
         elif provider == PROVIDER_KIMI:
             out, finish, resolved, usage = _call_kimi(
                 key, model, system_prompt, user_content, max_tokens, temperature)
         else:
-            out, finish, resolved, upstream_provider, usage = _call_openai_compat(
+            out, finish, resolved, upstream_provider, usage, quality_floor_dropped = (
+                _call_openai_compat(
                 provider, key, model, system_prompt, user_content, max_tokens,
-                temperature, disable_thinking)
+                temperature, disable_thinking, cache_prefix)
+            )
         _record_timing(provider, model, (time.monotonic() - t0) * 1000,
                        "ok" if out else "empty", resolved_model=resolved,
                        chars=len(out) if out else 0,
-                       upstream_provider=upstream_provider, **(usage or {}))
+                       upstream_provider=upstream_provider,
+                       **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+                       **(usage or {}))
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
+        quality_floor_dropped = bool(
+            getattr(e, "quality_floor_dropped", quality_floor_dropped)
+        )
         _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
-                       error=type(e).__name__)
+                       error=type(e).__name__,
+                       **({"quality_floor_dropped": True} if quality_floor_dropped else {}))
         return (None, None) if return_finish_reason else None
 
 
 def _call_anthropic(
     key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
     temperature: float | None = None,
+    cache_prefix: str | None = None,
 ) -> tuple[str | None, str | None, str | None, dict | None]:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
@@ -717,7 +828,10 @@ def _call_anthropic(
         "model": model,
         "max_tokens": max_tokens,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_content}],
+        "messages": [{
+            "role": "user",
+            "content": _user_content(PROVIDER_ANTHROPIC, model, user_content, cache_prefix),
+        }],
     }
     if temperature is not None:
         kwargs["temperature"] = temperature
@@ -776,8 +890,10 @@ def _call_kimi(
 
 def _call_openai_compat(
     provider: str, key: str, model: str, system_prompt: str, user_content: str, max_tokens: int,
-    temperature: float | None = None, disable_thinking: bool = False,
-) -> tuple[str | None, str | None, str | None, str | None, dict | None]:
+    temperature: float | None = None,
+    disable_thinking: bool = False,
+    cache_prefix: str | None = None,
+) -> tuple[str | None, str | None, str | None, str | None, dict | None, bool]:
     """DeepSeek, OpenAI, OpenRouter, Mistral and Z.ai all use the OpenAI chat
     completions schema."""
     url = f"{_get_base_url(provider)}/chat/completions"
@@ -786,7 +902,10 @@ def _call_openai_compat(
         "max_tokens": max_tokens,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
+            {
+                "role": "user",
+                "content": _user_content(provider, model, user_content, cache_prefix),
+            },
         ],
     }
     if temperature is not None:
@@ -795,6 +914,8 @@ def _call_openai_compat(
         provider_preference = _openrouter_provider()
         if provider_preference is not None:
             body["provider"] = provider_preference
+        if session_id := _openrouter_session_id("memory"):
+            body["session_id"] = session_id
         if disable_thinking:
             body["reasoning"] = {"enabled": False}
     # Reasoning models (DeepSeek v4 flash/pro, GLM) can spend their whole budget
@@ -805,37 +926,28 @@ def _call_openai_compat(
     if disable_thinking and (provider in (PROVIDER_DEEPSEEK, PROVIDER_ZAI)
                              or "z.ai" in _disable_base or "bigmodel" in _disable_base):
         body["thinking"] = {"type": "disabled"}
-    resp = httpx.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            **({
-                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://magnolia.local"),
-                "X-Title": os.environ.get("OPENROUTER_TITLE", "Magnolia"),
-            } if provider == PROVIDER_OPENROUTER else {}),
-        },
-        json=body,
-        timeout=60,
-    )
-    if (
-        provider == PROVIDER_OPENROUTER and getattr(resp, "status_code", 200) == 400
-        and "reasoning" in str(getattr(resp, "text", "")).lower()
-        and "reasoning" in body
-    ):
-        body = {field: value for field, value in body.items() if field != "reasoning"}
-        resp = httpx.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://magnolia.local"),
-                "X-Title": os.environ.get("OPENROUTER_TITLE", "Magnolia"),
-            },
-            json=body,
-            timeout=60,
-        )
-    resp.raise_for_status()
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        **({
+            "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://magnolia.local"),
+            "X-Title": os.environ.get("OPENROUTER_TITLE", "Magnolia"),
+        } if provider == PROVIDER_OPENROUTER else {}),
+    }
+    quality_floor_dropped = False
+    if provider == PROVIDER_OPENROUTER:
+        resp, quality_floor_dropped = _post_openrouter(url, headers, body)
+    else:
+        resp = httpx.post(url, headers=headers, json=body, timeout=60)
+    try:
+        resp.raise_for_status()
+    except Exception as error:
+        if quality_floor_dropped:
+            try:
+                error.quality_floor_dropped = True
+            except Exception:  # noqa: BLE001 - some third-party errors are immutable
+                pass
+        raise
     data = resp.json()
     resolved = data.get("model")
     upstream_provider = data.get("provider")
@@ -843,12 +955,15 @@ def _call_openai_compat(
         upstream_provider = None
     choices = data.get("choices") or []
     if not choices:
-        return None, None, resolved, upstream_provider, normalise_usage(data.get("usage"))
+        return (
+            None, None, resolved, upstream_provider, normalise_usage(data.get("usage")),
+            quality_floor_dropped,
+        )
     choice = choices[0]
     msg = choice.get("message") or {}
     return (
         msg.get("content"), choice.get("finish_reason"), resolved, upstream_provider,
-        normalise_usage(data.get("usage")),
+        normalise_usage(data.get("usage")), quality_floor_dropped,
     )
 
 
@@ -860,6 +975,7 @@ def call_llm_json(
     temperature: float | None = None,
     disable_thinking: bool = False,
     return_finish_reason: bool = False,
+    cache_prefix: str | None = None,
 ) -> dict | list | None | tuple[dict | list | None, str | None]:
     """Call LLM and parse JSON from the response. Strips a single
     ```json fenced block if present. Returns None on parse failure.
@@ -867,10 +983,12 @@ def call_llm_json(
     With ``return_finish_reason=True`` returns ``(result, finish_reason)``
     so the caller can tell a complete answer from one cut off at
     ``max_tokens`` (``finish_reason == "length"``) — a clipped response may
-    still parse by luck, so the caller decides whether to trust it."""
+    still parse by luck, so the caller decides whether to trust it.
+
+    ``cache_prefix`` is passed through unchanged to :func:`call_llm`."""
     text, finish = call_llm(system_prompt, user_content, max_tokens,
                             temperature=temperature, disable_thinking=disable_thinking,
-                            return_finish_reason=True)
+                            return_finish_reason=True, cache_prefix=cache_prefix)
     if not text:
         return (None, finish) if return_finish_reason else None
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)

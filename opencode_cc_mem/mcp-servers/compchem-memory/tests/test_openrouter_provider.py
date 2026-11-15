@@ -21,7 +21,8 @@ def _clear_provider_env(monkeypatch):
         "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
         "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "MAGNOLIA_LLM_API_KEY",
         "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
-        "MAGNOLIA_OPENROUTER_PROVIDER",
+        "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_OPENROUTER_STICKY",
+        "MAGNOLIA_PROJECT_DIR",
     ):
         monkeypatch.delenv(var, raising=False)
     llm._INVALID_OPENROUTER_PROVIDER_WARNED.clear()
@@ -154,7 +155,9 @@ def test_provider_routing_and_reasoning_switch_reach_both_request_builders(
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "user"},
         ],
-        "provider": provider, "reasoning": {"enabled": False},
+        "provider": provider,
+        "session_id": llm._openrouter_session_id("memory"),
+        "reasoning": {"enabled": False},
     }
     assert captured == [expected, expected]
     timing = json.loads(
@@ -210,3 +213,201 @@ def test_invalid_provider_json_is_ignored_with_one_stderr_line(monkeypatch, caps
 
     assert "provider" not in first and "provider" not in second
     assert capsys.readouterr().err.count("MAGNOLIA_OPENROUTER_PROVIDER") == 1
+
+
+def test_openrouter_session_id_is_stable_per_project_and_role(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    first_project = tmp_path / "LFX private project"
+    second_project = tmp_path / "other project"
+    first_project.mkdir()
+    second_project.mkdir()
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(first_project))
+    memory = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key",
+        "openai", "memory",
+    )
+    critic = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key",
+        "openai", "critic",
+    )
+
+    memory_id = llm._route_request(memory, "s", "u", 1, None, False, False)[1]["session_id"]
+    repeated = llm._route_request(memory, "s", "u", 1, None, False, False)[1]["session_id"]
+    critic_id = llm._route_request(critic, "s", "u", 1, None, False, False)[1]["session_id"]
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(second_project))
+    other_id = llm._route_request(memory, "s", "u", 1, None, False, False)[1]["session_id"]
+
+    assert memory_id == repeated
+    assert memory_id.startswith("magnolia-memory-")
+    assert critic_id.startswith("magnolia-critic-")
+    assert len(memory_id.rsplit("-", 1)[1]) == 16
+    assert len({memory_id, critic_id, other_id}) == 3
+    assert str(first_project) not in memory_id
+    assert first_project.name not in memory_id
+
+
+@pytest.mark.parametrize("disabled", ["0", "false", "NO", "off"])
+def test_openrouter_session_id_can_be_disabled(monkeypatch, disabled):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_OPENROUTER_STICKY", disabled)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key", "openai",
+    )
+    body = llm._route_request(route, "s", "u", 1, None, False, False)[1]
+    assert "session_id" not in body
+
+
+def test_non_openrouter_route_has_no_session_id(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    route = llm.Route(
+        llm.PROVIDER_OPENAI, "gpt-4o-mini", "https://openai/chat", "key", "openai",
+    )
+    body = llm._route_request(route, "s", "u", 1, None, False, False)[1]
+    assert "session_id" not in body
+
+
+def test_default_quality_floor_and_member_override(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key", "openai",
+    )
+    default_body = llm._route_request(route, "s", "u", 1, None, False, False)[1]
+    assert default_body["provider"] == {
+        "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
+    }
+
+    member_value = {"order": ["DeepInfra"], "allow_fallbacks": True}
+    monkeypatch.setenv("MAGNOLIA_OPENROUTER_PROVIDER", json.dumps(member_value))
+    member_body = llm._route_request(route, "s", "u", 1, None, False, False)[1]
+    assert member_body["provider"] == member_value
+
+
+def test_reasoning_and_floor_retries_never_exceed_three_posts(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    bodies = []
+
+    class Response:
+        def __init__(self, status, text=""):
+            self.status_code = status
+            self.text = text
+
+        def json(self):
+            return {
+                "model": "vendor/model", "provider": "DeepInfra",
+                "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+            }
+
+    responses = [
+        Response(400, "reasoning is unsupported"),
+        Response(404, "No endpoints found"),
+        Response(200),
+    ]
+    monkeypatch.setattr(
+        llm.httpx, "post",
+        lambda url, **kwargs: bodies.append(kwargs["json"].copy()) or responses.pop(0),
+    )
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "vendor/model", "https://router/chat", "key",
+        "openai", "critic",
+    )
+    result = llm.call_route(route, "s", "u", max_tokens=1, disable_thinking=True)
+
+    assert result.text == "OK"
+    assert result.quality_floor_dropped is True
+    assert len(bodies) == 3
+    assert "reasoning" in bodies[0] and "reasoning" not in bodies[1]
+    assert "provider" in bodies[1] and "provider" not in bodies[2]
+
+
+def test_call_llm_drops_quality_floor_on_endpoint_400_and_records_it(
+    monkeypatch, tmp_path,
+):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+    bodies = []
+
+    class Response:
+        def __init__(self, status, text=""):
+            self.status_code = status
+            self.text = text
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise AssertionError("fallback did not recover")
+
+        def json(self):
+            return {
+                "model": "deepseek/deepseek-v4.1-flash", "provider": "DeepInfra",
+                "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+            }
+
+    responses = [Response(400, "No endpoints match the quantization"), Response(200)]
+    monkeypatch.setattr(
+        llm.httpx, "post",
+        lambda url, **kwargs: bodies.append(kwargs["json"].copy()) or responses.pop(0),
+    )
+
+    assert llm.call_llm("s", "u", max_tokens=1) == "OK"
+    timing = json.loads(
+        (tmp_path / ".magnolia" / "llm-timing.jsonl").read_text().splitlines()[-1]
+    )
+    assert len(bodies) == 2
+    assert "provider" in bodies[0] and "provider" not in bodies[1]
+    assert timing["quality_floor_dropped"] is True
+
+
+@pytest.mark.parametrize("model", ["deepseek/deepseek-v4.1-flash", "openai/gpt-5"])
+def test_automatic_cache_models_keep_plain_user_string(monkeypatch, model):
+    _clear_provider_env(monkeypatch)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, model, "https://router/chat", "key", "openai",
+    )
+    body = llm._route_request(
+        route, "s", "transcript plus instruction", 1, None, False, False,
+        cache_prefix="transcript",
+    )[1]
+    assert body["messages"][1]["content"] == "transcript plus instruction"
+
+
+def test_openrouter_anthropic_cache_prefix_marks_only_first_block(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    route = llm.Route(
+        llm.PROVIDER_OPENROUTER, "anthropic/claude-sonnet-4.5",
+        "https://router/chat", "key", "openai",
+    )
+    body = llm._route_request(
+        route, "s", "transcript plus instruction", 1, None, False, False,
+        cache_prefix="transcript",
+    )[1]
+    assert body["messages"][1]["content"] == [
+        {
+            "type": "text", "text": "transcript",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": " plus instruction"},
+    ]
+
+
+def test_native_anthropic_route_marks_prefix_but_kimi_does_not(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    native = llm.Route(
+        llm.PROVIDER_ANTHROPIC, "claude-haiku-4-5", "https://anthropic/messages",
+        "key", "anthropic",
+    )
+    kimi = llm.Route(
+        llm.PROVIDER_KIMI, "k3", "https://kimi/messages", "key", "anthropic",
+    )
+    native_body = llm._route_request(
+        native, "s", "transcript", 1, None, False, False, cache_prefix="transcript",
+    )[1]
+    kimi_body = llm._route_request(
+        kimi, "s", "transcript", 1, None, False, False, cache_prefix="transcript",
+    )[1]
+
+    assert native_body["messages"][0]["content"] == [{
+        "type": "text", "text": "transcript",
+        "cache_control": {"type": "ephemeral"},
+    }]
+    assert kimi_body["messages"][0]["content"] == "transcript"

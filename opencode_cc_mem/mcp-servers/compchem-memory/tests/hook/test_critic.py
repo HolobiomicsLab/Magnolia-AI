@@ -112,7 +112,9 @@ def _tool(
 def test_resolve_route_critic_matches_plugin(monkeypatch, provider, key_var, key, model, url, schema):
     monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", provider)
     monkeypatch.setenv(key_var, key)
-    assert llm.resolve_route("critic") == Route(provider, model, url, key, schema)
+    assert llm.resolve_route("critic") == Route(
+        provider, model, url, key, schema, "critic",
+    )
 
 
 @pytest.mark.parametrize(
@@ -269,10 +271,16 @@ def _node_request(tmp_path: Path, env: dict[str, str], reply_kind: str = "openai
 )
 def test_critic_request_matches_plugin(tmp_path, monkeypatch, env, reply_kind):
     node_call = _node_request(tmp_path, env, reply_kind)
-    if env.get("MAGNOLIA_CRITIC_PROVIDER") == "openrouter":
-        node_call["body"]["reasoning"] = {"enabled": False}
     for name, value in env.items():
         monkeypatch.setenv(name, value)
+    if env.get("MAGNOLIA_CRITIC_PROVIDER") == "openrouter":
+        node_call["body"].update({
+            "reasoning": {"enabled": False},
+            "provider": {
+                "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
+            },
+            "session_id": llm._openrouter_session_id("critic"),
+        })
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
     paths = _paths(tmp_path / "python")
     report = "The binding energy is -9.3 kcal/mol and the pose ranks first. " * 5
@@ -534,7 +542,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
         critic, "call_route",
         lambda *args, **kwargs: CallResult(
             f"```json\n{verdict}\n```", "stop", "resolved", None, 200, "DeepInfra",
-            {"prompt_tokens": 12, "cached_tokens": 8},
+            {"prompt_tokens": 12, "cached_tokens": 8}, True,
         ),
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
@@ -549,6 +557,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row["provider"] == "deepseek" and row["model"] == "judge"
     assert row["upstream_provider"] == "DeepInfra"
     assert row["usage"] == {"prompt_tokens": 12, "cached_tokens": 8}
+    assert row["quality_floor_dropped"] is True
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
@@ -585,6 +594,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
         critic, "call_route",
         lambda *args, **kwargs: CallResult(
             None, None, None, "HTTP 401: denied", 401, usage={"prompt_tokens": 9},
+            quality_floor_dropped=True,
         ),
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
@@ -595,6 +605,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
     assert error["status"] == 401 and error["error"] == "HTTP 401: denied"
     assert error["usage"] == {"prompt_tokens": 9}
+    assert error["quality_floor_dropped"] is True
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
 
 
