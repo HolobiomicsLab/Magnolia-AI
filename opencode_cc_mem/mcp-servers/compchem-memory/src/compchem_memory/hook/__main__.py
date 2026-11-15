@@ -20,14 +20,32 @@ def _render_handled(adapter: Any, handled: Any, event: Any):
     return adapter.render(handled.response, event)
 
 
+def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
+    """Consume what the adapter reports as emitted; keep or discard the rest.
+
+    An action note that was not emitted spends no budget and is logged with
+    ``injected: 0``; notices that were not emitted stay queued for the next event.
+    """
+    if handled.pending is not None:
+        from compchem_memory.hook.action_retrieval import commit_exposure, discard_note
+
+        if "tool_note" in rendered.emitted:
+            commit_exposure(handled.pending, event.session_id)
+        else:
+            discard_note(handled.pending)
+    notices = getattr(handled, "notices", None)
+    paths = getattr(handled, "paths", None)
+    if notices is not None and paths is not None and "notice" in rendered.emitted:
+        from compchem_memory.hook.notices import commit_notices
+
+        commit_notices(paths, event.harness, event.session_id, notices)
+
+
 def _write_rendered(rendered: Any, handled: Any, event: Any) -> None:
-    """Write UTF-8 output and commit exposure after stdout delivery."""
+    """Write UTF-8 output, then commit what was delivered."""
     sys.stdout.buffer.write(rendered.stdout.encode("utf-8"))
     sys.stdout.buffer.flush()
-    if handled.pending is not None and "tool_note" in rendered.emitted:
-        from compchem_memory.hook.action_retrieval import commit_exposure
-
-        commit_exposure(handled.pending, event.session_id)
+    _commit_delivered(rendered, handled, event)
     sys.stderr.buffer.write(rendered.stderr.encode("utf-8"))
     sys.stderr.buffer.flush()
 

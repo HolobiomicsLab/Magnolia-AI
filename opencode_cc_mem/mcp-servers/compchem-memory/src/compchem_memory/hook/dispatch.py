@@ -6,7 +6,7 @@ adapters may run that event asynchronously; Claude Code supports ``async: true``
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
@@ -15,15 +15,22 @@ from compchem_memory.hook.project import bind_project
 
 if TYPE_CHECKING:
     from compchem_memory.hook.action_retrieval import ActionNote
+    from compchem_memory.hook.notices import Notices
     from compchem_memory.hook.project import ProjectPaths
 
 
 @dataclass
 class Handled:
-    """A client-independent response and any not-yet-exposed action note."""
+    """A client-independent response and what it consumes once delivered.
+
+    ``pending`` (an action note) and ``notices`` are committed by the CLI only
+    when the adapter reports that it emitted ``tool_note`` or ``notice``.
+    """
 
     response: HookResponse
     pending: ActionNote | None
+    notices: Notices | None = field(default=None)
+    paths: ProjectPaths | None = field(default=None)
 
 
 def _record(paths: ProjectPaths, event: HookEvent) -> None:
@@ -46,13 +53,13 @@ def _directive(paths: ProjectPaths, event: HookEvent) -> str | None:
         return retrieval_directive(paths, state, event.session_id)
 
 
-def _notices(paths: ProjectPaths, event: HookEvent) -> str | None:
-    """Consume pending notices in one state transaction."""
-    from compchem_memory.hook.notices import pending_notices
+def _notices(paths: ProjectPaths, event: HookEvent) -> Notices | None:
+    """Read pending notices; the CLI consumes them after delivery."""
+    from compchem_memory.hook.notices import peek_notices
     from compchem_memory.hook.state import SessionState
 
     with SessionState.open(paths.store, event.harness, event.session_id) as state:
-        return pending_notices(paths, state)
+        return peek_notices(paths, state)
 
 
 def _session_start(paths: ProjectPaths, event: HookEvent) -> Handled:
@@ -76,8 +83,9 @@ def _prompt(paths: ProjectPaths, event: HookEvent, env: Mapping[str, str]) -> Ha
         )
     response = HookResponse(context=context)
     response = response.merge(HookResponse(context=_directive(paths, event)))
-    response = response.merge(HookResponse(notice=_notices(paths, event)))
-    return Handled(response, None)
+    notices = _notices(paths, event)
+    response = response.merge(HookResponse(notice=None if notices is None else notices.text))
+    return Handled(response, None, notices)
 
 
 def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float) -> Handled:
@@ -85,8 +93,9 @@ def _post_tool(paths: ProjectPaths, event: HookEvent, deadline: float) -> Handle
 
     pending = on_post_tool(event, paths, deadline)
     response = HookResponse(tool_note=None if pending is None else pending.text)
-    response = response.merge(HookResponse(notice=_notices(paths, event)))
-    return Handled(response, pending)
+    notices = _notices(paths, event)
+    response = response.merge(HookResponse(notice=None if notices is None else notices.text))
+    return Handled(response, pending, notices)
 
 
 def _turn_end(paths: ProjectPaths, event: HookEvent) -> Handled:
@@ -108,12 +117,15 @@ def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled
         return Handled(HookResponse(), None)
     _record(paths, event)
     if event.event == "session-start":
-        return _session_start(paths, event)
-    if event.event == "prompt":
-        return _prompt(paths, event, env)
-    if event.event == "post-tool":
-        return _post_tool(paths, event, deadline)
-    if event.event == "turn-end":
-        return _turn_end(paths, event)
-    return Handled(HookResponse(), None)
+        handled = _session_start(paths, event)
+    elif event.event == "prompt":
+        handled = _prompt(paths, event, env)
+    elif event.event == "post-tool":
+        handled = _post_tool(paths, event, deadline)
+    elif event.event == "turn-end":
+        handled = _turn_end(paths, event)
+    else:
+        handled = Handled(HookResponse(), None)
+    handled.paths = paths
+    return handled
 

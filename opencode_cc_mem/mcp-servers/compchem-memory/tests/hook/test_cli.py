@@ -14,12 +14,14 @@ from types import SimpleNamespace
 import pytest
 
 from compchem_memory import quick_search
-from compchem_memory.hook.__main__ import _log_error, _render_handled
+from compchem_memory.hook.__main__ import _commit_delivered, _log_error, _render_handled
 from compchem_memory.hook.adapters import Rendered
 from compchem_memory.hook.adapters import json_adapter
 from compchem_memory.hook.dispatch import handle
 from compchem_memory.hook.events import Block, HookEvent, HookResponse, ToolCall
 from compchem_memory.hook import project as project_module
+from compchem_memory.hook.state import SessionState
+from compchem_memory.job_notices import push_job_notice
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -83,6 +85,70 @@ def test_dropped_tool_note_leaves_no_exposure(tmp_path, monkeypatch):
 
     assert handled.pending is not None
     assert not (store / "surfacing.jsonl").exists()
+
+
+def test_dropped_notice_is_delivered_on_next_event(tmp_path, monkeypatch):
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    monkeypatch.delenv("MAGNOLIA_JOB_NOTIFY", raising=False)
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [])
+    push_job_notice(str(project), run_id="run-1", tool="dock", state="completed", category="success")
+    with SessionState.open(store, "json", "s1") as state:
+        state.data["unshown_notices"] = ["⚠ (high) unsupported ranking"]
+    expected = "✅ dock finished (completed) — run …run-1\n⚠ (high) unsupported ranking"
+
+    def event():
+        return HookEvent(
+            "json", "post-tool", "s1", str(project),
+            tool=ToolCall("run_shell", "compchem-tools", "compchem-tools_run_shell", "c1",
+                          {"cmd": "ls"}, "ok"),
+        )
+
+    first = handle(event(), env, time.monotonic() + 8)
+    assert first.response.notice == expected
+    _commit_delivered(Rendered("", "", 0, frozenset({"tool_note"})), first, event())
+
+    second = handle(event(), env, time.monotonic() + 8)
+    assert second.response.notice == expected
+    _commit_delivered(Rendered("", "", 0, frozenset({"notice"})), second, event())
+
+    third = handle(event(), env, time.monotonic() + 8)
+    assert third.response.notice is None
+    assert not (store / ".job-notices.jsonl").exists()
+
+
+def test_dropped_tool_note_is_offered_again(tmp_path, monkeypatch):
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+
+    def event(call_id):
+        return HookEvent(
+            "json", "post-tool", "s1", str(project),
+            tool=ToolCall("run_shell", "compchem-tools", "compchem-tools_run_shell", call_id,
+                          {"cmd": "haddock3 run workflow"}, "ok"),
+        )
+
+    for call_id in ("c1", "c2", "c3"):
+        handled = handle(event(call_id), env, time.monotonic() + 8)
+        assert handled.pending is not None
+        _commit_delivered(Rendered("", "", 0, frozenset()), handled, event(call_id))
+    with SessionState.open(store, "json", "s1") as state:
+        assert state.data.get("injections", 0) == 0
+
+    delivered = handle(event("c4"), env, time.monotonic() + 8)
+    _commit_delivered(Rendered("", "", 0, frozenset({"tool_note"})), delivered, event("c4"))
+    with SessionState.open(store, "json", "s1") as state:
+        assert state.data["injections"] == 1
+    rows = [json.loads(line) for line in (store / "action-retrieval.jsonl").read_text().splitlines()]
+    assert [row["injected"] for row in rows if "injected" in row] == [0, 0, 0, 1]
+    assert (store / "surfacing.jsonl").exists()
 
 
 def test_block_rendered_by_adapter():

@@ -14,6 +14,7 @@ from compchem_memory.hook.action_retrieval import (
     _cache_key,
     args_to_query,
     commit_exposure,
+    discard_note,
     on_post_tool,
     probe_application,
 )
@@ -98,6 +99,14 @@ def _call(
     return on_post_tool(event, paths, time.monotonic() + seconds)
 
 
+def _deliver(event: HookEvent, paths: ProjectPaths) -> ActionNote | None:
+    """Retrieve, then commit as the CLI does once the client emitted the note."""
+    note = _call(event, paths)
+    if note is not None:
+        commit_exposure(note, event.session_id)
+    return note
+
+
 def test_args_to_query_depth_and_cut() -> None:
     args = {
         "top": "alpha",
@@ -127,7 +136,7 @@ def test_action_retrieval_injects_block(tmp_path, monkeypatch) -> None:
     ]
     monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: hits)
 
-    note = _call(_event(paths), paths)
+    note = _deliver(_event(paths), paths)
 
     assert note is not None
     assert note.text == (
@@ -170,24 +179,48 @@ def test_action_retrieval_latch_and_budget(tmp_path, monkeypatch) -> None:
     current = [fixed]
     monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: current)
 
-    assert _call(_event(paths, call_id="l1"), paths) is not None
-    assert _call(_event(paths, call_id="l2"), paths) is not None
-    assert _call(_event(paths, call_id="l3"), paths) is None
-    assert _call(_event(paths, call_id="l4"), paths) is None
+    assert _deliver(_event(paths, call_id="l1"), paths) is not None
+    assert _deliver(_event(paths, call_id="l2"), paths) is not None
+    assert _deliver(_event(paths, call_id="l3"), paths) is None
+    assert _deliver(_event(paths, call_id="l4"), paths) is None
 
     for index in range(6):
         current[:] = [_hit(paths.store, f"fresh-{index}.md", title=f"Fresh {index}")]
-        assert _call(
+        assert _deliver(
             _event(paths, call_id=f"f{index}", tool_input={"cmd": f"command {index}"}), paths
         ) is not None
     current[:] = [_hit(paths.store, "ninth.md", title="Ninth")]
-    assert _call(_event(paths, call_id="b1", tool_input={"cmd": "budget one"}), paths) is None
-    assert _call(_event(paths, call_id="b2", tool_input={"cmd": "budget two"}), paths) is None
+    assert _deliver(_event(paths, call_id="b1", tool_input={"cmd": "budget one"}), paths) is None
+    assert _deliver(_event(paths, call_id="b2", tool_input={"cmd": "budget two"}), paths) is None
 
     rows = _rows(paths.store)
     assert sum(row.get("skipped") == "latch" for row in rows) == 1
     assert sum(row.get("skipped") == "budget" for row in rows) == 1
     assert sum(row.get("injected", 0) > 0 for row in rows) == 8
+
+
+def test_dropped_note_spends_nothing_and_is_logged_as_not_injected(tmp_path, monkeypatch) -> None:
+    paths = _paths(tmp_path)
+    hit = _hit(paths.store, "dropped.md")
+    monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: [hit])
+
+    dropped = _call(_event(paths, call_id="d1"), paths)
+    assert dropped is not None
+    discard_note(dropped)
+
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data.get("injections", 0) == 0
+        assert state.data.get("entry_counts", {}) == {}
+        assert state.data.get("pending_application", []) == []
+    assert [row["injected"] for row in _rows(paths.store)] == [0]
+    assert not (paths.store / "surfacing.jsonl").exists()
+
+    for call_id in ("d2", "d3"):
+        assert _deliver(_event(paths, call_id=call_id), paths) is not None
+    assert _call(_event(paths, call_id="d4"), paths) is None
+    rows = _rows(paths.store)
+    assert [row.get("injected") for row in rows if "injected" in row] == [0, 1, 1, 0]
+    assert sum("hits" in row for row in rows) == 2
 
 
 def test_action_retrieval_zero_hits(tmp_path, monkeypatch) -> None:
@@ -341,9 +374,9 @@ def test_probe_application_positive_and_negative(tmp_path, monkeypatch) -> None:
     second = _hit(paths.store, "gamma_delta.md", title="Gamma solvent warning")
     current = [first]
     monkeypatch.setattr(quick_search, "search", lambda query, project_dir, k=5: current)
-    assert _call(_event(paths, call_id="positive"), paths) is not None
+    assert _deliver(_event(paths, call_id="positive"), paths) is not None
     current = [second]
-    assert _call(
+    assert _deliver(
         _event(paths, call_id="negative", tool_input={"cmd": "different query"}), paths
     ) is not None
 

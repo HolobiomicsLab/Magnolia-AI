@@ -22,7 +22,7 @@ import queue
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -87,11 +87,25 @@ _STOP = frozenset(
 
 
 @dataclass
+class _Delivery:
+    """What a delivered note spends and records; applied by ``commit_exposure``."""
+
+    paths: ProjectPaths
+    harness: str
+    session_id: str
+    entry_paths: list[str]
+    pending: dict
+    coarse_row: dict
+    hits_row: dict
+
+
+@dataclass
 class ActionNote:
     """An injection block and the serving-store rows it can expose."""
 
     text: str
     sources_by_store: dict[Path, list[dict]]
+    delivery: _Delivery | None = field(default=None, repr=False)
 
 
 def args_to_query(args: object) -> str:
@@ -126,7 +140,29 @@ def _cache_key(tool_name: str, args: object) -> str:
 
 
 def commit_exposure(note: ActionNote, session_id: str) -> None:
-    """Record a delivered note once in every store that served its entries."""
+    """Commit a delivered note: budget, latch, pending probe, ledger, exposure.
+
+    Called only once the client emitted the note, so a dropped note spends no
+    budget, latches no entry and is not reported as injected.
+    """
+    delivery = note.delivery
+    if delivery is not None:
+        with SessionState.open(delivery.paths.store, delivery.harness, delivery.session_id) as current:
+            used = current.data.get("injections", 0)
+            current.data["injections"] = (used if isinstance(used, int) else 0) + 1
+            entry_counts = current.data.get("entry_counts")
+            if not isinstance(entry_counts, dict):
+                entry_counts = {}
+                current.data["entry_counts"] = entry_counts
+            for entry in delivery.entry_paths:
+                entry_counts[entry] = entry_counts.get(entry, 0) + 1
+            pending = current.data.get("pending_application")
+            if not isinstance(pending, list):
+                pending = []
+                current.data["pending_application"] = pending
+            pending.append(delivery.pending)
+        _log(delivery.paths, delivery.coarse_row)
+        _log(delivery.paths, delivery.hits_row)
     for store, sources in note.sources_by_store.items():
         surfacing.log_surfacing(
             store,
@@ -134,6 +170,13 @@ def commit_exposure(note: ActionNote, session_id: str) -> None:
             channel="action_memory",
             session_id=session_id,
         )
+
+
+def discard_note(note: ActionNote) -> None:
+    """Record a note the client did not emit: one ledger row with ``injected: 0``."""
+    delivery = note.delivery
+    if delivery is not None:
+        _log(delivery.paths, {**delivery.coarse_row, "injected": 0})
 
 
 def _canonical_key(event: HookEvent) -> str | None:
@@ -351,31 +394,26 @@ def on_post_tool(
             skip_reason = "budget"
         else:
             selected = fresh[:MAX_HITS]
-            current.data["injections"] = used + 1
-            for hit in selected:
-                entry_counts[hit["path"]] = entry_counts.get(hit["path"], 0) + 1
-            pending = current.data.setdefault("pending_application", [])
-            if not isinstance(pending, list):
-                pending = []
-                current.data["pending_application"] = pending
-            pending.append(
-                {
-                    "callID": str(event.tool.call_id or ""),
-                    "tool": ledger_tool,
-                    "titles": [str(hit.get("title") or "") for hit in selected],
-                    "paths": [str(hit.get("path") or "") for hit in selected],
-                }
-            )
 
     if skip_reason is not None:
         _log_skip(event, paths, ledger_tool, skip_reason)
-    _log(paths, _coarse_row(event, ledger_tool, len(selected)))
     if not selected:
+        _log(paths, _coarse_row(event, ledger_tool, 0))
         return None
 
-    _log(
-        paths,
-        {
+    delivery = _Delivery(
+        paths=paths,
+        harness=event.harness,
+        session_id=event.session_id,
+        entry_paths=[hit["path"] for hit in selected],
+        pending={
+            "callID": str(event.tool.call_id or ""),
+            "tool": ledger_tool,
+            "titles": [str(hit.get("title") or "") for hit in selected],
+            "paths": [str(hit.get("path") or "") for hit in selected],
+        },
+        coarse_row=_coarse_row(event, ledger_tool, len(selected)),
+        hits_row={
             "sessionID": event.session_id,
             "tool": ledger_tool,
             "callID": event.tool.call_id,
@@ -394,7 +432,7 @@ def on_post_tool(
             ],
         },
     )
-    return ActionNote(_block(event.tool.name, selected), _sources(selected))
+    return ActionNote(_block(event.tool.name, selected), _sources(selected), delivery)
 
 
 def _distinctive_tokens(titles: list[str], paths: list[str]) -> list[str]:
