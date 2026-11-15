@@ -32,6 +32,21 @@
 4. **Very large or binary tool outputs** (multi-megabyte logs, NUL bytes): the transcript and critic trace must truncate and stay valid JSON lines. Test: Task 7 `test_transcript_truncates_and_escapes`.
 5. **Slow memory search** (large store, cold Python start): action retrieval must give up after 2.5 s and log `skipped: "timeout"` rather than stall the tool result. Test: Task 6 `test_action_retrieval_timeout_skips`.
 
+## Alignment with Collegium
+
+Collegium (`HolobiomicsLab/collegium`, `main` at e64e411 on 15 Nov 2026) pins this Magnolia line (c285620, an ancestor of this branch) and reads parts of it through its adapter contract, `src/collegium/harness/magnolia/contract.py`. It also has its own client-neutral ports (`src/collegium/harness/ports.py`: Session, Capture, Inform, Perimeter, Memory, Exposure, Sources, Scrub). D-032 keeps the two repositories independent: Magnolia does not import Collegium and Collegium does not edit Magnolia. This plan therefore duplicates none of Collegium's ports and changes nothing Collegium reads.
+
+**Names this plan must not change** (Collegium's contract at e64e411): `.magnolia/{sessions,runs,staging,entries}/`; `surfacing.jsonl` and its row shape (`ts` str, `channel` in `get_context|boot_context|action_memory`, `store` str, `session_id` str or null, `tier` in `project|staging`, `id` str, `counts_for_exposure` bool, `task_len` int); `action-retrieval.jsonl`; `opencode-transcripts/`; `compchem_memory.opencode_ingest._SECRET_PATTERNS`; `compchem_memory.receipts`; the `MAGNOLIA_*` switches listed there (`MAGNOLIA_DISABLE_INLINE_EXTRACT`, `MAGNOLIA_DISABLE_BACKGROUND_POLLER`, `MAGNOLIA_MEMORY_{ENABLED,MODEL,PROVIDER}`, `MAGNOLIA_PROJECT_DIR`, …). New files sit beside them (`transcripts/<harness>/`, `agent-sessions.jsonl`, `hook-state/`, `hook-errors.jsonl`).
+
+**What each side owns:**
+- Magnolia's transcript (Task 7) keeps content for Magnolia's memory, scrubbed with the same `_SECRET_PATTERNS`. Collegium's Capture keeps metadata, byte counts and digests only (Collegium D-065). Two hooks on the same event, written by two owners, are expected on Claude Code and Codex as they are on OpenCode (Collegium D-062); neither calls the other.
+- The P0 report (Task 0) is written so that Collegium's second-adapter work (INT-COLLEGIUM-030) can cite it instead of probing again: each finding names its evidence (client version, executable path and sha256, the fixture file holding the verbatim payload), in the spirit of Collegium's `tests/fixtures/collegium_capture_probe/hook_evidence.json`. It also records what Collegium's Perimeter port needs: which built-in tools each client can deny, and how reliably (Collegium D-053).
+- Plan 3 (executors, usage ledger) will report a run as Collegium's `SessionOutcome` does: `sessions`, `tool_calls`, `tokens` (`input`, `output`, `reasoning`, `cache_read`, `cache_write`), `cost`, `stopped_because`, `reported_errors`, with `None` for anything the client did not report, never 0; and its process descriptions carry no credential (Collegium's `ProcessSpec`). Recorded here so Plan 3 does not invent a second shape.
+
+**Known gaps left to later plans, named so nobody assumes otherwise:** five readers still know only OpenCode files: `surfacing.py:53`, `server.py:952`, `handover.py:932`, `startup_scan.py:40` (`opencode-sessions.jsonl`) and `dreaming.py:235` (`opencode-transcripts/`). Sessions of Claude Code, Codex or Vibe are invisible to them until Plan 2's `TranscriptSource`.
+
+**For LFX and Tao, not decided here:** whether Collegium's second adapter (INT-COLLEGIUM-030; candidates there: OpenCode without Magnolia, Claude Code, Codex) becomes "Magnolia on another client", a client setting of the existing `magnolia` adapter, once Plan 2 lands. And, on Collegium's side: its `MODEL_CREDENTIAL_NAMES` does not list `MISTRAL_API_KEY`, `ZHIPU_API_KEY`, `ZAI_API_KEY` or `MAGNOLIA_CRITIC_API_KEY`, which commit acf96ee introduces; Collegium's lab would not strip them.
+
 ---
 
 ### Task 0 (P0): Probe the three clients and record fixtures
@@ -51,7 +66,7 @@
 - [ ] **Step 3: Codex probe.** Temporary project with `.codex/config.toml` (`[mcp_servers.probe]`) and `.codex/hooks.json` for the same events; try `codex exec --json -s read-only` first with only the user layer, then ask LFX to trust the project and review the hooks once if project hooks do not load. Record tool name form, `agent_id` on tool events in a subagent, whether a PreToolUse `permissionDecision: "deny"` stops the built-in shell tool (decides Codex as campaign worker, design 8.1), `turn.failed`/`error` shapes.
 - [ ] **Step 4: Vibe probe (only after LFX's go to install `mistral-vibe` from PyPI).** `config.toml` with the `probe` server and `hooks.toml` with before-tool, after-tool and after-turn hooks; `vibe --prompt ... --output json`. Record payloads, what an after-tool hook's output does, the instructions file Vibe loads, the skills location, and how to disable its shell tool. If LFX declines, write "not probed" in the report.
 - [ ] **Step 5: Scrub and save fixtures.** Replace home paths with `/HOME`, session ids with `ses-fixture-N`, drop any field holding a token or account e-mail. Run: `grep -rniE 'token|bearer|@|/Users/' tests/fixtures/hooks` → no output.
-- [ ] **Step 6: Write the report** `harness-probes-2026-11.md`: commands, one table per client (event → fields seen), answers to each question above, and the consequences for sections 5 and 7 of the design.
+- [ ] **Step 6: Write the report** `harness-probes-2026-11.md`: commands, one table per client (event → fields seen), answers to each question above, and the consequences for sections 5 and 7 of the design. Per client: version, executable path and its `shasum -a 256`; each finding cites the fixture file that shows it (see "Alignment with Collegium"); a table "built-in tools that can be denied, by which mechanism, and whether the probe saw the denial hold".
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -193,7 +208,7 @@ def test_state_concurrent_updates_keep_all_counts(tmp_path):
 
 The search runs at post-tool time (one process per event cannot keep the plugin's pre-tool promise). It runs in a worker thread joined with a 2.5 s timeout; on timeout log `{skipped: "timeout"}` and return `None`. The query cache moves to `state.data["query_cache"]` with the 120 s TTL. Surfacing rows go through `surfacing.log_surfacing(store, sources, channel="action_memory", session_id=...)`, replacing the plugin's hand-written rows.
 
-- [ ] **Step 1: Write the failing tests**: `test_args_to_query_depth_and_cut`; `test_action_retrieval_injects_block` (fixture store with three entries, two above score 3; assert header line, bullet format `- [project/<type>] <title> — <gist>\n  <path>`, ledger rows); `test_action_retrieval_latch_and_budget` (third time an entry is offered it is dropped; ninth injection logs `skipped: "budget"` once); `test_action_retrieval_ignores_non_action_tools`; `test_action_retrieval_without_project_is_silent`; `test_action_retrieval_timeout_skips` (monkeypatch `quick_search.search` to sleep 3 s; assert `None` and a `timeout` row); `test_probe_application_marks_applied`.
+- [ ] **Step 1: Write the failing tests**: `test_args_to_query_depth_and_cut`; `test_action_retrieval_injects_block` (fixture store with three entries, two above score 3; assert header line, bullet format `- [project/<type>] <title> — <gist>\n  <path>`, ledger rows); `test_action_retrieval_latch_and_budget` (third time an entry is offered it is dropped; ninth injection logs `skipped: "budget"` once); `test_action_retrieval_ignores_non_action_tools`; `test_action_retrieval_without_project_is_silent`; `test_action_retrieval_timeout_skips` (monkeypatch `quick_search.search` to sleep 3 s; assert `None` and a `timeout` row); `test_probe_application_marks_applied`; `test_action_surfacing_rows_keep_collegium_shape` (every row the task writes passes a copy of the predicate in "Alignment with Collegium": field names, types and the allowed `channel`/`tier` values; the copy names its source, `collegium/src/collegium/harness/magnolia/exposure.py` at e64e411).
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement** `quick_search.search`, then `action_retrieval.py`.
 - [ ] **Step 4: Run** `python -m pytest -q tests/hook/test_action_retrieval.py tests -k quick_search` → PASS.
@@ -208,12 +223,12 @@ The search runs at post-tool time (one process per event cannot keep the plugin'
 **Interfaces:**
 - Produces:
   - `transcript_path(store: Path, harness: str, session_id: str) -> Path` = `<store>/transcripts/<harness>/<session_id>.jsonl`
-  - `append_event(store: Path, event: HookEvent) -> None`: rows `{schema_version, ts, kind, ...}` with `kind` in `prompt` (`text`), `tool` (`name`, `call_id`, `input`, `output`, `is_error`, `agent`), `assistant` (`text`), `session-start`, `session-end`; outputs cut at 2000 characters, inputs at 4000 characters of their JSON, text cleaned of NUL bytes; one `os.write` per row under `fcntl.flock`.
+  - `append_event(store: Path, event: HookEvent) -> None`: rows `{schema_version, ts, kind, ...}` with `kind` in `prompt` (`text`), `tool` (`name`, `call_id`, `input`, `output`, `is_error`, `agent`), `assistant` (`text`), `session-start`, `session-end`; outputs cut at 2000 characters, inputs at 4000 characters of their JSON, text cleaned of NUL bytes, then every string field passed through `opencode_ingest._SECRET_PATTERNS` (the scrubber the OpenCode ingest path already applies); one `os.write` per row under `fcntl.flock`.
   - `read_turns(path: Path) -> list[dict]` (rows in order, malformed lines skipped).
   - `record_session(store: Path, harness: str, session_id: str, cwd: str, transcript_ref: str | None) -> bool` writes `{ts, harness, session_id, directory, transcript_ref}` once per session to `<store>/agent-sessions.jsonl`; returns whether it wrote.
   - `iter_sessions(store: Path) -> Iterator[dict]` yields rows of `agent-sessions.jsonl` plus legacy `opencode-sessions.jsonl` rows mapped to `{harness: "opencode", session_id: <opencode_session_id>, ...}`.
 
-- [ ] **Step 1: Write the failing tests**: `test_transcript_rows_by_kind`, `test_transcript_truncates_and_escapes` (5 MB output with `\x00`; row parses, output length 2000), `test_transcript_concurrent_appends` (8 threads × 50 rows → 400 parseable rows), `test_record_session_once`, `test_iter_sessions_merges_legacy`.
+- [ ] **Step 1: Write the failing tests**: `test_transcript_rows_by_kind`, `test_transcript_truncates_and_escapes` (5 MB output with `\x00`; row parses, output length 2000), `test_transcript_concurrent_appends` (8 threads × 50 rows → 400 parseable rows), `test_transcript_scrubs_secrets` (an `OPENAI_API_KEY=sk-…` in a tool input and a bearer token in an output are replaced as `opencode_ingest` replaces them), `test_record_session_once`, `test_iter_sessions_merges_legacy`.
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** → PASS.
