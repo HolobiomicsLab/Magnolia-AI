@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
 FORBIDDEN_FLAGS = frozenset({
+    "--dangerously-bypass-approvals-and-sandbox",
     "--dangerously-bypass-hook-trust",
     "--dangerously-skip-permissions",
     "--auto-approve",
@@ -46,14 +47,33 @@ RESTRICTED_FEATURES = (
     "browser_use_external",
     "browser_use_full_cdp_access",
     "code_mode_host",
+    "computer_use",
     "goals",
     "image_generation",
     "in_app_browser",
     "multi_agent",
     "standalone_web_search",
 )
+ISOLATION_OVERRIDES = (
+    'web_search="disabled"',
+    "sandbox_workspace_write.network_access=false",
+    "sandbox_workspace_write.writable_roots=[]",
+    'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
+    'exclude=[],set={},include_only=[]}',
+)
+PINNED_OWNER_KEYS = frozenset({
+    "approval_policy",
+    "model",
+    "model_reasoning_effort",
+    "notify",
+    "sandbox_mode",
+    "sandbox_workspace_write",
+    "shell_environment_policy",
+    "web_search",
+})
 BARE_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+")
 PLUGIN_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+(?:@[A-Za-z0-9_-]+)?")
+SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 QuotaDetector = Callable[[Mapping[str, Any]], RunOutcome | None]
 
 
@@ -259,6 +279,7 @@ class CodexExecutor:
     reasoning_effort: str = "low"
     user_config_path: Path | None = None
     _disable_overrides: tuple[str, ...] = field(default=(), init=False, repr=False)
+    _owner_config_digest: str = field(default="", init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.role not in {"worker", "reviewer", "helper", "evaluator"}:
@@ -269,8 +290,6 @@ class CodexExecutor:
             raise WorkerError("Codex requires an explicit model and positive supervising cap")
         if FORBIDDEN_ENV & set(self.prepared.env):
             raise WorkerError("forbidden Codex child environment")
-        if any(value in FORBIDDEN_FLAGS for value in self.prepared.argv):
-            raise WorkerError("forbidden Codex launch flag")
         if (
             not Path(self.prepared.argv[0]).is_absolute()
             or not self.prepared.client_sha256
@@ -279,7 +298,7 @@ class CodexExecutor:
         self._native_artifact(".codex/config.toml")
         self._native_artifact(".codex/hooks.json")
         self._verify_project_artifacts()
-        self._disable_overrides = tuple(self._discovered_disable_overrides())
+        self._refresh_owner_config()
         if self.resume_artifact is not None:
             self.resume_permitted = False
             self._accept_resume_artifact(self.resume_artifact)
@@ -325,6 +344,7 @@ class CodexExecutor:
         tool_calls = 0
         identity = self._identity(session_id)
         for attempt_index in range(retry_limit + 1):
+            self._refresh_owner_config()
             if session_id:
                 self._require_bound_session(session_id)
             admission = self._admit(attempt_index, stem, identity, control)
@@ -344,6 +364,7 @@ class CodexExecutor:
                 with admission or _NoAdmission():
                     argv = self._argv(current_prompt, session_id)
                     self._verify_client_bytes()
+                    _validate_final_argv(argv)
                     process = run_process(
                         argv,
                         cwd,
@@ -411,6 +432,8 @@ class CodexExecutor:
             "notify=[]",
             f"model_reasoning_effort={json.dumps(self.reasoning_effort)}",
         ]
+        if self.role in {"worker", "reviewer"}:
+            overrides.extend(ISOLATION_OVERRIDES)
         argv = [
             self.prepared.argv[0],
             "-C", str(self.prepared.discovery_dir),
@@ -432,10 +455,31 @@ class CodexExecutor:
         else:
             argv.extend(["--disable", "code_mode_host"])
         argv.extend(["--disable", "apps"])
-        argv.extend(([session_id] if session_id else []) + [prompt])
+        if session_id:
+            if SESSION_ID.fullmatch(session_id) is None:
+                raise ExecutorRefused("invalid Codex resume session id")
+            argv.extend([session_id, "--", prompt])
+        else:
+            argv.extend(["--", prompt])
         return argv
 
-    def _discovered_disable_overrides(self) -> list[str]:
+    def _refresh_owner_config(self) -> None:
+        """Re-parse owner config before spawn and bind its relevant settings."""
+        path = self.user_config_path or Path.home() / ".codex" / "config.toml"
+        payload = _read_codex_config(path)
+        _refuse_owner_redirects(payload)
+        self._disable_overrides = tuple(
+            self._discovered_disable_overrides(owner_payload=payload)
+        )
+        relevant = _relevant_owner_config(payload)
+        body = json.dumps(
+            relevant, sort_keys=True, separators=(",", ":"), default=str
+        ).encode()
+        self._owner_config_digest = hashlib.sha256(body).hexdigest()
+
+    def _discovered_disable_overrides(
+        self, *, owner_payload: Mapping[str, Any] | None = None
+    ) -> list[str]:
         overrides: list[str] = []
         native = tomllib.loads(
             (self.prepared.invocation_dir / ".codex" / "config.toml").read_text(
@@ -444,16 +488,15 @@ class CodexExecutor:
         )
         governed = set(native.get("mcp_servers", {}))
         paths = [
-            (self.prepared.discovery_dir / ".codex" / "config.toml", True),
-            (self.user_config_path or Path.home() / ".codex" / "config.toml", False),
+            (self.prepared.discovery_dir / ".codex" / "config.toml", True, None),
+            (
+                self.user_config_path or Path.home() / ".codex" / "config.toml",
+                False,
+                owner_payload,
+            ),
         ]
-        for path, project_config in paths:
-            try:
-                payload = tomllib.loads(path.read_text(encoding="utf-8"))
-            except (OSError, tomllib.TOMLDecodeError) as exc:
-                raise ExecutorRefused(
-                    f"cannot verify Codex config used by the client: {path}"
-                ) from exc
+        for path, project_config, supplied in paths:
+            payload = supplied if supplied is not None else _read_codex_config(path)
             for section in ("mcp_servers", "plugins"):
                 entries = payload.get(section)
                 if not isinstance(entries, Mapping):
@@ -610,6 +653,8 @@ class CodexExecutor:
         return {
             "client": "codex",
             "configuration_identity_digest": digest,
+            "model": self.model,
+            "owner_config_digest": self._owner_config_digest,
             "role": self.role,
             "project_identity": project or "",
         }
@@ -756,6 +801,127 @@ class CodexExecutor:
             usage.run_kind = admission.request.run_kind
             usage.project_digest = admission.request.project_digest
         return usage
+
+
+def _read_codex_config(path: Path) -> Mapping[str, Any]:
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ExecutorRefused(
+            f"cannot verify Codex config used by the client: {path}"
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise ExecutorRefused(f"cannot verify Codex config used by the client: {path}")
+    return payload
+
+
+def _refuse_owner_redirects(payload: Mapping[str, Any]) -> None:
+    """Reject owner settings that can redirect endpoints or credentials."""
+    redirect = _redirect_key(payload)
+    if redirect is not None:
+        raise ExecutorRefused(f"Codex owner config redirects {redirect}")
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, Mapping):
+        return
+    for name, profile in profiles.items():
+        if not isinstance(profile, Mapping):
+            continue
+        redirect = _redirect_key(profile)
+        if redirect is not None:
+            raise ExecutorRefused(
+                f"Codex owner config redirects profiles.{name}.{redirect}"
+            )
+
+
+def _redirect_key(payload: Mapping[str, Any]) -> str | None:
+    for raw_key, value in payload.items():
+        key = str(raw_key).casefold().replace("-", "_")
+        if key == "model_providers":
+            return str(raw_key)
+        if key == "model_provider" and (
+            not isinstance(value, str) or value.casefold() != "openai"
+        ):
+            return str(raw_key)
+        if _is_base_url_key(key):
+            return str(raw_key)
+    return None
+
+
+def _is_base_url_key(key: str) -> bool:
+    return (
+        key in {"api_base", "api_base_url", "base_url", "base_uri"}
+        or key.endswith("_base_url")
+        or key.endswith("_base_uri")
+    )
+
+
+def _relevant_owner_config(payload: Mapping[str, Any]) -> dict[str, Any]:
+    relevant: dict[str, Any] = {}
+    pinned_features = set(RESTRICTED_FEATURES) | {
+        "apps",
+        "skip_host_skill_discovery",
+    }
+    for raw_key, value in payload.items():
+        key = str(raw_key)
+        normalized = key.casefold().replace("-", "_")
+        if normalized in PINNED_OWNER_KEYS:
+            continue
+        if normalized == "features" and isinstance(value, Mapping):
+            remaining = {
+                str(name): setting
+                for name, setting in value.items()
+                if str(name).casefold().replace("-", "_") not in pinned_features
+            }
+            if remaining:
+                relevant[key] = remaining
+            continue
+        if normalized == "profiles" and isinstance(value, Mapping):
+            relevant[key] = {
+                str(name): _relevant_owner_config(profile)
+                if isinstance(profile, Mapping) else profile
+                for name, profile in value.items()
+            }
+            continue
+        relevant[key] = value
+    return relevant
+
+
+def _validate_final_argv(argv: list[str]) -> None:
+    """Reject bypasses in the exact argv that is about to be spawned."""
+    option_end = argv.index("--") if "--" in argv else len(argv)
+    options = argv[:option_end]
+    for index, value in enumerate(options):
+        if any(value == flag or value.startswith(flag + "=") for flag in FORBIDDEN_FLAGS):
+            raise WorkerError("forbidden Codex launch flag")
+        if value in {"-s", "--sandbox"} and index + 1 < len(options):
+            if options[index + 1] == "danger-full-access":
+                raise WorkerError("forbidden Codex launch sandbox")
+        if value.startswith("--sandbox=") and value.split("=", 1)[1] == "danger-full-access":
+            raise WorkerError("forbidden Codex launch sandbox")
+        if value in {"-c", "--config"} and index + 1 < len(options):
+            _validate_config_override(options[index + 1])
+        elif value.startswith("--config="):
+            _validate_config_override(value.split("=", 1)[1])
+
+
+def _validate_config_override(override: str) -> None:
+    key, separator, _raw_value = override.partition("=")
+    if not separator:
+        raise WorkerError("forbidden Codex launch config override")
+    normalized = key.strip().casefold().replace("-", "_")
+    segments = normalized.split(".")
+    if any(segment.startswith("dangerously_") for segment in segments):
+        raise WorkerError("forbidden Codex launch config bypass")
+    if normalized == "sandbox_mode":
+        raise WorkerError("forbidden Codex launch sandbox override")
+    if normalized != "approval_policy":
+        return
+    try:
+        approval = tomllib.loads(override).get("approval_policy")
+    except tomllib.TOMLDecodeError as exc:
+        raise WorkerError("forbidden Codex launch approval override") from exc
+    if approval != "never":
+        raise WorkerError("forbidden Codex launch approval override")
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:

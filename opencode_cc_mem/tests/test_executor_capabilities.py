@@ -316,6 +316,11 @@ def test_current_table_accepts_claude_and_refuses_codex_vibe():
     assert all(role["accepted"] for role in projected["claude-code"].values())
     assert all(not role["stale"] for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["claude-code"].values())
+    assert all("launch_identity" in role for role in projected["codex"].values())
+    assert all(
+        role["launch_identity"]["components"]["model"] == "gpt-5.6-luna"
+        for role in projected["codex"].values()
+    )
     for client in ("codex", "vibe"):
         assert all(not role["accepted"] for role in projected[client].values())
         assert all(role["blocking_cells"] for role in projected[client].values())
