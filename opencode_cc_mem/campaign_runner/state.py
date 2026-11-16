@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
+from .executors.contracts import SessionIdentity
 from .models import (
     CampaignError,
     Protocol,
@@ -29,6 +30,7 @@ STATES = (
     "running",
     "waiting_job",
     "validating",
+    "waiting_quota",
     "waiting_human",
     "completed",
     "failed",
@@ -36,20 +38,46 @@ STATES = (
     "paused",
 )
 TERMINAL_STATES = frozenset({"completed", "failed", "halted"})
-PAUSABLE_STATES = frozenset({"queued", "running", "waiting_job", "validating"})
+PAUSABLE_STATES = frozenset(
+    {"queued", "running", "waiting_job", "validating", "waiting_quota"}
+)
 TRANSITIONS: dict[str, frozenset[str]] = {
-    "queued": frozenset({"running", "waiting_human", "paused", "halted", "failed"}),
+    "queued": frozenset(
+        {"running", "waiting_quota", "waiting_human", "paused", "halted", "failed"}
+    ),
     "running": frozenset(
-        {"validating", "waiting_job", "waiting_human", "failed", "halted", "paused"}
+        {
+            "validating",
+            "waiting_job",
+            "waiting_quota",
+            "waiting_human",
+            "failed",
+            "halted",
+            "paused",
+        }
     ),
     "waiting_job": frozenset(
         {"validating", "waiting_human", "failed", "halted", "paused"}
     ),
     "validating": frozenset(
-        {"queued", "running", "waiting_human", "completed", "failed", "halted", "paused"}
+        {
+            "queued",
+            "running",
+            "waiting_quota",
+            "waiting_human",
+            "completed",
+            "failed",
+            "halted",
+            "paused",
+        }
+    ),
+    "waiting_quota": frozenset(
+        {"queued", "running", "validating", "paused", "halted", "failed"}
     ),
     "waiting_human": frozenset({"queued", "completed", "failed", "halted", "paused"}),
-    "paused": frozenset({"queued", "waiting_job", "validating", "halted", "failed"}),
+    "paused": frozenset(
+        {"queued", "waiting_job", "validating", "waiting_quota", "halted", "failed"}
+    ),
     "completed": frozenset(),
     "failed": frozenset(),
     "halted": frozenset(),
@@ -79,6 +107,33 @@ CAMPAIGN_KEYS = {
     "memory_state",
     "job_core_hours",
     "paused_from",
+    "quota_wait",
+}
+QUOTA_PHASE_STATES = {
+    "pre-worker": "queued",
+    "worker": "running",
+    "reviewer": "validating",
+}
+QUOTA_WAIT_KEYS = {
+    "reason",
+    "subscription_key",
+    "observed_at",
+    "hold_id",
+    "reset_at",
+    "suspended_phase",
+    "stage",
+    "attempt",
+    "session_identity",
+    "result_ref",
+    "retry_cursor",
+}
+SESSION_IDENTITY_KEYS = {
+    "client",
+    "model",
+    "session_id",
+    "project_digest",
+    "role",
+    "policy_digest",
 }
 
 
@@ -96,6 +151,142 @@ class CampaignStateChangedError(CampaignBusyError):
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _utc_datetime(value: Any, field_name: str) -> datetime:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise StateError(f"quota {field_name} must be an ISO datetime") from exc
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise StateError(f"quota {field_name} must be timezone-aware")
+    return value.astimezone(timezone.utc)
+
+
+def _required_text(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateError(f"quota {field_name} must be a non-empty string")
+    return value
+
+
+def _session_identity_from_dict(value: Any) -> SessionIdentity:
+    if not isinstance(value, dict):
+        raise StateError("quota session_identity must be an object")
+    unknown = sorted(set(value) - SESSION_IDENTITY_KEYS)
+    missing = sorted(SESSION_IDENTITY_KEYS - set(value))
+    if unknown:
+        raise StateError(
+            "quota session_identity has unknown fields: " + ", ".join(unknown)
+        )
+    if missing:
+        raise StateError(
+            "quota session_identity missing fields: " + ", ".join(missing)
+        )
+    required = {
+        key: _required_text(value[key], f"session_identity.{key}")
+        for key in SESSION_IDENTITY_KEYS - {"model"}
+    }
+    model = value["model"]
+    if model is not None:
+        model = _required_text(model, "session_identity.model")
+    return SessionIdentity(model=model, **required)
+
+
+@dataclass(frozen=True)
+class QuotaWait:
+    """Durable continuation checkpoint for a quota-suspended campaign role."""
+
+    reason: str
+    subscription_key: str
+    observed_at: datetime
+    hold_id: str
+    reset_at: datetime | None
+    suspended_phase: str
+    stage: str
+    attempt: int
+    session_identity: SessionIdentity | None = None
+    result_ref: str | None = None
+    retry_cursor: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("reason", "subscription_key", "hold_id", "stage"):
+            object.__setattr__(self, name, _required_text(getattr(self, name), name))
+        if self.suspended_phase not in QUOTA_PHASE_STATES:
+            raise StateError(f"unknown quota suspended_phase '{self.suspended_phase}'")
+        if isinstance(self.attempt, bool) or not isinstance(self.attempt, int) or self.attempt < 0:
+            raise StateError("quota attempt must be a non-negative integer")
+        object.__setattr__(self, "observed_at", _utc_datetime(self.observed_at, "observed_at"))
+        if self.reset_at is not None:
+            object.__setattr__(self, "reset_at", _utc_datetime(self.reset_at, "reset_at"))
+        if self.session_identity is not None and not isinstance(
+            self.session_identity, SessionIdentity
+        ):
+            raise StateError("quota session_identity must be a SessionIdentity")
+        if self.result_ref is not None:
+            object.__setattr__(
+                self, "result_ref", _required_text(self.result_ref, "result_ref")
+            )
+        if self.retry_cursor is not None and (
+            isinstance(self.retry_cursor, bool)
+            or not isinstance(self.retry_cursor, int)
+            or self.retry_cursor < 0
+        ):
+            raise StateError("quota retry_cursor must be a non-negative integer")
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "QuotaWait":
+        """Validate and restore a serialized quota continuation checkpoint."""
+        if not isinstance(value, dict):
+            raise StateError("quota_wait must be an object")
+        unknown = sorted(set(value) - QUOTA_WAIT_KEYS)
+        missing = sorted(QUOTA_WAIT_KEYS - set(value))
+        if unknown:
+            raise StateError(f"quota_wait has unknown fields: {', '.join(unknown)}")
+        if missing:
+            raise StateError(f"quota_wait missing fields: {', '.join(missing)}")
+        session = value["session_identity"]
+        return cls(
+            reason=value["reason"],
+            subscription_key=value["subscription_key"],
+            observed_at=_utc_datetime(value["observed_at"], "observed_at"),
+            hold_id=value["hold_id"],
+            reset_at=(
+                _utc_datetime(value["reset_at"], "reset_at")
+                if value["reset_at"] is not None
+                else None
+            ),
+            suspended_phase=value["suspended_phase"],
+            stage=value["stage"],
+            attempt=value["attempt"],
+            session_identity=(
+                _session_identity_from_dict(session) if session is not None else None
+            ),
+            result_ref=value["result_ref"],
+            retry_cursor=value["retry_cursor"],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the strict JSON-compatible quota checkpoint representation."""
+        session = None
+        if self.session_identity is not None:
+            session = {
+                key: getattr(self.session_identity, key)
+                for key in SESSION_IDENTITY_KEYS
+            }
+        return {
+            "reason": self.reason,
+            "subscription_key": self.subscription_key,
+            "observed_at": self.observed_at.isoformat(),
+            "hold_id": self.hold_id,
+            "reset_at": self.reset_at.isoformat() if self.reset_at else None,
+            "suspended_phase": self.suspended_phase,
+            "stage": self.stage,
+            "attempt": self.attempt,
+            "session_identity": session,
+            "result_ref": self.result_ref,
+            "retry_cursor": self.retry_cursor,
+        }
 
 
 def validate_transition(current: str, target: str) -> None:
@@ -123,6 +314,7 @@ class CampaignState:
     memory_state: dict[str, Any] | None = None
     job_core_hours: dict[str, float] = field(default_factory=dict)
     paused_from: str | None = None
+    quota_wait: QuotaWait | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "CampaignState":
@@ -175,6 +367,12 @@ class CampaignState:
             if isinstance(item, bool) or not isinstance(item, (int, float)):
                 raise StateError(f"job_core_hours[{key!r}] must be numeric")
             job_core_hours[str(key)] = float(item)
+        raw_quota_wait = value.get("quota_wait")
+        quota_wait = (
+            QuotaWait.from_dict(raw_quota_wait) if raw_quota_wait is not None else None
+        )
+        if value["state"] == "waiting_quota" and quota_wait is None:
+            raise StateError("waiting_quota state requires quota_wait")
         return cls(
             schema=1,
             protocol_id=str(value["protocol_id"]),
@@ -192,6 +390,7 @@ class CampaignState:
             memory_state=dict(memory_state) if memory_state is not None else None,
             job_core_hours=job_core_hours,
             paused_from=paused_from,
+            quota_wait=quota_wait,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -210,6 +409,7 @@ class CampaignState:
             "memory_state": self.memory_state,
             "job_core_hours": self.job_core_hours,
             "paused_from": self.paused_from,
+            "quota_wait": self.quota_wait.to_dict() if self.quota_wait else None,
         }
 
 
@@ -455,6 +655,9 @@ class CampaignStore:
         }
         if state.state == "paused" and state.paused_from:
             event["paused_from"] = state.paused_from
+        if state.quota_wait is not None:
+            event["quota_hold_id"] = state.quota_wait.hold_id
+            event["quota_wait_after"] = state.quota_wait.to_dict()
         return event
 
     def transition(
@@ -500,6 +703,10 @@ class CampaignStore:
     ) -> CampaignState:
         state = self.load()
         validate_transition(state.state, target)
+        if target == "waiting_quota" and state.quota_wait is None:
+            raise StateError("use wait_for_quota() to enter waiting_quota")
+        if state.state == "waiting_quota" and target in QUOTA_PHASE_STATES.values():
+            raise StateError("use resume_if_quota_ready() to leave waiting_quota")
         if (
             state.state == "waiting_human"
             and target == "queued"
@@ -525,6 +732,83 @@ class CampaignStore:
         state.updated_at = str(event["ts"])
         self.save(state)
         return state
+
+    def wait_for_quota(self, checkpoint: QuotaWait) -> CampaignState:
+        """Persist a quota checkpoint without spending or changing its attempt."""
+        if not isinstance(checkpoint, QuotaWait):
+            raise StateError("quota checkpoint must be a QuotaWait")
+        with self.lock():
+            state = self.load()
+            expected_state = QUOTA_PHASE_STATES[checkpoint.suspended_phase]
+            if state.state != expected_state:
+                raise StateError(
+                    f"quota phase '{checkpoint.suspended_phase}' requires "
+                    f"state '{expected_state}', found '{state.state}'"
+                )
+            if (checkpoint.stage, checkpoint.attempt) != (state.stage, state.attempt):
+                raise StateError(
+                    "quota checkpoint stage and attempt must match campaign state"
+                )
+            event = self._new_event(
+                state,
+                "waiting_quota",
+                checkpoint.reason,
+                state.stage,
+                state.attempt,
+            )
+            event["quota_hold_id"] = checkpoint.hold_id
+            event["quota_wait_after"] = checkpoint.to_dict()
+            self._append_event_locked(event)
+            state.state = "waiting_quota"
+            state.quota_wait = checkpoint
+            state.updated_at = str(event["ts"])
+            self.save(state)
+            return state
+
+    def resume_if_quota_ready(
+        self,
+        now: datetime,
+        manual: bool = False,
+    ) -> CampaignState:
+        """Restore the exact suspended phase when its reset is due or cleared manually."""
+        current_time = _utc_datetime(now, "resume time")
+        if not isinstance(manual, bool):
+            raise StateError("manual must be a boolean")
+        with self.lock():
+            state = self.load()
+            if state.state != "waiting_quota":
+                return state
+            checkpoint = state.quota_wait
+            if checkpoint is None:
+                raise StateError("waiting_quota state has no quota checkpoint")
+            if not manual and (
+                checkpoint.reset_at is None or current_time < checkpoint.reset_at
+            ):
+                return state
+            target = QUOTA_PHASE_STATES[checkpoint.suspended_phase]
+            validate_transition(state.state, target)
+            reason = (
+                "quota hold cleared manually"
+                if manual
+                else "quota reset time reached"
+            )
+            event = self._new_event(
+                state,
+                target,
+                reason,
+                checkpoint.stage,
+                checkpoint.attempt,
+            )
+            event["quota_hold_id"] = checkpoint.hold_id
+            event["quota_wait_after"] = None
+            self._append_event_locked(event)
+            state.state = target
+            state.stage = checkpoint.stage
+            state.attempt = checkpoint.attempt
+            state.quota_wait = None
+            state.updated_at = str(event["ts"])
+            self.save(state)
+            return state
 
     def update_usage(self, delta: Mapping[str, float], reason: str) -> CampaignState:
         with self.lock():
@@ -606,6 +890,7 @@ class CampaignStore:
                     str(key): float(value)
                     for key, value in last["job_core_hours_after"].items()
                 }
+            self._apply_quota_event(state, last)
             if last.get("to") == "paused":
                 if last.get("paused_from"):
                     state.paused_from = str(last["paused_from"])
@@ -634,6 +919,7 @@ class CampaignStore:
                     str(key): float(value)
                     for key, value in event["job_core_hours_after"].items()
                 }
+            self._apply_quota_event(state, event)
             if event.get("to") == "paused":
                 if event.get("paused_from"):
                     state.paused_from = str(event["paused_from"])
@@ -641,6 +927,15 @@ class CampaignStore:
                 state.paused_from = None
             state.updated_at = str(event.get("ts", state.updated_at))
         return state
+
+    @staticmethod
+    def _apply_quota_event(state: CampaignState, event: Mapping[str, Any]) -> None:
+        if "quota_wait_after" not in event:
+            return
+        checkpoint = event["quota_wait_after"]
+        state.quota_wait = (
+            QuotaWait.from_dict(checkpoint) if checkpoint is not None else None
+        )
 
     def pause(self, reason: str = "operator pause") -> CampaignState:
         with self.lock():
@@ -656,7 +951,7 @@ class CampaignStore:
                 raise StateError(f"cannot resume from state '{state.state}'")
             origin = state.paused_from
             target = "queued"
-            if origin in {"waiting_job", "validating"}:
+            if origin in {"waiting_job", "validating", "waiting_quota"}:
                 target = origin
             elif origin is None and self._has_resumable_job_attempt(state):
                 target = "waiting_job"
