@@ -49,6 +49,21 @@ def test_decorator_emits_tool_call_and_success(project_dir):
     assert "duration_ms" in events[2]
 
 
+def test_decorator_records_tool_origin_for_extraction(project_dir):
+    @captured(source="member-analysis")
+    def score_pose(project_dir: str | None = None) -> str:
+        return "score=-82.4"
+
+    score_pose(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[1]["origin"] == {
+        "tool": "score_pose",
+        "mcp_server": "member-analysis",
+    }
+    assert events[2]["origin"] == events[1]["origin"]
+
+
 def test_decorator_emits_tool_error_and_reraises(project_dir):
     @captured(source="compchem-tools")
     def failing_tool(project_dir: str | None = None) -> str:

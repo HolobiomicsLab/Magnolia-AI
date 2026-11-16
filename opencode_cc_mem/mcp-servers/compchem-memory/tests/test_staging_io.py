@@ -70,3 +70,20 @@ def test_save_candidate_omits_observed_in_sessions_without_provenance(store):
     path = save_candidate(store, {"title": "t", "content": "c"}, source="auto_extraction")
     meta = yaml.safe_load(Path(path).read_text().split("---")[1])
     assert "observed_in_sessions" not in meta
+
+
+def test_save_candidate_persists_normalized_origins(store):
+    from compchem_memory.staging_io import save_candidate
+
+    path = save_candidate(store, {
+        "title": "origin",
+        "content": "body",
+        "origins": [
+            {"client": "codex", "session_id": "s1", "unknown": "drop"},
+            {"client": "codex", "session_id": "s1"},
+            {"client": "", "session_id": None},
+        ],
+    }, source="opencode_distill")
+
+    meta = yaml.safe_load(Path(path).read_text().split("---")[1])
+    assert meta["origins"] == [{"client": "codex", "session_id": "s1"}]

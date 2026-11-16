@@ -129,7 +129,23 @@ def _base_row(event: HookEvent, kind: str) -> dict:
     return {
         "schema_version": event.schema_version, "ts": _timestamp(),
         "kind": kind, "turn_id": event.turn_id, "agent": agent,
+        "origin": _event_origin(event),
     }
+
+
+def _event_origin(event: HookEvent) -> dict[str, str]:
+    """Return only origin fields observed or bound on this hook event."""
+    origin = {"client": event.harness, "session_id": event.session_id}
+    if event.agent is not None:
+        origin["agent_id"] = event.agent.id
+        if event.agent.type:
+            origin["agent_type"] = event.agent.type
+    if event.model:
+        origin["model"] = event.model
+    bound_role = event.role or os.environ.get("MAGNOLIA_ROLE")
+    if bound_role:
+        origin["role"] = bound_role
+    return origin
 
 
 def _tool_row(tool: ToolCall, phase: str) -> dict:

@@ -546,11 +546,19 @@ def memory_record_learning(
     # Resolve session_id for cross-session tracking
     sess_m = _get_session_mgr(pd)
     session_id = sess_m._current_session_id  # may be None on first call
+    origin = {"session_id": session_id} if session_id else {}
+    if os.environ.get("MAGNOLIA_CLIENT"):
+        origin["client"] = os.environ["MAGNOLIA_CLIENT"]
+    if os.environ.get("MAGNOLIA_ROLE"):
+        origin["role"] = os.environ["MAGNOLIA_ROLE"]
+    origins = [origin] if origin else []
 
     # Check for similar existing staging entry to bump instead of duplicate
     similar = proj_m.find_similar_staging(pd, title, tags or [], entry_type=entry_type)
     if similar:
-        proj_m.bump_observation_count(pd, similar, session_id=session_id, content=content)
+        proj_m.bump_observation_count(
+            pd, similar, session_id=session_id, content=content, origins=origins,
+        )
         promoted = proj_m.auto_promote_staging(pd)
         return json.dumps({
             "status": "bumped",
@@ -569,6 +577,7 @@ def memory_record_learning(
         tools=tools,
         confidence=confidence,
         run_ids=run_ids,
+        origins=origins,
     )
 
     # Stamp the new entry with the current session_id

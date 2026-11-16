@@ -47,6 +47,8 @@ class SessionRef:
     first_ts: str | None
     last_ts: str | None
     sealable: bool
+    model: str | None = None
+    role: str | None = None
 
 
 def list_sessions(store: str | Path) -> list[SessionRef]:
@@ -87,6 +89,7 @@ def list_sessions(store: str | Path) -> list[SessionRef]:
             continue
         seen.add(identity)
         first_ts = row.get("ts") if isinstance(row.get("ts"), str) else None
+        origin = row.get("origin") if isinstance(row.get("origin"), dict) else {}
         path = transcript_path(root, harness, session_id)
         hook_fed.append(SessionRef(
             harness=harness,
@@ -95,6 +98,8 @@ def list_sessions(store: str | Path) -> list[SessionRef]:
             first_ts=first_ts,
             last_ts=_mtime_utc(path),
             sealable=False,
+            model=origin.get("model") if isinstance(origin.get("model"), str) else None,
+            role=origin.get("role") if isinstance(origin.get("role"), str) else None,
         ))
 
     hook_fed.sort(key=lambda ref: (ref.first_ts is None, ref.first_ts or ""))
@@ -338,10 +343,12 @@ def _mtime_utc(path: Path) -> str | None:
 
 def _row_message(ref: SessionRef, row: dict, index: int) -> dict | None:
     kind = row.get("kind")
+    origin = _message_origin(ref, row)
     info = {
         "id": f"{ref.key}:{index}",
         "role": "user" if kind == "prompt" else "assistant",
         "agent": row.get("agent"),
+        "origin": origin,
     }
     if kind in {"prompt", "assistant"}:
         return {"info": info, "parts": [{"type": "text", "text": row.get("text", "")}]}
@@ -362,3 +369,21 @@ def _row_message(ref: SessionRef, row: dict, index: int) -> dict | None:
         "state": state,
     }
     return {"info": info, "parts": [part]}
+
+
+def _message_origin(ref: SessionRef, row: dict) -> dict[str, str]:
+    """Recover explicit row provenance, with a backward-compatible session base."""
+    stored = row.get("origin")
+    origin = dict(stored) if isinstance(stored, dict) else {}
+    origin.setdefault("client", ref.harness)
+    origin.setdefault("session_id", ref.session_id)
+    agent = row.get("agent")
+    if isinstance(agent, dict) and agent.get("id"):
+        origin.setdefault("agent_id", agent["id"])
+        if agent.get("type"):
+            origin.setdefault("agent_type", agent["type"])
+    if ref.model:
+        origin.setdefault("model", ref.model)
+    if ref.role:
+        origin.setdefault("role", ref.role)
+    return {key: value for key, value in origin.items() if isinstance(value, str) and value}
