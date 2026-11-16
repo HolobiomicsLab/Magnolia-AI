@@ -19,6 +19,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 from compchem_memory.process_identity import (
+    _proc_stat_fields,
     verified_process_start_token as _verified_process_start_token,
 )
 
@@ -990,14 +991,6 @@ def _process_group_exists(pgid: int) -> bool:
     else:
         has_live_members = _ps_group_has_live_members(pgid)
     return True if has_live_members is None else has_live_members
-
-
-def _proc_stat_fields(body: bytes) -> list[bytes] | None:
-    parts = body.rsplit(b")", 1)
-    if len(parts) != 2:
-        return None
-    fields = parts[1].split()
-    return fields or None
 
 
 def _process_state(pid: int) -> str | None:

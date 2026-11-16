@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -341,6 +342,81 @@ async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
     assert "needle-123" in result.content[0].text
     assert not trap.exists()
     assert not foreign_trap.exists()
+
+
+@pytest.mark.asyncio
+async def test_regex_worker_uses_run_owned_bytecode_cache(tmp_path):
+    repository = tmp_path / "writable-repository" / "opencode_cc_mem"
+    source = repository / "mcp-servers" / "compchem-memory" / "src"
+    shutil.copytree(
+        Path(__file__).parents[2] / "src" / "compchem_memory",
+        source / "compchem_memory",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "notes.txt").write_text(
+        "alpha\nneedle-123\nomega\n", encoding="utf-8"
+    )
+    policy = _policy(tmp_path / "policy.json", project)
+    control = tmp_path / "run" / "control"
+    cache = control / "executors" / "fixture" / "pycache"
+    runner = source / "compchem_memory" / "hook" / "runner.py"
+    environment = {
+        **os.environ,
+        "PYTHONPYCACHEPREFIX": str(cache),
+        "MAGNOLIA_HOOK_POLICY": str(policy),
+        "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(policy.read_bytes()).hexdigest(),
+        "MAGNOLIA_CONTROL_DIR": str(control),
+    }
+
+    async def search() -> dict:
+        transport = StdioTransport(
+            command=os.sys.executable,
+            args=["-I", str(runner), "--read-server"],
+            env=environment,
+            cwd=str(project),
+        )
+        async with Client(transport) as client:
+            result = await client.call_tool(
+                "search",
+                {"pattern": "re:needle-[0-9]+", "path": "notes.txt"},
+                raise_on_error=False,
+            )
+        assert result.is_error is False
+        return json.loads(result.content[0].text)
+
+    first_result = await search()
+    repository_cache_files = list(repository.rglob("*.pyc"))
+
+    read_server = source / "compchem_memory" / "harness" / "read_server.py"
+    body = read_server.read_text(encoding="utf-8")
+    marker = '    """Evaluate bounded regex input outside the stdio server process."""\n'
+    trap = tmp_path / "planted-bytecode-executed"
+    forged = marker + (
+        f"    open({str(trap)!r}, 'a').write('executed\\n')\n"
+        "    connection.send(([0, 1, 2], os.path.realpath(__file__)))\n"
+        "    connection.close()\n"
+        "    return\n"
+    )
+    code = compile(body.replace(marker, forged, 1), str(read_server), "exec")
+    stat = read_server.stat()
+    from importlib._bootstrap_external import _code_to_timestamp_pyc
+
+    planted_cache = Path(importlib.util.cache_from_source(str(read_server)))
+    planted_cache.parent.mkdir(parents=True, exist_ok=True)
+    planted_cache.write_bytes(
+        _code_to_timestamp_pyc(code, stat.st_mtime, stat.st_size)
+    )
+
+    second_result = await search()
+
+    expected_matches = [{"path": "notes.txt", "line": 2, "text": "needle-123"}]
+    assert first_result["matches"] == expected_matches
+    assert repository_cache_files == []
+    assert list(cache.rglob("*.pyc"))
+    assert second_result["matches"] == expected_matches
+    assert not trap.exists()
 
 
 @pytest.mark.asyncio
