@@ -17,7 +17,7 @@ from campaign_runner.executors.claude_code import (
     ClaudeCodeExecutor,
     parse_claude_stream,
 )
-from campaign_runner.governor import Governor, Policy, QuotaWaiting
+from campaign_runner.governor import AdmissionRequest, Governor, Policy
 from campaign_runner.launch import configuration_identity
 from campaign_runner.process import ProcessControl
 from campaign_runner.routing import ResolvedRoute
@@ -745,31 +745,23 @@ def test_claude_observed_quota_precedes_success_empty_retry(tmp_path):
 def test_claude_daily_limit_returns_without_client_or_attempt(tmp_path):
     stream = _jsonl(tmp_path / "unused.jsonl", [])
     binary, config, state = _stub(tmp_path, [stream])
+    now = datetime(2026, 11, 16, 8, tzinfo=timezone.utc)
     reset = datetime(2026, 11, 17, tzinfo=timezone.utc)
-
-    class DailyGovernor:
-        policy = Policy(min_seconds_between_runs=1)
-
-        def admit(self, request, control=None):
-            return QuotaWaiting(
-                request.route.subscription_key,
-                request.invocation_id,
-                "daily_limit",
-                reset,
-                "daily-hold",
-            )
-
-        def cancel_wait(self, waiting):
-            return True
-
-        def wait(self, waiting, control=None):
-            raise AssertionError("daily limit must not wait inside the executor")
-
     route = ResolvedRoute(
         "claude-code", "haiku", "claude-haiku", "claude-code", "evaluator", "test"
     )
+    governor = Governor(
+        Policy(max_runs_per_day=1, min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+        clock=lambda: now,
+    )
+    prior = governor.admit(
+        AdmissionRequest(route, "prior", None, "project-digest", "evaluator")
+    )
+    prior.mark_started(pid=1, pgid=1, process_start_token="prior")
+    prior.release(outcome=RunOutcome("success"))
     governance = InvocationGovernance(
-        DailyGovernor(), route, "parent-run", "project-digest", role_cap=1
+        governor, route, "parent-run", "project-digest", role_cap=1
     )
     context = _context(
         tmp_path, binary, config, role="evaluator", role_cap=1, governance=governance
@@ -782,7 +774,8 @@ def test_claude_daily_limit_returns_without_client_or_attempt(tmp_path):
     assert result.outcome.kind == "quota"
     assert result.outcome.limit.reason == "daily_limit"
     assert result.outcome.limit.reset_at == reset
-    assert result.outcome.limit.hold_id == "daily-hold"
+    assert result.outcome.limit.hold_id
+    assert result.outcome.limit.hold_id == governor.quota_wait("claude-code").hold_id
     assert result.attempts == 0
     assert _calls(state) == []
 
@@ -829,6 +822,71 @@ def test_claude_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
             "evaluator",
             replace(resume_context, resume_artifact=wrong_policy),
         )
+
+
+def test_claude_refuses_forged_resume_session_without_starting_client(tmp_path):
+    stream = _jsonl(
+        tmp_path / "first.jsonl",
+        [{"type": "result", "subtype": "success", "session_id": "bound", "result": "ok", "is_error": False}],
+    )
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary, config, role="evaluator", role_cap=1)
+    executor = executor_for(context.route, "evaluator", context)
+    result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
+    binding_path = executor.prepared.invocation_dir / "session-bindings.json"
+    original_binding = binding_path.read_bytes()
+    forged = replace(result.resume_artifact, session_id="forged")
+
+    with pytest.raises(ExecutorRefused, match="unknown Claude session"):
+        executor_for(
+            context.route,
+            "evaluator",
+            replace(
+                context,
+                resume_from=executor.prepared.invocation_dir,
+                resume_artifact=forged,
+            ),
+        )
+
+    assert binding_path.read_bytes() == original_binding
+    assert len(_calls(state)) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("configuration_identity_digest", "different-digest"),
+        ("role", "helper"),
+        ("project_identity", "different-project"),
+        ("client", "codex"),
+    ),
+)
+def test_claude_refuses_resume_session_rebound_in_store(tmp_path, field, value):
+    stream = _jsonl(
+        tmp_path / "first.jsonl",
+        [{"type": "result", "subtype": "success", "session_id": "bound", "result": "ok", "is_error": False}],
+    )
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary, config, role="evaluator", role_cap=1)
+    executor = executor_for(context.route, "evaluator", context)
+    result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
+    binding_path = executor.prepared.invocation_dir / "session-bindings.json"
+    payload = json.loads(binding_path.read_text())
+    payload["sessions"]["bound"][field] = value
+    binding_path.write_text(json.dumps(payload))
+
+    with pytest.raises(ExecutorRefused, match="different bound identity"):
+        executor_for(
+            context.route,
+            "evaluator",
+            replace(
+                context,
+                resume_from=executor.prepared.invocation_dir,
+                resume_artifact=result.resume_artifact,
+            ),
+        )
+
+    assert len(_calls(state)) == 1
 
 
 def test_claude_argv_failure_releases_reservation(tmp_path, monkeypatch):

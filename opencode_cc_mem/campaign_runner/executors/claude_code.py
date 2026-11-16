@@ -279,7 +279,9 @@ class ClaudeCodeExecutor:
         if len(self.prepared.argv) != 1:
             raise WorkerError("Claude prepared argv must contain exactly one executable")
         if self.resume_artifact is not None:
+            self.resume_permitted = False
             self._accept_resume_artifact(self.resume_artifact)
+            self.resume_permitted = True
 
     def run(
         self,
@@ -529,6 +531,7 @@ class ClaudeCodeExecutor:
             ).encode()
         ).hexdigest()
         return {
+            "client": "claude-code",
             "configuration_identity_digest": digest,
             "role": self.role,
             "project_identity": project,
@@ -554,7 +557,7 @@ class ClaudeCodeExecutor:
             raise ExecutorRefused(
                 "Claude resume artifact does not match client, role, policy, or project"
             )
-        self._bind_session(artifact.session_id)
+        self._require_bound_session(artifact.session_id)
 
     def _load_bindings(self) -> dict[str, Any]:
         path = self._binding_path()

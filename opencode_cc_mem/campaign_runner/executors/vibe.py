@@ -348,6 +348,7 @@ class VibeExecutor:
             "--auto-approve",
         ]
         if resume_session:
+            self._require_bound_session(resume_session)
             argv.extend(["--resume", resume_session])
         for tool in READ_ONLY_DISABLED_TOOLS:
             argv.extend(["--disabled-tools", tool])
@@ -407,6 +408,7 @@ class VibeExecutor:
             f"{self.prepared.policy_digest}\0{self.prepared.config_digest}\0{self.role}\0{self.model}".encode()
         ).hexdigest()
         return {
+            "client": "vibe",
             "configuration_identity_digest": digest,
             "role": self.role,
             "project_identity": project or "",
@@ -451,6 +453,13 @@ class VibeExecutor:
         temporary.chmod(0o600)
         temporary.replace(self._binding_path())
 
+    def _require_bound_session(self, session_id: str) -> None:
+        current = self._load_bindings()["sessions"].get(session_id)
+        if current is None:
+            raise ExecutorRefused(f"unknown Vibe session: {session_id}")
+        if current != self._binding_identity():
+            raise ExecutorRefused("Vibe session has a different bound identity")
+
     def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
         if session_id is None:
             return None
@@ -468,7 +477,7 @@ class VibeExecutor:
             raise ExecutorRefused(
                 "Vibe resume artifact does not match client, role, policy, or project"
             )
-        self._bind_session(artifact.session_id)
+        self._require_bound_session(artifact.session_id)
 
     def _admit(self, stem: str, identity: SessionIdentity | None, control: ProcessControl | None) -> Admission | QuotaWaiting | None:
         if self.governance is None:
