@@ -6,6 +6,7 @@ import base64
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import secrets
 import shlex
@@ -51,6 +52,7 @@ DEFAULT_READY_TIMEOUT_SECONDS = 10.0
 READY_INTERVAL_SECONDS = 0.1
 HEALTH_TIMEOUT_SECONDS = 2.0
 SERVICE_MODULE = "compchem_memory.memory_http"
+LOGGER = logging.getLogger(__name__)
 SAFE_BASE_ENV = frozenset(
     {
         "PATH",
@@ -335,10 +337,21 @@ def _state_lock(state: Path) -> Iterator[None]:
 def _read_record(state: Path) -> dict[str, Any] | None:
     path = state / "service.json"
     try:
-        if not _private_owned(state, 0o700) or not _private_owned(path, 0o600):
+        if not _private_owned(state, 0o700):
+            return None
+        if not _private_owned(path, 0o600):
+            if path.exists():
+                LOGGER.warning(
+                    "memory service record is not private; leaving any named process untouched"
+                )
             return None
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        LOGGER.warning(
+            "memory service record is unreadable; leaving any named process untouched"
+        )
         return None
     return value if isinstance(value, dict) else None
 
@@ -360,6 +373,8 @@ def _reuse(
     holder: dict[str, Any],
 ) -> ServiceHandle | None:
     expected_digest = project_digest(project)
+    if record.get("provisional") is True:
+        return None
     try:
         pid = int(record["pid"])
         port = int(record["port"])
@@ -384,6 +399,8 @@ def _reuse(
     live_holders = _live_holders(record.get("holders", []))
     if not live_holders:
         return None
+    if _process_is_stopped(pid):
+        return None
     health = None
     for attempt in range(2):
         health = _health(url, token, HEALTH_TIMEOUT_SECONDS)
@@ -396,6 +413,8 @@ def _reuse(
         "process_identity": identity,
         "service_identity": service_identity,
     }:
+        return None
+    if not _listener_owned_by_pid(pid, port):
         return None
     if not _holder_is_live(holder):
         raise ExecutorRefused("memory service holder identity is no longer live")
@@ -454,6 +473,19 @@ def _start_service(
         timeout = float(
             setup.get("memory_service_timeout", DEFAULT_READY_TIMEOUT_SECONDS)
         )
+        record = {
+            "pid": process.pid,
+            "port": port,
+            "project_digest": digest,
+            "project_dir": str(project),
+            "process_identity": identity,
+            "service_identity": service_identity,
+            "token_file": str(token_file),
+            "command": command,
+            "holders": [holder],
+            "provisional": True,
+        }
+        _write_record(state, record)
         health = _wait_ready(process, url, token, timeout)
         expected = {
             "project_digest": digest,
@@ -467,20 +499,10 @@ def _start_service(
             )
         if not _holder_is_live(holder):
             raise ExecutorRefused("memory service holder identity is no longer live")
-        record = {
-            "pid": process.pid,
-            "port": port,
-            "project_digest": digest,
-            "project_dir": str(project),
-            "process_identity": identity,
-            "service_identity": service_identity,
-            "token_file": str(token_file),
-            "command": command,
-            "holders": [holder],
-        }
+        record.pop("provisional", None)
         _write_record(state, record)
         return _handle(record, project, holder["id"])
-    except Exception:
+    except BaseException:
         _stop_started_process(process)
         _remove_state_files(state)
         raise
@@ -519,8 +541,10 @@ def _handle(record: Mapping[str, Any], project: Path, holder_id: str) -> Service
 
 def _holder_pid(context: Any) -> int:
     value = getattr(context, "holder_pid", None)
+    if value is None:
+        raise ExecutorRefused("memory service requires an explicit holder pid")
     try:
-        pid = int(value) if value is not None else os.getpid()
+        pid = int(value)
     except (TypeError, ValueError) as exc:
         raise ExecutorRefused("memory service holder pid is invalid") from exc
     if pid <= 0:
@@ -577,13 +601,22 @@ def _discard_record(
         expected = str(record.get("process_identity", ""))
     except (TypeError, ValueError):
         pid, expected = 0, ""
-    if (
+    signal_safe = (
         record.get("project_digest") == expected_project_digest
         and pid > 0
         and expected
         and _service_signal_safe(record)
-    ):
-        _terminate_owned(pid, expected)
+    )
+    if signal_safe:
+        if not _terminate_owned(pid, expected):
+            LOGGER.warning(
+                "verified memory service record could not be reaped; process left untouched"
+            )
+    elif pid > 0:
+        LOGGER.warning(
+            "discarding unverifiable memory service record; pid %s left untouched",
+            pid,
+        )
     _remove_state_files(state)
 
 
@@ -666,6 +699,51 @@ def _process_command(pid: int) -> tuple[str, ...] | None:
         return None
 
 
+def _process_is_stopped(pid: int) -> bool:
+    """Return whether ``pid`` is suspended, avoiding doomed health waits."""
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-o", "stat=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    status = result.stdout.strip()
+    return result.returncode == 0 and status.startswith("T")
+
+
+def _listener_owned_by_pid(pid: int, port: int) -> bool:
+    """Bind authenticated health to ``pid`` when the platform exposes ownership."""
+    lsof = Path("/usr/sbin/lsof")
+    if not lsof.is_file():
+        return True
+    try:
+        result = subprocess.run(
+            [
+                str(lsof),
+                "-nP",
+                "-a",
+                "-p",
+                str(pid),
+                f"-iTCP:{port}",
+                "-sTCP:LISTEN",
+                "-Fp",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/sbin"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return True
+    return result.returncode == 0 and f"p{pid}" in result.stdout.splitlines()
+
+
 def _is_memory_service_command(command: tuple[str, ...] | None) -> bool:
     return bool(
         command
@@ -710,45 +788,24 @@ def _service_process_matches(record: Mapping[str, Any]) -> bool:
     try:
         pid = int(record["pid"])
         expected_identity = str(record["process_identity"])
-        recorded_command = tuple(str(value) for value in record["command"])
     except (KeyError, TypeError, ValueError):
         return False
     return bool(
         _process_identity(pid) == expected_identity
-        and _is_memory_service_command(recorded_command)
-        and _is_memory_service_command(_process_command(pid))
+        and _full_service_command_matches(record)
     )
 
 
 def _service_signal_safe(record: Mapping[str, Any]) -> bool:
-    """Verify project ownership before signalling a recorded process."""
+    """Require the recorded start token and exact project-bound command."""
     try:
         pid = int(record["pid"])
         identity = str(record["process_identity"])
-        port = int(record["port"])
-        digest = str(record["project_digest"])
-        service_identity = str(record["service_identity"])
-        token_path = Path(str(record["token_file"])).resolve()
-    except (KeyError, TypeError, ValueError, OSError):
+    except (KeyError, TypeError, ValueError):
         return False
-    if _process_identity(pid) != identity:
-        return False
-    if _private_owned(token_path, 0o600):
-        try:
-            token = token_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            token = ""
-        if token:
-            health = _health(
-                f"http://127.0.0.1:{port}/mcp", token, HEALTH_TIMEOUT_SECONDS
-            )
-            if health == {
-                "project_digest": digest,
-                "process_identity": identity,
-                "service_identity": service_identity,
-            }:
-                return True
-    return _full_service_command_matches(record)
+    return bool(
+        _process_identity(pid) == identity and _full_service_command_matches(record)
+    )
 
 
 def _stop_started_process(process: Any) -> None:

@@ -8,6 +8,7 @@ import re
 import stat
 import tomllib
 import uuid
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -177,6 +178,7 @@ class VibeExecutor:
     governance: InvocationGovernance | None = None
     max_price: float | None = None
     resume_artifact: ResumeArtifact | None = None
+    _memory_service_finalizer: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         try:
@@ -184,6 +186,11 @@ class VibeExecutor:
         except Exception:
             self._release_memory_service()
             raise
+        self._memory_service_finalizer = weakref.finalize(
+            self,
+            VibeExecutor._release_prepared_memory_service,
+            self.prepared,
+        )
 
     def _validate_prepared(self) -> None:
         if self.role == "worker":
@@ -225,16 +232,31 @@ class VibeExecutor:
                 control=control,
             )
         finally:
-            self._release_memory_service()
+            if not self._is_reviewer_attempt(stem):
+                self._release_memory_service()
+
+    def _is_reviewer_attempt(self, stem: str) -> bool:
+        """Keep one service lease across the reviewer's format-repair loop."""
+        return self.role == "reviewer" and (
+            stem == "reviewer" or stem.startswith("reviewer_retry_")
+        )
 
     def _release_memory_service(self) -> None:
-        handle = getattr(self.prepared, "memory_service_handle", None)
+        finalizer = self._memory_service_finalizer
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+            return
+        self._release_prepared_memory_service(self.prepared)
+
+    @staticmethod
+    def _release_prepared_memory_service(prepared: Any) -> None:
+        handle = getattr(prepared, "memory_service_handle", None)
         if handle is None:
             return
         from compchem_memory.harness.memory_service import release_memory_service
 
         release_memory_service(handle)
-        object.__setattr__(self.prepared, "memory_service_handle", None)
+        object.__setattr__(prepared, "memory_service_handle", None)
 
     def _run(
         self,
