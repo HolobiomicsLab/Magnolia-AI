@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from compchem_memory.hook.events import HookEvent, HookResponse
+from compchem_memory.hook.events import (
+    HookEvent,
+    HookResponse,
+    ToolTarget,
+    canonical_tool,
+)
 
 from . import Rendered, claude
 
@@ -14,7 +19,9 @@ def parse(raw: dict, event: str) -> HookEvent | None:
     payload = claude.translated_payload(translated, event, "codex")
     if payload is None:
         return None
-    return HookEvent.from_json(payload)
+    parsed = HookEvent.from_json(payload)
+    _decode_policy_targets(parsed)
+    return parsed
 
 
 def render(resp: HookResponse, event: HookEvent) -> Rendered:
@@ -37,3 +44,20 @@ def render(resp: HookResponse, event: HookEvent) -> Rendered:
 
 def _join(first: str | None, second: str) -> str:
     return second if first is None else f"{first}\n\n{second}"
+
+
+def _decode_policy_targets(event: HookEvent) -> None:
+    """Decode only synthetic-only Codex shapes recorded for Task 6."""
+    tool = event.tool
+    if tool is None:
+        return
+    server, name = canonical_tool(tool.raw_name)
+    if server is not None:
+        tool.policy_action = "mcp"
+        return
+    if name != "read":
+        return
+    path = tool.input.get("file_path")
+    if isinstance(path, str) and path:
+        tool.policy_action = "native_read"
+        tool.targets = (ToolTarget(path, "read"),)

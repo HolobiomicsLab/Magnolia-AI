@@ -193,15 +193,61 @@ def _log_error(
         pass
 
 
-def _read_stdin(harness: str) -> tuple[Any, dict]:
-    """Return the selected adapter and one native JSON object."""
-    from compchem_memory.hook.adapters import ADAPTERS
+def _required_failure_event(harness: str, event_name: str, raw: Any = None):
+    """Build the minimum event needed for a native required denial."""
+    from compchem_memory.hook.events import HookEvent, ToolCall
 
-    adapter = ADAPTERS[harness]
-    raw = json.load(sys.stdin)
-    if not isinstance(raw, dict):
-        raise ValueError("hook payload must be an object")
-    return adapter, raw
+    payload = raw if isinstance(raw, dict) else {}
+    session_id = payload.get("session_id", "unknown")
+    cwd = payload.get("cwd", ".")
+    if not isinstance(session_id, str) or not session_id:
+        session_id = "unknown"
+    if not isinstance(cwd, str) or not cwd:
+        cwd = "."
+    neutral_event = event_name if event_name in HookEvent.EVENTS else "pre-tool"
+    return HookEvent(
+        harness,
+        neutral_event,
+        session_id,
+        cwd,
+        tool=ToolCall("unknown", None, "unknown", None, {}),
+    )
+
+
+def _render_required_failure(
+    adapter: Any,
+    harness: str,
+    event_name: str,
+    env: Mapping[str, str],
+    raw: Any = None,
+) -> int:
+    """Emit a native denial, or a nonzero hook failure if emission is impossible."""
+    from compchem_memory.hook.events import Block, HookResponse
+    from compchem_memory.hook.policy import REQUIRED_REASON
+
+    event = _required_failure_event(harness, event_name, raw)
+    response = HookResponse(block=Block(REQUIRED_REASON))
+    try:
+        rendered = adapter.render(response, event)
+    except Exception as error:  # noqa: BLE001 - required mode must not pass
+        _log_error(error, harness, event_name, event, env)
+        return 2
+    if not rendered.stdout:
+        _log_error(
+            ValueError("required denial renderer produced empty stdout"),
+            harness,
+            event_name,
+            event,
+            env,
+        )
+        return 2
+    try:
+        _write_rendered(rendered, None, event, env)
+    except Exception as error:  # noqa: BLE001 - failed emission cannot be an exit-0 pass
+        _log_error(error, harness, event_name, event, env)
+        return 2
+    _record_denied(event, REQUIRED_REASON, env)
+    return rendered.exit_code
 
 
 def _native_tool_name(raw: dict) -> str | None:
@@ -242,15 +288,28 @@ def _render_policy_block(
     adapter: Any, event: Any, response: Any, env: Mapping[str, str]
 ) -> int:
     """Write a known denial immediately, before optional hook side effects."""
+    from compchem_memory.hook.policy import required_mode
+
+    is_required = required_mode(env)
     try:
         rendered = adapter.render(response, event)
-    except Exception as error:  # noqa: BLE001 - render failure is an unavoidable fail-open
+    except Exception as error:  # noqa: BLE001 - required mode converts this to hook failure
         _log_error(error, event.harness, event.event, event, env)
-        return 0
+        return 2 if is_required else 0
+    if is_required and not rendered.stdout:
+        _log_error(
+            ValueError("required denial renderer produced empty stdout"),
+            event.harness,
+            event.event,
+            event,
+            env,
+        )
+        return 2
     try:
         _write_rendered(rendered, None, event, env)
     except Exception as error:  # noqa: BLE001 - preserve the rendered denial exit code
         _log_error(error, event.harness, event.event, event, env)
+        return 2 if is_required else rendered.exit_code
     _record_denied(event, response.block.reason, env)
     return rendered.exit_code
 
@@ -273,12 +332,19 @@ def _record_denied(event: Any, reason: str, env: Mapping[str, str]) -> None:
 def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
     """Evaluate policy independently, failing closed for configured shell calls."""
     from compchem_memory.hook.events import Block, HookResponse, canonical_tool
-    from compchem_memory.hook.policy import REASON, decide
+    from compchem_memory.hook.policy import (
+        REASON,
+        REQUIRED_REASON,
+        decide,
+        required_mode,
+    )
 
     try:
         return HookResponse(block=decide(event, env))
     except Exception as error:  # noqa: BLE001 - configured bash policy fails closed
         _log_error(error, event.harness, event.event, event, env)
+        if required_mode(env):
+            return HookResponse(block=Block(REQUIRED_REASON))
         is_bash = (
             event.event == "pre-tool"
             and event.tool is not None
@@ -299,18 +365,44 @@ def main() -> None:
         deadline -= POST_TOOL_EXIT_RESERVE_SECONDS
     event = None
     handled = None
+    from compchem_memory.hook.policy import required_mode
+
+    is_required = required_mode(os.environ)
     try:
-        adapter, raw = _read_stdin(harness)
-    except Exception as error:  # noqa: BLE001 - malformed input fails open
+        from compchem_memory.hook.adapters import ADAPTERS
+
+        adapter = ADAPTERS[harness]
+    except Exception as error:  # noqa: BLE001 - unknown required harness must refuse
         _log_error(error, harness, event_name, event, os.environ)
+        os._exit(2 if is_required else 0)
+    try:
+        raw = json.load(sys.stdin)
+        if not isinstance(raw, dict):
+            raise ValueError("hook payload must be an object")
+    except Exception as error:  # noqa: BLE001 - required input failures deny natively
+        _log_error(error, harness, event_name, event, os.environ)
+        if is_required:
+            os._exit(
+                _render_required_failure(
+                    adapter, harness, event_name, os.environ, locals().get("raw")
+                )
+            )
         os._exit(0)
     try:
         event = adapter.parse({**raw, "harness": harness}, event_name)
     except Exception as error:  # noqa: BLE001 - recover only a configured pre-tool policy
         _log_error(error, harness, event_name, event, os.environ)
+        if is_required:
+            os._exit(
+                _render_required_failure(adapter, harness, event_name, os.environ, raw)
+            )
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
     if event is None:
+        if is_required:
+            os._exit(
+                _render_required_failure(adapter, harness, event_name, os.environ, raw)
+            )
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
         # An ignored event is an error only when the policy blocks its tool
         # (e.g. not for Claude's ToolSearch events).

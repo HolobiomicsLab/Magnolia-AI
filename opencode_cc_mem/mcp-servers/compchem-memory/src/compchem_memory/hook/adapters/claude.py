@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import json
 
-from compchem_memory.hook.events import HookEvent, HookResponse, normalise_output
+from compchem_memory.hook.events import (
+    HookEvent,
+    HookResponse,
+    ToolTarget,
+    canonical_tool,
+    normalise_output,
+)
 
 from . import Rendered
 
@@ -15,7 +21,11 @@ _SILENT_EVENTS = frozenset({"turn-end", "session-end", "agent-start", "agent-end
 def parse(raw: dict, event: str) -> HookEvent | None:
     """Translate Claude's payload, ignoring deferred-tool discovery events."""
     payload = translated_payload(raw, event, "claude")
-    return None if payload is None else HookEvent.from_json(payload)
+    if payload is None:
+        return None
+    parsed = HookEvent.from_json(payload)
+    _decode_policy_targets(parsed)
+    return parsed
 
 
 def translated_payload(raw: dict, event: str, harness: str) -> dict | None:
@@ -109,6 +119,45 @@ def _tool(raw: dict, native: object) -> dict | None:
         "output": output,
         "is_error": failed,
     }
+
+
+def _decode_policy_targets(event: HookEvent) -> None:
+    """Decode only fixture-backed Claude native path shapes."""
+    tool = event.tool
+    if tool is None:
+        return
+    server, name = canonical_tool(tool.raw_name)
+    if server is not None:
+        tool.policy_action = "mcp"
+        return
+    if name == "read":
+        _set_path(tool, "native_read", "file_path", "read")
+    elif name == "glob":
+        _set_search(tool, event.cwd, "native_glob", "pattern")
+    elif name == "grep":
+        _set_search(tool, event.cwd, "native_grep", "glob")
+    elif name in {"edit", "write"}:
+        _set_path(tool, "native_edit", "file_path", "edit")
+
+
+def _set_path(tool: object, action: str, field: str, access: str) -> None:
+    value = tool.input.get(field)
+    if not isinstance(value, str) or not value:
+        return
+    tool.policy_action = action
+    tool.targets = (ToolTarget(value, access),)
+
+
+def _set_search(tool: object, cwd: str, action: str, inclusion: str) -> None:
+    root = tool.input.get("path", cwd)
+    if not isinstance(root, str) or not root:
+        return
+    included = tool.input.get(inclusion)
+    inclusions = (included,) if isinstance(included, str) and included else ()
+    tool.policy_action = action
+    tool.targets = (
+        ToolTarget(root, "search", broad=True, inclusions=inclusions),
+    )
 
 
 def _additional_context(native_name: str, text: str) -> dict:

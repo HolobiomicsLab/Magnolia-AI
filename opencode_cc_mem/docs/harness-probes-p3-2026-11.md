@@ -33,6 +33,14 @@ D2 refuses both Codex campaign roles until the full normal-trust gate passes; a 
 - Parser-only quota controls: `tests/fixtures/executors/<client>/synthetic/quota.json`, each marked `"synthetic": true`.
 - Round 6 context only: `docs/harness-acceptance-2026-11.md` and `docs/harness-campaign-2026-11-15.md`. These runs did not prove the complete role matrix.
 
+## Task 6 offline enforcement evidence
+
+Required mode is recognized from `MAGNOLIA_HOOK_POLICY_REQUIRED=1` before stdin or policy parsing. The real hook CLI now emits Claude/Codex `permissionDecision: deny` or Vibe `decision: deny` for malformed payloads, missing/invalid/schema-mismatched policy, unknown tools, and disallowed targets. A render exception, empty denial stdout, or failed denial write returns nonzero; this is not promoted to client acceptance because normal-trust fail-closed behavior remains unobserved.
+
+Native target decoding remains `synthetic-only`: Claude `Read.file_path`, `Glob.{path,pattern}`, `Grep.{path,glob}`, `Edit.file_path`, and `Write.file_path` are in `tests/fixtures/executors/claude/synthetic/native-tools.json`; Codex only `Read.file_path` is in its corresponding fixture; Vibe `file_system.read_file.path`, `file_system.write_file.path`, and `file_system.edit.path` are in its corresponding fixture. Patch, notebook, move, unrecognized inputs, and every other uncited shape deny in required mode. The neutral policy tests cover multi-target patch/move semantics without claiming a client wire shape.
+
+All client × role rows remain **refused**. The synthetic implementation evidence changes `native_schemas` from `unknown` to `synthetic-only`; it does not satisfy the observed prerequisite or release the live gate.
+
 ## Live work still owed
 
 After the owner's explicit go, run the following ledger separately for each client. The hard cap is ten physical invocations per client across Task 0 and acceptance; every launch, resume, empty-output retry, and format repair consumes one. Stop rather than exceed the cap.
@@ -51,4 +59,3 @@ After the owner's explicit go, run the following ledger separately for each clie
 Use Claude `-p --output-format stream-json --verbose`, Codex `exec --json`, and Vibe `-p --output json --output-dir` with the implemented normal-trust configuration. Never use `--trust`, hook-trust bypass, permission bypass, alternate credential homes, or subscription credentials. Vibe keeps telemetry disabled. Capture a quota signal only if it appears naturally in these runs; do not exhaust an account.
 
 Tasks 6–8 must bind the rows to the implemented policy, renderer, and executor digests, then repeat only changed observations inside the same cap before enabling a role. D3's project-bound HTTP memory service remains required for Vibe-memory acceptance; it does not block no-tools helper/evaluator proof.
-
