@@ -10,11 +10,16 @@
  * cannot drain the same project notice concurrently. If this process dies the
  * child sees EOF and releases without consuming.
  *
+ * The bridge runs Magnolia's configured Python with -I (isolated import
+ * paths), and a queue holding only malformed lines never starts Python: those
+ * rows belong to the hook core's cleanup path.
+ *
  * No-op when MAGNOLIA_JOB_NOTIFY=0, the queue is absent, no delivery channel
- * exists, or Python cannot take the shared lock. Failures never break a session.
+ * exists, or Magnolia's configured Python cannot take the shared lock.
+ * Failures never break a session.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -27,21 +32,31 @@ const CLAIM_TIMEOUT_MS = 5_000
 // override for tests and nonstandard installations.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
-const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
-const PYTHONPATH = join(REPO_ROOT, "opencode_cc_mem", "mcp-servers", "compchem-memory", "src")
+const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : null)
+const SOURCE_DIR = join(REPO_ROOT, "opencode_cc_mem", "mcp-servers", "compchem-memory", "src")
+// -I ignores PYTHONPATH and the working directory, so a project file cannot
+// shadow a standard module; the Magnolia source dir is added explicitly.
+const BRIDGE = [
+  "import sys",
+  "sys.path.insert(0, sys.argv[1])",
+  "sys.argv[1:] = sys.argv[2:]",
+  "from compchem_memory.job_notices import _main",
+  "raise SystemExit(_main())",
+].join("; ")
 
 type Notice = Record<string, unknown>
 type Claim = { child: ChildProcessWithoutNullStreams; rows: Notice[]; closed: Promise<void> }
 type Toast = (title: string, message: string, variant?: string) => void | Promise<void>
 
 function claimNotices(noticesPath: string, limit: number): Promise<Claim | null> {
-  if (!existsSync(noticesPath)) return Promise.resolve(null)
+  // Malformed rows belong to the hook core's cleanup path; never start Python for them.
+  if (!PYTHON || !existsSync(noticesPath) || !hasValidNotice(noticesPath)) return Promise.resolve(null)
   const projectDir = dirname(dirname(noticesPath))
   return new Promise((resolveClaim) => {
     const child = spawn(
       PYTHON,
-      ["-m", "compchem_memory.job_notices", "--claim", projectDir, "--limit", String(limit)],
-      { env: { ...process.env, PYTHONPATH } },
+      ["-I", "-c", BRIDGE, SOURCE_DIR, "--claim", projectDir, "--limit", String(limit)],
+      { env: process.env },
     )
     let buffer = ""
     let answered = false
@@ -71,6 +86,21 @@ function claimNotices(noticesPath: string, limit: number): Promise<Claim | null>
       }
     })
   })
+}
+
+function hasValidNotice(noticesPath: string): boolean {
+  try {
+    return readFileSync(noticesPath, "utf8").split(/\r?\n/).some((line) => {
+      try {
+        const value = JSON.parse(line)
+        return value !== null && typeof value === "object" && !Array.isArray(value)
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  }
 }
 
 async function settleClaim(claim: Claim, delivered: boolean): Promise<void> {

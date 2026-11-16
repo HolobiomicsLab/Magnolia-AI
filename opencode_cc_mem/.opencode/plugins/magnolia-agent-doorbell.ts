@@ -102,8 +102,10 @@ function deliver(directory: string, sourceProject: string, agent: string, reques
   const taskDir = join(workspaceRoot(directory), "projects", agent, "inbox", `from-${sourceProject}`)
   mkdirSync(taskDir, { recursive: true })
   const file = join(taskDir, `${slug(request)}.task.md`)
+  // Same single safe line as the hook core's _title: control characters become spaces.
+  const title = request.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, " ").trim()
   const letter = [
-    `# Task: ${request.slice(0, 80)}`,
+    `# Task: ${title.slice(0, 80)}`,
     ``,
     `- from: ${sourceProject}`,
     `- date: ${new Date().toISOString()}`,
