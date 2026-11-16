@@ -240,7 +240,7 @@ class OpenCodeExecutor:
                 governance = self.governance
                 assert governance is not None
                 governance.governor.cancel_wait(admission)
-                if admission.reason == "quota":
+                if admission.reason in {"quota", "daily_limit"}:
                     typed_outcome = RunOutcome(
                         "quota",
                         LimitInfo(
@@ -388,7 +388,7 @@ class OpenCodeExecutor:
             admitted = governance.governor.admit(request, control)
             if isinstance(admitted, Admission):
                 return admitted
-            if admitted.reason in {"quota", "cancelled"}:
+            if admitted.reason in {"quota", "daily_limit", "cancelled"}:
                 return admitted
             if not governance.governor.wait(admitted, control):
                 return QuotaWaiting(
