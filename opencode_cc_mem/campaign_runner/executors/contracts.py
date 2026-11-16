@@ -145,7 +145,7 @@ class SessionIdentity:
 
 @dataclass(frozen=True)
 class ResumeArtifact:
-    """Opaque-enough typed proof binding one resumable client session."""
+    """Typed locator for a session whose identical binding must already exist."""
 
     client: str
     session_id: str

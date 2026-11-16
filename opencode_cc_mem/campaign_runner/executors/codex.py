@@ -257,7 +257,9 @@ class CodexExecutor:
         self._verify_project_artifacts()
         self._disable_overrides = tuple(self._discovered_disable_overrides())
         if self.resume_artifact is not None:
+            self.resume_permitted = False
             self._accept_resume_artifact(self.resume_artifact)
+            self.resume_permitted = True
 
     def run(
         self,
@@ -527,7 +529,7 @@ class CodexExecutor:
             )
         current = self._load_bindings()["sessions"].get(artifact.session_id)
         if current is None:
-            self._bind_session(artifact.session_id, UsageRecord())
+            raise ExecutorRefused(f"unknown Codex session: {artifact.session_id}")
         elif not isinstance(current, Mapping) or current.get(
             "identity"
         ) != self._binding_identity():
@@ -538,7 +540,12 @@ class CodexExecutor:
         digest = hashlib.sha256(
             f"{self.prepared.policy_digest}\0{self.prepared.config_digest}\0{self.role}\0{self.model}".encode()
         ).hexdigest()
-        return {"configuration_identity_digest": digest, "role": self.role, "project_identity": project or ""}
+        return {
+            "client": "codex",
+            "configuration_identity_digest": digest,
+            "role": self.role,
+            "project_identity": project or "",
+        }
 
     def _load_bindings(self) -> dict[str, Any]:
         path = self._binding_path()

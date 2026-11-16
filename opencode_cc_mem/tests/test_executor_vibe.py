@@ -13,7 +13,7 @@ import pytest
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome
 from campaign_runner.executors.vibe import VibeExecutor, parse_vibe_export, require_vibe_trust
-from campaign_runner.governor import Governor, Policy, QuotaWaiting
+from campaign_runner.governor import AdmissionRequest, Governor, Policy
 from campaign_runner.launch import configuration_identity
 from campaign_runner.process import ProcessControl
 from campaign_runner.routing import ResolvedRoute
@@ -379,31 +379,23 @@ def test_vibe_daily_limit_returns_without_client_or_attempt(tmp_path):
     export = tmp_path / "unused.json"
     export.write_text(json.dumps(_real_export()))
     binary, config, state = _stub(tmp_path, [export])
+    now = datetime(2026, 11, 16, 8, tzinfo=timezone.utc)
     reset = datetime(2026, 11, 17, tzinfo=timezone.utc)
-
-    class DailyGovernor:
-        policy = Policy(min_seconds_between_runs=1)
-
-        def admit(self, request, control=None):
-            return QuotaWaiting(
-                request.route.subscription_key,
-                request.invocation_id,
-                "daily_limit",
-                reset,
-                "daily-hold",
-            )
-
-        def cancel_wait(self, waiting):
-            return True
-
-        def wait(self, waiting, control=None):
-            raise AssertionError("daily limit must not wait inside the executor")
-
     route = ResolvedRoute(
         "vibe", "selected-model", "family", "vibe", "reviewer", "test"
     )
+    governor = Governor(
+        Policy(max_runs_per_day=1, min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+        clock=lambda: now,
+    )
+    prior = governor.admit(
+        AdmissionRequest(route, "prior", None, "project-fixture", "reviewer")
+    )
+    prior.mark_started(pid=1, pgid=1, process_start_token="prior")
+    prior.release(outcome=RunOutcome("success"))
     governance = InvocationGovernance(
-        DailyGovernor(), route, "parent-run", "project-fixture", role_cap=8
+        governor, route, "parent-run", "project-fixture", role_cap=8
     )
     context = _context(
         tmp_path, binary=binary, stub_config=config, governance=governance
@@ -416,7 +408,8 @@ def test_vibe_daily_limit_returns_without_client_or_attempt(tmp_path):
     assert result.outcome.kind == "quota"
     assert result.outcome.limit.reason == "daily_limit"
     assert result.outcome.limit.reset_at == reset
-    assert result.outcome.limit.hold_id == "daily-hold"
+    assert result.outcome.limit.hold_id
+    assert result.outcome.limit.hold_id == governor.quota_wait("vibe").hold_id
     assert result.attempts == 0
     assert _calls(state) == []
 
@@ -450,6 +443,67 @@ def test_vibe_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
             "reviewer",
             replace(resume_context, resume_artifact=wrong_project),
         )
+
+
+def test_vibe_refuses_forged_resume_session_without_starting_client(tmp_path):
+    export = tmp_path / "first.json"
+    export.write_text(json.dumps(_real_export()))
+    binary, config, state = _stub(tmp_path, [export])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "reviewer", context)
+    result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
+    binding_path = executor.prepared.invocation_dir / "vibe-session-bindings.json"
+    original_binding = binding_path.read_bytes()
+    forged = replace(result.resume_artifact, session_id="forged")
+
+    with pytest.raises(ExecutorRefused, match="unknown Vibe session"):
+        executor_for(
+            context.route,
+            "reviewer",
+            replace(
+                context,
+                resume_from=executor.prepared.invocation_dir,
+                resume_artifact=forged,
+            ),
+        )
+
+    assert binding_path.read_bytes() == original_binding
+    assert len(_calls(state)) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("configuration_identity_digest", "different-digest"),
+        ("role", "helper"),
+        ("project_identity", "different-project"),
+        ("client", "codex"),
+    ),
+)
+def test_vibe_refuses_resume_session_rebound_in_store(tmp_path, field, value):
+    export = tmp_path / "first.json"
+    export.write_text(json.dumps(_real_export()))
+    binary, config, state = _stub(tmp_path, [export])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "reviewer", context)
+    result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
+    binding_path = executor.prepared.invocation_dir / "vibe-session-bindings.json"
+    payload = json.loads(binding_path.read_text())
+    payload["sessions"]["vibe-session"][field] = value
+    binding_path.write_text(json.dumps(payload))
+
+    with pytest.raises(ExecutorRefused, match="different bound identity"):
+        executor_for(
+            context.route,
+            "reviewer",
+            replace(
+                context,
+                resume_from=executor.prepared.invocation_dir,
+                resume_artifact=result.resume_artifact,
+            ),
+        )
+
+    assert len(_calls(state)) == 1
 
 
 @pytest.mark.parametrize("damage", ("hook", "mcp", "tool", "model"))
