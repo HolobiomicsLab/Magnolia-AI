@@ -20,7 +20,7 @@ from campaign_runner.jobs import FakeJobBackend, JobController
 from campaign_runner.lease import AttemptLease
 from campaign_runner.reviewers import Reviewer, ReviewResult
 from campaign_runner.runner import CampaignRunner, RunnerConfig
-from campaign_runner.routing import ResolvedRoute
+from campaign_runner.routing import ResolvedRoute, resolve_route
 from campaign_runner.state import CampaignStore, QuotaWait
 from campaign_runner.workers import (
     InvocationGovernance,
@@ -588,6 +588,116 @@ def test_reviewer_daily_limit_waits_once(tmp_path, monkeypatch):
     assert state["quota_wait"]["suspended_phase"] == "reviewer"
     assert state["quota_wait"]["reset_at"] == reset.isoformat()
     assert calls == 1
+
+
+@pytest.mark.parametrize(
+    ("limit_kind", "expected_reason"),
+    [("quota", "governor quota"), ("daily_limit", "daily_limit")],
+)
+def test_real_opencode_reviewer_governor_limit_waits(
+    tmp_path, limit_kind, expected_reason
+):
+    store = _store(tmp_path, review=True)
+    route = resolve_route(
+        "reviewer", {"reviewer": {"model": "other/reviewer"}}
+    )
+    policy = {"max_runs_per_day": 1} if limit_kind == "daily_limit" else {}
+    governor = _real_governor(tmp_path / "governor", **policy)
+    prior = governor.admit(
+        AdmissionRequest(route, "prior", None, "project", "reviewer")
+    )
+    prior.mark_started(pid=1, pgid=1, process_start_token="prior")
+    prior.release(
+        outcome=(
+            RunOutcome("success")
+            if limit_kind == "daily_limit"
+            else RunOutcome("quota", LimitInfo("quota", None, "test"))
+        )
+    )
+    marker = tmp_path / "opencode-launched"
+    binary = tmp_path / "opencode"
+    binary.write_text(
+        f"#!/bin/sh\ntouch '{marker}'\nexit 99\n", encoding="utf-8"
+    )
+    binary.chmod(0o755)
+    reviewer = Reviewer(
+        binary=str(binary),
+        governance=InvocationGovernance(
+            governor, route, "campaign:q", "project"
+        ),
+    )
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    state = _runner(store, worker, governor, reviewer).run_once()["state"]
+
+    assert state["state"] == "waiting_quota"
+    assert state["quota_wait"]["suspended_phase"] == "reviewer"
+    assert state["quota_wait"]["reason"] == expected_reason
+    assert worker.calls == 1
+    assert not marker.exists()
+
+
+def test_reviewer_quota_with_stop_reason_waits(tmp_path):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class QuotaReviewer:
+        def run(self, *args, **kwargs):
+            return ReviewResult(
+                model="other/reviewer",
+                stopped_reason="daily_limit",
+                outcome=RunOutcome(
+                    "quota", LimitInfo("daily_limit", NOW + timedelta(hours=1), "test")
+                ),
+            )
+
+    state = _runner(store, worker, HoldGovernor(), QuotaReviewer()).run_once()["state"]
+
+    assert state["state"] == "waiting_quota"
+    assert state["quota_wait"]["suspended_phase"] == "reviewer"
+
+
+def test_reviewer_pause_file_remains_stopped(tmp_path):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class PausingReviewer:
+        def run(self, *args, **kwargs):
+            (store.run_dir / "PAUSE").write_text("pause\n")
+            return ReviewResult(
+                model="other/reviewer",
+                stopped_reason="pause requested",
+                outcome=RunOutcome("cancelled"),
+            )
+
+    state = _runner(store, worker, HoldGovernor(), PausingReviewer()).run_once()["state"]
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+
+    assert state["state"] == "paused"
+    assert receipt["status"] == "stopped"
+
+
+def test_unbound_worker_resume_artifact_uses_failure_path(tmp_path):
+    store = _store(tmp_path)
+
+    class UnboundWorker:
+        def run(self, *args, **kwargs):
+            result = _result()
+            result.resume_artifact = ResumeArtifact(
+                "opencode", "session", "digest", "worker", "project"
+            )
+            return result
+
+    result = _runner(store, UnboundWorker(), HoldGovernor()).run_once()
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+
+    assert result["state"]["state"] == "waiting_human"
+    assert receipt["status"] == "failed"
+    assert "resumable worker did not expose" in receipt["errors"][0]
 
 
 def test_manual_shared_hold_release_wakes_all_campaigns(tmp_path):
