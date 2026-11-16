@@ -15,6 +15,7 @@ import pytest
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.codex import (
     CodexExecutor,
+    RESTRICTED_FEATURES,
     _relevant_owner_config,
     parse_codex_stream,
     require_codex_trust,
@@ -382,12 +383,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         "workspace-write" if role == "worker" else "read-only"
     )
     pairs = [argv[i:i + 2] for i in range(len(argv) - 1)]
-    for feature in (
-        "apps", "browser_use", "browser_use_external",
-        "browser_use_full_cdp_access", "code_mode_host", "goals",
-        "computer_use", "image_generation", "in_app_browser", "multi_agent",
-        "standalone_web_search",
-    ):
+    for feature in (*RESTRICTED_FEATURES, "apps"):
         assert ["--disable", feature] in pairs
     assert ["--enable", "skip_host_skill_discovery"] in pairs
     overrides = [
@@ -600,6 +596,7 @@ def test_codex_allows_builtin_openai_owner_provider(tmp_path):
         "lmstudio",
         "amazon-bedrock",
         "amazon-bedrock-runtime",
+        "gcp",
     ),
 )
 def test_codex_refuses_owner_definition_of_builtin_provider(tmp_path, provider):
@@ -1136,6 +1133,8 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
     (
         ["--dangerously-bypass-approvals-and-sandbox"],
         ["--dangerously-bypass-hook-trust=1"],
+        ["--cyber-access-program", "daybreak_red"],
+        ["--cyber-access-program=daybreak_red"],
         ["--yolo"],
         ["-p", "owner"],
         ["-powner"],
@@ -1177,6 +1176,57 @@ def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
     ]
 
     with pytest.raises(WorkerError, match="forbidden Codex launch"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert _calls(state) == []
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        [
+            '-cmodel_reasoning_effort="low"',
+            '-cmodel_reasoning_effort="xhigh"',
+        ],
+        [
+            '-c=model_reasoning_effort="low"',
+            '-c=model_reasoning_effort="xhigh"',
+        ],
+        [
+            '--config=model_reasoning_effort="low"',
+            '--config=model_reasoning_effort="xhigh"',
+        ],
+    ),
+)
+def test_codex_glued_reasoning_effort_pairs_cannot_conflict(
+    tmp_path, overrides
+):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+    safe_argv = executor._argv("prompt", None)
+    separator = safe_argv.index("--")
+    without_effort = []
+    index = 0
+    while index < separator:
+        if (
+            safe_argv[index] == "-c"
+            and index + 1 < separator
+            and safe_argv[index + 1].startswith("model_reasoning_effort=")
+        ):
+            index += 2
+            continue
+        without_effort.append(safe_argv[index])
+        index += 1
+    executor._argv = lambda prompt, session_id: [
+        *without_effort, *overrides, *safe_argv[separator:]
+    ]
+
+    with pytest.raises(WorkerError, match="model_reasoning_effort"):
         executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
 
     assert _calls(state) == []

@@ -103,30 +103,6 @@ MEMORY_PROVIDER_ENV = frozenset(
         "ZAI_API_KEY",
     }
 )
-EXPLICIT_CHILD_ENV_NAMES = frozenset(
-    {
-        "COMPCHEM_TOOLS_PORT",
-        "MAGNOLIA_CLIENT",
-        "MAGNOLIA_CONTROL_DIR",
-        "MAGNOLIA_DISTILL_INTERVAL_MIN",
-        "MAGNOLIA_DOORBELL",
-        "MAGNOLIA_HOOK_POLICY",
-        "MAGNOLIA_HOOK_POLICY_REQUIRED",
-        "MAGNOLIA_HOOK_POLICY_SHA256",
-        "MAGNOLIA_INSTALLATION_ROOT",
-        "MAGNOLIA_PROJECT_DIR",
-        "MAGNOLIA_PROJECT_IDENTITY",
-        "MAGNOLIA_PYTHON",
-        "MAGNOLIA_ROOT",
-        "MAGNOLIA_ROLE",
-        "MAGNOLIA_RULES_DIR",
-        "MAGNOLIA_RUN_DIR",
-        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
-        "MAGNOLIA_WORK_DIR",
-        "MAGNOLIA_WORKSPACE_ROOT",
-        "PYTHONPYCACHEPREFIX",
-    }
-)
 DEFAULT_GOVERNOR_CAP = 60
 ROLE_CONFIG_NAMES = {
     "worker": "campaign-worker",
@@ -1410,28 +1386,12 @@ def _effective_environment(
     assert context.run_dir is not None
     assert context.control_dir is not None
     assert context.work_dir is not None
-    explicit = {
-        "MAGNOLIA_HOOK_POLICY": str(policy_path.resolve()),
-        "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
-        "MAGNOLIA_HOOK_POLICY_SHA256": policy_digest,
-        "MAGNOLIA_DOORBELL": "0",
-        "MAGNOLIA_CLIENT": context.route.client,
-        "MAGNOLIA_ROLE": context.role,
-        "MAGNOLIA_PROJECT_IDENTITY": context.project_identity,
-        "MAGNOLIA_INSTALLATION_ROOT": str(context.installation_root.resolve()),
-        "MAGNOLIA_WORKSPACE_ROOT": str(context.workspace_root.resolve()),
-        "MAGNOLIA_RUN_DIR": str(context.run_dir.resolve()),
-        "MAGNOLIA_CONTROL_DIR": str(context.control_dir.resolve()),
-        "MAGNOLIA_WORK_DIR": str(context.work_dir.resolve()),
-        "MAGNOLIA_PYTHON": context.python_executable,
-        "PYTHONPYCACHEPREFIX": _fresh_pycache_prefix(policy_path.parent),
-        "MAGNOLIA_ROOT": str(context.installation_root.parent.resolve()),
-        "MAGNOLIA_PROJECT_DIR": str(context.project_dir.resolve()),
-        "MAGNOLIA_RULES_DIR": "rules",
-        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS": "4000",
-        "MAGNOLIA_DISTILL_INTERVAL_MIN": "60",
-        "COMPCHEM_TOOLS_PORT": str(context.tools_port),
-    }
+    explicit = _base_explicit_environment(
+        context,
+        policy_path=policy_path,
+        policy_digest=policy_digest,
+        pycache_prefix=_fresh_pycache_prefix(policy_path.parent),
+    )
     memory_model = context.setup.get("memory_model")
     memory_provider = context.setup.get("memory_provider")
     if isinstance(memory_model, str) and memory_model:
@@ -1462,6 +1422,45 @@ def _effective_environment(
         explicit["VIBE_ENABLE_TELEMETRY"] = "false"
     env.update({key: str(value) for key, value in explicit.items()})
     return env
+
+
+def _base_explicit_environment(
+    context: ExecContext,
+    *,
+    policy_path: Path,
+    policy_digest: str,
+    pycache_prefix: str,
+) -> dict[str, str]:
+    """Build the unconditional child environment from its single key source."""
+    assert context.route is not None
+    assert context.installation_root is not None
+    assert context.workspace_root is not None
+    assert context.run_dir is not None
+    assert context.control_dir is not None
+    assert context.work_dir is not None
+    assert context.project_dir is not None
+    return {
+        "MAGNOLIA_HOOK_POLICY": str(policy_path.resolve()),
+        "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+        "MAGNOLIA_HOOK_POLICY_SHA256": policy_digest,
+        "MAGNOLIA_DOORBELL": "0",
+        "MAGNOLIA_CLIENT": context.route.client,
+        "MAGNOLIA_ROLE": context.role,
+        "MAGNOLIA_PROJECT_IDENTITY": context.project_identity,
+        "MAGNOLIA_INSTALLATION_ROOT": str(context.installation_root.resolve()),
+        "MAGNOLIA_WORKSPACE_ROOT": str(context.workspace_root.resolve()),
+        "MAGNOLIA_RUN_DIR": str(context.run_dir.resolve()),
+        "MAGNOLIA_CONTROL_DIR": str(context.control_dir.resolve()),
+        "MAGNOLIA_WORK_DIR": str(context.work_dir.resolve()),
+        "MAGNOLIA_PYTHON": context.python_executable,
+        "PYTHONPYCACHEPREFIX": pycache_prefix,
+        "MAGNOLIA_ROOT": str(context.installation_root.parent.resolve()),
+        "MAGNOLIA_PROJECT_DIR": str(context.project_dir.resolve()),
+        "MAGNOLIA_RULES_DIR": "rules",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS": "4000",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN": "60",
+        "COMPCHEM_TOOLS_PORT": str(context.tools_port),
+    }
 
 
 def _fresh_pycache_prefix(invocation_dir: Path) -> str:
@@ -1722,7 +1721,12 @@ def _contract_environment_names(
     context: ExecContext, env: Mapping[str, str]
 ) -> frozenset[str]:
     """Return env names Magnolia deliberately sets or forwards by contract."""
-    names = set(EXPLICIT_CHILD_ENV_NAMES)
+    names = set(_base_explicit_environment(
+        context,
+        policy_path=Path("."),
+        policy_digest="",
+        pycache_prefix="",
+    ))
     names.update(str(name) for name in context.renderer_env)
     if context.route is not None and context.route.model:
         names.add("MAGNOLIA_MODEL")

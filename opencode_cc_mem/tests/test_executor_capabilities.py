@@ -376,3 +376,17 @@ def test_codex_vibe_rows_still_refused():
 
     for client in ("codex", "vibe"):
         assert all(not row["accepted"] for row in projected[client].values())
+
+
+def test_codex_rows_share_their_reaudited_client_identity():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    rows = [row for row in table["rows"] if row["client"] == "codex"]
+    identities = [row["gate"]["value"]["client_identity"] for row in rows]
+
+    assert len(rows) == 4
+    assert all(identity == identities[0] for identity in identities)
+    assert all(
+        row["cells"]["identity"]["value"] == identities[0] for row in rows
+    )
+    assert identities[0]["version"] in identities[0]["executable"]
+    assert len(identities[0]["sha256"]) == 64
