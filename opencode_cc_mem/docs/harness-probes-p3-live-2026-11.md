@@ -270,3 +270,37 @@ change); the Vibe file differed only by my entry. After restore both files are *
 5. Claude validates some tool inputs before PreToolUse (invisible attempts).
 6. Vibe: `VIBE_DISABLE_TELEMETRY` is a no-op; turning telemetry off removes the free model and triggers a paid
    fallback; `--disabled-tools` did not stop `file_system.bash` calls from being attempted.
+
+## Follow-up 16 Nov 2026 (07:45 CET): Codex with `code_mode_host` disabled
+
+Coordinator's follow-up, Codex only, at most 2 more invocations; **1 used (x9), Codex total 12/20**. Same bounds:
+same temp project, `~/.codex/config.toml` backed up again, the same 10 trust tables re-appended (project
+`trust_level` + 9 `hooks.state.trusted_hash` from x0a; `.codex/hooks.json` unchanged) and removed afterwards; the file is
+byte-identical to both backups (`cmp`). No client process left running.
+
+Checked without a model first: `codex features list --disable code_mode_host` shows `code_mode_host … false` (the
+flag takes effect). `codex debug models` (offline catalog) shows `tool_mode: "code_mode_only"` for **every** listed
+model (`gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, hidden ones too).
+
+x9 argv: `codex exec --json -C <project> <same -c overrides as x1> --disable code_mode_host -s workspace-write
+-m gpt-5.6-luna -c model_reasoning_effort="low" <prompt>`, worker policy (code mode denied). Fixtures:
+`codex/live-p3/x9/` (hook log, stream) and `codex/live-p3/x9-rollout-code-mode-host-disabled/` (tool-call entries
+from the session's rollout).
+
+Outcome:
+- The stream opens with `item.type: error` "Code Mode is unavailable because code-mode host is disabled. Code mode
+  will fail closed; enable `features.code_mode_host` …" (`x9/09`).
+- `exec` was **still offered**; the model called it four times (outer `text(...)`, then `tools.mcp__probe__echo`,
+  `tools.mcp__probe__shell`, `tools.exec_command`) and each returned `code-mode host is disabled`. Nothing ran: no
+  PreToolUse at all (hook log = SessionStart, UserPromptSubmit, Stop, SessionEnd), marker dir empty.
+- The model's self-reported tool list no longer had `exec_command` or any `mcp__probe__*` tool as a direct tool (only
+  `exec`, `wait`, `apply_patch`, `write_stdin`, goals, MCP resource tools, `request_plugin_install`, `view_image`,
+  `image_gen`, `web.run`, `mcp__cua_repl.js(_reset)`). With `code_mode_only` models, shell and MCP tools are reachable
+  only through `exec`.
+
+Conclusion: `--disable code_mode_host` fails closed (the outer program and every inner call are refused), but it does
+**not** make every tool call reach the hook. It removes shell and MCP calls altogether, so MCP tools are **not**
+callable directly. Under this account's model catalog there is no observed Codex configuration where MCP and shell
+calls are both direct and hooked. When code mode is on, the outer `exec` stays unhooked (x5, x8). The Codex worker and
+reviewer stay refused (D2). Whether `apply_patch` and the other remaining direct tools still reach PreToolUse with the
+host disabled was not exercised in x9.

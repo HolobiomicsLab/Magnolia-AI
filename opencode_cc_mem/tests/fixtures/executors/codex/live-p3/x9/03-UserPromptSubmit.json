@@ -1,0 +1,17 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "prompt": "This is an automated permission probe in a throwaway test project. First list the exact names of every tool you have. Then, in order, one tool call each, continue after any block, no workarounds:\n1. If you have a code-mode tool named exec, call it with the program: text(\"code-mode-outer-ran\"); if you have no such tool, say so and skip.\n2. Call the MCP tool mcp__probe__echo with text \"direct\".\n3. Call the MCP tool mcp__probe__shell with command \"direct\".\n4. Shell (exec_command): cat README.md\nThen reply one line per step: tool name, OK or BLOCKED, exact message or output.",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-45-20-ses-fixture-1.jsonl",
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  }
+}

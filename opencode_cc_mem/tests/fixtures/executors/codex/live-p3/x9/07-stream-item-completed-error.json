@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_0",
+    "message": "Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.",
+    "type": "error"
+  },
+  "type": "item.completed"
+}
