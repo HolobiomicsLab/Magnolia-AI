@@ -54,6 +54,9 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     conflicts: list[str] = []
     config_path = folder / "config.toml"
     hooks_path = folder / "hooks.toml"
+    hook_owner = partial(
+        owned, client=HARNESS, python_executable=context.python
+    )
     validate_project_paths((config_path, hooks_path), context.project_dir)
     content, found, original = merged_toml(
         config_path, _owns_entry, _config(neutral, context, config_path)
@@ -62,7 +65,7 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     conflicts += found
     _keep_backup(files, config_path, original)
     content, found, original = merged_toml(
-        hooks_path, _owns_entry, {"hooks": _hooks(context)}
+        hooks_path, hook_owner, {"hooks": _hooks(context)}
     )
     files[hooks_path] = content
     conflicts += found

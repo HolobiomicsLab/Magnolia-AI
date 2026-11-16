@@ -21,8 +21,11 @@ _RUNNER_PARTS = (
 )
 
 
-def _shell_words(command: str) -> tuple[str, ...]:
-    if _has_shell_expansion(command):
+def _shell_words(command: str, *, allow_newlines: bool = False) -> tuple[str, ...]:
+    if (
+        (not allow_newlines and ("\n" in command or "\r" in command))
+        or _has_shell_expansion(command)
+    ):
         return ()
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
@@ -50,12 +53,22 @@ def _has_shell_expansion(command: str) -> bool:
     return False
 
 
-def _direct_hook(words: tuple[str, ...], client: str | None) -> bool:
+def _direct_hook(
+    words: tuple[str, ...], client: str | None, python_executable: str | None
+) -> bool:
     if len(words) != 5 or words[-2] not in _CLIENTS or not _EVENT_TOKEN.fullmatch(words[-1]):
         return False
     if client is not None and words[-2] != client:
         return False
-    if words[0] != "{python_executable}" and not _PYTHON.fullmatch(PurePosixPath(words[0]).name):
+    if python_executable is not None:
+        is_interpreter = words[0] == python_executable or bool(
+            _PYTHON.fullmatch(PurePosixPath(words[0]).name)
+        )
+    else:
+        is_interpreter = words[0] == "{python_executable}" or bool(
+            _PYTHON.fullmatch(PurePosixPath(words[0]).name)
+        )
+    if not is_interpreter:
         return False
     if words[1:3] == ("-m", "compchem_memory.hook"):
         return True
@@ -68,43 +81,65 @@ def _direct_hook(words: tuple[str, ...], client: str | None) -> bool:
 
 
 def parse_hook_command(
-    command: object, client: str | None = None
+    command: object,
+    client: str | None = None,
+    python_executable: str | None = None,
 ) -> tuple[tuple[str, ...], bool] | None:
     """Return complete hook argv and wrapper presence, or None for member commands."""
     if not isinstance(command, str):
         return None
     try:
         words = _shell_words(command)
-        if _direct_hook(words, client):
+        if _direct_hook(words, client, python_executable):
             return words, False
-        if len(words) == 3 and words[:2] == ("/bin/sh", "-c"):
-            return _parse_required_hook(words[2], client)
+        wrapper_words = _shell_words(command, allow_newlines=True)
+        if len(wrapper_words) == 3 and wrapper_words[:2] == ("/bin/sh", "-c"):
+            return _parse_required_hook(
+                wrapper_words[2], client, python_executable
+            )
     except ValueError:
         return None
     return None
 
 
-def _parse_required_hook(script: str, client: str | None):
+def _parse_required_hook(
+    script: str, client: str | None, python_executable: str | None
+):
     marker = "__MAGNOLIA_HOOK_COMMAND__"
     for candidate in (client,) if client is not None else _CLIENTS:
         template = _shell_words(
-            _required_pre_tool_command(marker, candidate, REQUIRED_HOOK_TIMEOUT_S)
+            _required_pre_tool_command(marker, candidate, REQUIRED_HOOK_TIMEOUT_S),
+            allow_newlines=True,
         )[2]
         before, after = template.split(marker)
         if not script.startswith(before) or not script.endswith(after):
             continue
         words = _shell_words(script[len(before):-len(after)])
-        if _direct_hook(words, candidate) and words[-1] == "pre-tool":
+        if (
+            _direct_hook(words, candidate, python_executable)
+            and words[-1] == "pre-tool"
+        ):
             return words, True
     return None
 
 
-def is_magnolia_hook_command(command: object, client: str | None = None) -> bool:
+def is_magnolia_hook_command(
+    command: object,
+    client: str | None = None,
+    python_executable: str | None = None,
+) -> bool:
     """Recognise only a complete rendered hook for the requested client."""
-    return parse_hook_command(command, client) is not None
+    return parse_hook_command(command, client, python_executable) is not None
 
 
-def owned(kind: str, name: str | None, entry: dict, *, client: str | None = None) -> bool:
+def owned(
+    kind: str,
+    name: str | None,
+    entry: dict,
+    *,
+    client: str | None = None,
+    python_executable: str | None = None,
+) -> bool:
     """Ownership predicate for :mod:`compchem_memory.harness.files`.
 
     Servers are owned by name. Only complete commands for the renderer's client
@@ -116,7 +151,7 @@ def owned(kind: str, name: str | None, entry: dict, *, client: str | None = None
         return False
     if client is None:
         return False
-    if _runs_hook_module(entry, client):
+    if _runs_hook_module(entry, client, python_executable):
         return True
     inner = entry.get("hooks")
     # A matcher group is Magnolia's only when every hook in it is; a mixed group
@@ -124,11 +159,20 @@ def owned(kind: str, name: str | None, entry: dict, *, client: str | None = None
     return (
         isinstance(inner, list)
         and bool(inner)
-        and all(isinstance(hook, dict) and _runs_hook_module(hook, client) for hook in inner)
+        and all(
+            isinstance(hook, dict)
+            and _runs_hook_module(hook, client, python_executable)
+            for hook in inner
+        )
     )
 
 
-def strip_owned_hooks(current: dict, *, client: str = "codex") -> dict:
+def strip_owned_hooks(
+    current: dict,
+    *,
+    client: str = "codex",
+    python_executable: str | None = None,
+) -> dict:
     """Remove Magnolia hooks, including groups under obsolete event keys."""
     hooks = current.get("hooks")
     if not isinstance(hooks, dict):
@@ -139,22 +183,48 @@ def strip_owned_hooks(current: dict, *, client: str = "codex") -> dict:
             cleaned[event] = groups
             continue
         kept = [
-            _strip_group(group, client)
+            _strip_group(group, client, python_executable)
             for group in groups
-            if not (isinstance(group, dict) and owned("hook", None, group, client=client))
+            if not (
+                isinstance(group, dict)
+                and owned(
+                    "hook",
+                    None,
+                    group,
+                    client=client,
+                    python_executable=python_executable,
+                )
+            )
         ]
         if kept:
             cleaned[event] = kept
     return {**current, "hooks": cleaned}
 
 
-def _strip_group(group, client):
+def _strip_group(group, client, python_executable):
     inner = group.get("hooks") if isinstance(group, dict) else None
-    if not isinstance(inner, list) or owned("hook", None, group, client=client):
+    if not isinstance(inner, list) or owned(
+        "hook",
+        None,
+        group,
+        client=client,
+        python_executable=python_executable,
+    ):
         return group
-    kept = [h for h in inner if not (isinstance(h, dict) and _runs_hook_module(h, client))]
+    kept = [
+        hook
+        for hook in inner
+        if not (
+            isinstance(hook, dict)
+            and _runs_hook_module(hook, client, python_executable)
+        )
+    ]
     return group if len(kept) == len(inner) else {**group, "hooks": kept}
 
 
-def _runs_hook_module(hook: dict, client: str) -> bool:
-    return is_magnolia_hook_command(hook.get("command"), client)
+def _runs_hook_module(
+    hook: dict, client: str, python_executable: str | None
+) -> bool:
+    return is_magnolia_hook_command(
+        hook.get("command"), client, python_executable
+    )

@@ -341,7 +341,7 @@ def test_claude_rows_accepted_from_live_gate():
     assert all(item["gate_accepted"] is True for item in projected.values())
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
-    assert {"hook_interpreter", "hook_source"} <= set(
+    assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(
         worker["gate"]["value"]["configuration_binding"]["components"]
     )
 

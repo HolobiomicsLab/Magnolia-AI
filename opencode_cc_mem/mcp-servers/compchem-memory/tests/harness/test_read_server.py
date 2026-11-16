@@ -47,7 +47,13 @@ def _server(tmp_path: Path) -> tuple[ReadServer, Path, Path]:
     project.mkdir()
     outside.mkdir()
     policy = _policy(tmp_path / "policy.json", project)
-    return ReadServer.from_policy_file(policy, cwd=project), project, outside
+    return (
+        ReadServer.from_policy_file(
+            policy, cwd=project, control_dir=str(tmp_path / "control")
+        ),
+        project,
+        outside,
+    )
 
 
 def test_read_server_confines_reads_to_policy_roots(tmp_path):
@@ -83,12 +89,23 @@ def test_read_server_refuses_policy_digest_mismatch(tmp_path):
     project.mkdir()
     policy = _policy(tmp_path / "policy.json", project)
     digest = hashlib.sha256(policy.read_bytes()).hexdigest()
+    required_env = {
+        "MAGNOLIA_HOOK_POLICY": str(policy),
+        "MAGNOLIA_HOOK_POLICY_SHA256": digest,
+        "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+    }
+
+    with pytest.raises(ReadRefused, match="control directory"):
+        ReadServer.from_environment(
+            {
+                "MAGNOLIA_HOOK_POLICY": str(policy),
+                "MAGNOLIA_HOOK_POLICY_SHA256": digest,
+            },
+            cwd=project,
+        )
 
     server = ReadServer.from_environment(
-        {
-            "MAGNOLIA_HOOK_POLICY": str(policy),
-            "MAGNOLIA_HOOK_POLICY_SHA256": digest,
-        },
+        required_env,
         cwd=project,
     )
     (project / "allowed.txt").write_text("ok\n", encoding="utf-8")
@@ -99,10 +116,7 @@ def test_read_server_refuses_policy_digest_mismatch(tmp_path):
         server.read_file("allowed.txt")
     with pytest.raises(ReadRefused, match="digest"):
         ReadServer.from_environment(
-            {
-                "MAGNOLIA_HOOK_POLICY": str(policy),
-                "MAGNOLIA_HOOK_POLICY_SHA256": digest,
-            },
+            required_env,
             cwd=project,
         )
 
@@ -217,10 +231,11 @@ async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
         env={
             **os.environ,
             "MAGNOLIA_HOOK_POLICY": str(policy),
-            "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(
-                policy.read_bytes()
-            ).hexdigest(),
-        },
+                "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(
+                    policy.read_bytes()
+                ).hexdigest(),
+                "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+            },
         cwd=str(project),
     )
     async with Client(transport) as client:

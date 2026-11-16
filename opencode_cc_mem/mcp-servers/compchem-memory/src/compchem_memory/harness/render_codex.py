@@ -67,8 +67,18 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     config_path = folder / "config.toml"
     validate_project_paths((hooks_path, config_path), context.project_dir)
     conflicts: list[str] = []
+    hook_owner = partial(
+        owned, client=HARNESS, python_executable=context.python
+    )
     content, found = merged_json(
-        hooks_path, _owns_entry, {"hooks": _hooks(context)}, strip_owned_hooks
+        hooks_path,
+        hook_owner,
+        {"hooks": _hooks(context)},
+        partial(
+            strip_owned_hooks,
+            client=HARNESS,
+            python_executable=context.python,
+        ),
     )
     files[hooks_path] = content
     conflicts += found

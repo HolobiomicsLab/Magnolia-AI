@@ -123,6 +123,7 @@ LAUNCH_IDENTITY_COMPONENTS = (
     "policy",
     "hook_command",
     "hook_interpreter",
+    "hook_runner",
     "hook_source",
     "required_env",
 )
@@ -482,6 +483,7 @@ def _normalized_launch_identity(
         "policy": _digest(_normalize_identity_body(policy_body, replacements)),
         "hook_command": _hook_commands_digest(native_bodies, replacements),
         "hook_interpreter": _hook_interpreter_digest(context, launch_env),
+        "hook_runner": _hook_runner_digest(context),
         "hook_source": _hook_source_digest(context),
         "required_env": _digest(
             _canonical_bytes(_required_policy_env_names(launch_env))
@@ -620,6 +622,40 @@ def resolve_python(
     )
 
 
+def _hook_runner_path(context: ExecContext) -> Path:
+    runner = (
+        context.installation_root
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+        / "hook"
+        / "runner.py"
+    )
+    lexical = Path(os.path.abspath(runner))
+    try:
+        resolved = runner.resolve(strict=True)
+    except OSError as exc:
+        raise ExecutorRefused("hook_runner is unavailable") from exc
+    if lexical != resolved or not runner.is_file():
+        raise ExecutorRefused(
+            "hook_runner must be a regular file without symlinked ancestors"
+        )
+    return runner
+
+
+def _hook_runner_digest(context: ExecContext) -> str:
+    """Validate and bind the repository runner path contract."""
+    _hook_runner_path(context)
+    return _digest(_canonical_bytes({
+        "schema_version": "magnolia-hook-runner-v1",
+        "relative_path": (
+            "mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py"
+        ),
+        "path_rule": "regular-file-without-symlinked-ancestors",
+    }))
+
+
 def _hook_source_digest(context: ExecContext) -> str:
     """Hash hook sources and the required-mode wrapper that executes them."""
     source_root = (
@@ -630,6 +666,7 @@ def _hook_source_digest(context: ExecContext) -> str:
         / "compchem_memory"
     )
     hook_root = source_root / "hook"
+    _hook_runner_path(context)
     render_common = source_root / "harness" / "render_common.py"
     bodies: list[tuple[str, bytes]] = []
     try:

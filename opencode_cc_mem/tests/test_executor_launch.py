@@ -1244,6 +1244,21 @@ def test_claude_hook_is_isolated_to_repository_source_and_private_pycache(tmp_pa
     assert not Path(launch.env["PYTHONPYCACHEPREFIX"]).exists()
 
 
+def test_launch_refuses_symlinked_hook_runner(tmp_path):
+    context = _production_claude_context(tmp_path)
+    runner = (
+        context.installation_root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
+    target = tmp_path / "runner-target.py"
+    target.write_bytes(runner.read_bytes())
+    runner.unlink()
+    runner.symlink_to(target)
+
+    with pytest.raises(ExecutorRefused, match="hook_runner"):
+        prepare_launch(context)
+
+
 @pytest.mark.parametrize(
     ("role", "role_cap"),
     (("worker", 30), ("worker", 20), ("reviewer", 12)),

@@ -202,26 +202,35 @@ Concrete paths remain in the session capability identity. The production test in
 copies the package instead of symlinking it to the development checkout.
 
 All four role bindings were recomputed offline from production-shaped launches in two independent
-installations, including one with spaces in its path. Only `native_files`, `hook_command` and
-`hook_source` changed; client identity, MCP route, policy, cap rule, interpreter selection rule
-and required policy environment names did not. The new `native_files` digest starts `ebc893c5`
-for worker and `d7e1c87d` for the other roles; `hook_command` starts `50995faf`, and `hook_source`
-starts `98fd3966`. Codex and Vibe rows remain unchanged and refused.
+installations, including one with spaces in its path. The sweep-1 production-shape render binds
+these shared components for all four Claude roles: client `2.1.325` / `84590fef…`,
+`hook_command=50995faf…`, `hook_interpreter=2cc2bd87…`, `hook_runner=7430de9e…`,
+`hook_source=2216e082…` and `required_env=22bee604…`. Role-specific values are:
+
+| role | settings | MCP | native files | policy |
+|---|---|---|---|---|
+| worker | `2b81fccb…` | `0125b533…` | `ebc893c5…` | `e314a49b…` |
+| reviewer | `15445e1c…` | `98b6b4d0…` | `d7e1c87d…` | `9c10e4ad…` |
+| helper | `90609e78…` | `98b6b4d0…` | `d7e1c87d…` | `916d1002…` |
+| evaluator | `bcab8b46…` | `98b6b4d0…` | `d7e1c87d…` | `3b50e1c9…` |
+
+Codex and Vibe rows remain unchanged and refused. No identity component contains a home path.
 
 Hook ownership requires a complete shell-parsed command: one Python interpreter, either
 `-m compchem_memory.hook` or `-I <installation>/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py`,
-then the renderer's client and a known event. The exact required `/bin/sh -c` pre-tool wrapper
-is also recognized, including quoted paths. Extra tokens, compound commands, unknown events,
-other clients and a `magnolia-` name alone do not establish ownership. Member commands survive
-re-rendering; complete legacy commands migrate once, including those in mixed matcher groups.
-The existing merge callbacks currently select the client from the native entry shape. Passing
-each renderer's `HARNESS` explicitly is prepared as a separate, unapplied scope-extension patch;
-see `task-cf-report.md` Round 6 for that pending dependency and the conflicting old test assertion.
+then the renderer's client and a well-formed event. The exact required `/bin/sh -c` pre-tool
+wrapper is also recognized, including quoted paths. Extra tokens, compound commands, malformed
+events, other clients and a `magnolia-` name alone do not establish ownership. Any newline or
+carriage return makes the entry member-owned, including a second command that looks like an
+event. Renderers pass their client and exact interpreter path to ownership; this accepts Magnolia
+paths named `pypy3` or `python3-intel64` while retaining legacy `python` migration. Member commands
+survive re-rendering and complete legacy commands migrate once, including mixed matcher groups.
 
 The isolated runner refuses a symlinked file or ancestor and refuses paths outside the expected
-source layout. Repository source is inserted after the standard library and before site-packages,
-never at index zero. The stdlib-shadow regressions cover `json`, `typing`, `re`, `pathlib`,
-`fractions` and `statistics`, alongside the existing editable-install and forged-bytecode checks.
+source layout; launch preparation now refuses the same condition as `hook_runner` before starting
+the client. It loads the repository package by file location with a package search path and never
+puts repository `src` on `sys.path`. Marker modules named `_winapi`, `nt` and `json` therefore do
+not run, alongside the existing editable-install, stdlib and forged-bytecode checks.
 The repository venv remains a trust boundary: its `.pth` startup code runs under `-I` before
 the runner, and the venv itself can be a symlink.
 
