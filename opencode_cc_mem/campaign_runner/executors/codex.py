@@ -486,6 +486,7 @@ class CodexExecutor:
                         "MAGNOLIA_HOOK_POLICY",
                         "MAGNOLIA_HOOK_POLICY_REQUIRED",
                         "MAGNOLIA_HOOK_POLICY_SHA256",
+                        "MAGNOLIA_CONTROL_DIR",
                     ]
                 ):
                     raise ExecutorRefused("Codex magnolia-read server is not run-owned")
