@@ -12,6 +12,7 @@ import hmac
 import json
 import os
 import time
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -276,7 +277,9 @@ def _same_or_within(candidate: Path, root: Path) -> bool:
 
 
 def _normalized_path(path: Path, is_case_insensitive: bool) -> str:
-    normalized = os.path.normcase(os.path.normpath(str(path)))
+    normalized = unicodedata.normalize(
+        "NFD", os.path.normcase(os.path.normpath(str(path)))
+    )
     return normalized.casefold() if is_case_insensitive else normalized
 
 

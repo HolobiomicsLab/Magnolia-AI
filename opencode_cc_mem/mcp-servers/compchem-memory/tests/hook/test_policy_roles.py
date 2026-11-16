@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import unicodedata
 
 import pytest
 
@@ -502,6 +503,37 @@ def test_protected_edit_roots_follow_case_insensitive_filesystem_semantics(tmp_p
         assert decide(event, env) is not None
 
 
+def test_protected_edit_roots_compare_unicode_normal_forms(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    work = project / "work"
+    control = project / "contrôle"
+    policy_dir = project / "protégé"
+    work.mkdir(parents=True)
+    control.mkdir()
+    policy_dir.mkdir()
+    policy_path = policy_dir / "policy.json"
+    env = _write_policy(policy_path, project, work, edit_roots=[str(project)])
+    env["MAGNOLIA_CONTROL_DIR"] = str(control)
+    monkeypatch.setattr(policy, "_filesystem_is_case_insensitive", lambda _path: True)
+
+    targets = (
+        unicodedata.normalize("NFD", str(control).upper()) + "/approvals/a.json",
+        unicodedata.normalize("NFD", str(policy_dir).upper()) + "/replacement.json",
+    )
+    for target in targets:
+        event = _event(
+            project,
+            "native_edit",
+            ToolTarget(target, "edit"),
+            raw_name="apply_patch",
+        )
+        assert decide(event, env) is not None
+
+    nfc = Path("/tmp/contrôle")
+    nfd = Path(unicodedata.normalize("NFD", str(nfc)))
+    assert policy._normalized_path(nfc, True) == policy._normalized_path(nfd, True)
+
+
 @pytest.mark.parametrize("control_dir", (None, "relative/control"))
 def test_required_policy_denies_missing_or_relative_control_dir(
     tmp_path, control_dir
@@ -525,7 +557,23 @@ def test_required_policy_denies_missing_or_relative_control_dir(
 
 
 def test_policy_escalation_chain_stops_at_policy_rewrite(tmp_path):
+    _exercise_policy_escalation_chain(tmp_path)
+
+
+def test_policy_escalation_differential_proves_policy_bytes_check(tmp_path):
     apply_patch = _offline_apply_patch_binary()
+    _exercise_policy_escalation_chain(tmp_path, apply_patch=apply_patch)
+    with pytest.raises(AssertionError, match="malicious changed active policy bytes"):
+        _exercise_policy_escalation_chain(
+            tmp_path / "forced-allow",
+            apply_patch=apply_patch,
+            force_allow_malicious=True,
+        )
+
+
+def _exercise_policy_escalation_chain(
+    tmp_path, *, apply_patch=None, force_allow_malicious=False
+):
     project = tmp_path / "project"
     run = project / "runs" / "r1"
     work = run / "work"
@@ -564,24 +612,44 @@ def test_policy_escalation_chain_stops_at_policy_rewrite(tmp_path):
     )
 
     assert decision(allowed) is None
-    subprocess.run(
-        [apply_patch, allowed],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=True,
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": str(tmp_path),
-            "CODEX_HOME": str(tmp_path / "codex-home"),
-        },
-    )
-    assert (work / "probe.txt").read_bytes() == b"applied\n"
-    assert decision(direct) is not None
-    assert decision(malicious) is not None
-    policy_after = policy_path.read_bytes()
-    assert policy_after == original_policy
+    decisions = {
+        "allowed": decision(allowed),
+        "direct": decision(direct),
+        "malicious": decision(malicious),
+    }
+    assert decisions["allowed"] is None
+    assert decisions["direct"] is not None
+    assert decisions["malicious"] is not None
+    if force_allow_malicious:
+        decisions["malicious"] = None
+
+    if apply_patch is not None:
+        for name, patch in (
+            ("allowed", allowed),
+            ("direct", direct),
+            ("malicious", malicious),
+        ):
+            if decisions[name] is not None:
+                continue
+            subprocess.run(
+                [apply_patch, patch],
+                cwd=project,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=True,
+                env={
+                    "PATH": os.environ.get("PATH", ""),
+                    "HOME": str(tmp_path),
+                    "CODEX_HOME": str(tmp_path / "codex-home"),
+                },
+            )
+            assert policy_path.read_bytes() == original_policy, (
+                f"{name} changed active policy bytes"
+            )
+        assert (work / "probe.txt").read_bytes() == b"applied\n"
+
+    assert policy_path.read_bytes() == original_policy
     assert decision(direct) is not None
     assert source.read_text(encoding="utf-8") == "orig\n"
 

@@ -44,15 +44,22 @@ def _memory_setup(root: Path = _ROOT) -> dict[str, Any]:
 
 
 def _memory_route(
-    route: ResolvedRoute, python_executable: str | None = None
+    route: ResolvedRoute,
+    python_executable: str | None = None,
+    installation_root: Path | None = None,
 ) -> dict[str, Any]:
     """Return authenticated managed Vibe or observed-shape stdio memory."""
     if route.client == "vibe":
         return {"transport": "managed"}
+    root = installation_root or _ROOT
+    runner = (
+        root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
     return {
         "transport": "stdio",
-        "command": python_executable or resolve_python(_ROOT),
-        "args": ["-m", "compchem_memory.server"],
+        "command": python_executable or resolve_python(root),
+        "args": ["-I", str(runner.resolve()), "--memory-server"],
         "env_vars": [
             "MAGNOLIA_ROOT",
             "MAGNOLIA_PROJECT_DIR",
@@ -386,7 +393,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
             setup=memory_setup,
             memory_service=_memory_route(
-                route, python_executable
+                route, python_executable, _ROOT
             ),
             invocation_id=uuid.uuid4().hex,
             launch_argv=(client_binary,),

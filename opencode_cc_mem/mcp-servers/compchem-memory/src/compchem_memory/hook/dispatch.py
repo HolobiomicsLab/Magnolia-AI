@@ -659,8 +659,9 @@ def _schedule_background_batch(
     job_path = folder / f"session-worker-{time.time_ns()}.json"
     atomic_write_text(job_path, json.dumps(_worker_payload(paths, event), ensure_ascii=False))
     try:
+        runner = Path(__file__).with_name("runner.py")
         subprocess.Popen(
-            [sys.executable, "-m", "compchem_memory.hook.background", str(job_path)],
+            [sys.executable, "-I", str(runner), "--background", str(job_path)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )

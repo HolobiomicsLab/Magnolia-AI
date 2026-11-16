@@ -65,6 +65,7 @@ class ServiceWatchdog:
     holder_unknown_logged: set[str] = field(init=False, default_factory=set)
     acquirer_unknown_since: float | None = field(init=False, default=None)
     acquirer_unknown_logged: bool = field(init=False, default=False)
+    lock_unknown_since: float | None = field(init=False, default=None)
     exit_reason: str | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
@@ -80,14 +81,18 @@ class ServiceWatchdog:
         """Return true once the record or verified-holder contract is lost."""
         state = self.state_dir
         assert state is not None
-        with service_state._state_lock(state):
-            record = service_state._read_record(state)
-            if record is None:
-                return self._expire("the service record is gone")
-            if not self._record_names_self(record):
-                return self._expire("the service record names another service")
-            self._refresh_provisional_record(state, record)
-            return self._ownership_expired(record)
+        try:
+            with service_state._state_lock(state, blocking=False):
+                self.lock_unknown_since = None
+                record = service_state._read_record(state)
+                if record is None:
+                    return self._expire("the service record is gone")
+                if not self._record_names_self(record):
+                    return self._expire("the service record names another service")
+                self._refresh_provisional_record(state, record)
+                return self._ownership_expired(record)
+        except BlockingIOError:
+            return self._lock_unknown_expired()
 
     def _expire(self, reason: str) -> bool:
         self.exit_reason = reason
@@ -98,12 +103,28 @@ class ServiceWatchdog:
         """Remove only this service's still-current record and bearer token."""
         state = self.state_dir
         assert state is not None
-        with service_state._state_lock(state):
-            record = service_state._read_record(state)
-            if record is None or not self._record_names_self(record):
-                return False
-            service_state._remove_state_files(state)
-            return True
+        try:
+            with service_state._state_lock(state, blocking=False):
+                record = service_state._read_record(state)
+                if record is None or not self._record_names_self(record):
+                    return False
+                service_state._remove_state_files(state)
+                return True
+        except BlockingIOError:
+            return False
+
+    def _lock_unknown_expired(self) -> bool:
+        """Bound lock contention by the same ceiling as unknown owners."""
+        checked_at = self.now()
+        if self.lock_unknown_since is None:
+            self.lock_unknown_since = checked_at
+        elapsed = checked_at - self.lock_unknown_since
+        if elapsed < self.unknown_limit_seconds:
+            return False
+        return self._expire(
+            "the service lock stayed unavailable for "
+            f"{self.unknown_limit_seconds:.1f} seconds; watchdog is failing closed"
+        )
 
     def _record_names_self(self, record: dict[str, Any]) -> bool:
         try:
@@ -184,7 +205,10 @@ class ServiceWatchdog:
         if has_live_holder:
             return False
         if holders_unknown_expired:
-            return self._expire("every holder stayed unverifiable past the ceiling")
+            return self._expire(
+                "every holder stayed unverifiable past the ceiling; "
+                "watchdog is failing closed"
+            )
         if holders_dead_expired:
             return self._expire("no live holder remained past the grace period")
         return False
@@ -219,8 +243,7 @@ class ServiceWatchdog:
             return False
         if key not in self.holder_unknown_logged:
             LOGGER.warning(
-                "memory service holder %s identity remained unknown for %.1f seconds; "
-                "watchdog is failing closed",
+                "memory service holder %s identity remained unknown for %.1f seconds",
                 key,
                 self.unknown_limit_seconds,
             )

@@ -59,7 +59,9 @@ def test_claude_campaign_route_is_stdio_with_expanded_environment_names():
 
     assert memory["transport"] == "stdio"
     assert memory["command"] == "/repo/.venv/bin/python3"
-    assert memory["args"] == ["-m", "compchem_memory.server"]
+    assert memory["args"][0] == "-I"
+    assert memory["args"][-1] == "--memory-server"
+    assert memory["args"][1].endswith("/compchem_memory/hook/runner.py")
     assert "MAGNOLIA_PROJECT_DIR" in memory["env_vars"]
 
 

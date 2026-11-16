@@ -125,3 +125,10 @@ def test_renderers_own_the_exact_rendered_interpreter(make_render, python_name):
     pre_tools = [hook for hook in rendered if hook["type"] == "pre_tool"]
     assert len(pre_tools) == 1
     assert "compchem_memory/hook/runner.py" in pre_tools[0]["command"]
+
+
+@pytest.mark.parametrize("python_name", ("python３", "python٣"))
+def test_interpreter_pattern_rejects_non_ascii_digits(python_name):
+    command = f"/opt/member/bin/{python_name} -m compchem_memory.hook codex pre-tool"
+
+    assert not is_magnolia_hook_command(command, "codex")

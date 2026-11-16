@@ -1,4 +1,5 @@
 import asyncio
+import fcntl
 import json
 import os
 import signal
@@ -220,6 +221,76 @@ def test_each_unknown_holder_gets_its_own_ceiling(tmp_path, monkeypatch):
     assert watchdog.holder_unknown_since == {"first": 0.0, "second": 0.0}
     clock[0] = 10.0
     assert watchdog.should_exit() is True
+
+
+def test_unavailable_service_lock_is_nonblocking_and_expires_unknown(
+    tmp_path, monkeypatch, caplog
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    _watchdog_record(project)
+    operations = []
+
+    def unavailable(_descriptor, operation):
+        if operation != fcntl.LOCK_UN:
+            operations.append(operation)
+            if not operation & fcntl.LOCK_NB:
+                pytest.fail("watchdog attempted a blocking service lock")
+            raise BlockingIOError
+
+    monkeypatch.setattr(memory_service.fcntl, "flock", unavailable)
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+    watchdog.unknown_limit_seconds = 10.0
+
+    assert watchdog.should_exit() is False
+    clock[0] = 9.9
+    assert watchdog.should_exit() is False
+    clock[0] = 10.0
+    with caplog.at_level("WARNING", logger=memory_http.LOGGER.name):
+        assert watchdog.should_exit() is True
+
+    assert operations and all(operation & fcntl.LOCK_NB for operation in operations)
+    assert "service lock" in (watchdog.exit_reason or "")
+    assert "failing closed" in caplog.text
+    assert watchdog.remove_owned_state() is False
+
+
+def test_unknown_holder_logs_neutrally_while_live_holder_keeps_service(
+    tmp_path, monkeypatch, caplog
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    holders = [
+        {"id": "live", "pid": 4200, "process_identity": "ps:4200:live"},
+        {"id": "unknown", "pid": 4300, "process_identity": "ps:4300:unknown"},
+    ]
+    _watchdog_record(project, holders=holders)
+    identities = {4101: "ps:4101:service", 4200: "ps:4200:live"}
+    monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    monkeypatch.setattr(
+        memory_service,
+        "_process_exists",
+        lambda pid: None if pid == 4300 else pid in identities,
+    )
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+    watchdog.unknown_limit_seconds = 10.0
+
+    assert watchdog.should_exit() is False
+    clock[0] = 10.0
+    with caplog.at_level("WARNING", logger=memory_http.LOGGER.name):
+        assert watchdog.should_exit() is False
+    assert "remained unknown" in caplog.text
+    assert "failing closed" not in caplog.text
+    assert "stopping the service" not in caplog.text
+
+    identities.pop(4200)
+    caplog.clear()
+    with caplog.at_level("WARNING", logger=memory_http.LOGGER.name):
+        assert watchdog.should_exit() is True
+    assert "failing closed" in caplog.text
+    assert "stopping the service" in caplog.text
 
 
 def test_service_exits_after_last_holder_dies_and_grace(tmp_path, monkeypatch):

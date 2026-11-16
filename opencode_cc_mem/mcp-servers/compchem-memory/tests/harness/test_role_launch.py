@@ -449,6 +449,62 @@ def test_required_hook_ignores_editable_install_and_forged_source_pycache(tmp_pa
     assert result.returncode == 0
 
 
+@pytest.mark.parametrize("mode", ("--memory-server", "--background"))
+def test_isolated_runner_ignores_project_local_packages_and_stdlib_shadows(
+    tmp_path, mode
+):
+    installation = tmp_path / "repo" / "opencode_cc_mem"
+    source = installation / "mcp-servers" / "compchem-memory" / "src"
+    shutil.copytree(
+        ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
+        source / "compchem_memory",
+    )
+    marker = tmp_path / "loaded.json"
+    target = "server.py" if mode == "--memory-server" else "hook/background.py"
+    (source / "compchem_memory" / target).write_text(
+        "import json, os, compchem_memory\n"
+        "from pathlib import Path\n"
+        "def _record():\n"
+        "    Path(os.environ['ISOLATION_MARKER']).write_text("
+        "json.dumps({'json': json.__file__, 'package': compchem_memory.__file__}))\n"
+        + (
+            "class _Mcp:\n    def run(self): _record()\n"
+            "mcp = _Mcp()\n"
+            if mode == "--memory-server"
+            else "def main(): _record()\n"
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    local_package = project / "compchem_memory"
+    local_package.mkdir(parents=True)
+    trap = project / "project-imported"
+    (local_package / "__init__.py").write_text(
+        f"from pathlib import Path\nPath({str(trap)!r}).write_text('package')\n",
+        encoding="utf-8",
+    )
+    (project / "json.py").write_text(
+        f"from pathlib import Path\nPath({str(trap)!r}).write_text('json')\n",
+        encoding="utf-8",
+    )
+    runner = source / "compchem_memory" / "hook" / "runner.py"
+
+    result = subprocess.run(
+        [sys.executable, "-I", str(runner), mode],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={**os.environ, "ISOLATION_MARKER": str(marker)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    loaded = json.loads(marker.read_text(encoding="utf-8"))
+    assert loaded["package"] == str(source / "compchem_memory" / "__init__.py")
+    assert loaded["json"] != str(project / "json.py")
+    assert not trap.exists()
+
+
 def _runner_tree(root):
     source = root / "mcp-servers" / "compchem-memory" / "src"
     package = source / "compchem_memory"

@@ -130,6 +130,9 @@ LAUNCH_IDENTITY_COMPONENTS = (
     "hook_source",
     "required_env",
 )
+ISOLATED_RUNNER_PARTS = (
+    "mcp-servers", "compchem-memory", "src", "compchem_memory", "hook", "runner.py"
+)
 
 
 @dataclass(frozen=True)
@@ -1191,6 +1194,18 @@ def _validate_memory_service(service: Mapping[str, Any]) -> None:
     if transport == "stdio":
         if not isinstance(service.get("command"), str) or not service["command"]:
             raise ExecutorRefused("memory stdio route requires a command")
+        args = service.get("args")
+        runner = Path(str(args[1])) if isinstance(args, (list, tuple)) and len(args) == 3 else None
+        if (
+            runner is None
+            or args[0] != "-I"
+            or args[2] != "--memory-server"
+            or not runner.is_absolute()
+            or runner.parts[-len(ISOLATED_RUNNER_PARTS):] != ISOLATED_RUNNER_PARTS
+        ):
+            raise ExecutorRefused(
+                "memory stdio route requires the isolated repository runner"
+            )
         return
     raise ExecutorRefused("memory route must use proved HTTP or stdio transport")
 

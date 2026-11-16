@@ -43,13 +43,13 @@
             ],
             "components": {
               "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
-              "mcp": "0125b5338b2886e3ea1344eb25fe566ef4b958370e59ee9eed2d39de5bd8b45b",
-              "native_files": "ebc893c59d61c1eb4ef74a634e07b0890b0de8076cb169b09ead0e87efab8998",
+              "mcp": "84ee161778f9244b72bfbc338bc20017fedf74d8ceac0b2961b38188850d67e4",
+              "native_files": "21d27ad3d7e2f4e4b28b6ef305a05f5bae5db27d7fc5422cfd8398000fdecdc6",
               "policy": "e314a49bde7032c89646e4714027f087a42b42eb408f21f3e0d6ea0436b9dbe7",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
+              "hook_source": "89505d54ddfca32150d87439a833895523f8c7e2eb1d8a2fdf51fbd85e17664c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -252,7 +252,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
+              "hook_source": "89505d54ddfca32150d87439a833895523f8c7e2eb1d8a2fdf51fbd85e17664c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -448,7 +448,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
+              "hook_source": "89505d54ddfca32150d87439a833895523f8c7e2eb1d8a2fdf51fbd85e17664c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -643,7 +643,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
+              "hook_source": "89505d54ddfca32150d87439a833895523f8c7e2eb1d8a2fdf51fbd85e17664c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
