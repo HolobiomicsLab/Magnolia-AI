@@ -141,6 +141,13 @@ Source: `harness-probes-2026-11.md` (Claude Code 2.1.325, Codex 0.154.0, Mistral
 - Codex hook trust: project hooks do not load until trusted. The probes used
   `--dangerously-bypass-hook-trust` on throwaway temp projects only, at the owner's request. The
   flag is not to be put in any Magnolia config; the campaign worker project needs trusted hooks.
+- Model/config fields observed in P0: Claude's selected model was supplied by `--model` and its
+  result named models under `model_usage_since_last_result` (the older scrubber dropped
+  `modelUsage`); Codex received `-m` and repeated the actual model in hook payloads such as
+  `SessionStart`; Vibe reported its actual model in `session_start` and sub-agent models in
+  `export.json`. Project MCP/hook configuration was read from Claude's run-owned settings/MCP
+  files, Codex `.codex/config.toml` plus `.codex/hooks.json`, and Vibe `.vibe/config.toml` plus
+  `.vibe/hooks.toml`. These observations do not prove role isolation or normal trust.
 - Denial (Codex): a PreToolUse `deny` on the shell stopped the command and no PostToolUse followed;
   a write outside the project was stopped by the `workspace-write` sandbox. Claude denial was not
   probed.
@@ -274,9 +281,9 @@ winning:
    evaluator}`), written by `magnolia setup`;
 4. the global default (`harness` + `main_model`, as today).
 
-`magnolia usage` shows which route each role resolves to. Reviewer independence still
-compares model families, so routing a worker and its reviewer to two vendors satisfies
-it.
+`magnolia usage` shows which route each role resolves to. Reviewer independence compares the
+resolved model-family field, not vendor or client shorthand. Different vendors satisfy it only
+when their resolved families differ; the route prefix is stripped before family classification.
 
 ### 8.1 Executors
 
@@ -298,15 +305,18 @@ cannot enforce them does not run that role:
   excluded files and for edits outside `work/**`; `--max-turns` from the stage's
   `max_steps`; `--resume` for the same-session retry. Parses `system/init`, assistant
   and tool events, `result`.
-- `CodexExecutor`: reviewer role with `-s read-only`; worker role only if P0 shows that
-  a PreToolUse hook can deny Codex's shell and out-of-scope writes (otherwise Codex is
-  refused as a campaign worker and stays available as reviewer and helper agent).
+- `CodexExecutor`: D2 refuses both worker and reviewer unless Task 0 proves the complete role
+  matrix through normal persisted trust: permitted reads, denied secret reads, no shell and
+  confined worker edits; reviewer additionally permits no edits. `-s read-only` or changing the
+  working directory is not sufficient. Helper/evaluator remain separate contracts.
   `codex exec --json` in the project with its `.codex/` layer, `codex exec resume <id>`
-  for retries. Parses `thread.started`, `item.completed`, `turn.completed` usage.
+  for evidenced retries. Parses `thread.started`, `item.completed`, `turn.completed` usage.
 - `VibeExecutor`: `vibe -p --output json --auto-approve --output-dir <run>` with
-  `--disabled-tools` for the shell, write and edit tools and a `strict` `pre_tool` hook
-  enforcing the role's path rules, since Vibe has no sandbox (P0); `--max-turns` and
-  `--max-price` from the governor; usage and outcome read from `export.json`.
+  `--disabled-tools` for the shell and a `strict` `pre_tool` hook enforcing the role's path
+  rules, since Vibe has no sandbox (P0). D4 permits guarded worker edits under its own
+  `work/**` only after the complete Task 0/6 gate passes; reviewer, helper and evaluator keep
+  writes disabled. `--max-turns` and optional `--max-price` come from proved policy; usage and
+  outcome are read from `export.json`.
 
 Stage type `"opencode"` gains the alias `"agent"`; `model_family` learns the prefixes so
 reviewer independence works across clients (a Codex worker can be reviewed by Claude).
@@ -397,6 +407,14 @@ Each phase ends with Tao's review on its own branch.
   15 Nov 2026; section 8.2).
 - Subscriptions are used only through the vendors' own clients; no credential handling
   by Magnolia (LFX's "sans abuser l'abonnement", made concrete by anti-goals A1–A2).
+- D1: per-subscription defaults are `max_concurrent=2`, `max_runs_per_day=50`,
+  `max_turns_per_run=60`, `min_seconds_between_runs=30`; effective role caps remain the
+  minimum of configured and governor caps.
+- D2: Codex worker and reviewer are refused unless their complete Task 0/6 gates pass.
+- D3: Vibe memory uses a project-bound loopback HTTP service; API credentials stay only in
+  the service environment.
+- D4: Vibe worker edits may be guarded under its own work tree only after the full path gate;
+  until then the worker is refused.
 
 ## 11. Interfaces seen by others
 

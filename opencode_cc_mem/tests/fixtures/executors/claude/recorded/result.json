@@ -1,0 +1,12 @@
+{
+  "synthetic": false,
+  "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/claude/parent/27-result-stream-line.json",
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 4,
+  "terminal_reason": "completed",
+  "modelUsage": "<dropped by P0 scrubber>",
+  "usage": "<dropped by P0 scrubber>"
+}
+

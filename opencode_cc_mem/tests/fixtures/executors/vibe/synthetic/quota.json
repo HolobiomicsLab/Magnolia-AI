@@ -1,0 +1,20 @@
+{
+  "synthetic": true,
+  "derived_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/vibe/parent/20-export.json",
+  "purpose": "Parser-only quota control; no account quota was observed.",
+  "export": {
+    "outcome": "turn_limit",
+    "stop_reason": "synthetic quota",
+    "usage": {
+      "input_tokens": 101,
+      "output_tokens": 17,
+      "cached_input_tokens": 83,
+      "total_tokens": 118
+    },
+    "limits": {
+      "max_turns": 8,
+      "max_price": 0.05
+    }
+  }
+}
+

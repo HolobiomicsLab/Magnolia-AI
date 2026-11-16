@@ -1,0 +1,16 @@
+{
+  "synthetic": true,
+  "derived_from": "opencode_cc_mem/docs/harness-neutral-agents-design.md",
+  "purpose": "Parser-only quota control; no Claude quota signal was observed.",
+  "event": {
+    "type": "result",
+    "subtype": "error",
+    "result": "synthetic session limit",
+    "usage": {
+      "input_tokens": 101,
+      "cache_read_input_tokens": 83,
+      "output_tokens": 17
+    }
+  }
+}
+

@@ -1,0 +1,1047 @@
+{
+  "schema_version": 1,
+  "generated_from": {
+    "revision": "b7504a580631d83ef424819e5659618dde87b1cc",
+    "sources": [
+      "opencode_cc_mem/docs/harness-probes-2026-11.md",
+      "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
+      "opencode_cc_mem/docs/harness-campaign-2026-11-15.md"
+    ]
+  },
+  "note": "Offline initial gate. Live Task 0 Steps 2-5 were not authorized.",
+  "rows": [
+    {
+      "client": "claude-code",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "claude-code",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "claude-code",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "claude-code",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "codex",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "codex",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "codex",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "codex",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "D4: Vibe worker edits are refused until D4 and the complete safety gate pass."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
+          "value": {
+            "source": "export.json",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_input_tokens",
+              "total_tokens"
+            ],
+            "scope": [
+              "parent",
+              "subagent"
+            ]
+          }
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
+          "value": {
+            "source": "export.json",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_input_tokens",
+              "total_tokens"
+            ],
+            "scope": [
+              "parent",
+              "subagent"
+            ]
+          }
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
+          "value": {
+            "source": "export.json",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_input_tokens",
+              "total_tokens"
+            ],
+            "scope": [
+              "parent",
+              "subagent"
+            ]
+          }
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
+          "value": {
+            "source": "export.json",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_input_tokens",
+              "total_tokens"
+            ],
+            "scope": [
+              "parent",
+              "subagent"
+            ]
+          }
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    }
+  ]
+}
+

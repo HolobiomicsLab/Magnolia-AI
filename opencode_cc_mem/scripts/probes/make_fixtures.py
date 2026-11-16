@@ -2,6 +2,7 @@
 
 Usage: make_fixtures.py <probe_tmp_dir> <fixtures_root>
        make_fixtures.py --check <fixtures_root>
+       make_fixtures.py --scrub-json <input.json> <output.json>
 
 What the scrubber changes (field names are never rewritten):
 - home and temp paths: the home directory becomes /HOME; a path under /HOME
@@ -22,6 +23,8 @@ Kept as captured: every other key and value, including usage and modelUsage.
 --check scans a fixtures tree for the home directory, the login and full
 name, e-mail addresses, /Users/ paths and Bearer/sk- strings, and exits 1 if
 any is found (it reports file and kind, never the matched text).
+
+--scrub-json applies the same scrubber to one bounded JSON fixture.
 """
 import json
 import os
@@ -110,6 +113,13 @@ def check(root):
 
 if sys.argv[1] == "--check":
     sys.exit(check(sys.argv[2]))
+if sys.argv[1] == "--scrub-json":
+    with open(sys.argv[2], encoding="utf-8") as source:
+        payload = scrub(json.load(source))
+    with open(sys.argv[3], "w", encoding="utf-8") as target:
+        json.dump(payload, target, indent=2, sort_keys=True)
+        target.write("\n")
+    sys.exit(0)
 T, OUT = sys.argv[1], sys.argv[2]
 
 
