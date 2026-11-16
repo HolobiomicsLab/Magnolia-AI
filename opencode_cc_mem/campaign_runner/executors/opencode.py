@@ -72,6 +72,7 @@ class OpenCodeHelperExecutor:
             self.argv(extra_args),
             cwd=str(cwd),
             env=self.environment_with_cap(environment),
+            stdin=subprocess.DEVNULL,
             timeout=timeout_seconds,
             capture_output=True,
             text=True,
@@ -131,6 +132,7 @@ class OpenCodeEvaluatorExecutor:
         return subprocess.run(
             self.catalog_argv(),
             env=self.environment_with_cap(environment),
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,

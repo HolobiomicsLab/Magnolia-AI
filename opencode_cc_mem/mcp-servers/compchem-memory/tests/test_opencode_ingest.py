@@ -220,6 +220,50 @@ def test_ingest_does_not_mark_on_export_failure(store):
     assert not (store / "opencode-distilled" / "ses_fail.json").exists()  # retry next time
 
 
+@pytest.mark.parametrize(
+    ("database_state", "v2_value", "expected"),
+    [
+        ("unset", None, "v1"),
+        ("unset", "1", "v2"),
+        ("exists", None, "database"),
+        ("exists", "1", "database"),
+        ("missing", None, None),
+        ("missing", "1", "v2"),
+        ("missing", "yes", "v2"),
+    ],
+)
+def test_live_session_exporter_uses_the_plugin_dump_v2_decision_matrix(
+    tmp_path, monkeypatch, database_state, v2_value, expected
+):
+    database = tmp_path / "opencode.db"
+    if database_state == "exists":
+        database.touch()
+    if database_state == "unset":
+        monkeypatch.delenv("OPENCODE_DB", raising=False)
+    else:
+        monkeypatch.setenv("OPENCODE_DB", str(database))
+    if v2_value is None:
+        monkeypatch.delenv("MAGNOLIA_OPENCODE_V2", raising=False)
+    else:
+        monkeypatch.setenv("MAGNOLIA_OPENCODE_V2", v2_value)
+    monkeypatch.setattr(
+        oi,
+        "v2_db_exporter",
+        lambda _path: lambda _session: {"source": "database"},
+    )
+
+    def export_session(_session):
+        from compchem_memory import opencode_cli
+
+        return {"source": "v2" if opencode_cli.is_v2() else "v1"}
+
+    monkeypatch.setattr(oi, "export_session", export_session)
+
+    result = oi.live_session_exporter()("ses_matrix")
+
+    assert (result or {}).get("source") == expected
+
+
 def test_export_session_reads_full_output_via_file_not_truncated_pipe(monkeypatch):
     """Regression: `opencode export` truncates piped stdout at one 64 KB pipe
     buffer, so export_session must redirect to a FILE (full output), not capture

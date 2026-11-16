@@ -828,6 +828,22 @@ def test_memory_stdio_route_refuses_nonisolated_module_launch(tmp_path):
         )
 
 
+def test_memory_stdio_route_refuses_project_copy_of_runner(tmp_path):
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    project_runner = (
+        context.project_dir
+        / "mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py"
+    )
+    context.memory_service["args"] = ["-I", str(project_runner), "--memory-server"]
+
+    with pytest.raises(ExecutorRefused, match="isolated repository runner"):
+        prepare_launch(context)
+
+
 @pytest.mark.parametrize(
     "api_key_name",
     ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MISTRAL_API_KEY"),

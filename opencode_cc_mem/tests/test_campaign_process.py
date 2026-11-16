@@ -121,6 +121,29 @@ def _run_captured(tmp_path, stem, argv, env, governed):
     )
 
 
+@pytest.mark.parametrize("governed", (False, True))
+def test_client_process_launches_disconnect_stdin(tmp_path, monkeypatch, governed):
+    real_popen = subprocess.Popen
+    calls = []
+
+    def recording_popen(*args, **kwargs):
+        calls.append(kwargs)
+        return real_popen(*args, **kwargs)
+
+    monkeypatch.setattr(process_module.subprocess, "Popen", recording_popen)
+    outcome, _stdout, _stderr = _run_captured(
+        tmp_path,
+        f"stdin-{governed}",
+        [sys.executable, "-c", "pass"],
+        dict(os.environ),
+        governed,
+    )
+
+    assert outcome.returncode == 0
+    assert calls
+    assert all(call.get("stdin") is subprocess.DEVNULL for call in calls)
+
+
 def _reap_test_process(pid):
     try:
         waited, _status = os.waitpid(pid, os.WNOHANG)

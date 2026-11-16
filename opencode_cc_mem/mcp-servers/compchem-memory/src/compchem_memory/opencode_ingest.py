@@ -349,10 +349,14 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
 def live_session_exporter() -> Callable[[str], Optional[dict]]:
     """Export the live OpenCode source without consulting a worker-written dump."""
     def exporter(ses_id: str) -> Optional[dict]:
+        from compchem_memory import opencode_cli
+
         db = os.environ.get("OPENCODE_DB")
         if db and Path(db).exists():
             # Never point an unqualified CLI fallback at the live v2 database.
             return v2_db_exporter(db)(ses_id)
+        if v2_mode() and not opencode_cli.is_v2():
+            return None
         return export_session(ses_id)
 
     return exporter
@@ -364,7 +368,9 @@ def v2_mode() -> bool:
     The v1 export CLI is not just useless in this mode — it opens the v2 DB,
     fails with "has no session table", and has taken down the stdio MCP
     connection when spawned from the boot handover (2026-11-16)."""
-    return bool(os.environ.get("OPENCODE_DB")) or os.environ.get("MAGNOLIA_OPENCODE_V2") == "1"
+    from compchem_memory import opencode_cli
+
+    return bool(os.environ.get("OPENCODE_DB")) or opencode_cli.is_v2()
 
 
 def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:

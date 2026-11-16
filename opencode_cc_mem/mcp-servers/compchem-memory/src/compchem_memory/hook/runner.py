@@ -9,6 +9,8 @@ import sys
 
 MEMORY_SERVER_MODE = "--memory-server"
 BACKGROUND_MODE = "--background"
+MEMORY_HTTP_MODE = "--memory-http"
+READ_SERVER_MODE = "--read-server"
 
 
 def _repository_source() -> str:
@@ -19,6 +21,12 @@ def _repository_source() -> str:
     if runner != os.path.realpath(runner) or not runner.endswith(os.sep + relative):
         raise SystemExit("Magnolia hook runner must be a regular file in its repository source tree")
     return os.path.dirname(os.path.dirname(os.path.dirname(runner)))
+
+
+def repository_runner_path() -> str:
+    """Return this validated repository runner without resolving its spelling."""
+    _repository_source()
+    return os.path.abspath(__file__)
 
 
 def _load_repository_package(source: str) -> None:
@@ -51,9 +59,24 @@ def main() -> None:
     _load_repository_package(source)
     if sys.argv[1:2] == [MEMORY_SERVER_MODE]:
         sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from compchem_memory.server_start import install_stdio_guards
+
+        install_stdio_guards(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
         from compchem_memory.server import mcp
 
         mcp.run()
+        return
+    if sys.argv[1:2] == [MEMORY_HTTP_MODE]:
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from compchem_memory.memory_http import main as memory_http_main
+
+        memory_http_main()
+        return
+    if sys.argv[1:2] == [READ_SERVER_MODE]:
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from compchem_memory.harness.read_server import main as read_server_main
+
+        read_server_main()
         return
     if sys.argv[1:2] == [BACKGROUND_MODE]:
         sys.argv = [sys.argv[0], *sys.argv[2:]]

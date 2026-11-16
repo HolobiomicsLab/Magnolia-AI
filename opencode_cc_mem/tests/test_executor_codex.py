@@ -35,6 +35,7 @@ ISOLATED_MEMORY_ARGS = [
     ),
     "--memory-server",
 ]
+RUNNER = Path(ISOLATED_MEMORY_ARGS[1])
 FIXTURES = ROOT / "tests" / "fixtures" / "executors" / "codex" / "live-p3"
 STRIPPED_ENV = {
     "CLAUDE_CONFIG_DIR": "forbidden-claude-config",
@@ -298,7 +299,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         }
     servers["magnolia-read"] = {
             "command": "/venv/bin/python",
-            "args": ["-m", "compchem_memory.harness.read_server"],
+            "args": ["-I", str(RUNNER), "--read-server"],
             "cwd": str(context.project_dir),
             "env_vars": [
                 "MAGNOLIA_HOOK_POLICY",
@@ -316,7 +317,11 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         (executor.prepared.invocation_dir / ".codex/config.toml").read_text()
     )
     assert set(config["mcp_servers"]) == set(servers)
-    assert config["mcp_servers"]["magnolia-read"]["args"][-1].endswith("read_server")
+    assert config["mcp_servers"]["magnolia-read"]["args"] == [
+        "-I",
+        str(RUNNER),
+        "--read-server",
+    ]
     assert config["mcp_servers"]["magnolia-read"]["env_vars"] == [
         "MAGNOLIA_HOOK_POLICY",
         "MAGNOLIA_HOOK_POLICY_REQUIRED",
@@ -406,7 +411,7 @@ def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
     servers = {
         "magnolia-read": {
             "command": "/venv/bin/python",
-            "args": ["-m", "compchem_memory.harness.read_server"],
+            "args": ["-I", str(RUNNER), "--read-server"],
             "cwd": str(context.project_dir),
             "env_vars": [
                 "MAGNOLIA_HOOK_POLICY",

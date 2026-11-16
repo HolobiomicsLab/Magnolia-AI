@@ -475,11 +475,15 @@ class CodexExecutor:
                 raise ExecutorRefused("Codex config has unexpected governed MCP servers")
             if "magnolia-read" in expected:
                 read_server = servers["magnolia-read"]
+                runner = (
+                    Path(self.prepared.env["MAGNOLIA_INSTALLATION_ROOT"])
+                    / "mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py"
+                )
                 if (
                     not isinstance(read_server, Mapping)
                     or read_server.get("command") != self.prepared.env.get("MAGNOLIA_PYTHON")
                     or read_server.get("args")
-                    != ["-m", "compchem_memory.harness.read_server"]
+                    != ["-I", str(runner), "--read-server"]
                     or read_server.get("cwd") != str(self.prepared.discovery_dir)
                     or read_server.get("env_vars")
                     != [
