@@ -46,6 +46,20 @@ def union_origins(*groups: object) -> list[dict[str, str]]:
     return combined
 
 
+def observed_session_ids(
+    session_id: str | None, origins: object,
+) -> list[str]:
+    """Return the canonical session, or origin sessions when it is unknown."""
+    if session_id:
+        return [session_id]
+    sessions: list[str] = []
+    for origin in normalize_origins(origins):
+        origin_session = origin.get("session_id")
+        if origin_session and origin_session not in sessions:
+            sessions.append(origin_session)
+    return sessions
+
+
 def save_candidate(
     store: Path,
     candidate: dict[str, Any],
@@ -117,14 +131,9 @@ def save_candidate(
     }
     if opencode_session_id is not None:
         fm["opencode_session_id"] = opencode_session_id
-        fm["observed_in_sessions"] = [opencode_session_id]
-    origin_sessions = [] if opencode_session_id is not None else [
-        origin["session_id"] for origin in origins if origin.get("session_id")
-    ]
-    if origin_sessions:
-        fm["observed_in_sessions"] = list(dict.fromkeys([
-            *fm.get("observed_in_sessions", []), *origin_sessions,
-        ]))
+    observed_sessions = observed_session_ids(opencode_session_id, origins)
+    if observed_sessions:
+        fm["observed_in_sessions"] = observed_sessions
     if candidate.get("run_ids"):
         fm["run_ids"] = list(candidate["run_ids"])
 

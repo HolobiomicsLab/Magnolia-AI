@@ -111,6 +111,7 @@ def _record_session(paths: ProjectPaths, event: HookEvent) -> None:
 
     record_session(
         paths.store, event.harness, event.session_id, event.cwd, event.transcript_ref,
+        model=event.model, role=event.role,
     )
 
 

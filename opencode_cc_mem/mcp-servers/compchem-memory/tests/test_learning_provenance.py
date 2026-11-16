@@ -5,8 +5,11 @@ from pathlib import Path
 
 import yaml
 
+from compchem_memory.consolidation import apply_merge, consolidate_project_findings
 from compchem_memory.extraction import AutomaticMemoryExtractor
+from compchem_memory.hook.dispatch import _record_session
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
+from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.sessions import record_session
 from compchem_memory.hook.transcript import append_event
 from compchem_memory.opencode_ingest import ingest_opencode_sessions
@@ -88,24 +91,140 @@ def test_tool_event_candidate_preserves_server_and_unknown_client(tmp_path, monk
 
 
 def test_mixed_and_unknown_origins_remain_honest(tmp_path):
-    store = ensure_project_store(str(tmp_path / "project"))
-    candidate = {
-        "title": "HADDOCK result",
-        "content": "score=-82.4",
-        "tools": ["haddock3"],
-        "origins": [
-            {"client": "codex", "session_id": "mixed", "tool": "haddock3",
-             "mcp_server": "compchem-tools"},
-            {"session_id": "manual-only"},
-        ],
+    project = tmp_path / "project"
+    store = ensure_project_store(str(project))
+    claim_titles = {
+        "claude": ("Orbital signal", "Joint telescope result", "Observatory context"),
+        "codex": ("Docking energy", "Combined contact map", "Computation context"),
     }
+    for client in ("claude", "codex"):
+        session_id = f"{client}-mixed"
+        record_session(store, client, session_id, str(project), None)
+        for suffix in ("alpha", "beta"):
+            tool = f"{client}_{suffix}"
+            append_event(store, HookEvent(
+                harness=client,
+                event="post-tool",
+                session_id=session_id,
+                cwd=str(project),
+                tool=ToolCall(
+                    name=tool,
+                    server=f"{client}-server",
+                    raw_name=tool,
+                    call_id=f"{session_id}-{suffix}",
+                    input={},
+                    output=f"{suffix} result",
+                ),
+            ))
 
-    path = save_candidate(store, candidate, source="opencode_distill")
-    origins = _frontmatter(path)["origins"]
+    def distiller(transcript):
+        client = "claude" if "tool:claude_alpha" in transcript else "codex"
+        titles = claim_titles[client]
+        return [
+            {"title": titles[0], "content": "alpha",
+             "type": "scientific_finding", "tools": [f"{client}_alpha"]},
+            {"title": titles[1], "content": "alpha and beta",
+             "type": "success_pattern",
+             "tools": [f"{client}_alpha", f"{client}_beta"]},
+            {"title": titles[2], "content": "session-wide",
+             "type": "workflow_note"},
+        ]
 
-    assert origins[0]["tool"] == "haddock3"
-    assert origins[1] == {"session_id": "manual-only"}
-    assert all("model" not in origin and "role" not in origin for origin in origins)
+    saved = ingest_opencode_sessions(str(store), distiller=distiller)
+    by_title = {_frontmatter(path)["title"]: _frontmatter(path) for path in saved}
+
+    for client in ("claude", "codex"):
+        session_id = f"{client}-mixed"
+        titles = claim_titles[client]
+        alpha = by_title[titles[0]]["origins"]
+        mixed = by_title[titles[1]]["origins"]
+        session = by_title[titles[2]]["origins"]
+        assert alpha == [{
+            "client": client,
+            "session_id": session_id,
+            "tool": f"{client}_alpha",
+            "mcp_server": f"{client}-server",
+        }]
+        assert [origin["tool"] for origin in mixed] == [
+            f"{client}_alpha", f"{client}_beta",
+        ]
+        assert session == [{"client": client, "session_id": session_id}]
+        assert all("model" not in origin and "role" not in origin for origin in mixed)
+
+
+def test_consolidation_cluster_merge_keeps_all_origins(tmp_path):
+    store = ensure_project_store(str(tmp_path / "project"))
+    staging = store / "staging"
+    origins = [
+        {"client": "claude", "session_id": "s1"},
+        {"client": "codex", "session_id": "s2"},
+    ]
+    for index, origin in enumerate(origins, start=1):
+        meta = {
+            "title": f"Same finding {index}",
+            "type": "scientific_finding",
+            "confidence": 0.8,
+            "opencode_session_id": origin["session_id"],
+            "observed_in_sessions": [origin["session_id"]],
+            "origins": [origin],
+        }
+        (staging / f"finding-{index}.md").write_text(
+            "---\n" + yaml.safe_dump(meta) + "---\n\n"
+            + ("long canonical body" if index == 1 else "short body") + "\n"
+        )
+
+    consolidate_project_findings(
+        str(store),
+        clusterer=lambda _: [{
+            "ids": ["finding-1.md", "finding-2.md"],
+            "confidence": 0.9,
+            "rationale": "same claim",
+        }],
+    )
+    artifact = json.loads(
+        (store / "reflex" / "consolidation-proposal.json").read_text()
+    )
+    proposal = artifact["proposals"][0]
+    assert proposal["merged_preview"]["origins"] == origins
+
+    applied = apply_merge(proposal["sources"])
+    assert _frontmatter(applied["merged"])["origins"] == origins
+
+
+def test_dispatch_records_only_bound_model_and_role(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_ROLE", raising=False)
+    store = tmp_path / ".magnolia"
+    store.mkdir()
+    paths = ProjectPaths(tmp_path, tmp_path, store, "project", False)
+    _record_session(paths, HookEvent(
+        harness="codex",
+        event="session-start",
+        session_id="bound",
+        cwd=str(tmp_path),
+        model="gpt-bound",
+        role="worker",
+    ))
+    _record_session(paths, HookEvent(
+        harness="claude",
+        event="session-start",
+        session_id="unknown",
+        cwd=str(tmp_path),
+    ))
+
+    rows = [
+        json.loads(line)
+        for line in (store / "agent-sessions.jsonl").read_text().splitlines()
+    ]
+    assert rows[0]["origin"] == {
+        "client": "codex",
+        "session_id": "bound",
+        "model": "gpt-bound",
+        "role": "worker",
+    }
+    assert rows[1]["origin"] == {
+        "client": "claude",
+        "session_id": "unknown",
+    }
 
 
 def test_dedup_unions_origins_without_losing_evidence(tmp_path):

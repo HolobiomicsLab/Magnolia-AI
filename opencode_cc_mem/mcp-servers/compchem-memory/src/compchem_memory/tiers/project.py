@@ -568,20 +568,27 @@ class ProjectManager:
                 text = f.read_text()
                 meta = self._parse_frontmatter(text)
                 new_count = meta.get("observation_count", 0) + 1
+                from compchem_memory.staging_io import (
+                    observed_session_ids,
+                    union_origins,
+                )
+
                 sessions = list(meta.get("observed_in_sessions", []) or [])
-                if session_id and session_id not in sessions:
-                    sessions.append(session_id)
+                for observed_session in observed_session_ids(session_id, origins):
+                    if observed_session not in sessions:
+                        sessions.append(observed_session)
                 # Enrich, don't discard: append the new content if it adds info.
                 if content and content.strip() and content.strip() not in text:
                     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                     block = f"\n\n## Observation {new_count} ({date})\n\n{content.strip()}\n"
                     atomic_write_text(f, text.rstrip() + block)
                 self._update_entry_frontmatter(f, "observation_count", new_count)
-                self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
-                from compchem_memory.staging_io import union_origins
+                if sessions:
+                    self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
 
                 merged = union_origins(meta.get("origins", []), origins or [])
-                self._update_entry_frontmatter(f, "origins", merged)
+                if merged:
+                    self._update_entry_frontmatter(f, "origins", merged)
                 return True
         return False
 
