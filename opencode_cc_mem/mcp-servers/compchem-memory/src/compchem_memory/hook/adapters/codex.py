@@ -81,7 +81,9 @@ def _decode_policy_targets(event: HookEvent) -> None:
 
 def _patch_paths(patch: str) -> list[str] | None:
     """Decode the headers accepted by Codex 0.154, or fail closed."""
-    lines = patch.splitlines()
+    lines = _patch_lines(patch)
+    if lines is None:
+        return None
     stripped = [line.strip() for line in lines if line.strip()]
     if not stripped or stripped[0] != "*** Begin Patch":
         return None
@@ -96,16 +98,36 @@ def _patch_paths(patch: str) -> list[str] | None:
     markers = {"*** Begin Patch", "*** End Patch", "*** End of File"}
     paths: list[str] = []
     for line in lines:
-        header = line.strip()
+        header = line.lstrip()
         if not header.startswith("***"):
             continue
-        if header in markers:
+        if header.strip() in markers:
             continue
         matched = next((prefix for prefix in prefixes if header.startswith(prefix)), None)
         if matched is None:
             return None
-        path = header.removeprefix(matched).strip()
-        if not path:
+        path = header.removeprefix(matched)
+        if not path or path != path.strip():
             return None
         paths.append(path)
     return paths or None
+
+
+def _patch_lines(patch: str) -> list[str] | None:
+    """Split like Codex and reject every non-tab C0/C1 control."""
+    lines: list[str] = []
+    for raw_line in patch.split("\n"):
+        line = raw_line[:-1] if raw_line.endswith("\r") else raw_line
+        if any(_forbidden_patch_character(character) for character in line):
+            return None
+        lines.append(line)
+    return lines
+
+
+def _forbidden_patch_character(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        (codepoint < 0x20 and character != "\t")
+        or 0x7F <= codepoint <= 0x9F
+        or character in {"\u2028", "\u2029"}
+    )

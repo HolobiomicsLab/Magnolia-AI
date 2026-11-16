@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import hashlib
+import hmac
 import multiprocessing
 import os
 import re
@@ -41,11 +43,20 @@ class ReadServer:
     MAX_SEARCH_SECONDS = 2.0
     MAX_PATTERN_LENGTH = 256
 
-    def __init__(self, policy: RequiredPolicy, *, cwd: Path) -> None:
+    def __init__(
+        self,
+        policy: RequiredPolicy,
+        *,
+        cwd: Path,
+        policy_path: Path | None = None,
+        policy_digest: str | None = None,
+    ) -> None:
         if policy.role not in {"worker", "reviewer"}:
             raise ReadRefused("magnolia-read is restricted to worker and reviewer policies")
         self.policy = policy
         self.cwd = cwd.resolve()
+        self.policy_path = policy_path
+        self.policy_digest = policy_digest
 
     @classmethod
     def from_environment(
@@ -56,18 +67,50 @@ class ReadServer:
         policy_path = values.get("MAGNOLIA_HOOK_POLICY")
         if not policy_path:
             raise ReadRefused("MAGNOLIA_HOOK_POLICY is required")
-        return cls.from_policy_file(policy_path, cwd=cwd)
+        policy_digest = values.get("MAGNOLIA_HOOK_POLICY_SHA256")
+        if not policy_digest:
+            raise ReadRefused("MAGNOLIA_HOOK_POLICY_SHA256 is required")
+        return cls.from_policy_file(
+            policy_path,
+            cwd=cwd,
+            expected_sha256=policy_digest,
+            control_dir=values.get("MAGNOLIA_CONTROL_DIR"),
+        )
 
     @classmethod
     def from_policy_file(
-        cls, path: str | Path, *, cwd: Path | None = None
+        cls,
+        path: str | Path,
+        *,
+        cwd: Path | None = None,
+        expected_sha256: str | None = None,
+        control_dir: str | None = None,
     ) -> "ReadServer":
         """Load and validate one immutable run policy before serving reads."""
         try:
-            policy = load_required_policy(path)
+            policy = load_required_policy(
+                path,
+                expected_sha256=expected_sha256,
+                control_dir=control_dir,
+            )
         except (OSError, TypeError, ValueError) as exc:
             raise ReadRefused(f"invalid MAGNOLIA_HOOK_POLICY: {exc}") from exc
-        return cls(policy, cwd=cwd or Path.cwd())
+        return cls(
+            policy,
+            cwd=cwd or Path.cwd(),
+            policy_path=Path(path) if expected_sha256 is not None else None,
+            policy_digest=expected_sha256,
+        )
+
+    def _verify_policy_integrity(self) -> None:
+        if self.policy_path is None or self.policy_digest is None:
+            return
+        try:
+            current = hashlib.sha256(self.policy_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ReadRefused(f"policy digest verification failed: {exc}") from exc
+        if not hmac.compare_digest(current, self.policy_digest):
+            raise ReadRefused("policy digest mismatch after server startup")
 
     def _path(self, value: str, *, broad: bool = False) -> Path:
         if not isinstance(value, str) or not read_target_allowed(
@@ -81,6 +124,7 @@ class ReadServer:
         self, path: str, offset: int = 0, limit: int = DEFAULT_READ_LIMIT
     ) -> dict[str, object]:
         """Return bounded lines from one allowed regular file."""
+        self._verify_policy_integrity()
         _bounded_int("offset", offset, minimum=0, maximum=self.MAX_READ_OFFSET)
         _bounded_int("limit", limit, minimum=1, maximum=self.MAX_READ_LINES)
         target = self._path(path)
@@ -101,6 +145,7 @@ class ReadServer:
 
     def list_dir(self, path: str) -> dict[str, object]:
         """List allowed direct children without exposing denied entries."""
+        self._verify_policy_integrity()
         target = self._path(path)
         entries: list[str] = []
         descriptor = self._open_directory(target, path)
@@ -127,6 +172,7 @@ class ReadServer:
 
     def search(self, pattern: str, path: str) -> dict[str, object]:
         """Return time- and size-bounded literal or isolated-regex matches."""
+        self._verify_policy_integrity()
         expression, regex = self._expression(pattern)
         deadline = time.monotonic() + self.MAX_SEARCH_SECONDS
         target = self._path(path, broad=True)
@@ -318,7 +364,14 @@ def _descriptor_path(descriptor: int) -> str:
             raise ReadRefused("cannot verify opened file path") from exc
     if not path or path.endswith(" (deleted)"):
         raise ReadRefused("cannot verify opened file path")
-    return str(Path(path).resolve(strict=True))
+    try:
+        opened = os.fstat(descriptor)
+        named = os.stat(path)
+    except OSError as exc:
+        raise ReadRefused("cannot verify opened file identity") from exc
+    if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+        raise ReadRefused("opened file identity changed during verification")
+    return path
 
 
 def _regex_worker(connection, expression: str, lines: list[str], limit: int) -> None:

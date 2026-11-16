@@ -7,6 +7,8 @@ mode validates the complete role policy and denies malformed or unsafe tool call
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -24,6 +26,7 @@ REASON = (
 )
 REQUIRED_REASON = "Magnolia required role policy denied this operation."
 REQUIRED_ENV = "MAGNOLIA_HOOK_POLICY_REQUIRED"
+REQUIRED_DIGEST_ENV = "MAGNOLIA_HOOK_POLICY_SHA256"
 REQUIRED_SCHEMA = "magnolia-role-v1"
 BROAD_SEARCH_MAX_ENTRIES = 10_000
 BROAD_SEARCH_MAX_SECONDS = 1.0
@@ -42,6 +45,7 @@ class RequiredPolicy:
     deny_unknown: bool
     deny_shell: bool
     deny_code: bool
+    protected_edit_roots: tuple[Path, ...]
 
 
 def _canonical_name(event: HookEvent) -> str | None:
@@ -68,10 +72,25 @@ def required_mode(env: Mapping[str, str]) -> bool:
     return env.get(REQUIRED_ENV) == "1"
 
 
-def _read_required(path: str | None) -> RequiredPolicy:
+def _read_required(
+    path: str | None,
+    *,
+    expected_sha256: str | None = None,
+    control_dir: str | None = None,
+) -> RequiredPolicy:
     if not path:
         raise ValueError("required hook policy path is missing")
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    policy_path = Path(path)
+    body = policy_path.read_bytes()
+    if expected_sha256 is not None:
+        if len(expected_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in expected_sha256
+        ):
+            raise ValueError("required hook policy digest is invalid")
+        actual_sha256 = hashlib.sha256(body).hexdigest()
+        if not hmac.compare_digest(actual_sha256, expected_sha256):
+            raise ValueError("required hook policy digest mismatch")
+    payload = json.loads(body)
     if not isinstance(payload, dict) or payload.get("schema_version") != REQUIRED_SCHEMA:
         raise ValueError("required hook policy schema mismatch")
     role = _required_text(payload, "role")
@@ -90,6 +109,12 @@ def _read_required(path: str | None) -> RequiredPolicy:
     _required_strings(payload, "deny_tools")
     read_roots = _required_roots(payload, "canonical_read_roots")
     edit_roots = _required_roots(payload, "edit_roots")
+    protected_edit_roots = [policy_path.resolve(strict=False).parent]
+    if control_dir is not None:
+        control_path = Path(control_dir)
+        if not control_path.is_absolute():
+            raise ValueError("required hook control directory must be absolute")
+        protected_edit_roots.append(control_path.resolve(strict=False))
     return RequiredPolicy(
         role=role,
         read_roots=read_roots,
@@ -100,6 +125,7 @@ def _read_required(path: str | None) -> RequiredPolicy:
         deny_unknown=booleans["deny_unknown_tools"],
         deny_shell=booleans["deny_shell"],
         deny_code=booleans["deny_unconfined_code_execution"],
+        protected_edit_roots=tuple(dict.fromkeys(protected_edit_roots)),
     )
 
 
@@ -188,6 +214,10 @@ def _targets_allowed(event: HookEvent, policy: RequiredPolicy) -> bool:
         roots = policy.edit_roots if target.access == "edit" else policy.read_roots
         if not roots or not _path_forms_allowed(target.path, event.cwd, roots, policy):
             return False
+        if target.access == "edit" and _within_protected_edit_root(
+            target.path, event.cwd, policy.protected_edit_roots
+        ):
+            return False
         if target.broad and not _broad_search_allowed(target, event.cwd, roots, policy):
             return False
     return True
@@ -211,9 +241,30 @@ def _path_forms_allowed(
     return _within_any(requested, lexical_roots) and _within_any(resolved, resolved_roots)
 
 
-def load_required_policy(path: str | Path) -> RequiredPolicy:
+def load_required_policy(
+    path: str | Path,
+    *,
+    expected_sha256: str | None = None,
+    control_dir: str | None = None,
+) -> RequiredPolicy:
     """Load the same fail-closed role policy used by the required hook."""
-    return _read_required(str(path))
+    return _read_required(
+        str(path), expected_sha256=expected_sha256, control_dir=control_dir
+    )
+
+
+def _within_protected_edit_root(
+    value: str, cwd: str, protected_roots: tuple[Path, ...]
+) -> bool:
+    """Return whether either path form enters immutable run control state."""
+    raw = value if os.path.isabs(value) else os.path.join(cwd, value)
+    candidates = (Path(os.path.abspath(raw)), Path(os.path.realpath(raw)))
+    roots = tuple(root.resolve(strict=False) for root in protected_roots)
+    return any(
+        candidate == root or candidate.is_relative_to(root)
+        for candidate in candidates
+        for root in roots
+    )
 
 
 def read_target_allowed(
@@ -373,7 +424,17 @@ def decide(event: HookEvent, env: Mapping[str, str]) -> Block | None:
     policy_path = env.get("MAGNOLIA_HOOK_POLICY")
     if required_mode(env):
         try:
-            return _required_decision(event, _read_required(policy_path))
+            digest = env.get(REQUIRED_DIGEST_ENV)
+            if not digest:
+                raise ValueError("required hook policy digest is missing")
+            return _required_decision(
+                event,
+                _read_required(
+                    policy_path,
+                    expected_sha256=digest,
+                    control_dir=env.get("MAGNOLIA_CONTROL_DIR"),
+                ),
+            )
         except (OSError, ValueError, TypeError):
             return Block(REQUIRED_REASON)
     if not policy_path:

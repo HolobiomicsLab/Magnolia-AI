@@ -482,7 +482,11 @@ class CodexExecutor:
                     != ["-m", "compchem_memory.harness.read_server"]
                     or read_server.get("cwd") != str(self.prepared.discovery_dir)
                     or read_server.get("env_vars")
-                    != ["MAGNOLIA_HOOK_POLICY", "MAGNOLIA_HOOK_POLICY_REQUIRED"]
+                    != [
+                        "MAGNOLIA_HOOK_POLICY",
+                        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+                        "MAGNOLIA_HOOK_POLICY_SHA256",
+                    ]
                 ):
                     raise ExecutorRefused("Codex magnolia-read server is not run-owned")
         else:

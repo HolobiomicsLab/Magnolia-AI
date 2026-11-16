@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -237,6 +238,10 @@ def test_rendered_required_hook_preserves_allowed_stdin_and_denies(client, tmp_p
     command = _pre_tool_command(launch, project, policy_path, client)
     env = dict(os.environ)
     env.update(launch.env)
+    env["MAGNOLIA_HOOK_POLICY_SHA256"] = hashlib.sha256(
+        policy_path.read_bytes()
+    ).hexdigest()
+    env["MAGNOLIA_CONTROL_DIR"] = str(control)
     fixture = json.loads(
         (FIXTURES / client / "synthetic" / "native-tools.json").read_text()
     )
