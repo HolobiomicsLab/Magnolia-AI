@@ -1,0 +1,52 @@
+{
+  "createdAt": 1794810923653,
+  "detail": {
+    "display": {
+      "content": "new file\n",
+      "message": "work/new.txt",
+      "settledMessage": "work/new.txt",
+      "settledVerb": "Created",
+      "statusText": "Writing file",
+      "suffix": "",
+      "summary": "Writing work/new.txt",
+      "verb": "Creating"
+    },
+    "input": {
+      "content": "new file\n",
+      "filePath": "work/new.txt"
+    },
+    "kind": "file_write",
+    "toolName": "file_system.write_file"
+  },
+  "generationStatus": "completed",
+  "id": "effect-4e6a99ae-16a0-5fed-b971-9b0bd185cf6a",
+  "inputEntryId": "user-turn-6bf8c5709f3f97086d7a1b781f817608-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": "bypass",
+    "approvalType": "always",
+    "decision": "execute",
+    "display": {
+      "approvalNote": null,
+      "message": "work/new.txt",
+      "success": true,
+      "suffix": "",
+      "verb": "Created",
+      "warnings": []
+    },
+    "durationMs": 0.0,
+    "output": {
+      "content": "new file\n",
+      "fileExisted": false,
+      "filePath": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/work/new.txt",
+      "previousContent": null
+    },
+    "outputText": "",
+    "status": "completed"
+  },
+  "title": "file_system.write_file",
+  "turnId": "turn-6bf8c5709f3f97086d7a1b781f817608",
+  "type": "effect",
+  "updatedAt": 1794810923699
+}

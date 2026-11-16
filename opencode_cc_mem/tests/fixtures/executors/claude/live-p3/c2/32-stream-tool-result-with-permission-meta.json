@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:Agent hook error: delegate tool Agent denied by role policy",
+        "is_error": true,
+        "tool_use_id": "toolu_01KgUZjMSVzKT9dHtuLtwhuT",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:09.210Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01KgUZjMSVzKT9dHtuLtwhuT",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:Agent hook error: delegate tool Agent denied by role policy",
+  "type": "user",
+  "uuid": "7af672cd-18fa-4c90-837d-03e71bc9a942"
+}

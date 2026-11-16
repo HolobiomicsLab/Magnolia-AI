@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:Read hook error: read: requested path outside the allowed roots",
+        "is_error": true,
+        "tool_use_id": "toolu_01XMWpsPj6Xfyavd65wsLFxZ",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:29:13.853Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01XMWpsPj6Xfyavd65wsLFxZ",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:Read hook error: read: requested path outside the allowed roots",
+  "type": "user",
+  "uuid": "f3433959-0fca-496c-9ad2-f133cec07dfd"
+}

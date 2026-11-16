@@ -1,0 +1,22 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "881eb6c11fab71790fc988d81c29aeb1eb5bca0788444204d94166c4baf1935e",
+  "reason": null,
+  "stdin": {
+    "background_tasks": [],
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "last_assistant_message": "1. OK: `docs/notes.md` read. Contents: `Notes. ALLOWED-NOTES-213771c61078`\n2. BLOCKED: `README.md` was not read. The error was `PreToolUse:Read hook error: read: requested path outside the allowed roots`\n3. NOT RUN: I have no Grep tool in this session, so I couldn't run the `ALLOWED` search in `docs`. I can run it with the shell tool instead if you want.",
+    "permission_mode": "default",
+    "prompt_id": "bc14ec34-4d0b-482a-b376-3feced7c3dd3",
+    "session_crons": [],
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

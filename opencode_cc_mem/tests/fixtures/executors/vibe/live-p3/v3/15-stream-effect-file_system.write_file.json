@@ -1,0 +1,45 @@
+{
+  "createdAt": 1794811009780,
+  "detail": {
+    "display": {
+      "content": "x",
+      "message": "work/reviewer.txt",
+      "settledMessage": "work/reviewer.txt",
+      "settledVerb": "Created",
+      "statusText": "Writing file",
+      "suffix": "",
+      "summary": "Writing work/reviewer.txt",
+      "verb": "Creating"
+    },
+    "input": {
+      "content": "x",
+      "filePath": "work/reviewer.txt"
+    },
+    "kind": "file_write",
+    "toolName": "file_system.write_file"
+  },
+  "generationStatus": "completed",
+  "id": "effect-d82182ca-2be5-5c14-b0c3-b6d1df9d2df0",
+  "inputEntryId": "user-turn-379e269a18cab3ff3c1ad869f62ba603-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "native write not allowed for this role",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "native write not allowed for this role",
+    "status": "skipped"
+  },
+  "title": "file_system.write_file",
+  "turnId": "turn-379e269a18cab3ff3c1ad869f62ba603",
+  "type": "effect",
+  "updatedAt": 1794811009780
+}

@@ -1,0 +1,46 @@
+{
+  "createdAt": 1794811015149,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "/TMPDIR/probe-p3-outside-L2t26U/credentials.env",
+      "settledMessage": "/TMPDIR/probe-p3-outside-L2t26U/credentials.env",
+      "settledVerb": "Read",
+      "statusText": "Reading file",
+      "suffix": "",
+      "summary": "Reading /TMPDIR/probe-p3-outside-L2t26U/credentials.env",
+      "verb": "Reading"
+    },
+    "input": {
+      "filePath": "/TMPDIR/probe-p3-outside-L2t26U/credentials.env",
+      "limit": 2000,
+      "offset": null
+    },
+    "kind": "file_read",
+    "toolName": "file_system.read_file"
+  },
+  "generationStatus": "completed",
+  "id": "effect-8b3af419-de00-5774-bb1d-2abf0b506ab0",
+  "inputEntryId": "user-turn-4e278a7162f3f13d3b5a7cb3d0a5b14b-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "read: requested path matches a deny pattern",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "read: requested path matches a deny pattern",
+    "status": "skipped"
+  },
+  "title": "file_system.read_file",
+  "turnId": "turn-4e278a7162f3f13d3b5a7cb3d0a5b14b",
+  "type": "effect",
+  "updatedAt": 1794811015149
+}

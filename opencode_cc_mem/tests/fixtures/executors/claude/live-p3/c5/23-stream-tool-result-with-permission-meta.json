@@ -1,0 +1,35 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "File created successfully at: /TMPDIR/probe-p3-claude-Pe5W5B/proj/control/crash.txt (file state is current in your context \u2014 no need to Read it back)",
+        "tool_use_id": "toolu_01RxvDVki83cAkYNKu9ZybeN",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:55.155Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01RxvDVki83cAkYNKu9ZybeN",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use_result": {
+    "content": "x",
+    "filePath": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/control/crash.txt",
+    "originalFile": null,
+    "structuredPatch": [],
+    "type": "create",
+    "userModified": false
+  },
+  "type": "user",
+  "uuid": "51d28aa7-a2fa-4d41-8373-30f3542b1272"
+}

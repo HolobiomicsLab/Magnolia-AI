@@ -1,0 +1,21 @@
+{
+  "class": "shell",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": "shell tool Bash denied by role policy",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "command": "cat alias-env"
+    },
+    "tool_name": "Bash",
+    "tool_use_id": "exec-a54c2f20-3579-43fd-af5c-d19e5f114233",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-31-10-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30d-6eec-78c1-99a8-e9ac78f41930"
+  }
+}

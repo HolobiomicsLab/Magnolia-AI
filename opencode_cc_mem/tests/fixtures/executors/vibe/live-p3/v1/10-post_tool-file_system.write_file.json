@@ -1,0 +1,29 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "15c6689ab4433cee46bc64669d367927e6f009273174b3b85249fcb4e0a3353e",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "duration_ms": 0,
+    "hook_event_name": "post_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "chatcmpl-tool-a2780c46e5cd1afb",
+    "tool_error": null,
+    "tool_input": {
+      "content": "new file\n",
+      "file_path": "work/new.txt"
+    },
+    "tool_name": "file_system.write_file",
+    "tool_output": {
+      "bytes_written": 9,
+      "file_existed": false,
+      "path": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/work/new.txt"
+    },
+    "tool_output_text": "bytes_written: 9\nfile_existed: False\npath: /TMPDIR/probe-p3-vibe-DhLzfS/proj/work/new.txt",
+    "tool_status": "success",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

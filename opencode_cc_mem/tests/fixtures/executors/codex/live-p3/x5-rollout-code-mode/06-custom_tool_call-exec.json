@@ -1,0 +1,12 @@
+{
+  "call_id": "call_6e857ec9eaa34676b80b7d2658981073",
+  "id": "ctc_04ccab6819dd2c99016afaa3ba0ad087d2a6511ed87153ccd7",
+  "input": "async function attempt(label, fn) {\n  try { return {label, status:\"OK\", result: await fn()}; }\n  catch (e) { return {label, status:\"BLOCKED\", error:String(e?.message ?? e)}; }\n}\ntext(await attempt(\"exec_command\", () => tools.exec_command({cmd:\"cat secret/.env\",workdir:\"/TMPDIR/probe-p3-codex-omV8qQ/proj\"})));\ntext(await attempt(\"mcp__probe__shell\", () => tools.mcp__probe__shell({command:\"inner\"})));\ntext(await attempt(\"apply_patch\", () => tools.apply_patch(\"*** Begin Patch\\n*** Add File: /TMPDIR/probe-p3-codex-omV8qQ/proj/control/inner.txt\\n+x\\n*** End Patch\")));\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810810.0438979,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

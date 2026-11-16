@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "1. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n2. BLOCKED \u2014 Command blocked by PreToolUse hook: native patch not allowed for this role.\n3. BLOCKED \u2014 Tool call blocked by PreToolUse hook: mcp tool probe.echo not on the role allowlist.",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

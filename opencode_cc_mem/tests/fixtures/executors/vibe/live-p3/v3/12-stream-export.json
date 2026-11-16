@@ -1,0 +1,44 @@
+{
+  "config_subset": {
+    "active_model": "",
+    "bypass_tool_permissions": true,
+    "disabled_tools": [
+      "bash",
+      "git_bash",
+      "powershell",
+      "ask_user_question",
+      "cron"
+    ],
+    "enable_background_processes": true,
+    "enable_subagents": true,
+    "enable_telemetry": false,
+    "enabled_tools": [],
+    "model_aliases": [
+      "mistral-medium-3.5"
+    ]
+  },
+  "cost_usd": 0.027975,
+  "error": null,
+  "exit_code": 0,
+  "limits": {
+    "max_price": 0.05,
+    "max_tokens": null,
+    "max_turns": 10,
+    "time_limit_s": null
+  },
+  "outcome": "finished",
+  "schema_version": 1,
+  "session_id": "ses-fixture-1",
+  "stderr_notices": [
+    "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Medium 3.5'. Pick another model to stop this notice."
+  ],
+  "steps": 5,
+  "stop_reason": null,
+  "usage": {
+    "cached_input_tokens": 108160,
+    "input_tokens": 112154,
+    "output_tokens": 768,
+    "total_tokens": 112922
+  },
+  "vibe_version": "3.1.2"
+}

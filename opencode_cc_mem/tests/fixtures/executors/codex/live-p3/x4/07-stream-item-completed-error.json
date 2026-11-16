@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "message": "Model metadata for `gpt-6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+    "type": "error"
+  },
+  "type": "item.completed"
+}

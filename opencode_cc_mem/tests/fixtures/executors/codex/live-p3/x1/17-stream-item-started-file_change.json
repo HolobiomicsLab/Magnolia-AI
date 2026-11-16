@@ -1,0 +1,14 @@
+{
+  "item": {
+    "changes": [
+      {
+        "kind": "update",
+        "path": "/TMPDIR/probe-p3-codex-omV8qQ/proj/work/draft.txt"
+      }
+    ],
+    "id": "item_1",
+    "status": "in_progress",
+    "type": "file_change"
+  },
+  "type": "item.started"
+}

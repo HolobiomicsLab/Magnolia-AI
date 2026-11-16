@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_0",
+    "message": "This session was recorded with model `gpt-6-sol` but is resuming with `gpt-5.6-luna`. Consider switching back to `gpt-6-sol` as it may affect Codex performance.",
+    "type": "error"
+  },
+  "type": "item.completed"
+}

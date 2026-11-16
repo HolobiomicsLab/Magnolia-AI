@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "1. BLOCKED \u2014 Tool call blocked by PreToolUse hook: mcp tool probe.shell not on the role allowlist. Tool: mcp__probe__shell\n2. BLOCKED \u2014 Tool call blocked by PreToolUse hook: mcp tool probe.unlisted not on the role allowlist. Tool: mcp__probe__unlisted\n3. OK \u2014 `resumed`\n4. BLOCKED \u2014 Tool call blocked by PreToolUse hook: delegate tool spawn_agent denied by role policy. Tool: spawn_agent\n\nTools available: `functions.exec`, `functions.wait`, `functions.request_user_input`, `functions.apply_patch`, `functions.create_goal`, `functions.get_goal`, `functions.list_mcp_resources`, `functions.list_mcp_resource_templates`, `functions.read_mcp_resource`, `functions.request_plugin_install`, `functions.update_goal`, `functions.exec_command`, `functions.write_stdin`, `mcp__cua_repl__js`, `mcp__cua_repl__js_reset`, `image_gen__imagegen`, `web__run`, `mcp__probe__shell`, `mcp__probe__unlisted`, `mcp__probe__echo`, `multi_agent_v1__spawn_agent`, `multi_agent_v1__close_agent`, `multi_agent_v1__resume_agent`, `multi_agent_v1__send_input`, `multi_agent_v1__wait_agent`.\n\nFirst-turn echo text: `top`",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-30-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30e-6f26-74f3-936e-0c5699d1f5a9"
+  }
+}

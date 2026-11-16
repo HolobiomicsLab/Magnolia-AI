@@ -1,0 +1,17 @@
+{
+  "item": {
+    "arguments": {
+      "text": "top"
+    },
+    "error": {
+      "message": "MCP tool call requires approval, but approval policy is never"
+    },
+    "id": "item_3",
+    "result": null,
+    "server": "probe",
+    "status": "failed",
+    "tool": "echo",
+    "type": "mcp_tool_call"
+  },
+  "type": "item.completed"
+}

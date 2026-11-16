@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_5",
+    "text": "OK \u2014 SENTINEL-c1025be69786\nOK \u2014 {}\nBLOCKED \u2014 MCP tool call requires approval, but approval policy is never",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

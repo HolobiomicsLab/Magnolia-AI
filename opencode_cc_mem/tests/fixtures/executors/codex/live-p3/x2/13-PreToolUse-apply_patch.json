@@ -1,0 +1,21 @@
+{
+  "class": "patch",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": "patch: requested path outside the allowed roots",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "command": "*** Begin Patch\n*** Update File: work/draft.txt\n*** Move to: control/moved.txt\n*** End Patch"
+    },
+    "tool_name": "apply_patch",
+    "tool_use_id": "exec-b509cffb-3704-4f27-b8a8-508f2a1110b3",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-31-10-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30d-6eec-78c1-99a8-e9ac78f41930"
+  }
+}

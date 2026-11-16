@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": null,
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "BLOCKED \u2014 exec_command: Command blocked by PreToolUse hook: probe policy missing or unreadable. Command: cat secret/.env  \nBLOCKED \u2014 mcp__probe__shell: Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__probe__shell  \nBLOCKED \u2014 apply_patch: Command blocked by PreToolUse hook: probe policy missing or unreadable.  \nBLOCKED \u2014 mcp__cua_repl__js: Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__cua_repl__js",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-33-16-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  }
+}

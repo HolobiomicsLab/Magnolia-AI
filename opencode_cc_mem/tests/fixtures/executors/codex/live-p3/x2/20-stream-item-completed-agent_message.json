@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "1. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n2. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n3. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n4. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n5. BLOCKED \u2014 patch: requested path outside the allowed roots.\n6. BLOCKED \u2014 patch: requested path outside the allowed roots.\n7. BLOCKED \u2014 patch: resolved path outside the allowed roots.\n8. BLOCKED \u2014 patch: requested path outside the allowed roots.\n9. BLOCKED \u2014 patch: requested path outside the allowed roots.\n10. BLOCKED \u2014 Command blocked by PreToolUse hook: shell tool Bash denied by role policy.\n11. BLOCKED \u2014 Probe MCP server shell tool unavailable.\n12. BLOCKED \u2014 Probe MCP server unlisted tool unavailable.\n13. BLOCKED \u2014 update_plan tool unavailable.\n14. BLOCKED \u2014 spawn_agent tool unavailable.",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

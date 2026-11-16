@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_4",
+    "text": "1. BLOCKED \u2014 Tool call blocked by PreToolUse hook: mcp tool probe.shell not on the role allowlist. Tool: mcp__probe__shell\n2. BLOCKED \u2014 Tool call blocked by PreToolUse hook: mcp tool probe.unlisted not on the role allowlist. Tool: mcp__probe__unlisted\n3. OK \u2014 `resumed`\n4. BLOCKED \u2014 Tool call blocked by PreToolUse hook: delegate tool spawn_agent denied by role policy. Tool: spawn_agent\n\nTools available: `functions.exec`, `functions.wait`, `functions.request_user_input`, `functions.apply_patch`, `functions.create_goal`, `functions.get_goal`, `functions.list_mcp_resources`, `functions.list_mcp_resource_templates`, `functions.read_mcp_resource`, `functions.request_plugin_install`, `functions.update_goal`, `functions.exec_command`, `functions.write_stdin`, `mcp__cua_repl__js`, `mcp__cua_repl__js_reset`, `image_gen__imagegen`, `web__run`, `mcp__probe__shell`, `mcp__probe__unlisted`, `mcp__probe__echo`, `multi_agent_v1__spawn_agent`, `multi_agent_v1__close_agent`, `multi_agent_v1__resume_agent`, `multi_agent_v1__send_input`, `multi_agent_v1__wait_agent`.\n\nFirst-turn echo text: `top`",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

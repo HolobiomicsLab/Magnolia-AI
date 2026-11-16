@@ -1,0 +1,27 @@
+{
+  "call_id": "call_6e857ec9eaa34676b80b7d2658981073",
+  "id": "ctco_01a1e30f-9f27-7773-bec0-2610adaafb0c",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810814.247621,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "output": [
+    {
+      "text": "Script completed\nWall time 0.1 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "{\"label\":\"exec_command\",\"status\":\"BLOCKED\",\"error\":\"Command blocked by PreToolUse hook: probe policy missing or unreadable. Command: cat secret/.env\"}",
+      "type": "input_text"
+    },
+    {
+      "text": "{\"label\":\"mcp__probe__shell\",\"status\":\"BLOCKED\",\"error\":\"Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__probe__shell\"}",
+      "type": "input_text"
+    },
+    {
+      "text": "{\"label\":\"apply_patch\",\"status\":\"BLOCKED\",\"error\":\"Command blocked by PreToolUse hook: probe policy missing or unreadable. Command: *** Begin Patch\\n*** Add File: /TMPDIR/probe-p3-codex-omV8qQ/proj/control/inner.txt\\n+x\\n*** End Patch\"}",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

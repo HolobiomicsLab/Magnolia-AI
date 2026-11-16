@@ -1,0 +1,26 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "15c6689ab4433cee46bc64669d367927e6f009273174b3b85249fcb4e0a3353e",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "duration_ms": 0,
+    "hook_event_name": "post_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "typescript:16:chatcmpl-tool-9e1bad6ebd235d19:0:tool:0",
+    "tool_error": null,
+    "tool_input": {
+      "text": "top"
+    },
+    "tool_name": "mcp_probe.echo",
+    "tool_output": {
+      "result": "top"
+    },
+    "tool_output_text": "top",
+    "tool_status": "success",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

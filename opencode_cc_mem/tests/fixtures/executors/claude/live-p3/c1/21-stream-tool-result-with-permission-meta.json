@@ -1,0 +1,48 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "The file /TMPDIR/probe-p3-claude-Pe5W5B/proj/work/draft.txt has been updated successfully.",
+        "tool_use_id": "toolu_011PwKcRSJ5PXDueAPRPKEfj",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:27:29.966Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_011PwKcRSJ5PXDueAPRPKEfj",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use_result": {
+    "contentNotInModelContext": true,
+    "filePath": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/work/draft.txt",
+    "newString": "draft v1",
+    "oldString": "draft v0",
+    "originalFile": "draft v0\n",
+    "replaceAll": false,
+    "structuredPatch": [
+      {
+        "lines": [
+          "-draft v0",
+          "+draft v1"
+        ],
+        "newLines": 1,
+        "newStart": 1,
+        "oldLines": 1,
+        "oldStart": 1
+      }
+    ],
+    "userModified": false
+  },
+  "type": "user",
+  "uuid": "a782b5a9-a701-4bdd-8851-39cab68c673b"
+}

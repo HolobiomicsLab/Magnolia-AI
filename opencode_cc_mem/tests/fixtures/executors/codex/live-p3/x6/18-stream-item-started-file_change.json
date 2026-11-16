@@ -1,0 +1,14 @@
+{
+  "item": {
+    "changes": [
+      {
+        "kind": "add",
+        "path": "/TMPDIR/probe-p3-codex-omV8qQ/proj/control/crash.txt"
+      }
+    ],
+    "id": "item_3",
+    "status": "in_progress",
+    "type": "file_change"
+  },
+  "type": "item.started"
+}

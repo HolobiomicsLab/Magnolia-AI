@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:Glob hook error: glob: recursive search root contains a denied or linked path",
+        "is_error": true,
+        "tool_use_id": "toolu_011du2ADL664Y7x3e68MWhDw",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:27:27.789Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_011du2ADL664Y7x3e68MWhDw",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:Glob hook error: glob: recursive search root contains a denied or linked path",
+  "type": "user",
+  "uuid": "55005671-d31a-4789-be34-1eaf1bcb4bdf"
+}

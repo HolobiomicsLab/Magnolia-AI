@@ -1,0 +1,22 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "3204d94ead3f9988abf4fbc7065f4abdc0c9cc2b4d38f2912f11465b9028f1e2",
+  "reason": null,
+  "stdin": {
+    "background_tasks": [],
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "last_assistant_message": "1. Read README.md: OK. Contents: `Probe project. ALLOWED-README-213771c61078`\n2. Grep \"ALLOWED\" in docs: OK. Matched one file, `docs/notes.md`.\n3. Edit work/draft.txt, replace \"draft v0\" with \"draft reviewer\": BLOCKED. The tool reported `String to replace not found in file. String: draft v0`. The Edit call ran and returned this error. I did not retry it. The file may not contain that text.\n4. Write work/reviewer.txt with \"x\": BLOCKED. `PreToolUse:Write hook error: native write not allowed for this role`\n5. mcp__probe__echo with text \"reviewer\": BLOCKED. `PreToolUse:mcp__probe__echo hook error: mcp tool probe.echo not on the role allowlist`\n\nSteps 4 and 5 were issued in the same turn, so they did not run strictly after step 3. Both were rejected by hooks before executing. I did not load the deferred tool schema with ToolSearch, since that would have been a tool outside the list.",
+    "permission_mode": "default",
+    "prompt_id": "ebb895e1-0227-4d81-8931-44d4ea54e001",
+    "session_crons": [],
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

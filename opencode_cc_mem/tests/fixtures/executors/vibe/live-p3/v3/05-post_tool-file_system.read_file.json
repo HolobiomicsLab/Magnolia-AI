@@ -1,0 +1,34 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "d4417cd05c05cfa2a69d15c957a660d4ae415b3c5f66198bdffcbd9f67497d49",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "duration_ms": 0,
+    "hook_event_name": "post_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "7NVDhqpxz",
+    "tool_error": null,
+    "tool_input": {
+      "file_path": "README.md"
+    },
+    "tool_name": "file_system.read_file",
+    "tool_output": {
+      "content": "Probe project. ALLOWED-README-46eff7ab6a5e\n",
+      "file_size_bytes": 43,
+      "lines_read": 1,
+      "next_offset": null,
+      "offset": 0,
+      "path": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/README.md",
+      "returned_bytes": 43,
+      "total_lines": 1,
+      "was_truncated": false
+    },
+    "tool_output_text": "content: Probe project. ALLOWED-README-46eff7ab6a5e\n\nfile_size_bytes: 43\nlines_read: 1\nnext_offset: None\noffset: 0\npath: /TMPDIR/probe-p3-vibe-DhLzfS/proj/README.md\nreturned_bytes: 43\ntotal_lines: 1\nwas_truncated: False",
+    "tool_status": "success",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "class": "mcp",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "d4417cd05c05cfa2a69d15c957a660d4ae415b3c5f66198bdffcbd9f67497d49",
+  "reason": "mcp tool probe.echo not on the role allowlist",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "pre_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "typescript:9:AgQ3GOuG4:0:tool:0",
+    "tool_input": {
+      "text": "reviewer"
+    },
+    "tool_name": "mcp_probe.echo",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

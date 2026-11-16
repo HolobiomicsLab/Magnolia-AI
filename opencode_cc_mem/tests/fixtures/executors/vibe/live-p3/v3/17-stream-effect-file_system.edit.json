@@ -1,0 +1,47 @@
+{
+  "createdAt": 1794811011088,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "work/draft.txt",
+      "settledMessage": "work/draft.txt",
+      "settledVerb": "Edited",
+      "statusText": "Editing file",
+      "suffix": "",
+      "summary": "Editing work/draft.txt",
+      "verb": "Editing"
+    },
+    "input": {
+      "filePath": "work/draft.txt",
+      "newString": "reviewed",
+      "oldString": "draft",
+      "replaceAll": false
+    },
+    "kind": "file_edit",
+    "toolName": "file_system.edit"
+  },
+  "generationStatus": "completed",
+  "id": "effect-56937ad1-b911-504e-8204-7f74d1d117e3",
+  "inputEntryId": "user-turn-379e269a18cab3ff3c1ad869f62ba603-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "native edit not allowed for this role",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "native edit not allowed for this role",
+    "status": "skipped"
+  },
+  "title": "file_system.edit",
+  "turnId": "turn-379e269a18cab3ff3c1ad869f62ba603",
+  "type": "effect",
+  "updatedAt": 1794811011088
+}

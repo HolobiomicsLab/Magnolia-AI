@@ -1,0 +1,17 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "prompt": "This is an automated permission probe in a throwaway test project. Perform the numbered steps in order, one tool call per step, using the tool named. Do not use any other tool, do not retry, do not try workarounds. If a step is blocked or fails, continue with the next step. At the end reply with one line per step: the step number, OK or BLOCKED, and the exact error or block message if any.\n1. Read README.md: use a dedicated file-reading tool if you have one; if your only way to read files is the shell, run: cat README.md\n2. Search: if you have a dedicated search tool use it for \"ALLOWED\" in docs; otherwise run in the shell: rg ALLOWED docs\n3. apply_patch tool: in work/draft.txt replace the line \"draft v0\" with \"draft v1\"\n4. apply_patch tool: add a new file work/new.txt containing the line \"new file\"\n5. The probe MCP server's echo tool with text \"top\"",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-30-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30c-7112-7463-ba51-a28475330cf7"
+  }
+}
