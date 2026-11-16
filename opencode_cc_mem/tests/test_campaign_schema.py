@@ -107,7 +107,6 @@ def test_protocol_hash_is_stable_and_content_sensitive(tmp_path):
         (lambda p: p["stages"][1].update(extra=1), "unknown field"),
         (lambda p: p["worker"].update(model=""), "must not be empty"),
         (lambda p: p["worker"].update(model="no-provider"), "provider/model"),
-        (lambda p: p["reviewer"].update(model=None), "model is required"),
         (lambda p: p["stages"][1].pop("gate"), "missing required field 'gate'"),
         (lambda p: p["stages"][2].pop("prompt"), "missing required field 'prompt'"),
         (lambda p: p["stages"][3].pop("command"), "missing required field 'command'"),
@@ -159,3 +158,64 @@ def test_disabled_reviewer_does_not_require_model(tmp_path):
     protocol = load_protocol(write_protocol(tmp_path, payload))
     assert protocol.reviewer.enabled is False
     assert protocol.reviewer.model is None
+
+
+def test_omitted_models_resolve_or_fail_before_launch(tmp_path):
+    from campaign_runner.cli import resolve_campaign_routes
+
+    payload = valid_protocol()
+    payload["worker"].pop("model")
+    payload["reviewer"].pop("model")
+    protocol = load_protocol(write_protocol(tmp_path, payload))
+    routes = resolve_campaign_routes(protocol)
+    assert routes.worker["analyze"].model == "kimi-code-plan-cn/k3.1-pro#high"
+    with pytest.raises(ProtocolError, match="reviewer"):
+        resolve_campaign_routes(protocol, require_reviewers=True)
+
+
+def test_hard_stage_override_preserved(tmp_path):
+    from campaign_runner.cli import resolve_campaign_routes
+
+    payload = valid_protocol()
+    payload["stages"][2].pop("model")
+    payload["stages"][2]["hard"] = True
+    protocol = load_protocol(write_protocol(tmp_path, payload))
+    routes = resolve_campaign_routes(protocol)
+    assert routes.worker["analyze"].model == "kimi-code-plan-cn/k3.1-pro#high"
+
+
+def test_agent_alias_normalizes_without_changing_legacy_hash(tmp_path):
+    legacy = valid_protocol()
+    protocol = load_protocol(write_protocol(tmp_path / "legacy", legacy))
+    assert protocol_sha256(protocol) == protocol_sha256(
+        load_protocol(write_protocol(tmp_path / "again", legacy))
+    )
+    alias = valid_protocol()
+    alias["stages"][2]["type"] = "agent"
+    normalized = load_protocol(write_protocol(tmp_path / "alias", alias))
+    assert normalized.stage("analyze").type == "opencode"
+
+
+def test_opencode_service_for_reviewer_or_alternate_only(tmp_path):
+    from campaign_runner.cli import opencode_service_roles, resolve_campaign_routes
+
+    payload = valid_protocol()
+    payload["worker"]["model"] = "claude-code/sonnet"
+    payload["stages"][2]["model"] = "claude-code/opus"
+    payload["reviewer"]["model"] = "claude-code/opus"
+    payload["reviewer"]["alternate_model"] = "openai/gpt-5"
+    routes = resolve_campaign_routes(load_protocol(write_protocol(tmp_path, payload)))
+    assert opencode_service_roles(routes) == {"reviewer"}
+
+
+def test_no_opencode_service_for_claude_only_protocol(tmp_path):
+    from campaign_runner.cli import opencode_service_roles, resolve_campaign_routes
+
+    payload = valid_protocol()
+    payload["worker"]["model"] = "claude-code/sonnet"
+    payload["worker"]["hard_stage_model"] = "claude-code/opus"
+    payload["stages"][2]["model"] = "claude-code/opus"
+    payload["reviewer"]["model"] = "claude-code/sonnet"
+    payload["reviewer"]["alternate_model"] = "claude-code/opus"
+    routes = resolve_campaign_routes(load_protocol(write_protocol(tmp_path, payload)))
+    assert opencode_service_roles(routes) == set()

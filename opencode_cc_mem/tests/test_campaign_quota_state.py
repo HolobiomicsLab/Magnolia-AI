@@ -227,6 +227,25 @@ def test_manual_resume_requires_current_hold_generation(tmp_path):
     assert resumed.resumed_from_quota == second
 
 
+def test_manual_resume_mismatch_returns_typed_disposition(tmp_path):
+    store = make_store(tmp_path)
+    store.wait_for_quota(quota_wait(hold_id="fresh"))
+    result = store.manual_resume_quota(NOW, "stale")
+    assert result.resumed is False
+    assert result.reason == "hold_mismatch"
+    assert result.state.state == "waiting_quota"
+
+
+def test_wait_checkpoint_refreshes_new_reset_generation(tmp_path):
+    store = make_store(tmp_path)
+    first = quota_wait(hold_id="h1", reset_at=NOW + timedelta(hours=1))
+    store.wait_for_quota(first)
+    refreshed = quota_wait(hold_id="h2", reset_at=NOW + timedelta(hours=2))
+    state = store.refresh_quota_wait(refreshed)
+    assert state.quota_wait == refreshed
+    assert store.read_events()[-1]["quota_hold_id"] == "h2"
+
+
 def test_resume_crash_reconciles_continuation_data(tmp_path):
     store = make_store(tmp_path)
     store.transition("running", "worker started", stage="analyze", attempt=1)
@@ -309,13 +328,21 @@ def test_pause_halt_stop_while_waiting(tmp_path):
     halted_store.wait_for_quota(quota_wait())
     halted = halted_store.halt("operator stop")
     assert halted.state == "halted"
-    assert halted.quota_wait.hold_id == "hold-1"
+    assert halted.quota_wait is None
+    assert halted_store.read_events()[-1]["quota_wait_after"] is None
 
     failed_store = make_store(tmp_path / "failed")
     failed_store.wait_for_quota(quota_wait())
     failed = failed_store.fail("stop failed")
     assert failed.state == "failed"
-    assert failed.quota_wait.hold_id == "hold-1"
+    assert failed.quota_wait is None
+    assert failed_store.read_events()[-1]["quota_wait_after"] is None
+
+    paused_halt_store = make_store(tmp_path / "paused-halt")
+    paused_halt_store.wait_for_quota(quota_wait())
+    paused_halt_store.pause("pause")
+    paused_halt = paused_halt_store.halt("stop")
+    assert paused_halt.quota_wait is None
 
 
 @pytest.mark.parametrize(

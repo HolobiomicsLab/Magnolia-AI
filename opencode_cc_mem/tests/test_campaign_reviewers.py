@@ -20,6 +20,7 @@ from campaign_runner.reviewers import (  # noqa: E402
     validate_review,
 )
 from campaign_runner.workers import empty_usage  # noqa: E402
+from campaign_runner.workers import WorkerResult  # noqa: E402
 
 
 FAKE = r'''#!/usr/bin/env python3
@@ -355,3 +356,24 @@ def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
     assert calls[0]["argv"][3:7] == [
         "provider/model", "--agent", "campaign-reviewer", "--format"
     ]
+
+
+def test_worker_and_reviewer_db_fallback_only_for_opencode(tmp_path, monkeypatch):
+    class AlternateExecutor:
+        def run(self, *args, **kwargs):
+            return WorkerResult(
+                0, False, 0.1, "same", '{"issues":[],"followups":[]}', "", 0,
+                {**empty_usage(), "input_tokens": 7.0}, 1, [], [],
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for", lambda route, role, context: AlternateExecutor()
+    )
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.read_session_usage",
+        lambda *args: (_ for _ in ()).throw(AssertionError("OpenCode DB queried")),
+    )
+    result = Reviewer(binary="unused", db_path="unused").run(
+        "claude-code/sonnet", "review", tmp_path, tmp_path / "attempt", tmp_path
+    )
+    assert result.usage["input_tokens"] == 7.0

@@ -579,7 +579,7 @@ def distill_session_transcript(
         candidates = []
     distillation_failed = candidates is None
     if distillation_failed:
-        candidates = []
+        return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
 
     if not commit:
@@ -591,14 +591,14 @@ def distill_session_transcript(
     prior = rec.get("candidates", 0) if rec else 0
     closed = (
         hook_session_closed(store, ref, fingerprint=fingerprint)
-        if not ref.sealable and not distillation_failed else None
+        if not ref.sealable else None
     )
     _write_progress(
         rec_path,
         new_cursor,
         prior + len(kept),
         done=False,
-        fingerprint=None if distillation_failed else fingerprint,
+        fingerprint=fingerprint,
         closed=closed,
     )
     return {"status": "committed", "saved": saved}

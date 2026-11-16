@@ -146,6 +146,7 @@ class QuotaWaiting:
     caller_id: str
     reason: str
     reset_at: datetime | None = None
+    hold_id: str | None = None
 
 
 @dataclass
@@ -302,6 +303,23 @@ class Governor:
                         del state["waits"][wait_id]
             return removed
 
+    def quota_wait(self, key: str, caller_id: str = "campaign") -> QuotaWaiting | None:
+        """Return the current quota generation and reset as one atomic snapshot."""
+        with self._locked() as state:
+            self._recover_pending(state)
+            self._clear_due_cooldown(state, key, self._now())
+            current = state["cooldowns"].get(key)
+            if current is None:
+                return None
+            reset = current.get("reset_at")
+            return QuotaWaiting(
+                key,
+                caller_id,
+                "quota",
+                _parse_time(reset) if reset else None,
+                str(current["generation"]),
+            )
+
     def wait(
         self,
         waiting: QuotaWaiting,
@@ -426,6 +444,7 @@ class Governor:
                 request.invocation_id,
                 "quota",
                 _parse_time(reset) if reset else None,
+                str(cooldown["generation"]),
             )
         active = [item for item in state["reservations"].values() if item["key"] == key]
         if len(active) >= self.policy.max_concurrent:
@@ -601,7 +620,9 @@ class Governor:
                 "process_start_token": reservation["process_start_token"],
                 "service_request_id": reservation["service_request_id"],
             },
-            "session_identity": reservation["session_identity"],
+            "session_identity": _session_dict(usage.session_identity)
+            if usage is not None and usage.session_identity is not None
+            else reservation["session_identity"],
             "usage": usage_values,
             "outcome": {
                 "kind": outcome.kind,
@@ -624,6 +645,7 @@ class Governor:
             "caller_id": waiting.caller_id,
             "reason": waiting.reason,
             "reset_at": waiting.reset_at.isoformat() if waiting.reset_at else None,
+            "hold_id": waiting.hold_id,
             "observed_at": self._now().isoformat(),
             "owner_pid": owner["pid"],
         }

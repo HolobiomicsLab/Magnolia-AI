@@ -16,6 +16,7 @@ from campaign_runner.reviewers import ReviewResult  # noqa: E402
 from campaign_runner.runner import CampaignRunner, RunnerConfig  # noqa: E402
 from campaign_runner.state import CampaignStore  # noqa: E402
 from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
+from campaign_runner.executors.contracts import SessionIdentity  # noqa: E402
 
 
 def protocol_payload(
@@ -287,6 +288,59 @@ def test_hard_stage_uses_hard_model(tmp_path):
     assert fake_reviewer.calls[0][0] == "opencode-go/deepseek-v4.1-flash"
 
 
+def test_agent_alias_executes_complete_stage(tmp_path):
+    source = tmp_path / "campaign"
+    source.mkdir()
+    payload = protocol_payload()
+    payload["stages"] = [
+        {
+            "id": "analyze",
+            "type": "agent",
+            "prompt": "prompts/analyze.md",
+            "outputs": ["work/analysis.md"],
+            "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+    ]
+    payload["reviewer"] = {"enabled": False}
+    protocol = source / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = source / "brief.md"
+    brief.write_text("brief")
+    (source / "prompts").mkdir()
+    (source / "prompts" / "analyze.md").write_text("Analyze")
+    store = CampaignStore(tmp_path / "project" / "runs" / "runner")
+    store.initialize(protocol, brief)
+    store.approve_start("tao", "start")
+    worker = FakeWorker(store.run_dir)
+    result = make_runner(store, worker, None).run_once()
+    assert result["state"]["state"] == "completed"
+    assert len(worker.calls) == 1
+
+
+def test_receipt_and_queue_keep_returned_session_identity(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    worker = FakeWorker(store.run_dir)
+    original = worker.run
+
+    def identified(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result.session_identity = SessionIdentity(
+            "claude-code", "sonnet", "same", "project", "worker", "policy"
+        )
+        return result
+
+    worker.run = identified
+    runner = make_runner(store, worker, FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+    receipt = json.loads(
+        (store.attempts_dir / "analyze" / "001" / "worker_result.json").read_text()
+    )
+    assert receipt["session_identity"]["client"] == "claude-code"
+
+
 def test_startup_approval_is_required_before_any_stage(tmp_path):
     store = initialize(tmp_path)
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
@@ -311,6 +365,23 @@ def test_project_mismatch_is_rejected(tmp_path):
                 reviewer=FakeReviewer(),
             ),
         )
+
+
+def test_project_directory_is_realpath_before_launch(tmp_path):
+    store = initialize(tmp_path)
+    project = store.run_dir.parent.parent
+    alias = tmp_path / "project-alias"
+    alias.symlink_to(project, target_is_directory=True)
+    runner = CampaignRunner(
+        store,
+        alias,
+        RunnerConfig(
+            worker_factory=lambda model, timeout: FakeWorker(store.run_dir),
+            jobs=JobController(store, project, FakeJobBackend()),
+            reviewer=FakeReviewer(),
+        ),
+    )
+    assert runner.project_dir == project.resolve()
 
 
 def test_full_campaign_with_human_gates(tmp_path):

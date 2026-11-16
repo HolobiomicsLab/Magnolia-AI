@@ -12,7 +12,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-STAGE_TYPES = ("human", "script", "opencode", "job")
+STAGE_TYPES = ("human", "script", "opencode", "agent", "job")
 RETRY_POLICIES = ("none", "infra_once", "repair_once")
 GATE_FAIL_ACTIONS = ("repair", "human", "failed", "halt")
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -182,7 +182,7 @@ class Budget:
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    model: str
+    model: str | None
     agent: str
     hard_stage_model: str | None = None
     max_steps: int = 30
@@ -195,7 +195,7 @@ class WorkerConfig:
         _check_keys(data, allowed, where)
         hard_model = data.get("hard_stage_model")
         return cls(
-            model=_model(_required(data, "model", where), f"{where}.model") or "",
+            model=_model(data.get("model"), f"{where}.model", False),
             agent=_safe_name(_required(data, "agent", where), f"{where}.agent"),
             hard_stage_model=(
                 _model(hard_model, f"{where}.hard_stage_model", False)
@@ -233,8 +233,6 @@ class ReviewerConfig:
         enabled = _boolean(_required(data, "enabled", where), f"{where}.enabled")
         model_value = data.get("model")
         alternate_value = data.get("alternate_model")
-        if enabled and model_value is None:
-            raise _error(where, "model is required when reviewer is enabled")
         return cls(
             enabled=enabled,
             model=_model(model_value, f"{where}.model", False),
@@ -288,6 +286,8 @@ class Stage:
         stage_type = _string(_required(data, "type", where), f"{where}.type")
         if stage_type not in STAGE_TYPES:
             raise _error(f"{where}.type", f"must be one of: {', '.join(STAGE_TYPES)}")
+        if stage_type == "agent":
+            stage_type = "opencode"
         retry = _string(data.get("retry", "none"), f"{where}.retry")
         if retry not in RETRY_POLICIES:
             raise _error(f"{where}.retry", f"must be one of: {', '.join(RETRY_POLICIES)}")
@@ -394,12 +394,6 @@ class Protocol:
             budget=Budget.from_dict(_required(data, "budget", "protocol"), "protocol.budget"),
             stages=stages,
         )
-        for stage in protocol.stages:
-            if stage.hard and not protocol.worker.hard_stage_model:
-                raise _error(
-                    f"protocol.stages.{stage.id}.hard",
-                    "worker.hard_stage_model is required for a hard stage",
-                )
         return protocol
 
     def stage(self, stage_id: str) -> Stage:
