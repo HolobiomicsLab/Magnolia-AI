@@ -33,7 +33,8 @@ if TYPE_CHECKING:
 
 FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
 FORBIDDEN_FLAGS = frozenset({"--dangerously-bypass-hook-trust", "--full-auto"})
-BARE_TOML_KEY = re.compile(r"[A-Za-z0-9_-]+")
+BARE_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+")
+PLUGIN_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+(?:@[A-Za-z0-9_-]+)?")
 QuotaDetector = Callable[[Mapping[str, Any]], RunOutcome | None]
 
 
@@ -241,8 +242,8 @@ class CodexExecutor:
     _disable_overrides: tuple[str, ...] = field(default=(), init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.role not in {"helper", "evaluator"}:
-            raise ExecutorRefused("D2: Codex campaign worker and reviewer full gate failed")
+        if self.role not in {"worker", "reviewer", "helper", "evaluator"}:
+            raise ExecutorRefused(f"Codex does not provide the {self.role} role")
         if not self.prepared.argv or len(self.prepared.argv) != 1:
             raise WorkerError("Codex prepared argv must contain exactly one executable")
         if not self.model or self.max_turns < 1:
@@ -386,7 +387,7 @@ class CodexExecutor:
         argv = [
             self.prepared.argv[0],
             "-C", str(self.prepared.discovery_dir),
-            "-s", "read-only",
+            "-s", "workspace-write" if self.role == "worker" else "read-only",
             "-m", self.model,
             "exec",
         ]
@@ -397,15 +398,25 @@ class CodexExecutor:
             argv.extend(["-c", override])
         for override in self._disable_overrides:
             argv.extend(["-c", override])
-        argv.extend(["--disable", "code_mode_host", "--disable", "apps"])
+        if self.role in {"helper", "evaluator"}:
+            argv.extend(["--disable", "code_mode_host"])
+        argv.extend(["--disable", "apps"])
         argv.extend(([session_id] if session_id else []) + [prompt])
         return argv
 
     def _discovered_disable_overrides(self) -> list[str]:
         overrides: list[str] = []
-        paths = [self.prepared.discovery_dir / ".codex" / "config.toml"]
-        paths.append(self.user_config_path or Path.home() / ".codex" / "config.toml")
-        for path in paths:
+        native = tomllib.loads(
+            (self.prepared.invocation_dir / ".codex" / "config.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+        governed = set(native.get("mcp_servers", {}))
+        paths = [
+            (self.prepared.discovery_dir / ".codex" / "config.toml", True),
+            (self.user_config_path or Path.home() / ".codex" / "config.toml", False),
+        ]
+        for path, project_config in paths:
             try:
                 payload = tomllib.loads(path.read_text(encoding="utf-8"))
             except (OSError, tomllib.TOMLDecodeError) as exc:
@@ -417,10 +428,21 @@ class CodexExecutor:
                 if not isinstance(entries, Mapping):
                     continue
                 for name in sorted(str(value) for value in entries):
-                    if BARE_TOML_KEY.fullmatch(name) is None:
+                    if section == "mcp_servers" and name in governed:
+                        if project_config:
+                            continue
                         raise ExecutorRefused(
-                            f"Codex {section} entry {name!r} is not a bare TOML key; "
-                            "rename it to use only letters, digits, underscores, or hyphens"
+                            f"Codex user MCP server {name!r} conflicts with a governed server; "
+                            "rename the user-level entry"
+                        )
+                    key_pattern = (
+                        PLUGIN_CONFIG_KEY if section == "plugins" else BARE_CONFIG_KEY
+                    )
+                    if key_pattern.fullmatch(name) is None:
+                        raise ExecutorRefused(
+                            f"Codex {section} entry {name!r} is not a supported bare TOML key or "
+                            "<bare-key>@<bare-key> plugin id; rename it to use only letters, "
+                            "digits, underscores, or hyphens"
                         )
                     overrides.append(f"{section}.{name}.enabled=false")
         return overrides
@@ -437,8 +459,27 @@ class CodexExecutor:
             raise ExecutorRefused(f"invalid Codex-native launch artifact: {relative}")
         if relative.endswith("config.toml"):
             payload = tomllib.loads(body.decode())
-            if payload.get("mcp_servers"):
-                raise ExecutorRefused("Codex no-tools config must not contain MCP servers")
+            servers = payload.get("mcp_servers", {})
+            expected = (
+                {"magnolia-read", "compchem-memory"}
+                if self.role == "worker"
+                else {"magnolia-read"}
+                if self.role == "reviewer"
+                else set()
+            )
+            if not isinstance(servers, Mapping) or set(servers) != expected:
+                raise ExecutorRefused("Codex config has unexpected governed MCP servers")
+            if "magnolia-read" in expected:
+                read_server = servers["magnolia-read"]
+                if (
+                    not isinstance(read_server, Mapping)
+                    or read_server.get("command") != self.prepared.env.get("MAGNOLIA_PYTHON")
+                    or read_server.get("args")
+                    != ["-m", "compchem_memory.harness.read_server"]
+                    or read_server.get("env", {}).get("MAGNOLIA_HOOK_POLICY")
+                    != self.prepared.env.get("MAGNOLIA_HOOK_POLICY")
+                ):
+                    raise ExecutorRefused("Codex magnolia-read server is not run-owned")
         else:
             payload = json.loads(body)
             hooks = payload.get("hooks") if isinstance(payload, Mapping) else None

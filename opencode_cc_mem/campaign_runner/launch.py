@@ -56,6 +56,11 @@ CLIENT_CONFIG_FILES = {
     "codex": (".codex/config.toml", ".codex/hooks.json"),
     "vibe": (".vibe/config.toml", ".vibe/hooks.toml"),
 }
+CODEX_READ_SERVER_TOOLS = (
+    "mcp:magnolia-read.read_file",
+    "mcp:magnolia-read.list_dir",
+    "mcp:magnolia-read.search",
+)
 
 
 @dataclass(frozen=True)
@@ -351,6 +356,11 @@ def _policy_payload(
     edit_roots: tuple[str, ...],
     capability_identity: str,
 ) -> dict[str, Any]:
+    mcp_tools = list(policy.mcp_tool_allowlist)
+    if context.route is not None and (
+        context.route.client == "codex" and context.role in {"worker", "reviewer"}
+    ):
+        mcp_tools.extend(CODEX_READ_SERVER_TOOLS)
     return {
         "schema_version": policy.version,
         "role": context.role,
@@ -360,7 +370,7 @@ def _policy_payload(
         "deny_path_forms": ["requested", "resolved"],
         "edit_roots": list(edit_roots),
         "effective_capabilities": list(required),
-        "mcp_tool_allowlist": list(policy.mcp_tool_allowlist),
+        "mcp_tool_allowlist": list(dict.fromkeys(mcp_tools)),
         "delegation_policy": policy.delegation_policy,
         "required_capability_identity": capability_identity,
         "deny_unknown_tools": True,
@@ -440,10 +450,15 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
             key: value for key, value in context.memory_service.items() if key in allowed
         }
         _validate_memory_service(service)
+    tool_allowlist = list(policy.mcp_tool_allowlist)
+    if context.route is not None and (
+        context.route.client == "codex" and context.role in {"worker", "reviewer"}
+    ):
+        tool_allowlist.extend(CODEX_READ_SERVER_TOOLS)
     return {
         "schema_version": "magnolia-launch-mcp-v1",
         "memory_service": service,
-        "tool_allowlist": list(policy.mcp_tool_allowlist),
+        "tool_allowlist": list(dict.fromkeys(tool_allowlist)),
     }
 
 
@@ -477,13 +492,55 @@ def _client_native_artifacts(
             launch_context, _claude_mcp_servers(mcp_payload)
         )
     if context.route.client == "codex":
-        # The accepted Codex helper/evaluator contract is intentionally no-tools.
-        return render_codex_native_artifacts(launch_context, {})
+        return render_codex_native_artifacts(
+            launch_context,
+            _codex_mcp_servers(context, mcp_payload),
+        )
     if context.route.client == "vibe":
         return render_vibe_native_artifacts(
             launch_context, _vibe_mcp_servers(mcp_payload)
         )
     return {}
+
+
+def _codex_mcp_servers(
+    context: ExecContext,
+    mcp_payload: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Return only run-governed Codex servers; user servers are disabled later."""
+    if context.role not in {"worker", "reviewer"}:
+        return {}
+    assert context.python_executable is not None
+    servers: dict[str, dict[str, Any]] = {}
+    service = mcp_payload.get("memory_service")
+    if isinstance(service, Mapping):
+        if service.get("transport") == "http":
+            servers["compchem-memory"] = {"url": service["url"]}
+        else:
+            args = service.get("args", ())
+            if not isinstance(args, (list, tuple)):
+                raise ExecutorRefused("memory stdio route args must be a list")
+            entry: dict[str, Any] = {
+                "command": service["command"],
+                "args": [str(arg) for arg in args],
+            }
+            env_vars = service.get("env_vars", ())
+            if not isinstance(env_vars, (list, tuple)):
+                raise ExecutorRefused("memory stdio route env_vars must be a list")
+            if env_vars:
+                entry["env_vars"] = [str(name) for name in env_vars]
+            servers["compchem-memory"] = entry
+    servers["magnolia-read"] = {
+        "command": context.python_executable,
+        "args": ["-m", "compchem_memory.harness.read_server"],
+        "env": {
+            "MAGNOLIA_HOOK_POLICY": str(
+                (_invocation_dir(context) / "policy.json").resolve()
+            ),
+            "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+        },
+    }
+    return servers
 
 
 def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:

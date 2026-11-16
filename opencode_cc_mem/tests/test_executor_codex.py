@@ -242,10 +242,65 @@ def _governance(tmp_path: Path, role: str) -> InvocationGovernance:
 
 
 @pytest.mark.parametrize("role", ("worker", "reviewer"))
-def test_codex_worker_and_reviewer_full_gate_or_refusal(tmp_path, role):
+def test_codex_worker_reviewer_refused_without_accepted_capability(tmp_path, role):
     context = _context(tmp_path, role=role)
+    context.role_capabilities["codex"][role]["accepted"] = False
     with pytest.raises(ExecutorRefused, match="D2"):
         executor_for(context.route, role, context)
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
+    tmp_path, role
+):
+    context = _context(tmp_path, role=role)
+    evidence = context.role_capabilities["codex"][role]
+    evidence["capabilities"] = (
+        ["native_read", "native_glob", "native_grep", "native_edit",
+         "mcp:compchem-memory.memory_get_context",
+         "mcp:compchem-memory.memory_search",
+         "mcp:compchem-memory.memory_get_run_history"]
+        if role == "worker"
+        else ["native_read", "native_glob", "native_grep"]
+    )
+    evidence["identity"] = configuration_identity(context)
+
+    expected_context = LaunchContext(
+        root=ROOT, project="project-fixture", project_dir=context.project_dir,
+        python="/venv/bin/python", tools_port=8123, model="gpt-test", setup={},
+        run_dir=context.run_dir, control_dir=context.control_dir,
+        work_dir=context.work_dir, role=role, invocation_id=f"{role}-one",
+        noninteractive=True,
+    )
+    invocation = context.control_dir / "executors" / f"{role}-one"
+    servers = {}
+    if role == "worker":
+        servers["compchem-memory"] = {"url": "http://127.0.0.1:8765/mcp"}
+    servers["magnolia-read"] = {
+            "command": "/venv/bin/python",
+            "args": ["-m", "compchem_memory.harness.read_server"],
+            "env": {
+                "MAGNOLIA_HOOK_POLICY": str(invocation / "policy.json"),
+                "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+            },
+        }
+    for relative, body in native_artifacts(expected_context, servers).items():
+        (context.project_dir / relative).write_bytes(body)
+    evidence["identity"] = configuration_identity(context)
+
+    executor = executor_for(context.route, role, context)
+    config = tomllib.loads(
+        (executor.prepared.invocation_dir / ".codex/config.toml").read_text()
+    )
+    assert set(config["mcp_servers"]) == set(servers)
+    assert config["mcp_servers"]["magnolia-read"]["args"][-1].endswith("read_server")
+    argv = executor._argv("prompt", None)
+    assert argv[argv.index("-s") + 1] == (
+        "workspace-write" if role == "worker" else "read-only"
+    )
+    assert ["--disable", "apps"] in [argv[i:i + 2] for i in range(len(argv) - 1)]
+    assert "code_mode_host" not in argv
+    assert "mcp_servers.magnolia-read.enabled=false" not in argv
 
 
 @pytest.mark.parametrize("role", ("helper", "evaluator"))
@@ -274,7 +329,15 @@ def test_codex_helper_evaluator_independent_contracts(tmp_path, role):
     ]
 
 
-@pytest.mark.parametrize(("section", "name"), (("mcp_servers", "bad.name"), ("plugins", "bad name")))
+@pytest.mark.parametrize(
+    ("section", "name"),
+    (
+        ("mcp_servers", "bad.name"),
+        ("mcp_servers", "bad@name"),
+        ("plugins", "bad name"),
+        ("plugins", "bad@name@again"),
+    ),
+)
 def test_codex_refuses_non_bare_disable_key_with_action(tmp_path, section, name):
     context = _context(tmp_path)
     trust = Path(context.setup["codex_user_config_path"])
@@ -285,6 +348,22 @@ def test_codex_refuses_non_bare_disable_key_with_action(tmp_path, section, name)
 
     with pytest.raises(ExecutorRefused, match=rf"{section}.*{name}.*bare TOML key"):
         executor_for(context.route, "helper", context)
+
+
+def test_codex_accepts_owner_plugin_ids_with_at_separator(tmp_path):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + '\n[plugins."visualize@openai-bundled"]\nenabled = true\n'
+        + '[plugins."pdf@openai-primary-runtime"]\nenabled = true\n'
+    )
+    context.role_capabilities["codex"]["helper"]["identity"] = configuration_identity(context)
+
+    argv = executor_for(context.route, "helper", context)._argv("prompt", None)
+
+    assert "plugins.visualize@openai-bundled.enabled=false" in argv
+    assert "plugins.pdf@openai-primary-runtime.enabled=false" in argv
 
 
 def test_codex_recorded_stream_cache_and_resume_identity():

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from compchem_memory.hook.adapters import claude
+from compchem_memory.hook.adapters import claude, codex
 from compchem_memory.hook.events import HookEvent, ToolCall, ToolTarget
 from compchem_memory.hook import policy
 from compchem_memory.hook.policy import decide
@@ -17,11 +17,12 @@ def _write_policy(
     work: Path,
     *,
     edit_roots: list[str] | None = None,
+    role: str = "worker",
 ) -> dict[str, str]:
     payload = {
         "schema_version": "magnolia-role-v1",
-        "role": "worker",
-        "policy_role": "campaign-worker",
+        "role": role,
+        "policy_role": f"campaign-{role}",
         "canonical_read_roots": [str(project)],
         "read_deny_patterns": ["**/*.env*", "**/*.env*/**", "**/secret/**"],
         "deny_path_forms": ["requested", "resolved"],
@@ -33,6 +34,9 @@ def _write_policy(
             "mcp:compchem-memory.memory_get_context",
             "mcp:compchem-memory.memory_search",
             "mcp:compchem-memory.memory_get_run_history",
+            "mcp:magnolia-read.read_file",
+            "mcp:magnolia-read.list_dir",
+            "mcp:magnolia-read.search",
         ],
         "delegation_policy": "deny",
         "required_capability_identity": "fixture-identity",
@@ -279,3 +283,77 @@ def test_campaign_mcp_shell_member_tool_delegation_and_inner_call_denied(tmp_pat
     )
     for raw_name in denied_names:
         assert decide(_event(project, None, raw_name=raw_name), env) is not None
+
+
+def test_hook_allows_read_server_tools_only_for_worker_reviewer(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    (project / "allowed.txt").write_text("ok\n", encoding="utf-8")
+
+    for role in ("worker", "reviewer"):
+        env = _write_policy(tmp_path / f"{role}.json", project, work, role=role)
+        for raw_name, access, broad in (
+            ("mcp__magnolia_read__read_file", "read", False),
+            ("mcp__magnolia_read__list_dir", "read", False),
+            ("mcp__magnolia_read__search", "search", True),
+        ):
+            event = _event(
+                project,
+                "mcp",
+                ToolTarget(str(project / "allowed.txt"), access, broad=broad),
+                raw_name=raw_name,
+            )
+            assert decide(event, env) is None
+
+    helper = _write_policy(tmp_path / "helper.json", project, work, role="helper")
+    assert decide(
+        _event(
+            project,
+            "mcp",
+            ToolTarget(str(project / "allowed.txt"), "read"),
+            raw_name="mcp__magnolia_read__read_file",
+        ),
+        helper,
+    ) is not None
+    assert decide(
+        _event(
+            project,
+            "mcp",
+            ToolTarget(str(project / "allowed.txt"), "read"),
+            raw_name="mcp__other__read_file",
+        ),
+        _write_policy(tmp_path / "worker-other.json", project, work),
+    ) is not None
+
+
+def test_codex_apply_patch_is_confined_to_worker_edit_root(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    outside = project / "outside.txt"
+    env = _write_policy(tmp_path / "worker.json", project, work)
+
+    def event(patch: str):
+        parsed = codex.parse({
+            "hook_event_name": "PreToolUse",
+            "session_id": "session",
+            "cwd": str(project),
+            "tool_name": "apply_patch",
+            "tool_input": {"patch": patch},
+        }, "pre-tool")
+        assert parsed is not None
+        return parsed
+
+    assert decide(event(
+        f"*** Begin Patch\n*** Add File: {work / 'ok.txt'}\n+ok\n*** End Patch"
+    ), env) is None
+    assert decide(event(
+        f"*** Begin Patch\n*** Add File: {outside}\n+no\n*** End Patch"
+    ), env) is not None
+    assert decide(event(
+        "*** Begin Patch\n"
+        f"*** Update File: {work / 'ok.txt'}\n"
+        f"*** Move to: {outside}\n"
+        "*** End Patch"
+    ), env) is not None
