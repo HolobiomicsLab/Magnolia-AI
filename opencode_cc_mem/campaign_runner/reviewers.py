@@ -11,8 +11,10 @@ from typing import Any, Mapping
 from .accounting import read_session_usage
 from .process import ProcessControl
 from .security import SecurityError, ensure_within
-from .workers import OpenCodeExecutor, empty_usage
-from .executors.contracts import RunOutcome
+from .workers import InvocationGovernance, OpenCodeExecutor, empty_usage
+from .executors.contracts import ExecContext, RunOutcome
+from .executors.registry import executor_for
+from .routing import resolve_route
 
 
 REVIEW_FORMAT_NOTE = (
@@ -213,6 +215,7 @@ class Reviewer:
     timeout_seconds: int = 600
     max_retries: int = 1
     max_steps: int = 8
+    governance: InvocationGovernance | None = None
 
     def run(
         self,
@@ -223,17 +226,26 @@ class Reviewer:
         run_dir: Path,
         control: ProcessControl | None = None,
     ) -> ReviewResult:
-        executor = OpenCodeExecutor(
-            binary=self.binary,
-            model=model,
-            agent=self.agent,
-            server_url=self.server_url,
-            db_path=self.db_path,
-            environment=self.environment,
-            timeout_seconds=self.timeout_seconds,
-            max_format_retries=0,
-            max_steps=self.max_steps,
+        route = resolve_route("reviewer", {"reviewer": {"model": model}})
+        executor = executor_for(
+            route,
+            "reviewer",
+            ExecContext(
+                route=route,
+                role="reviewer",
+                project_dir=cwd,
+                run_dir=attempt_dir,
+                timeout_seconds=self.timeout_seconds,
+                role_cap=self.max_steps,
+                opencode_binary=self.binary,
+                opencode_server=self.server_url,
+                opencode_db=self.db_path,
+                agent=self.agent,
+                environment=self.environment,
+                governance=self.governance,
+            ),
         )
+        assert isinstance(executor, OpenCodeExecutor)
         usage = empty_usage()
         session_id: str | None = None
         current_prompt = prompt
@@ -249,7 +261,7 @@ class Reviewer:
                 retries=0,
                 control=control,
             )
-            attempts += 1
+            attempts += result.attempts
             _merge_usage(usage, result.usage)
             if result.session_id:
                 session_id = result.session_id
@@ -263,6 +275,7 @@ class Reviewer:
                     attempts=attempts,
                     model=model,
                     stopped_reason=result.stopped_reason,
+                    outcome=result.outcome,
                 )
             try:
                 issues, followups = validate_review(_extract_json(result.final_text), run_dir)

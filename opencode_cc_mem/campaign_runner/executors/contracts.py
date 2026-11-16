@@ -77,6 +77,7 @@ class ExecContext:
     renderer_env: Mapping[str, str] = field(default_factory=dict)
     resume_from: Path | None = None
     prompt: str | None = None
+    governance: Any = None
 
 
 @dataclass(frozen=True)

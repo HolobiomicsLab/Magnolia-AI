@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "@@TMP@@/opencode",
+    "run",
+    "--model",
+    "opencode-go/deepseek-v4.1-flash",
+    "--agent",
+    "campaign-worker",
+    "--format",
+    "json",
+    "--auto",
+    "--server",
+    "http://127.0.0.1:4111",
+    "PINNED PROMPT"
+  ],
+  "environment_keys": [
+    "BASE_ENV",
+    "OPENCODE_DB",
+    "PWD",
+    "RECIPE_EXTRA"
+  ],
+  "agent_file_bytes": "---\ndescription: Executes one bounded Magnolia campaign stage\nmode: primary\nsteps: 30\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n  - action: read\n    resource: \"*\"\n    effect: allow\n  - action: read\n    resource: \"*.env*\"\n    effect: deny\n  - action: read\n    resource: \"**/.magnolia/campaign-service.json\"\n    effect: deny\n  - action: read\n    resource: \"**/.magnolia/campaign-service.log\"\n    effect: deny\n  - action: glob\n    resource: \"*\"\n    effect: allow\n  - action: grep\n    resource: \"*\"\n    effect: allow\n  - action: edit\n    resource: \"projects/*/runs/*/work/**\"\n    effect: allow\n  - action: edit\n    resource: \"runs/*/work/**\"\n    effect: allow\n  - action: edit\n    resource: \"work/**\"\n    effect: allow\n  - action: compchem-memory_memory_get_context\n    resource: \"*\"\n    effect: allow\n  - action: compchem-memory_memory_search\n    resource: \"*\"\n    effect: allow\n  - action: compchem-memory_memory_get_run_history\n    resource: \"*\"\n    effect: allow\n---\n\nYou are a Magnolia campaign worker.\n\nExecute only the assigned stage. Read the brief and inputs first.\n\nWrite only inside the stage work directory. Do not edit control files, gates,\nbudgets, protocols, approvals, or shared rules.\n\nDo not claim success beyond the measured evidence. Your final message must\ncontain the complete stage result.\n"
+}

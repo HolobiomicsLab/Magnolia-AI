@@ -7,7 +7,7 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from .executors.contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
 from .governor import (
@@ -176,6 +176,7 @@ class OpenCodeExecutor:
     max_format_retries: int = 2
     max_steps: int | None = None
     governance: InvocationGovernance | None = None
+    service_cap_check: Callable[[int], None] | None = None
 
     def run(
         self,
@@ -259,6 +260,22 @@ class OpenCodeExecutor:
                 invocation_environment = _with_step_cap(
                     environment, self.agent, admission.effective_cap
                 )
+            effective_cap = (
+                admission.effective_cap
+                if admission is not None and admission.effective_cap is not None
+                else self.max_steps
+            )
+            if self.service_cap_check is not None:
+                if effective_cap is None:
+                    if admission is not None:
+                        admission.cancel_before_launch()
+                    raise WorkerError("OpenCode service cap cannot be verified without a cap")
+                try:
+                    self.verify_service_cap(effective_cap)
+                except BaseException:
+                    if admission is not None:
+                        admission.cancel_before_launch()
+                    raise
             try:
                 with admission or _NoAdmission():
                     try:
@@ -334,6 +351,11 @@ class OpenCodeExecutor:
             errors=errors,
             outcome=typed_outcome,
         )
+
+    def verify_service_cap(self, effective_cap: int) -> None:
+        """Recheck an attached service at every admitted invocation."""
+        if self.service_cap_check is not None:
+            self.service_cap_check(effective_cap)
 
     def _admit_invocation(
         self,

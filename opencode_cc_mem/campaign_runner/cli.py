@@ -11,9 +11,13 @@ from pathlib import Path
 from typing import Sequence
 
 from .distill import drain_queue
+from .executors.contracts import ExecContext
+from .executors.opencode import OpenCodeServiceExecutor
+from .executors.registry import executor_for
 from .jobs import CompchemJobBackend, FakeJobBackend, JobController
 from .models import CampaignError, Protocol, load_protocol, protocol_sha256
 from .reviewers import Reviewer
+from .routing import resolve_route
 from .runner import CampaignRunner, RunnerConfig
 from .service import ensure_service, merge_agent_steps, service_status, stop_service
 from .state import CampaignState, CampaignStore
@@ -222,10 +226,22 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
     ):
         config_content, required_agents = _service_settings(protocol)
         try:
-            record = ensure_service(
-                project_dir,
-                binary,
-                database,
+            service_route = resolve_route(
+                "worker", {"worker": {"model": protocol.worker.model}}
+            )
+            service_executor = executor_for(
+                service_route,
+                "service",
+                ExecContext(
+                    route=service_route,
+                    role="service",
+                    project_dir=project_dir,
+                    opencode_binary=binary,
+                    opencode_db=database,
+                ),
+            )
+            assert isinstance(service_executor, OpenCodeServiceExecutor)
+            record = service_executor.ensure(
                 config_content=config_content,
                 required_agents=required_agents,
             )
@@ -236,16 +252,26 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         environment["OPENCODE_SERVER_USERNAME"] = "opencode"
 
     def worker_factory(model: str, timeout: int) -> OpenCodeExecutor:
-        return OpenCodeExecutor(
-            binary=binary,
-            model=model,
-            agent=_WORKER_AGENT,
-            server_url=server,
-            db_path=database,
-            environment=environment,
-            timeout_seconds=timeout,
-            max_steps=protocol.worker.max_steps,
+        route = resolve_route("worker", {"worker": {"model": model}})
+        executor = executor_for(
+            route,
+            "worker",
+            ExecContext(
+                route=route,
+                role="worker",
+                project_dir=project_dir,
+                run_dir=store.run_dir,
+                timeout_seconds=timeout,
+                role_cap=protocol.worker.max_steps,
+                opencode_binary=binary,
+                opencode_server=server,
+                opencode_db=database,
+                agent=_WORKER_AGENT,
+                environment=environment,
+            ),
         )
+        assert isinstance(executor, OpenCodeExecutor)
+        return executor
 
     reviewer = None
     if protocol.reviewer.enabled:

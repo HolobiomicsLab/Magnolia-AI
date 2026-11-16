@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import select
 import shutil
 import signal
 import subprocess
@@ -100,6 +101,21 @@ class ProcessStartError(OSError):
     """Raised when governed work cannot cross its pre-exec barrier."""
 
 
+class _BarrierInterrupted(Exception):
+    def __init__(
+        self,
+        *,
+        timed_out: bool,
+        stopped_reason: str | None,
+        outcome: RunOutcome,
+        returncode: int = -signal.SIGKILL,
+    ) -> None:
+        self.timed_out = timed_out
+        self.stopped_reason = stopped_reason
+        self.outcome = outcome
+        self.returncode = returncode
+
+
 @dataclass
 class ProcessControl:
     should_stop: Callable[[], str | None] | None = None
@@ -140,9 +156,26 @@ def run_process(
     typed_outcome: RunOutcome | None = None
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         if control and control.hold_before_exec:
-            process = _start_governed_process(
-                argv, cwd, env, stdout, stderr, control
-            )
+            try:
+                process = _start_governed_process(
+                    argv,
+                    cwd,
+                    env,
+                    stdout,
+                    stderr,
+                    control,
+                    deadline=started + timeout_seconds,
+                )
+            except _BarrierInterrupted as interrupted:
+                return ProcessOutcome(
+                    returncode=interrupted.returncode,
+                    timed_out=interrupted.timed_out,
+                    duration_seconds=time.monotonic() - started,
+                    stdout_path=stdout_path,
+                    stderr_path=stderr_path,
+                    stopped_reason=interrupted.stopped_reason,
+                    outcome=interrupted.outcome,
+                )
         else:
             process = subprocess.Popen(
                 list(argv),
@@ -238,6 +271,7 @@ def _start_governed_process(
     stdout: object,
     stderr: object,
     control: ProcessControl,
+    deadline: float,
 ) -> subprocess.Popen:
     try:
         client_path = _resolve_executable(argv[0], cwd, env)
@@ -291,9 +325,25 @@ def _start_governed_process(
             payload_size = len(environment_payload).to_bytes(
                 _BARRIER_SIZE_BYTES, "big"
             )
-            _write_all(write_fd, b"\n" + payload_size + environment_payload)
+            _write_all(
+                write_fd,
+                b"\n" + payload_size + environment_payload,
+                deadline=deadline,
+                control=control,
+            )
         except OSError as exc:
             raise _process_start_error(exc) from exc
+        except _BarrierInterrupted:
+            raise
+    except _BarrierInterrupted as interrupted:
+        os.close(write_fd)
+        _kill_and_reap(process)
+        interrupted.returncode = (
+            process.returncode
+            if process.returncode is not None
+            else -signal.SIGKILL
+        )
+        raise
     except BaseException as exc:
         os.close(write_fd)
         _kill_and_reap(process)
@@ -340,13 +390,50 @@ def _snapshot_environment(env: Mapping[str, str]) -> bytes:
     return bytes(payload)
 
 
-def _write_all(fd: int, body: bytes) -> None:
+def _write_all(
+    fd: int,
+    body: bytes,
+    *,
+    deadline: float,
+    control: ProcessControl,
+) -> None:
     remaining = memoryview(body)
+    os.set_blocking(fd, False)
     while remaining:
-        written = os.write(fd, remaining)
+        reason = _start_stop_reason(control)
+        if reason:
+            raise _BarrierInterrupted(
+                timed_out=False,
+                stopped_reason=reason,
+                outcome=RunOutcome("cancelled"),
+            )
+        now = time.monotonic()
+        if now >= deadline:
+            raise _BarrierInterrupted(
+                timed_out=True,
+                stopped_reason=None,
+                outcome=RunOutcome("timeout"),
+            )
+        try:
+            written = os.write(fd, remaining)
+        except BlockingIOError:
+            wait_seconds = min(control.poll_interval, max(deadline - now, 0.0))
+            select.select([], [fd], [], wait_seconds)
+            continue
+        except InterruptedError:
+            continue
         if written <= 0:
             raise OSError(errno.EIO, "short barrier payload write")
         remaining = remaining[written:]
+
+
+def _start_stop_reason(control: ProcessControl) -> str | None:
+    if control.should_stop is None:
+        return None
+    try:
+        return control.should_stop()
+    except Exception as exc:
+        return f"stop check failed: {exc}"
 
 
 def _process_start_error(exc: OSError) -> ProcessStartError:

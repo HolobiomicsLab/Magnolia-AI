@@ -16,6 +16,7 @@ from campaign_runner.reviewers import (  # noqa: E402
     model_family,
     validate_review,
 )
+from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
 
 
 FAKE = r'''#!/usr/bin/env python3
@@ -262,3 +263,74 @@ def test_mistral_models_share_one_family():
     assert choose_reviewer_model(
         "mistral/mistral-large-latest", "mistral/devstral-latest", "zai-coding-plan/glm-5.3"
     ) == "zai-coding-plan/glm-5.3"
+
+
+def _review_worker_result(text, session_id="ses_review", usage=None):
+    return WorkerResult(
+        returncode=0,
+        timed_out=False,
+        duration_seconds=0.1,
+        session_id=session_id,
+        final_text=text,
+        all_text=text,
+        tool_calls=0,
+        usage=usage or empty_usage(),
+        attempts=1,
+        stdout_paths=[],
+        stderr_paths=[],
+    )
+
+
+def test_reviewer_configured_repairs_no_executor_empty_retry(tmp_path, monkeypatch):
+    created = []
+    calls = []
+
+    class FakeExecutor:
+        def run(self, prompt, cwd, attempt_dir, **kwargs):
+            calls.append((prompt, kwargs))
+            if len(calls) < 3:
+                return _review_worker_result("not json")
+            return _review_worker_result('{"issues":[],"followups":[]}')
+
+    def fake_executor_for(route, role, context):
+        created.append(context)
+        return FakeExecutor()
+
+    monkeypatch.setattr("campaign_runner.reviewers.executor_for", fake_executor_for)
+    monkeypatch.setattr("campaign_runner.reviewers.OpenCodeExecutor", FakeExecutor)
+    result = Reviewer(binary="opencode", max_retries=2).run(
+        "provider/model", "REVIEW", tmp_path, tmp_path / "attempt", tmp_path
+    )
+
+    assert created[0].role == "reviewer"
+    assert result.attempts == 3
+    assert [call[1]["retries"] for call in calls] == [0, 0, 0]
+    assert [call[1]["stem"] for call in calls] == [
+        "reviewer",
+        "reviewer_retry_1",
+        "reviewer_retry_2",
+    ]
+    assert calls[1][1]["resume_session"] == "ses_review"
+
+
+def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
+    fallback = empty_usage()
+    fallback.update(input_tokens=11.0, output_tokens=3.0, cost_usd=0.25)
+
+    class FakeExecutor:
+        def run(self, *args, **kwargs):
+            return _review_worker_result(
+                '{"issues":[],"followups":[]}', usage=fallback
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for", lambda *args: FakeExecutor()
+    )
+    monkeypatch.setattr("campaign_runner.reviewers.OpenCodeExecutor", FakeExecutor)
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.read_session_usage", lambda *args: empty_usage()
+    )
+    result = Reviewer(binary="opencode", db_path=str(tmp_path / "empty.db")).run(
+        "provider/model", "REVIEW", tmp_path, tmp_path / "attempt", tmp_path
+    )
+    assert result.usage == fallback

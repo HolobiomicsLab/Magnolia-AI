@@ -256,3 +256,59 @@ def test_merge_agent_steps_keeps_other_keys():
         "agents": {"a": {"steps": 2}}}
     assert json.loads(service_module.merge_agent_steps("not json", {"a": 2})) == {
         "agents": {"a": {"steps": 2}}}
+
+
+def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from campaign_runner.cli import _service_settings
+
+    project = tmp_path / "project"
+    project.mkdir()
+    seen = {}
+
+    def fake_popen(argv, **kwargs):
+        seen["argv"] = argv
+        seen["env"] = kwargs["env"]
+        return _FakeProcess()
+
+    protocol = SimpleNamespace(
+        worker=SimpleNamespace(max_steps=30),
+        reviewer=SimpleNamespace(enabled=True, max_steps=8),
+    )
+    monkeypatch.setattr(service_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
+    monkeypatch.setattr(service_module, "_healthy", lambda *args: True)
+    monkeypatch.setattr(
+        service_module,
+        "_wait_for_agents",
+        lambda port, password, names, timeout_seconds, interval=0.5:
+            seen.setdefault("required_agents", list(names)) is not None,
+    )
+    monkeypatch.setattr(service_module, "redact_file", lambda path: None)
+    config, required_agents = _service_settings(protocol)
+    ensure_service(
+        project,
+        str(tmp_path / "opencode"),
+        str(tmp_path / "opencode.db"),
+        config_content=config,
+        required_agents=required_agents,
+    )
+    snapshot = json.loads(
+        (ROOT / "tests" / "snapshots" / "opencode" / "service.json").read_text()
+    )
+    observed = {
+        "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in seen["argv"]],
+        "environment_keys": sorted(seen["env"]),
+        "required_agents": seen["required_agents"],
+        "startup_steps": {
+            name: value["steps"]
+            for name, value in json.loads(config)["agents"].items()
+        },
+        "agent_file_bytes": {
+            name: (ROOT / ".opencode" / "agents" / name).read_bytes().decode("utf-8")
+            for name in ("campaign-worker.md", "campaign-reviewer.md")
+        },
+    }
+    assert observed == snapshot
