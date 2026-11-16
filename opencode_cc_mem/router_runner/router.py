@@ -226,12 +226,31 @@ class Router:
         return hashlib.sha256(encoded).hexdigest()
 
     def _waiter_binding(self, text: str, context: dict) -> dict:
+        project_dir = getattr(self.evaluator, "project_dir", None)
         return {
             "route_identity": self._route_identity(),
             "project_registry_digest": self._registry_digest(),
             "pending_input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "project": context.get("last_project"),
+            "evaluator_project_dir": str(project_dir) if project_dir else None,
         }
+
+    def _restore_waiter_project(self, binding: dict) -> bool:
+        project_dir = binding.get("evaluator_project_dir")
+        if project_dir is None:
+            route_identity = binding.get("route_identity")
+            if isinstance(route_identity, dict):
+                project_dir = route_identity.get("project_dir")
+        if project_dir is None:
+            return True
+        bind_project = getattr(self.evaluator, "bind_project", None)
+        if not callable(bind_project):
+            return False
+        try:
+            bind_project(project_dir)
+        except (OSError, TypeError, ValueError):
+            return False
+        return True
 
     def _store_eval_waiter(
         self, text: str, context: dict, waiting: EvalQuotaWait
@@ -280,6 +299,8 @@ class Router:
             binding = persisted["binding"]
         except (KeyError, TypeError, json.JSONDecodeError):
             return RouteReply("unavailable", detail="evaluator waiter binding is invalid")
+        if not self._restore_waiter_project(binding):
+            return RouteReply("unavailable", detail="evaluator waiter binding is invalid")
         if binding.get("route_identity") != self._route_identity():
             return RouteReply("unavailable", detail="evaluator route changed")
         if binding.get("project_registry_digest") != self._registry_digest():
@@ -322,7 +343,11 @@ class Router:
             )
         except Exception:
             self.engine.store.set_eval_waiter_state(
-                waiter_id, "pending", datetime.now(timezone.utc).isoformat()
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=claimed["hold_id"],
+                reset_at=claimed["reset_at"],
             )
             return RouteReply("unavailable", detail="evaluator resume failed; waiter remains pending")
         if isinstance(result, EvalQuotaWait):

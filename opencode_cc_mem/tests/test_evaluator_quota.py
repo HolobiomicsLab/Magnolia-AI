@@ -60,7 +60,17 @@ def _governor(tmp_path):
     )
 
 
-def _router(tmp_path, monkeypatch, governor, executor, db_name="router.db"):
+_DEFAULT_PROJECT_DIR = object()
+
+
+def _router(
+    tmp_path,
+    monkeypatch,
+    governor,
+    executor,
+    db_name="router.db",
+    project_dir=_DEFAULT_PROJECT_DIR,
+):
     from router_runner import evaluator as evaluator_module
 
     monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
@@ -69,7 +79,7 @@ def _router(tmp_path, monkeypatch, governor, executor, db_name="router.db"):
     evaluator = GenerativeEvaluator(
         "claude-code/claude-haiku-5-5",
         governor=governor,
-        project_dir=tmp_path,
+        project_dir=tmp_path if project_dir is _DEFAULT_PROJECT_DIR else project_dir,
         role_capabilities=CAPABILITIES,
     )
     return Router(
@@ -145,6 +155,37 @@ def test_evaluator_resume_once_after_restart(tmp_path, monkeypatch):
     assert stored["text"] == ""
 
 
+def test_evaluator_resume_from_different_cwd_uses_recorded_project(
+    tmp_path, monkeypatch
+):
+    governor = _governor(tmp_path)
+    executor = DecisionExecutor()
+    _unknown_hold(governor)
+    first = _router(tmp_path, monkeypatch, governor, executor)
+    first.say("in proj_a: unrelated work")
+    waiter_id = first.say("analyze the latest result").waiter_id
+    first.engine.store.close()
+
+    resume_dir = tmp_path / "resume-cwd"
+    resume_dir.mkdir()
+    monkeypatch.chdir(resume_dir)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(resume_dir))
+    restarted = _router(
+        tmp_path,
+        monkeypatch,
+        governor,
+        executor,
+        project_dir=None,
+    )
+
+    resumed = restarted.resume_evaluation(waiter_id, manual=True)
+
+    assert resumed.kind == "handoff"
+    assert resumed.project == "proj_a"
+    assert restarted.evaluator.project_dir == tmp_path.resolve()
+    assert executor.calls == 1
+
+
 def test_evaluator_resume_after_unrelated_handoff(tmp_path, monkeypatch):
     governor = _governor(tmp_path)
     executor = DecisionExecutor()
@@ -186,8 +227,9 @@ def test_evaluator_resume_refuses_registry_change_without_decision(tmp_path, mon
     executor = DecisionExecutor()
     _unknown_hold(governor)
     router = _router(tmp_path, monkeypatch, governor, executor)
+    router.say("in proj_a: unrelated work")
     waiter_id = router.say("analyze the latest result").waiter_id
-    router.registry["proj_c"] = {"inbox": str(tmp_path / "proj_c" / "inbox")}
+    router.registry["proj_a"]["inbox"] = str(tmp_path / "moved" / "inbox")
 
     refused = router.resume_evaluation(waiter_id, manual=True)
 
@@ -218,9 +260,15 @@ def test_evaluator_second_quota_stays_waiting_without_decision(tmp_path, monkeyp
 def test_evaluator_resume_exception_never_leaves_running(tmp_path, monkeypatch):
     governor = _governor(tmp_path)
     executor = DecisionExecutor()
-    _unknown_hold(governor)
+    reset_at = datetime(2026, 11, 17, tzinfo=timezone.utc)
+    route = resolve_route("evaluator", {"model": "claude-code/claude-haiku-5-5"})
+    waiting = governor.checkpoint_limit(
+        route.subscription_key,
+        LimitInfo("weekly limit", reset_at, "fixture"),
+    )
     router = _router(tmp_path, monkeypatch, governor, executor)
     waiter_id = router.say("analyze the latest result").waiter_id
+    before = router.engine.store.get("eval_waiters", "waiter_id", waiter_id)
     monkeypatch.setattr(
         router.evaluator,
         "evaluate",
@@ -231,7 +279,9 @@ def test_evaluator_resume_exception_never_leaves_running(tmp_path, monkeypatch):
 
     assert reply.kind == "unavailable"
     stored = router.engine.store.get("eval_waiters", "waiter_id", waiter_id)
-    assert stored["state"] in {"pending", "failed"}
+    assert stored["state"] == "pending"
+    assert stored["hold_id"] == before["hold_id"] == waiting.hold_id
+    assert stored["reset_at"] == before["reset_at"] == reset_at.isoformat()
     assert router.engine.store.all("eval_decisions") == []
 
 

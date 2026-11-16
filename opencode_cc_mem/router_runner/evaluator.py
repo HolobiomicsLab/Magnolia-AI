@@ -185,6 +185,10 @@ class GenerativeEvaluator:
         self.role_capabilities = role_capabilities
         self._executable_available = executable_available or _executable_available
 
+    def bind_project(self, project_dir: str | Path) -> None:
+        """Restore the project recorded for a durable evaluator action."""
+        self.project_dir = Path(project_dir).resolve()
+
     def available(self) -> bool:
         if not self._uses_client():
             return llm.is_llm_available()
