@@ -1094,6 +1094,7 @@ def _codex_mcp_servers(
             "MAGNOLIA_HOOK_POLICY",
             "MAGNOLIA_HOOK_POLICY_REQUIRED",
             "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_CONTROL_DIR",
         ],
     }
     return servers
