@@ -130,11 +130,6 @@ LAUNCH_IDENTITY_COMPONENTS = (
     "hook_source",
     "required_env",
 )
-ISOLATED_RUNNER_PARTS = (
-    "mcp-servers", "compchem-memory", "src", "compchem_memory", "hook", "runner.py"
-)
-
-
 @dataclass(frozen=True)
 class PreparedLaunch:
     """An immutable noninteractive client launch and its run-owned identity."""
@@ -1011,7 +1006,7 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
         service = {
             key: value for key, value in context.memory_service.items() if key in allowed
         }
-        _validate_memory_service(service)
+        _validate_memory_service(context, service)
     tool_allowlist = list(policy.mcp_tool_allowlist)
     if context.route is not None and (
         context.route.client == "codex" and context.role in {"worker", "reviewer"}
@@ -1099,7 +1094,7 @@ def _codex_mcp_servers(
             servers["compchem-memory"] = entry
     servers["magnolia-read"] = {
         "command": context.python_executable,
-        "args": ["-m", "compchem_memory.harness.read_server"],
+        "args": ["-I", str(_hook_runner_path(context)), "--read-server"],
         "cwd": str(context.project_dir.resolve()),
         "env_vars": [
             "MAGNOLIA_HOOK_POLICY",
@@ -1167,7 +1162,7 @@ def _claude_mcp_servers(
     return {"compchem-memory": entry}
 
 
-def _validate_memory_service(service: Mapping[str, Any]) -> None:
+def _validate_memory_service(context: ExecContext, service: Mapping[str, Any]) -> None:
     transport = service.get("transport")
     dependencies = []
     authorization = service.get("authorization_env")
@@ -1201,7 +1196,7 @@ def _validate_memory_service(service: Mapping[str, Any]) -> None:
             or args[0] != "-I"
             or args[2] != "--memory-server"
             or not runner.is_absolute()
-            or runner.parts[-len(ISOLATED_RUNNER_PARTS):] != ISOLATED_RUNNER_PARTS
+            or runner != _hook_runner_path(context)
         ):
             raise ExecutorRefused(
                 "memory stdio route requires the isolated repository runner"

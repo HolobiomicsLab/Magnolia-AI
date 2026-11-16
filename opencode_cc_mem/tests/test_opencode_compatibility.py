@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import resource
 import signal
+import subprocess
 import time
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -17,6 +18,26 @@ from campaign_runner.process import ProcessControl, ProcessOutcome, run_process
 from campaign_runner.reviewers import Reviewer
 from campaign_runner.routing import resolve_route
 from campaign_runner.workers import OpenCodeExecutor
+
+
+def test_direct_opencode_client_calls_disconnect_stdin(monkeypatch, tmp_path):
+    from campaign_runner.executors import opencode as opencode_module
+
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(opencode_module.subprocess, "run", fake_run)
+    helper = opencode_module.OpenCodeHelperExecutor("opencode", "provider/model")
+    evaluator = opencode_module.OpenCodeEvaluatorExecutor("opencode", "provider/model")
+    helper.run([], cwd=tmp_path, environment={}, timeout_seconds=1)
+    evaluator.run("prompt", environment={}, timeout_seconds=1)
+    evaluator.catalog(environment={}, timeout_seconds=1)
+
+    assert len(calls) == 3
+    assert all(kwargs.get("stdin") is subprocess.DEVNULL for _, kwargs in calls)
 
 
 def _route(role):

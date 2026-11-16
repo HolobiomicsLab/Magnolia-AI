@@ -345,6 +345,25 @@ def test_watchdog_never_signals_other_processes(monkeypatch):
     assert removed == [True]
 
 
+def test_watchdog_logs_owned_state_left_by_lock_contention(monkeypatch, caplog):
+    class StopEvent:
+        def wait(self, interval):
+            return False
+
+    class Watchdog:
+        def should_exit(self):
+            return True
+
+        def remove_owned_state(self):
+            return False
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", lambda _signal: None)
+
+    memory_http._watchdog_loop(Watchdog(), 0.01, StopEvent())
+
+    assert "could not remove its owned state" in caplog.text
+
+
 def test_watchdog_forces_self_exit_after_graceful_shutdown_deadline(monkeypatch):
     raised = []
     forced = []

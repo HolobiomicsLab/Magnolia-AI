@@ -5,13 +5,11 @@ with elevation to durable doctrine via the git-tracked rules/ directory (the
 former .magnolia/skills skill tier was retired; protocols live in
 .opencode/skills/, loaded on demand by the agent)."""
 
-import faulthandler
 import json
 import os
 import sys
 import threading
 import time
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -98,10 +96,14 @@ from compchem_memory.project_guard import check_project
 from compchem_memory.startup_scan import scan_and_distill, _opencode_available
 from compchem_memory.llm import is_llm_available
 from compchem_memory.opencode_ingest import distill_session_transcript
+from compchem_memory.server_start import install_stdio_guards, write_crash_log
 
 RULES_DIR = resolved_rules_dir()
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
+
+if __name__ == "__main__":
+    install_stdio_guards(PROJECT_DIR)
 
 
 class ProjectBindingError(ValueError):
@@ -158,30 +160,6 @@ def _build_boot_steps(project_dir):
     ]
 
 
-class _StdoutToStderr:
-    """Keep the real stdout buffer for MCP JSON-RPC; send text prints to stderr.
-
-    `mcp.server.stdio` writes frames through `sys.stdout.buffer`, while every
-    `print()` in the server path writes through `sys.stdout.write`. Sharing one
-    stream is what let a boot-handover diagnostic line corrupt a tool response
-    (2026-11-16). Exposing `.buffer` preserves the transport; routing `.write`
-    to stderr keeps diagnostics out of the protocol.
-    """
-
-    def __init__(self, real: Any):
-        self._real = real
-        self.buffer = getattr(real, "buffer", None)
-
-    def write(self, data: str) -> int:
-        return sys.stderr.write(data)
-
-    def flush(self) -> None:
-        sys.stderr.flush()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._real, name)
-
-
 def _crash_log(where: str, exc: BaseException | None = None) -> None:
     """Append a traceback to .magnolia/crash.log. Never raises.
 
@@ -189,16 +167,7 @@ def _crash_log(where: str, exc: BaseException | None = None) -> None:
     (or a native crash captured by faulthandler) leaves only a closed MCP
     connection and a missing boot-timing row. The log is intentionally separate
     from boot-timing so it survives a hard process death."""
-    try:
-        p = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as f:
-            f.write(f"--- {datetime.now(timezone.utc).isoformat()} {where} ---\n")
-            if exc is not None:
-                traceback.print_exception(type(exc), exc, exc.__traceback__, file=f)
-            f.flush()
-    except Exception:
-        pass
+    write_crash_log(PROJECT_DIR, where, exc)
 
 
 def _run_startup_scan_background():
@@ -1380,31 +1349,4 @@ def get_runs_index() -> str:
 
 
 if __name__ == "__main__":
-    # A native crash (sqlite/ssl/…) must leave a stack trace, not just a closed
-    # MCP pipe. Keep the handle alive for the lifetime of the process.
-    _crash_file = None
-    try:
-        _crash_path = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
-        _crash_path.parent.mkdir(parents=True, exist_ok=True)
-        _crash_file = _crash_path.open("a", encoding="utf-8")
-        faulthandler.enable(file=_crash_file, all_threads=True)
-    except Exception:
-        pass
-
-    def _thread_excepthook(args) -> None:
-        if args.exc_type is SystemExit:
-            return
-        _crash_log(
-            f"thread {args.thread.name if args.thread else '?'}",
-            args.exc_value,
-        )
-        threading.__excepthook__(args)
-
-    threading.excepthook = _thread_excepthook
-
-    # stdout is the MCP transport. Route stray diagnostics to stderr while
-    # preserving the real buffer for JSON-RPC (see _StdoutToStderr).
-    if getattr(sys.stdout, "buffer", None) is not None:
-        sys.stdout = _StdoutToStderr(sys.stdout)
-
     mcp.run()

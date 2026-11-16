@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
+from compchem_memory.hook.runner import repository_runner_path
+
 try:
     from campaign_runner.executors.registry import ExecutorRefused
 except ImportError:  # Standalone memory-server installation.
@@ -502,8 +504,9 @@ def _start_service(
     )
     command = [
         python,
-        "-m",
-        SERVICE_MODULE,
+        "-I",
+        repository_runner_path(),
+        "--memory-http",
         "--project-dir",
         str(project),
         "--state-dir",
@@ -807,7 +810,7 @@ def _start_process(
     log = log_path.open("ab", buffering=0)
     try:
         return subprocess.Popen(
-            [argv[0], "-c", _UNMASK_AND_EXEC, *argv],
+            [argv[0], "-I", "-c", _UNMASK_AND_EXEC, *argv],
             cwd=str(cwd),
             env=dict(environment),
             stdin=subprocess.DEVNULL,
@@ -943,10 +946,10 @@ def _final_service_command(
 ) -> tuple[str, ...] | str | None:
     """Remove the bootstrap, retaining the interpreter's native re-exec name."""
     if isinstance(observed, tuple):
-        if observed[1:] == ("-c", _UNMASK_AND_EXEC, *command):
+        if observed[1:] == ("-I", "-c", _UNMASK_AND_EXEC, *command):
             return (observed[0], *command[1:])
     elif isinstance(observed, str):
-        bootstrap = " -c " + _UNMASK_AND_EXEC + " " + " ".join(command) + "\n"
+        bootstrap = " -I -c " + _UNMASK_AND_EXEC + " " + " ".join(command) + "\n"
         if observed.endswith(bootstrap):
             return observed[:-len(bootstrap)] + " " + " ".join(command[1:]) + "\n"
     return observed
@@ -963,15 +966,21 @@ def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
         return False
     if project_digest(project) != digest:
         return False
-    old_suffix = ("-m", SERVICE_MODULE, "--project-dir", str(project))
-    suffixes = [old_suffix]
+    service_suffix = (
+        "-I",
+        repository_runner_path(),
+        "--memory-http",
+        "--project-dir",
+        str(project),
+    )
+    suffixes = [service_suffix]
     state_value = record.get("state_dir")
     if state_value:
         try:
             state = Path(str(state_value)).expanduser().resolve()
         except OSError:
             return False
-        suffixes = [(*old_suffix, "--state-dir", str(state))]
+        suffixes = [(*service_suffix, "--state-dir", str(state))]
     candidates = [recorded]
     if record.get("provisional") is True:
         candidates.append(record.get("final_command"))

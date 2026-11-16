@@ -305,7 +305,8 @@ def _watchdog_loop(
     remover = getattr(watchdog, "remove_owned_state", None)
     if callable(remover):
         try:
-            remover()
+            if remover() is False:
+                LOGGER.warning("memory service watchdog could not remove its owned state")
         except BaseException:
             LOGGER.exception("memory service watchdog could not remove its owned state")
     signal.raise_signal(signal.SIGTERM)

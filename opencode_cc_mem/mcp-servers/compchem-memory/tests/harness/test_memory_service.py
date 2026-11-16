@@ -48,6 +48,20 @@ def _context(project: Path, *, key: str = "provider-secret") -> SimpleNamespace:
     )
 
 
+def _service_argv(
+    project: Path, state: Path | None = None, *, python: str = "/test/python"
+) -> tuple[str, ...]:
+    argv = (
+        python,
+        "-I",
+        memory_service.repository_runner_path(),
+        "--memory-http",
+        "--project-dir",
+        str(project.resolve()),
+    )
+    return (*argv, "--state-dir", str(state)) if state is not None else argv
+
+
 def test_private_state_is_user_private_and_outside_project(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -462,13 +476,7 @@ def test_forged_identity_correct_record_never_signals_unrelated_process(
         memory_service,
         "_process_command",
         lambda pid: ("/bin/sleep", "600") if pid == victim_pid else (
-            "/test/python",
-            "-m",
-            "compchem_memory.memory_http",
-            "--project-dir",
-            str(project.resolve()),
-            "--state-dir",
-            str(state),
+            *_service_argv(project, state),
         ),
         raising=False,
     )
@@ -527,13 +535,7 @@ def test_forged_record_naming_other_project_service_is_not_signalled(
         "process_identity": identities[service_pid],
         "service_identity": "project-d-identity",
         "token_file": str(token_path),
-        "command": [
-            "/test/python",
-            "-m",
-            memory_service.SERVICE_MODULE,
-            "--project-dir",
-            str(project_d.resolve()),
-        ],
+        "command": list(_service_argv(project_d)),
         "holders": [],
     }
     forged["observed_command"] = forged["command"]
@@ -546,15 +548,7 @@ def test_forged_record_naming_other_project_service_is_not_signalled(
         "_process_command",
         lambda pid: tuple(forged["command"])
         if pid == service_pid
-        else (
-            "/test/python",
-            "-m",
-            memory_service.SERVICE_MODULE,
-            "--project-dir",
-            str(project_c.resolve()),
-            "--state-dir",
-            str(state),
-        ),
+        else _service_argv(project_c, state),
     )
     monkeypatch.setattr(
         memory_service,
@@ -600,13 +594,7 @@ def test_signal_safety_accepts_exact_project_command_without_health_token(
     project.mkdir()
     pid = 4250
     identity = "ps:4250:service"
-    command = [
-        "/test/python",
-        "-m",
-        memory_service.SERVICE_MODULE,
-        "--project-dir",
-        str(project),
-    ]
+    command = list(_service_argv(project))
     record = {
         "pid": pid,
         "port": 44250,
@@ -730,15 +718,7 @@ def test_forged_health_sleep_record_is_never_signalled_by_ensure_or_release(
             "_process_command",
             lambda pid: ("/bin/sleep", "30")
             if pid == victim.pid
-            else (
-                "/test/python",
-                "-m",
-                memory_service.SERVICE_MODULE,
-                "--project-dir",
-                str(project.resolve()),
-                "--state-dir",
-                str(state),
-            ),
+            else _service_argv(project, state),
         )
         monkeypatch.setattr(memory_service, "_start_process", start)
         monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 44101)
@@ -777,17 +757,8 @@ def test_forged_health_sleep_record_is_never_signalled_by_ensure_or_release(
                 "port": 44101,
                 "process_identity": replacement.process_identity,
                 "service_identity": replacement.service_identity,
-                "command": [
-                    "/test/python",
-                    "-m",
-                    memory_service.SERVICE_MODULE,
-                    "--project-dir",
-                    str(project.resolve()),
-                ],
-                "observed_command": [
-                    "/test/python", "-m", memory_service.SERVICE_MODULE,
-                    "--project-dir", str(project.resolve()),
-                ],
+                "command": list(_service_argv(project)),
+                "observed_command": list(_service_argv(project)),
                 "holders": [
                     {
                         "id": replacement.holder_id,
@@ -1137,10 +1108,10 @@ def test_ready_identity_records_reexec_command_and_preserves_spaces(
     project.mkdir()
     started, stopped = _stub_runtime(monkeypatch)
     _healthy_for(monkeypatch, project, started)
-    observed = (
-        "/framework/Python.app/Contents/MacOS/Python", "-m",
-        memory_service.SERVICE_MODULE, "--project-dir", str(project.resolve()),
-        "--state-dir", str(memory_service.private_state_dir(project)),
+    observed = _service_argv(
+        project,
+        memory_service.private_state_dir(project),
+        python="/framework/Python.app/Contents/MacOS/Python",
     )
     if raw_ps:
         observed = " ".join(observed) + "\n"
@@ -1283,7 +1254,7 @@ def test_linux_proc_argv_preserves_native_argument_boundaries(monkeypatch):
 
 def test_termination_rechecks_exact_argv_before_escalation(tmp_path, monkeypatch):
     project = tmp_path.resolve()
-    command = ("/Runtime", "-m", memory_service.SERVICE_MODULE, "--project-dir", str(project))
+    command = _service_argv(project, python="/Runtime")
     record = {
         "pid": 4101, "process_identity": "start", "project_dir": str(project),
         "project_digest": memory_service.project_digest(project),
@@ -1415,6 +1386,55 @@ def test_real_service_reexec_and_spaced_project_release_without_duplicates(tmp_p
             process.wait(timeout=5)
 
 
+def test_real_service_ignores_project_shadow_modules_and_serves_health(
+    tmp_path, monkeypatch
+):
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 0))
+        except OSError as exc:
+            pytest.skip(f"loopback bind unavailable: {exc}")
+    if not memory_service._process_identity(os.getpid()):
+        pytest.skip("OS process start identity is unavailable")
+    project = tmp_path / "shadowed-project"
+    project.mkdir()
+    trap = tmp_path / "shadow-imported"
+    package = project / "compchem_memory"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        f"from pathlib import Path\nPath({str(trap)!r}).write_text('package')\n",
+        encoding="utf-8",
+    )
+    for name in ("json.py", "signal.py", "sitecustomize.py"):
+        (project / name).write_text(
+            f"from pathlib import Path\nPath({str(trap)!r}).write_text({name!r})\n",
+            encoding="utf-8",
+        )
+    (project / "shadow.pth").write_text(
+        f"import pathlib; pathlib.Path({str(trap)!r}).write_text('pth')\n",
+        encoding="utf-8",
+    )
+    context = _context(project, key="loopback-sentinel")
+    context.python = sys.executable
+    context.setup["memory_service_timeout"] = 15
+    context.environment.update(
+        {
+            "HOME": str(Path.home()),
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "OPENAI_BASE_URL": "http://127.0.0.1:9",
+            "NO_PROXY": "127.0.0.1",
+        }
+    )
+
+    handle = memory_service.ensure_memory_service(context)
+    try:
+        assert memory_service._health(handle.url, memory_service.token_for_handle(handle))["service_identity"]
+        assert not trap.exists()
+    finally:
+        memory_service.release_memory_service(handle)
+
+
 def test_real_service_symlinked_home_acquire_reuse_release(tmp_path, monkeypatch):
     with socket.socket() as probe:
         try:
@@ -1475,17 +1495,9 @@ def test_provisional_record_reaps_bootstrap_or_final_command_only(tmp_path, monk
     started, stopped = _stub_runtime(monkeypatch)
     _healthy_for(monkeypatch, project, started)
     state = memory_service.private_state_dir(project)
-    command = (
-        "/test/python",
-        "-m",
-        memory_service.SERVICE_MODULE,
-        "--project-dir",
-        str(project.resolve()),
-        "--state-dir",
-        str(state),
-    )
+    command = _service_argv(project, state)
     runtime = "/framework path/Python.app/Contents/MacOS/Python"
-    bootstrap = (runtime, "-c", memory_service._UNMASK_AND_EXEC, *command)
+    bootstrap = (runtime, "-I", "-c", memory_service._UNMASK_AND_EXEC, *command)
     final = (runtime, *command[1:])
     if raw_ps:
         bootstrap, final = " ".join(bootstrap) + "\n", " ".join(final) + "\n"
@@ -1574,7 +1586,7 @@ ms.ensure_memory_service(SimpleNamespace(
         record = json.loads((state / "service.json").read_text())
         old_pid = record["pid"]
         assert record["provisional"] is True
-        assert record["observed_command"][1] == "-c"
+        assert record["observed_command"][1:3] == ["-I", "-c"]
         assert tuple(record["observed_command"]) != memory_service._process_command(old_pid)
         acquirer.kill()
         acquirer.wait(timeout=5)

@@ -276,6 +276,7 @@ def ensure_service(
             ],
             cwd=str(project),
             env=environment,
+            stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
             start_new_session=True,

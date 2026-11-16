@@ -251,3 +251,45 @@ async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
         assert read.is_error is False
         result = await asyncio.wait_for(slow, timeout=5.0)
         assert "truncated" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    trap = tmp_path / "shadow-imported"
+    package = project / "compchem_memory"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        f"from pathlib import Path\nPath({str(trap)!r}).write_text('package')\n",
+        encoding="utf-8",
+    )
+    for name in ("json.py", "signal.py", "sitecustomize.py"):
+        (project / name).write_text(
+            f"from pathlib import Path\nPath({str(trap)!r}).write_text({name!r})\n",
+            encoding="utf-8",
+        )
+    (project / "shadow.pth").write_text(
+        f"import pathlib; pathlib.Path({str(trap)!r}).write_text('pth')\n",
+        encoding="utf-8",
+    )
+    policy = _policy(tmp_path / "policy.json", project, role="reviewer")
+    runner = Path(__file__).resolve().parents[2] / "src/compchem_memory/hook/runner.py"
+    transport = StdioTransport(
+        command=os.sys.executable,
+        args=["-I", str(runner), "--read-server"],
+        env={
+            "HOME": str(tmp_path),
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_HOOK_POLICY": str(policy),
+            "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(policy.read_bytes()).hexdigest(),
+            "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+        },
+        cwd=str(project),
+    )
+
+    async with Client(transport) as client:
+        tools = await client.list_tools()
+
+    assert {tool.name for tool in tools} == {"read_file", "list_dir", "search"}
+    assert not trap.exists()

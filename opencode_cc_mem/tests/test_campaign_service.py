@@ -179,9 +179,11 @@ def test_service_starts_with_config_content_and_waits_for_agents(tmp_path, monke
     def fake_popen(argv, **kwargs):
         seen["argv"] = argv
         seen["env"] = kwargs["env"]
+        seen["stdin"] = kwargs.get("stdin")
         return _FakeProcess()
 
     monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
     monkeypatch.setattr(service_module, "_healthy", lambda port, password: True)
     monkeypatch.setattr(
         service_module, "_wait_for_agents",
@@ -193,6 +195,7 @@ def test_service_starts_with_config_content_and_waits_for_agents(tmp_path, monke
                             config_content=config,
                             required_agents=["campaign-worker"])
     assert seen["env"]["OPENCODE_CONFIG_CONTENT"] == config
+    assert seen["stdin"] is service_module.subprocess.DEVNULL
     assert seen["agents"] == ["campaign-worker"]
     assert record["running"] is True
     assert "OPENCODE_CONFIG_CONTENT" not in json.dumps(read_service(project))
