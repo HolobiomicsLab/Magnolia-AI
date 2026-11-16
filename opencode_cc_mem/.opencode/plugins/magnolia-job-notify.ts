@@ -14,9 +14,11 @@
  * paths), and a queue holding only malformed lines never starts Python: those
  * rows belong to the hook core's cleanup path.
  *
- * No-op when MAGNOLIA_JOB_NOTIFY=0, the queue is absent, no delivery channel
- * exists, or Magnolia's configured Python cannot take the shared lock.
- * Failures never break a session.
+ * Python resolution follows the other Magnolia plugins: configured
+ * MAGNOLIA_PYTHON, the installation venv, then PATH's python3. No-op when
+ * MAGNOLIA_JOB_NOTIFY=0, the queue is absent, no delivery channel exists, or
+ * the resolved Python cannot take the shared lock. Failures never break a
+ * session.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
@@ -28,17 +30,19 @@ const POLL_INTERVAL_MS = 30_000
 const MAX_PER_DELIVERY = 10
 const CLAIM_TIMEOUT_MS = 5_000
 
-// Self-locate the Magnolia root and its venv. MAGNOLIA_PYTHON is the portable
+// Self-locate the installation and its venv. MAGNOLIA_PYTHON is the portable
 // override for tests and nonstandard installations.
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
-const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
-const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : null)
-const SOURCE_DIR = join(REPO_ROOT, "opencode_cc_mem", "mcp-servers", "compchem-memory", "src")
+const INSTALLATION_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
+const VENV_PY = join(INSTALLATION_ROOT, ".venv", "bin", "python3")
+const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
+const SOURCE_DIR = join(INSTALLATION_ROOT, "mcp-servers", "compchem-memory", "src")
 // -I ignores PYTHONPATH and the working directory, so a project file cannot
-// shadow a standard module; the Magnolia source dir is added explicitly.
+// shadow a standard module; the Magnolia source dir is added explicitly, and
+// any PYTHONPATH of the launching environment (a relocated installation) is
+// placed right after it, ahead of site-packages.
 const BRIDGE = [
-  "import sys",
-  "sys.path.insert(0, sys.argv[1])",
+  "import os, sys",
+  "sys.path[:0] = [sys.argv[1], *(p for p in os.environ.get('PYTHONPATH', '').split(os.pathsep) if p)]",
   "sys.argv[1:] = sys.argv[2:]",
   "from compchem_memory.job_notices import _main",
   "raise SystemExit(_main())",
@@ -50,7 +54,7 @@ type Toast = (title: string, message: string, variant?: string) => void | Promis
 
 function claimNotices(noticesPath: string, limit: number): Promise<Claim | null> {
   // Malformed rows belong to the hook core's cleanup path; never start Python for them.
-  if (!PYTHON || !existsSync(noticesPath) || !hasValidNotice(noticesPath)) return Promise.resolve(null)
+  if (!existsSync(noticesPath) || !hasValidNotice(noticesPath)) return Promise.resolve(null)
   const projectDir = dirname(dirname(noticesPath))
   return new Promise((resolveClaim) => {
     const child = spawn(

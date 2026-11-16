@@ -24,6 +24,7 @@ from .contracts import (
     RunOutcome,
     SessionIdentity,
     UsageRecord,
+    binding_identity_matches,
 )
 from .registry import ExecutorRefused
 
@@ -532,9 +533,7 @@ class CodexExecutor:
         current = self._load_bindings()["sessions"].get(artifact.session_id)
         if current is None:
             raise ExecutorRefused(f"unknown Codex session: {artifact.session_id}")
-        elif not isinstance(current, Mapping) or current.get(
-            "identity"
-        ) != self._binding_identity():
+        elif not _binding_record_matches(current, self._binding_identity()):
             raise ExecutorRefused("Codex session has a different bound identity")
 
     def _binding_identity(self) -> dict[str, str]:
@@ -565,7 +564,7 @@ class CodexExecutor:
         payload = self._load_bindings()
         expected = self._binding_identity()
         current = payload["sessions"].get(session_id)
-        if current is not None and current.get("identity") != expected:
+        if current is not None and not _binding_record_matches(current, expected):
             raise ExecutorRefused("Codex session has a different bound identity")
         payload["sessions"][session_id] = {
             "identity": expected,
@@ -575,7 +574,7 @@ class CodexExecutor:
 
     def _require_bound_session(self, session_id: str) -> None:
         current = self._load_bindings()["sessions"].get(session_id)
-        if not isinstance(current, Mapping) or current.get("identity") != self._binding_identity():
+        if not _binding_record_matches(current, self._binding_identity()):
             raise ExecutorRefused("unknown Codex session or different bound identity")
 
     def _usage_baseline(self, session_id: str | None) -> UsageRecord | None:
@@ -736,6 +735,11 @@ def _hook_key(source: str, event_name: str, group_index: int, hook_index: int) -
     """Return the persisted Codex key for one hooks.json handler."""
     snake_event = re.sub(r"(?<!^)(?=[A-Z])", "_", event_name).lower()
     return f"{source}:{snake_event}:{group_index}:{hook_index}"
+
+
+def _binding_record_matches(record: Any, expected: Mapping[str, str]) -> bool:
+    identity = record.get("identity") if isinstance(record, Mapping) else None
+    return isinstance(identity, Mapping) and binding_identity_matches(identity, expected)
 
 
 def _pid_is_running(pid: int | None) -> bool:
