@@ -299,7 +299,9 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
         "SessionEnd",
     } <= settings["hooks"].keys()
     pre_tool = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert "compchem_memory.hook claude pre-tool" in pre_tool
+    assert pre_tool.startswith("/bin/sh -c ")
+    assert "compchem_memory/hook/runner.py" in pre_tool
+    assert " -I " in pre_tool
     assert "permissionDecision" in pre_tool
     mcp = json.loads(
         Path(argv[argv.index("--mcp-config") + 1]).read_text(encoding="utf-8")

@@ -12,9 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from campaign_runner.cli import _memory_route
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.capabilities import load_role_capabilities
-from campaign_runner.launch import configuration_identity, prepare_launch
+from campaign_runner.launch import (
+    _hook_source_digest,
+    configuration_identity,
+    prepare_launch,
+)
 from campaign_runner.routing import ResolvedRoute
 from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.neutral import NeutralConfig
@@ -161,6 +166,24 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
     (run / "control").mkdir(parents=True, exist_ok=True)
     (run / "work").mkdir(exist_ok=True)
     binary = _fake_claude_client(tmp_path)
+    installation = tmp_path / "snapshot" / "opencode_cc_mem"
+    source = installation / "mcp-servers" / "compchem-memory" / "src"
+    source.mkdir(parents=True, exist_ok=True)
+    package = source / "compchem_memory"
+    if not package.exists():
+        package.symlink_to(
+            ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
+            target_is_directory=True,
+        )
+    repository_venv = installation.parent / ".venv"
+    python = repository_venv / "bin" / "python3"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    if not python.exists():
+        python.symlink_to(sys.executable)
+    (repository_venv / "pyvenv.cfg").write_text(
+        f"home = {Path(sys.executable).resolve().parent}\n",
+        encoding="utf-8",
+    )
     capabilities = copy.deepcopy(load_role_capabilities())
     identity = capabilities["claude-code"][role]["launch_identity"]["components"]
     identity["client_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
@@ -177,22 +200,17 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
     values = {
         "route": route,
         "role": role,
-        "installation_root": ROOT,
+        "installation_root": installation,
         "workspace_root": tmp_path,
         "project_identity": f"identity-{project_name}",
         "project_dir": project,
         "run_dir": run,
         "control_dir": run / "control",
         "work_dir": run / "work",
-        "python_executable": sys.executable,
+        "python_executable": str(python),
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
-        "memory_service": {
-            "transport": "stdio",
-            "command": sys.executable,
-            "args": ["-m", "compchem_memory.server"],
-            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
-        },
+        "memory_service": _memory_route(route, str(python)),
         "invocation_id": f"{role}-{project_name}",
         "launch_argv": (str(binary),),
         "role_capabilities": capabilities,
@@ -982,6 +1000,29 @@ def test_launch_accepts_claude_rows_in_any_project(tmp_path, role):
     assert launches[0].discovery_dir != launches[1].discovery_dir
 
 
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, role):
+    context = _production_claude_context(tmp_path, role=role)
+    route = _memory_route(context.route, context.python_executable)
+
+    prepare_launch(replace(context, memory_service=route))
+
+
+@pytest.mark.parametrize("change", ("missing", "extra"))
+def test_claude_refuses_memory_route_with_one_environment_name_changed(
+    tmp_path, change
+):
+    context = _production_claude_context(tmp_path, role="worker")
+    route = _memory_route(context.route, context.python_executable)
+    if change == "missing":
+        route["env_vars"] = route["env_vars"][:-1]
+    else:
+        route["env_vars"] = [*route["env_vars"], "MAGNOLIA_EXTRA"]
+
+    with pytest.raises(ExecutorRefused, match="mcp"):
+        prepare_launch(replace(context, memory_service=route))
+
+
 def test_launch_refuses_on_binary_drift(tmp_path):
     context = _production_claude_context(tmp_path)
     capabilities = copy.deepcopy(context.role_capabilities)
@@ -1064,6 +1105,31 @@ def test_launch_refuses_unselected_hook_interpreter(tmp_path):
         prepare_launch(context)
 
 
+@pytest.mark.parametrize("kind", ("base", "other-venv", "outside-symlink"))
+def test_hook_interpreter_identity_is_lexical_and_repository_bound(tmp_path, kind):
+    if kind == "base":
+        interpreter = Path(sys.executable).resolve()
+    elif kind == "other-venv":
+        interpreter = tmp_path / "venvX" / "bin" / "python3"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.symlink_to(Path(sys.executable).resolve())
+        (interpreter.parent.parent / "pyvenv.cfg").write_text("home = /base\n")
+    else:
+        interpreter = tmp_path / "outside-python"
+        interpreter.symlink_to(sys.executable)
+    context = _production_claude_context(
+        tmp_path,
+        python_executable=str(interpreter),
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_PYTHON": str(interpreter),
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
 def test_launch_refuses_changed_hook_source(tmp_path, monkeypatch):
     context = _production_claude_context(tmp_path)
     monkeypatch.setattr(
@@ -1072,6 +1138,53 @@ def test_launch_refuses_changed_hook_source(tmp_path, monkeypatch):
 
     with pytest.raises(ExecutorRefused, match="hook_source"):
         prepare_launch(context)
+
+
+def test_hook_source_digest_covers_non_python_files_but_ignores_pycache(tmp_path):
+    installation = tmp_path / "repo" / "opencode_cc_mem"
+    source = (
+        installation
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    repository_source = (
+        ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory"
+    )
+    shutil.copytree(repository_source / "hook", source / "hook")
+    (source / "harness").mkdir()
+    shutil.copy2(
+        repository_source / "harness" / "render_common.py",
+        source / "harness" / "render_common.py",
+    )
+    context = _production_claude_context(tmp_path)
+    context = replace(context, installation_root=installation)
+    baseline = _hook_source_digest(context)
+    pycache = source / "hook" / "__pycache__"
+    pycache.mkdir(exist_ok=True)
+    (pycache / "policy.cpython-312.pyc").write_bytes(b"forged")
+
+    assert _hook_source_digest(context) == baseline
+    (source / "hook" / "policy.cpython-312-darwin.so").write_bytes(b"extension")
+    assert _hook_source_digest(context) != baseline
+
+
+def test_claude_hook_is_isolated_to_repository_source_and_private_pycache(tmp_path):
+    context = _production_claude_context(tmp_path)
+    launch = prepare_launch(context)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    runner = (
+        context.installation_root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
+
+    assert " -I " in command
+    assert str(runner.resolve()) in command
+    assert "PYTHONPYCACHEPREFIX" in launch.env
+    assert Path(launch.env["PYTHONPYCACHEPREFIX"]).parent == launch.invocation_dir
+    assert not Path(launch.env["PYTHONPYCACHEPREFIX"]).exists()
 
 
 @pytest.mark.parametrize(
@@ -1120,6 +1233,17 @@ def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
         )
         with pytest.raises(ExecutorRefused, match=name):
             prepare_launch(context)
+
+
+@pytest.mark.parametrize("name", ("settings.json", "settings.local.json"))
+def test_claude_refuses_project_settings_loaded_by_setting_sources(tmp_path, name):
+    context = _production_claude_context(tmp_path)
+    settings = context.run_dir / ".claude" / name
+    settings.parent.mkdir()
+    settings.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match=name):
+        prepare_launch(context)
 
 
 def test_client_version_reads_only_own_package_json(tmp_path):

@@ -1,6 +1,9 @@
 import hashlib
+import importlib.util
 import json
 import os
+import py_compile
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -10,15 +13,18 @@ import pytest
 from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
+from compchem_memory.harness.ownership import is_magnolia_hook_command
 from compchem_memory.harness.render_common import (
     _required_pre_tool_command,
     harness_dir,
+    hook_command,
     policy_files,
 )
 from compchem_memory.hook.events import native_tool
 
 
-FIXTURES = Path(__file__).parents[4] / "tests" / "fixtures" / "executors"
+ROOT = Path(__file__).parents[4]
+FIXTURES = ROOT / "tests" / "fixtures" / "executors"
 
 
 def test_noninteractive_policy_is_run_owned_and_required(tmp_path):
@@ -152,11 +158,30 @@ def test_noninteractive_role_env_all_three_clients(
         rendered_hook = launch.files[project / hook_file]
     text = rendered_hook.decode("utf-8")
     assert hook_marker in text
-    assert "compchem_memory.hook" in text
+    assert any(
+        is_magnolia_hook_command(command)
+        for command in _rendered_commands(rendered_hook, client)
+    )
     assert not any(
         forbidden in " ".join(launch.argv) + text
         for forbidden in ("--trust", "--dangerously", "bypass")
     )
+
+
+def _rendered_commands(rendered_hook: bytes, client: str) -> list[str]:
+    """Extract hook commands from one client's native configuration."""
+    if client == "vibe":
+        import tomllib
+
+        hooks = tomllib.loads(rendered_hook.decode("utf-8"))["hooks"]
+        return [hook["command"] for hook in hooks]
+    hooks = json.loads(rendered_hook)["hooks"]
+    return [
+        hook["command"]
+        for groups in hooks.values()
+        for group in groups
+        for hook in group["hooks"]
+    ]
 
 
 def _pre_tool_command(launch, project, policy_path, client):
@@ -216,7 +241,7 @@ def test_rendered_required_hook_preserves_allowed_stdin_and_denies(client, tmp_p
     denied_file = tmp_path / "outside.txt"
     denied_file.write_text("secret", encoding="utf-8")
     context = LaunchContext(
-        root=tmp_path,
+        root=ROOT,
         project="project-id",
         project_dir=project,
         python=sys.executable,
@@ -329,6 +354,8 @@ def test_noninteractive_pre_tool_hook_failure_blocks(
 def test_noninteractive_pre_tool_hook_timeout_blocks():
     command = _required_pre_tool_command("sleep 5", "claude", timeout_s=1)
 
+    assert command.startswith("/bin/sh -c ")
+
     result = subprocess.run(
         ["sh", "-c", command],
         input="{}", capture_output=True, text=True, timeout=4,
@@ -336,4 +363,87 @@ def test_noninteractive_pre_tool_hook_timeout_blocks():
 
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert result.returncode == 0
+
+
+def test_required_hook_ignores_editable_install_and_forged_source_pycache(tmp_path):
+    installation = tmp_path / "repo" / "opencode_cc_mem"
+    source = installation / "mcp-servers" / "compchem-memory" / "src"
+    shutil.copytree(
+        ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
+        source / "compchem_memory",
+    )
+    repository_venv = installation.parent / ".venv"
+    interpreter = repository_venv / "bin" / "python3"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.symlink_to(sys.executable)
+    (repository_venv / "pyvenv.cfg").write_text(
+        f"home = {Path(sys.executable).resolve().parent}\n"
+        "include-system-site-packages = true\n",
+        encoding="utf-8",
+    )
+    editable = tmp_path / "editable"
+    editable_hook = editable / "compchem_memory" / "hook"
+    editable_hook.mkdir(parents=True)
+    (editable / "compchem_memory" / "__init__.py").write_text("")
+    (editable_hook / "__init__.py").write_text("")
+    (editable_hook / "__main__.py").write_text(
+        "def main():\n    print('{\"marker\": \"editable\"}')\n"
+    )
+    site_packages = (
+        repository_venv
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+    )
+    site_packages.mkdir(parents=True)
+    (site_packages / "editable.pth").write_text(str(editable) + "\n")
+    main_source = source / "compchem_memory" / "hook" / "__main__.py"
+    malicious = tmp_path / "malicious.py"
+    malicious.write_text(
+        "def main():\n    print('{\"marker\": \"forged\"}')\n"
+    )
+    forged = Path(importlib.util.cache_from_source(str(main_source)))
+    forged.parent.mkdir(exist_ok=True)
+    py_compile.compile(
+        str(malicious),
+        cfile=str(forged),
+        doraise=True,
+        invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+    )
+    context = LaunchContext(
+        root=installation,
+        project="project-id",
+        project_dir=tmp_path / "project",
+        python=str(interpreter),
+        tools_port=8123,
+        model="haiku",
+        setup={},
+        run_dir=tmp_path / "run",
+        control_dir=tmp_path / "run" / "control",
+        work_dir=tmp_path / "run" / "work",
+        role="worker",
+        invocation_id="worker-one",
+        noninteractive=True,
+    )
+    command = hook_command(context, "claude", "pre-tool")
+    cache = tmp_path / "run" / "control" / "executors" / "worker-one" / "pycache"
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        input="{}",
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={
+            **os.environ,
+            "PYTHONPYCACHEPREFIX": str(cache),
+            "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+        },
+    )
+
+    assert "editable" not in result.stdout
+    assert "forged" not in result.stdout
+    assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert result.returncode == 0

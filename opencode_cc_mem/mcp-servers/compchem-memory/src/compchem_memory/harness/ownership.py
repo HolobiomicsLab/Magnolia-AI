@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import re
+
 MAGNOLIA_SERVERS = frozenset({"compchem-tools", "compchem-memory", "perspicacite"})
-HOOK_MARKER = "-m compchem_memory.hook"
 VIBE_HOOK_PREFIX = "magnolia-"
+_COMMAND_BOUNDARY = r"(?:^|[\s;&|()])"
+_COMMAND_END = r"(?=$|[\s;&|()])"
+_LEGACY_HOOK = re.compile(
+    rf"{_COMMAND_BOUNDARY}-m\s+['\"]?compchem_memory\.hook['\"]?{_COMMAND_END}"
+)
+_RUNNER_HOOK = re.compile(
+    rf"compchem_memory[/\\]hook[/\\]runner\.py['\"]?{_COMMAND_END}"
+)
+
+
+def is_magnolia_hook_command(command: object) -> bool:
+    """Recognise legacy module hooks and the isolated repository runner."""
+    if not isinstance(command, str):
+        return False
+    return bool(_LEGACY_HOOK.search(command) or _RUNNER_HOOK.search(command))
 
 
 def owned(kind: str, name: str | None, entry: dict) -> bool:
@@ -62,5 +78,4 @@ def _strip_group(group):
 
 
 def _runs_hook_module(hook: dict) -> bool:
-    command = hook.get("command")
-    return isinstance(command, str) and HOOK_MARKER in command
+    return is_magnolia_hook_command(hook.get("command"))

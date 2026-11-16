@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from compchem_memory.harness import RENDERERS
+from compchem_memory.harness.ownership import is_magnolia_hook_command
 from compchem_memory.harness.render_vibe import render
 
 
@@ -105,9 +106,9 @@ def test_vibe_pre_tool_hook_is_strict(make_render):
         "magnolia-pre-tool": "pre_tool", "magnolia-post-tool": "post_tool",
         "magnolia-turn-end": "post_agent", "magnolia-session-end": "session_end",
     }
-    assert hooks["magnolia-pre-tool"]["command"] == (
-        "/venv/bin/python -m compchem_memory.hook vibe pre-tool"
-    )
+    pre_tool = hooks["magnolia-pre-tool"]["command"]
+    assert is_magnolia_hook_command(pre_tool)
+    assert pre_tool.endswith(" vibe pre-tool")
     assert hooks["magnolia-post-tool"]["timeout"] == 10
     assert hooks["magnolia-prompt"]["timeout"] == 30
     assert hooks["magnolia-prompt"]["match"] == "main"
