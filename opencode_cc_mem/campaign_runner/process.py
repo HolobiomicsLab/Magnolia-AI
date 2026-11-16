@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import json
 import os
 import shutil
 import signal
@@ -20,25 +19,67 @@ from .executors.contracts import RunOutcome
 BARRIER_FAILURE_EXIT = 125
 BARRIER_EXEC_FAILURE_EXIT = 126
 BARRIER_EXEC_NOT_FOUND_EXIT = 127
-_BARRIER_ENV_SNAPSHOT = "MAGNOLIA_BARRIER_ORIGINAL_ENV"
+_BARRIER_SIZE_BYTES = 8
 _BARRIER_STUB = f"""
-import errno, json, os, signal, sys
+import errno, os, signal, sys
 fd = int(sys.argv[1])
 client_path = sys.argv[2]
 client_argv0 = sys.argv[3]
-try:
-    released = os.read(fd, 1)
-except OSError:
+
+def fail():
+    try:
+        os.close(fd)
+    except OSError:
+        pass
     os._exit({BARRIER_FAILURE_EXIT})
+
+def read_exact(size):
+    body = bytearray()
+    while len(body) < size:
+        try:
+            chunk = os.read(fd, min(size - len(body), 65536))
+        except Exception:
+            fail()
+        if not chunk:
+            fail()
+        body.extend(chunk)
+    return bytes(body)
+
+released = read_exact(1)
 if released != b"\\n":
-    os._exit({BARRIER_FAILURE_EXIT})
+    fail()
+payload_size = int.from_bytes(read_exact({_BARRIER_SIZE_BYTES}), "big")
+payload = read_exact(payload_size)
 try:
     os.close(fd)
 except OSError:
     os._exit({BARRIER_FAILURE_EXIT})
-snapshot = json.loads(os.environ[{_BARRIER_ENV_SNAPSHOT!r}])
-original_env = {{bytes.fromhex(key): bytes.fromhex(value) for key, value in snapshot}}
-for signal_name in ("SIGPIPE", "SIGXFZ", "SIGXFSZ"):
+try:
+    cursor = 0
+    if len(payload) < {_BARRIER_SIZE_BYTES}:
+        raise ValueError
+    pair_count = int.from_bytes(payload[:{_BARRIER_SIZE_BYTES}], "big")
+    cursor = {_BARRIER_SIZE_BYTES}
+    original_env = {{}}
+    for _ in range(pair_count):
+        if len(payload) - cursor < {2 * _BARRIER_SIZE_BYTES}:
+            raise ValueError
+        key_size = int.from_bytes(payload[cursor:cursor + {_BARRIER_SIZE_BYTES}], "big")
+        cursor += {_BARRIER_SIZE_BYTES}
+        value_size = int.from_bytes(payload[cursor:cursor + {_BARRIER_SIZE_BYTES}], "big")
+        cursor += {_BARRIER_SIZE_BYTES}
+        end = cursor + key_size + value_size
+        if end > len(payload):
+            raise ValueError
+        key = payload[cursor:cursor + key_size]
+        cursor += key_size
+        original_env[key] = payload[cursor:end]
+        cursor = end
+    if cursor != len(payload):
+        raise ValueError
+except Exception:
+    os._exit({BARRIER_FAILURE_EXIT})
+for signal_name in ("SIGPIPE", "SIGXFSZ"):
     changed_signal = getattr(signal, signal_name, None)
     if changed_signal is not None:
         signal.signal(changed_signal, signal.SIG_DFL)
@@ -200,15 +241,12 @@ def _start_governed_process(
 ) -> subprocess.Popen:
     try:
         client_path = _resolve_executable(argv[0], cwd, env)
-        environment_snapshot = _snapshot_environment(env)
+        environment_payload = _snapshot_environment(env)
     except OSError as exc:
         raise _process_start_error(exc) from exc
     launch_env = dict(env)
-    launch_env.pop(_BARRIER_ENV_SNAPSHOT, None)
-    launch_env.pop(os.fsencode(_BARRIER_ENV_SNAPSHOT), None)
     launch_env.pop("__PYVENV_LAUNCHER__", None)
     launch_env.pop(b"__PYVENV_LAUNCHER__", None)
-    launch_env[_BARRIER_ENV_SNAPSHOT] = environment_snapshot
     read_fd = None
     write_fd = None
     try:
@@ -250,11 +288,12 @@ def _start_governed_process(
                 errno.EIO, "governed process exited before barrier release"
             )
         try:
-            written = os.write(write_fd, b"\n")
+            payload_size = len(environment_payload).to_bytes(
+                _BARRIER_SIZE_BYTES, "big"
+            )
+            _write_all(write_fd, b"\n" + payload_size + environment_payload)
         except OSError as exc:
             raise _process_start_error(exc) from exc
-        if written != 1:
-            raise ProcessStartError(errno.EIO, "short barrier release write")
     except BaseException as exc:
         os.close(write_fd)
         _kill_and_reap(process)
@@ -290,12 +329,24 @@ def _resolve_executable(
     return os.path.abspath(resolved)
 
 
-def _snapshot_environment(env: Mapping[str, str]) -> str:
-    snapshot = [
-        (os.fsencode(key).hex(), os.fsencode(value).hex())
-        for key, value in env.items()
-    ]
-    return json.dumps(snapshot, separators=(",", ":"))
+def _snapshot_environment(env: Mapping[str, str]) -> bytes:
+    entries = [(os.fsencode(key), os.fsencode(value)) for key, value in env.items()]
+    payload = bytearray(len(entries).to_bytes(_BARRIER_SIZE_BYTES, "big"))
+    for key, value in entries:
+        payload.extend(len(key).to_bytes(_BARRIER_SIZE_BYTES, "big"))
+        payload.extend(len(value).to_bytes(_BARRIER_SIZE_BYTES, "big"))
+        payload.extend(key)
+        payload.extend(value)
+    return bytes(payload)
+
+
+def _write_all(fd: int, body: bytes) -> None:
+    remaining = memoryview(body)
+    while remaining:
+        written = os.write(fd, remaining)
+        if written <= 0:
+            raise OSError(errno.EIO, "short barrier payload write")
+        remaining = remaining[written:]
 
 
 def _process_start_error(exc: OSError) -> ProcessStartError:

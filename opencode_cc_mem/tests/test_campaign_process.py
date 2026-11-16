@@ -371,6 +371,7 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
             "PATH": "/usr/bin:/bin",
             "MAGNOLIA_BARRIER_ORIGINAL_ENV": "caller value",
         },
+        {"PATH": "/usr/bin:/bin", "SENTINEL": "café / λ / 🧪"},
         {b"PATH": b"/usr/bin:/bin", b"SENTINEL": b"bytes key and value"},
     ],
     ids=[
@@ -378,6 +379,7 @@ def test_governed_pipe_preserves_exec_contract(tmp_path, monkeypatch):
         "lc-ctype-c",
         "pyvenv-launcher",
         "snapshot-marker",
+        "non-ascii-environment",
         "bytes-environment",
     ],
 )
@@ -390,6 +392,75 @@ def test_governed_client_environment_matches_plain_popen(tmp_path, child_env):
     assert governed[0].returncode == plain[0].returncode == 0
     assert sorted(governed[1].splitlines()) == sorted(plain[1].splitlines())
     assert governed[2] == plain[2] == b""
+
+
+def test_governed_large_environment_uses_partial_write_loop(tmp_path, monkeypatch):
+    child_env = {"PATH": "/usr/bin:/bin", "BIG": "x" * (100 * 1024)}
+    plain = _run_captured(
+        tmp_path, "plain-large-one-var", ["/usr/bin/env"], child_env, False
+    )
+    real_write = process_module.os.write
+    write_sizes = []
+
+    def partial_write(fd, body):
+        written = real_write(fd, body[:4096])
+        write_sizes.append(written)
+        return written
+
+    monkeypatch.setattr(process_module.os, "write", partial_write)
+    governed = _run_captured(
+        tmp_path, "governed-large-one-var", ["/usr/bin/env"], child_env, True
+    )
+
+    assert governed[0].returncode == plain[0].returncode == 0
+    assert governed[1] == plain[1]
+    assert governed[2] == plain[2] == b""
+    assert sum(write_sizes) > 64 * 1024
+    assert len(write_sizes) > 1
+
+
+def test_governed_total_environment_near_600_kib_matches_plain(tmp_path):
+    child_env = {"PATH": "/usr/bin:/bin"}
+    child_env.update({f"V{index:04d}": "y" * 1000 for index in range(600)})
+
+    plain = _run_captured(
+        tmp_path, "plain-large-total", ["/usr/bin/env"], child_env, False
+    )
+    governed = _run_captured(
+        tmp_path, "governed-large-total", ["/usr/bin/env"], child_env, True
+    )
+
+    assert governed[0].returncode == plain[0].returncode == 0
+    assert sorted(governed[1].splitlines()) == sorted(plain[1].splitlines())
+    assert governed[2] == plain[2] == b""
+
+
+def test_governed_stub_rejects_bad_environment_payload(tmp_path, monkeypatch):
+    marker = tmp_path / "client-ran"
+    monkeypatch.setattr(
+        process_module, "_snapshot_environment", lambda _env: b"bad payload"
+    )
+
+    outcome = run_process(
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')",
+        ],
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout_seconds=30,
+        stdout_path=tmp_path / "bad-payload.out",
+        stderr_path=tmp_path / "bad-payload.err",
+        control=ProcessControl(
+            on_start=lambda _pid, _pgid: None,
+            hold_before_exec=True,
+        ),
+    )
+
+    assert outcome.returncode == process_module.BARRIER_FAILURE_EXIT
+    assert not marker.exists()
+    assert (tmp_path / "bad-payload.err").read_bytes() == b""
 
 
 def test_governed_venv_interpreter_matches_plain_popen(tmp_path):
@@ -626,6 +697,61 @@ def test_real_epipe_keeps_start_error_and_cancels_reservation(tmp_path, monkeypa
     assert not (tmp_path / "client-ran").exists()
 
 
+def test_stub_killed_mid_environment_read_is_start_error(tmp_path, monkeypatch):
+    real_popen = subprocess.Popen
+    real_write = process_module.os.write
+    launchers = []
+
+    class RecordingPopen(real_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            if "-I" in self.args and "-S" in self.args:
+                launchers.append(self)
+
+    def kill_after_payload_prefix(fd, body):
+        if not launchers or len(body) <= 1024:
+            return real_write(fd, body)
+        written = real_write(fd, body[:1024])
+        os.kill(launchers[-1].pid, signal.SIGKILL)
+        launchers[-1].wait(timeout=5)
+        return written
+
+    monkeypatch.setattr(process_module.subprocess, "Popen", RecordingPopen)
+    monkeypatch.setattr(process_module.os, "write", kill_after_payload_prefix)
+    binary = tmp_path / "client"
+    marker = tmp_path / "client-ran"
+    binary.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+    binary.chmod(0o755)
+    usage = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage-ledger.jsonl",
+    )
+    selected = ResolvedRoute(
+        "opencode", "provider/model", "provider", "opencode:provider", "worker", "test"
+    )
+    executor = OpenCodeExecutor(
+        str(binary),
+        "provider/model",
+        "campaign-worker",
+        environment={"BIG": "x" * (100 * 1024)},
+        governance=InvocationGovernance(usage, selected, "run-1", "project"),
+    )
+
+    try:
+        with pytest.raises(WorkerError, match="Broken pipe"):
+            executor.run("work", tmp_path, tmp_path / "attempt")
+    finally:
+        for launcher in launchers:
+            if launcher.returncode is None:
+                launcher.kill()
+                launcher.wait()
+
+    assert not (tmp_path / "usage-ledger.jsonl").exists()
+    state = json.loads(usage.state_path.read_text(encoding="utf-8"))
+    assert state["reservations"] == {}
+    assert not marker.exists()
+
+
 @pytest.mark.parametrize("failure", ["callback", "keyboard_interrupt"])
 def test_dead_launcher_cleanup_preserves_on_start_failure(
     tmp_path, monkeypatch, failure
@@ -701,6 +827,75 @@ def test_kill_and_reap_does_not_signal_reaped_leader(monkeypatch):
     process_module._kill_and_reap(ReapedProcess())
 
     assert signals == []
+
+
+def test_kill_and_reap_swallows_eperm_only_after_leader_is_reaped(monkeypatch):
+    class ReapedAfterSignal:
+        pid = 4242
+        returncode = None
+
+        def __init__(self):
+            self.poll_calls = 0
+            self.wait_calls = 0
+
+        def poll(self):
+            self.poll_calls += 1
+            if self.poll_calls == 2:
+                self.returncode = -signal.SIGKILL
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            return self.returncode
+
+    process = ReapedAfterSignal()
+
+    def raise_eperm(_pid, _signal):
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM))
+
+    monkeypatch.setattr(
+        process_module,
+        "_signal_group",
+        raise_eperm,
+    )
+
+    process_module._kill_and_reap(process)
+
+    assert process.poll_calls == 2
+    assert process.wait_calls == 1
+
+
+def test_kill_and_reap_reraises_eperm_while_leader_is_live(monkeypatch):
+    class LiveProcess:
+        pid = 4242
+        returncode = None
+
+        def __init__(self):
+            self.poll_calls = 0
+
+        def poll(self):
+            self.poll_calls += 1
+            return None
+
+        @staticmethod
+        def wait(timeout=None):
+            raise AssertionError("live leader must not be reaped after EPERM")
+
+    process = LiveProcess()
+
+    def raise_eperm(_pid, _signal):
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM))
+
+    monkeypatch.setattr(
+        process_module,
+        "_signal_group",
+        raise_eperm,
+    )
+
+    with pytest.raises(PermissionError):
+        process_module._kill_and_reap(process)
+
+    assert process.poll_calls == 2
 
 
 def test_resume_and_repair_each_reserve_and_record(tmp_path):
