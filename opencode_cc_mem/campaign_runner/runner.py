@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, fields, is_dataclass, replace
+from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
@@ -1002,9 +1002,14 @@ class CampaignRunner:
         lease.update_session(result.session_id)
         session_identity = getattr(result, "session_identity", None)
         result_resume_artifact = getattr(result, "resume_artifact", None)
-        result_resume_from = self._bound_invocation_dir(
-            executor, result_resume_artifact or resume_artifact
-        )
+        try:
+            result_resume_from = self._bound_invocation_dir(
+                executor, result_resume_artifact or resume_artifact
+            )
+        except RunnerError as exc:
+            return self._fail_before_validation(
+                stage, attempt, f"worker failed: {exc}"
+            )
         recorded_usage = self._record_worker_usage(
             result, route.client, previous_result
         )
@@ -1090,10 +1095,6 @@ class CampaignRunner:
                 return self._finish_gate_failure(
                     stage, attempt, attempt_dir, [f"review failed: {exc}"], review=None
                 )
-            if review.stopped_reason:
-                return self._finish_stopped(
-                    stage, attempt, review.stopped_reason, "stop"
-                )
             if review.outcome is not None and review.outcome.kind == "quota":
                 return self._wait_for_quota(
                     review.outcome,
@@ -1110,6 +1111,10 @@ class CampaignRunner:
                     retry_cursor=review.attempts,
                     resume_artifact=review.resume_artifact,
                     resume_from=review.resume_from,
+                )
+            if review.stopped_reason:
+                return self._finish_stopped(
+                    stage, attempt, review.stopped_reason, "stop"
                 )
             if review.outcome is not None and review.outcome.kind != "success":
                 return self._finish_gate_failure(
@@ -1552,26 +1557,6 @@ class CampaignRunner:
         except (OSError, json.JSONDecodeError):
             return {}
         return value if isinstance(value, dict) else {}
-
-    @staticmethod
-    def _resume_executor(
-        executor: WorkerExecutor,
-        artifact: ResumeArtifact | None,
-        expected_client: str,
-    ) -> WorkerExecutor:
-        if artifact is None:
-            return executor
-        if artifact.client != expected_client:
-            raise RunnerError("resume artifact belongs to another client")
-        if not is_dataclass(executor):
-            raise RunnerError("resumable executor must be a dataclass")
-        names = {item.name for item in fields(executor)}
-        if "resume_artifact" not in names:
-            raise RunnerError("executor does not accept its resume artifact")
-        changes: dict[str, Any] = {"resume_artifact": artifact}
-        if "resume_permitted" in names:
-            changes["resume_permitted"] = True
-        return replace(executor, **changes)
 
     def _bound_invocation_dir(
         self,
