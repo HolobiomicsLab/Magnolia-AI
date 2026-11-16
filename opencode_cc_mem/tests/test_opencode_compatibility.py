@@ -300,8 +300,8 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
     decision = evaluator_module.GenerativeEvaluator(
-            "opencode-go/deepseek-v4.1-flash",
-            executable_available=lambda _path: True,
+        "opencode-go/deepseek-v4.1-flash",
+        executable_available=lambda _path: True,
     ).evaluate("dock", {"projects": ["proj_a"]})
     assert decision is not None
     assert evaluator_module._catalog_has_model("jev-1.13-free") is True
