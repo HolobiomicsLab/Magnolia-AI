@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import stat
@@ -17,7 +18,13 @@ from campaign_runner.security import redact_paths
 from campaign_runner.workers import InvocationGovernance, WorkerError, WorkerResult
 from compchem_memory.harness.render_vibe import READ_ONLY_DISABLED_TOOLS
 
-from .contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .contracts import (
+    LimitInfo,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+    UsageRecord,
+)
 from .registry import ExecutorRefused
 
 
@@ -168,6 +175,7 @@ class VibeExecutor:
     timeout_seconds: int = 1800
     governance: InvocationGovernance | None = None
     max_price: float | None = None
+    resume_artifact: ResumeArtifact | None = None
 
     def __post_init__(self) -> None:
         if self.role == "worker":
@@ -185,6 +193,8 @@ class VibeExecutor:
         self._native_artifact(".vibe/config.toml")
         self._native_artifact(".vibe/hooks.toml")
         self._verify_project_artifacts()
+        if self.resume_artifact is not None:
+            self._accept_resume_artifact(self.resume_artifact)
 
     def run(
         self,
@@ -196,19 +206,23 @@ class VibeExecutor:
         retries: int | None = None,
         control: ProcessControl | None = None,
     ) -> WorkerResult:
-        if resume_session is not None:
-            raise ExecutorRefused("Vibe 3.1.2 resume is not live-certified")
+        if self.resume_artifact is not None:
+            if resume_session not in (None, self.resume_artifact.session_id):
+                raise ExecutorRefused("Vibe resume session differs from its artifact")
+            resume_session = self.resume_artifact.session_id
+        elif resume_session is not None:
+            raise ExecutorRefused("Vibe resume requires a bound resume artifact")
         if retries not in (None, 0):
             raise ExecutorRefused("Vibe empty retry requires live-certified same-session resume")
         attempt_dir.mkdir(parents=True, exist_ok=True)
         stdout_path = attempt_dir / f"{stem}_1.jsonl"
         stderr_path = attempt_dir / f"{stem}_1.err.log"
         output_dir = attempt_dir / f"{stem}_1.out"
-        identity = None
+        identity = self._identity(resume_session) if resume_session else None
         admission = self._admit(stem, identity, control)
         if isinstance(admission, QuotaWaiting):
             outcome, stopped_reason = self._waiting_outcome(admission, control)
-            return self._empty_result(outcome, stopped_reason)
+            return self._empty_result(outcome, stopped_reason, identity)
         effective_cap = min(
             self.max_turns,
             admission.effective_cap
@@ -217,7 +231,7 @@ class VibeExecutor:
         )
         try:
             with admission or _NoAdmission():
-                argv = self._argv(prompt, output_dir, effective_cap)
+                argv = self._argv(prompt, output_dir, effective_cap, resume_session)
                 process = run_process(
                     argv,
                     cwd,
@@ -260,6 +274,17 @@ class VibeExecutor:
                 elif process.returncode != 0 and outcome.kind == "success":
                     outcome = RunOutcome("failure")
                 if parsed.session_id:
+                    if resume_session and parsed.session_id != resume_session:
+                        parsed.diagnostics.append(
+                            {
+                                "kind": "resume_identity_mismatch",
+                                "expected": resume_session,
+                                "observed": parsed.session_id,
+                            }
+                        )
+                        outcome = RunOutcome("refused")
+                    elif not resume_session:
+                        self._bind_session(parsed.session_id)
                     identity = self._identity(parsed.session_id)
                 usage = self._usage(parsed.usage, identity, admission, process.duration_seconds, outcome)
                 if admission is not None and process.client_started:
@@ -276,11 +301,17 @@ class VibeExecutor:
         redact_paths(paths)
         total_usage = _unknown_usage()
         _merge_usage(total_usage, parsed.usage)
+        result_session_id = parsed.session_id or resume_session
+        artifact_session_id = (
+            resume_session
+            if resume_session is not None and outcome.kind == "refused"
+            else result_session_id
+        )
         return WorkerResult(
             process.returncode,
             process.timed_out,
             process.duration_seconds,
-            parsed.session_id,
+            result_session_id,
             parsed.final_text,
             parsed.all_text,
             0,
@@ -291,9 +322,17 @@ class VibeExecutor:
             process.stopped_reason,
             parsed.diagnostics,
             outcome,
+            identity,
+            self._resume_artifact(artifact_session_id),
         )
 
-    def _argv(self, prompt: str, output_dir: Path, cap: int) -> list[str]:
+    def _argv(
+        self,
+        prompt: str,
+        output_dir: Path,
+        cap: int,
+        resume_session: str | None = None,
+    ) -> list[str]:
         argv = [
             self.prepared.argv[0],
             "-p",
@@ -308,6 +347,8 @@ class VibeExecutor:
             str(output_dir),
             "--auto-approve",
         ]
+        if resume_session:
+            argv.extend(["--resume", resume_session])
         for tool in READ_ONLY_DISABLED_TOOLS:
             argv.extend(["--disabled-tools", tool])
         if self.max_price is not None:
@@ -353,9 +394,81 @@ class VibeExecutor:
                 )
 
     def _identity(self, session_id: str) -> SessionIdentity:
-        digest = uuid.uuid5(uuid.NAMESPACE_OID, f"{self.prepared.policy_digest}:{self.prepared.config_digest}:{self.role}").hex
+        digest = self._binding_identity()["configuration_identity_digest"]
         project = self.governance.project_digest if self.governance else "ungoverned"
         return SessionIdentity("vibe", self.model, session_id, project, self.role, digest)
+
+    def _binding_path(self) -> Path:
+        return self.prepared.invocation_dir / "vibe-session-bindings.json"
+
+    def _binding_identity(self) -> dict[str, str]:
+        project = self.prepared.env.get("MAGNOLIA_PROJECT_IDENTITY")
+        digest = hashlib.sha256(
+            f"{self.prepared.policy_digest}\0{self.prepared.config_digest}\0{self.role}\0{self.model}".encode()
+        ).hexdigest()
+        return {
+            "configuration_identity_digest": digest,
+            "role": self.role,
+            "project_identity": project or "",
+        }
+
+    def _load_bindings(self) -> dict[str, Any]:
+        path = self._binding_path()
+        if not path.exists():
+            return {
+                "schema_version": "magnolia-vibe-session-bindings-v1",
+                "sessions": {},
+            }
+        try:
+            mode = path.lstat().st_mode
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ExecutorRefused("invalid Vibe session binding state") from exc
+        if (
+            not stat.S_ISREG(mode)
+            or not isinstance(payload, dict)
+            or not isinstance(payload.get("sessions"), dict)
+        ):
+            raise ExecutorRefused("invalid Vibe session binding state")
+        return payload
+
+    def _bind_session(self, session_id: str) -> None:
+        payload = self._load_bindings()
+        expected = self._binding_identity()
+        current = payload["sessions"].get(session_id)
+        if current is not None and current != expected:
+            raise ExecutorRefused("Vibe session has a different bound identity")
+        if current == expected:
+            return
+        payload["sessions"][session_id] = expected
+        temporary = self._binding_path().with_name(
+            f".{self._binding_path().name}.{uuid.uuid4().hex}.tmp"
+        )
+        temporary.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        temporary.chmod(0o600)
+        temporary.replace(self._binding_path())
+
+    def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
+        if session_id is None:
+            return None
+        binding = self._binding_identity()
+        return ResumeArtifact(
+            "vibe",
+            session_id,
+            binding["configuration_identity_digest"],
+            binding["role"],
+            binding["project_identity"],
+        )
+
+    def _accept_resume_artifact(self, artifact: ResumeArtifact) -> None:
+        if artifact != self._resume_artifact(artifact.session_id):
+            raise ExecutorRefused(
+                "Vibe resume artifact does not match client, role, policy, or project"
+            )
+        self._bind_session(artifact.session_id)
 
     def _admit(self, stem: str, identity: SessionIdentity | None, control: ProcessControl | None) -> Admission | QuotaWaiting | None:
         if self.governance is None:
@@ -369,7 +482,9 @@ class VibeExecutor:
         )
         while True:
             admitted = governance.governor.admit(request, control)
-            if isinstance(admitted, Admission) or admitted.reason in {"quota", "cancelled"}:
+            if isinstance(admitted, Admission) or admitted.reason in {
+                "quota", "daily_limit", "cancelled"
+            }:
                 return admitted
             if not governance.governor.wait(admitted, control):
                 return QuotaWaiting(admitted.key, admitted.caller_id, "cancelled")
@@ -393,9 +508,17 @@ class VibeExecutor:
         assert self.governance is not None
         self.governance.governor.cancel_wait(waiting)
         reason = _control_reason(control) or waiting.reason
-        if waiting.reason != "quota":
+        if waiting.reason not in {"quota", "daily_limit"}:
             return RunOutcome("cancelled"), reason
-        return RunOutcome("quota", LimitInfo("governor quota", waiting.reset_at, "usage governor")), reason
+        return RunOutcome(
+            "quota",
+            LimitInfo(
+                "daily_limit" if waiting.reason == "daily_limit" else "governor quota",
+                waiting.reset_at,
+                "usage governor",
+                waiting.hold_id,
+            ),
+        ), reason
 
     def _usage(self, usage: UsageRecord, identity: SessionIdentity | None, admission: Admission | None, duration: float, outcome: RunOutcome) -> UsageRecord:
         usage.session_identity = identity
@@ -411,8 +534,31 @@ class VibeExecutor:
             usage.project_digest = admission.request.project_digest
         return usage
 
-    def _empty_result(self, outcome: RunOutcome, stopped_reason: str) -> WorkerResult:
-        return WorkerResult(0, False, 0.0, None, "", "", 0, _unknown_usage(), 0, [], [], stopped_reason, [], outcome)
+    def _empty_result(
+        self,
+        outcome: RunOutcome,
+        stopped_reason: str,
+        identity: SessionIdentity | None,
+    ) -> WorkerResult:
+        session_id = identity.session_id if identity is not None else None
+        return WorkerResult(
+            0,
+            False,
+            0.0,
+            session_id,
+            "",
+            "",
+            0,
+            _unknown_usage(),
+            0,
+            [],
+            [],
+            stopped_reason,
+            [],
+            outcome,
+            identity,
+            self._resume_artifact(session_id),
+        )
 
 
 def _vibe_text(payload: Mapping[str, Any], stdout_text: str) -> tuple[str, str]:

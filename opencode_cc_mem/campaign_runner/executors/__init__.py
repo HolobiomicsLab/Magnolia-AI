@@ -1,9 +1,17 @@
-from .contracts import ExecContext, LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .contracts import (
+    ExecContext,
+    LimitInfo,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+    UsageRecord,
+)
 
 __all__ = [
     "ExecContext",
     "ExecutorRefused",
     "LimitInfo",
+    "ResumeArtifact",
     "RunOutcome",
     "SessionIdentity",
     "UsageRecord",
