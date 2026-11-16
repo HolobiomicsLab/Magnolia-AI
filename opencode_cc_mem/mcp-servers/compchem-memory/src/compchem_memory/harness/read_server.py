@@ -55,8 +55,11 @@ class ReadServer:
     ) -> None:
         if policy.role not in {"worker", "reviewer"}:
             raise ReadRefused("magnolia-read is restricted to worker and reviewer policies")
+        canonical_cwd = cwd.resolve()
+        if not cwd.is_absolute() or cwd != canonical_cwd:
+            raise ReadRefused("an explicit canonical cwd is required")
         self.policy = policy
-        self.cwd = cwd.resolve()
+        self.cwd = canonical_cwd
         self.policy_path = policy_path
         self.policy_digest = policy_digest
         self.clock = clock or time.monotonic
@@ -140,6 +143,7 @@ class ReadServer:
         target = self._path(path)
         try:
             with self._open_regular(target, path) as handle:
+                _validate_text_prefix(handle, self.MAX_READ_BYTES)
                 body, truncated = _read_lines(
                     handle, offset, limit, self.MAX_READ_BYTES
                 )
@@ -470,6 +474,13 @@ def _read_lines(
             return b"".join(lines), True
     body = b"".join(lines)
     return body, len(body) >= max_bytes or bool(handle.read(1))
+
+
+def _validate_text_prefix(handle: BinaryIO, max_bytes: int) -> None:
+    """Classify one file from its bounded prefix before paging through it."""
+    scanned = handle.read(max_bytes + 1)
+    _decode_text_prefix(scanned[:max_bytes], len(scanned) > max_bytes)
+    handle.seek(0)
 
 
 def _decode_text_prefix(body: bytes, truncated: bool) -> str:
