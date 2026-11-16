@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import tomllib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
-from campaign_runner.executors.codex import CodexExecutor, parse_codex_stream
+from campaign_runner.executors.codex import (
+    CodexExecutor,
+    parse_codex_stream,
+    require_codex_trust,
+)
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome
 from campaign_runner.governor import Governor, Policy
 from campaign_runner.launch import configuration_identity
@@ -22,14 +27,29 @@ from compchem_memory.harness.render_codex import native_artifacts
 
 ROOT = Path(__file__).parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "executors" / "codex" / "live-p3"
-FORBIDDEN_ENV = {
+STRIPPED_ENV = {
     "CLAUDE_CONFIG_DIR": "forbidden-claude-config",
     "CODEX_HOME": "forbidden-codex-home",
     "VIBE_HOME": "forbidden-vibe-home",
     "CODEX_API_KEY": "forbidden-codex-key",
     "ANTHROPIC_API_KEY": "forbidden-anthropic-key",
     "ANTHROPIC_AUTH_TOKEN": "forbidden-anthropic-token",
+    "OPENAI_API_KEY": "forbidden-openai-key",
+    "MISTRAL_API_KEY": "forbidden-mistral-key",
 }
+PASSTHROUGH_ENV = {
+    "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
+    "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
+    "OPENROUTER_API_KEY": "forbidden-openrouter-key",
+    "DEEPSEEK_API_KEY": "forbidden-deepseek-key",
+    "KIMI_PLAN_MAGNOLIA_API_KEY": "forbidden-kimi-plan-key",
+    "KIMI_API_KEY": "forbidden-kimi-key",
+    "ZHIPU_API_KEY": "forbidden-zhipu-key",
+    "ZAI_API_KEY": "forbidden-zai-key",
+    "MAGNOLIA_LLM_API_KEY": "forbidden-memory-key",
+    "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
+}
+PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
 
 
 class FakeClock:
@@ -81,12 +101,9 @@ index = len(list(state.glob("call-*.json")))
 (state / f"call-{index}.json").write_text(json.dumps({
     "argv": sys.argv,
     "cwd": os.getcwd(),
-    "forbidden_env": {
+    "client_env": {
         name: os.environ.get(name)
-        for name in (
-            "CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY",
-            "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-        )
+        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
         if name in os.environ
     },
     "role": os.environ.get("MAGNOLIA_ROLE"),
@@ -178,7 +195,7 @@ def _context(
         "discovery_dir": str(project.resolve()), "capabilities": [],
         "model_isolation": {"accepted": True, "model": model, "identity": "fixture"},
     }
-    environment = {"PATH": os.environ.get("PATH", ""), **FORBIDDEN_ENV}
+    environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
     if stub_config is not None:
         environment["CODEX_STUB_CONFIG"] = str(stub_config)
     context = ExecContext(
@@ -242,8 +259,31 @@ def test_codex_helper_evaluator_independent_contracts(tmp_path, role):
     pairs = [argv[index:index + 2] for index in range(len(argv))]
     assert ["--disable", "code_mode_host"] in pairs
     assert ["--disable", "apps"] in pairs
-    assert 'mcp_servers."user_mail".enabled=false' in argv
-    assert 'plugins."user_plugin".enabled=false' in argv
+    assert "mcp_servers.user_mail.enabled=false" in argv
+    assert "plugins.user_plugin.enabled=false" in argv
+    overrides = [
+        argv[index + 1]
+        for index, value in enumerate(argv[:-1])
+        if value == "-c" and argv[index + 1].startswith(("mcp_servers.", "plugins."))
+    ]
+    parsed = [tomllib.loads(override) for override in overrides]
+    assert parsed == [
+        {"mcp_servers": {"user_mail": {"enabled": False}}},
+        {"plugins": {"user_plugin": {"enabled": False}}},
+    ]
+
+
+@pytest.mark.parametrize(("section", "name"), (("mcp_servers", "bad.name"), ("plugins", "bad name")))
+def test_codex_refuses_non_bare_disable_key_with_action(tmp_path, section, name):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text() + f'\n[{section}.{json.dumps(name)}]\nenabled = true\n'
+    )
+    context.role_capabilities["codex"]["helper"]["identity"] = configuration_identity(context)
+
+    with pytest.raises(ExecutorRefused, match=rf"{section}.*{name}.*bare TOML key"):
+        executor_for(context.route, "helper", context)
 
 
 def test_codex_recorded_stream_cache_and_resume_identity():
@@ -279,7 +319,7 @@ def test_codex_x7_evaluator_cap_one_succeeds_through_run(tmp_path):
     assert result.final_text == "EVAL-OK 4"
     assert result.attempts == 1
     (call,) = _calls(state)
-    assert call["forbidden_env"] == {}
+    assert call["client_env"] == PASSTHROUGH_ENV
     assert call["role"] == "evaluator"
 
 
@@ -438,6 +478,22 @@ def test_codex_required_hook_trust_fails_closed(tmp_path, damage):
 
     with pytest.raises(ExecutorRefused, match="/hooks|trust"):
         executor_for(context.route, "helper", context)
+
+
+def test_codex_required_hook_trust_matches_each_handler_key(tmp_path):
+    context = _context(tmp_path)
+    rows = context.setup["codex_hooks_list"]
+    pre_tool = next(row for row in rows if row["eventName"] == "preToolUse")
+    hooks_path = context.project_dir / ".codex" / "hooks.json"
+    hooks = json.loads(hooks_path.read_text())
+    handlers = hooks["hooks"]["PreToolUse"][0]["hooks"]
+    handlers.append(dict(handlers[0]))
+    hooks_path.write_text(json.dumps(hooks) + "\n")
+    duplicate = dict(pre_tool)
+    rows.append(duplicate)
+
+    with pytest.raises(ExecutorRefused, match="key|hooks"):
+        require_codex_trust(context.project_dir, context.setup)
 
 
 def test_codex_user_config_change_invalidates_capability_identity(tmp_path):

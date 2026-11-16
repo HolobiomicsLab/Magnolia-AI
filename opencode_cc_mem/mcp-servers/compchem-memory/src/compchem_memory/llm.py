@@ -24,9 +24,11 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
    `vendor/model` id → openrouter.
 3. Autodetect by first key present, in order: `MAGNOLIA_LLM_API_KEY`
    (backward-compat: this was the old hardcoded Anthropic path) →
-   `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Kimi
+   `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → OpenAI
+   (`MAGNOLIA_OPENAI_API_KEY` / `OPENAI_API_KEY`) → Kimi
    (`KIMI_PLAN_MAGNOLIA_API_KEY` / `KIMI_API_KEY`) → `OPENROUTER_API_KEY`
-   → `MISTRAL_API_KEY` → Z.ai (`ZHIPU_API_KEY` / `ZAI_API_KEY`). DeepSeek-first is
+   → Mistral (`MAGNOLIA_MISTRAL_API_KEY` / `MISTRAL_API_KEY`) → Z.ai
+   (`ZHIPU_API_KEY` / `ZAI_API_KEY`). DeepSeek-first is
    intentional: it's the cheapest and the most commonly-configured key in
    the Magnolia user environment. Later providers never hijack an existing
    setup: adding a Kimi, Mistral or Z.ai key changes nothing until it is
@@ -154,13 +156,13 @@ def _autodetect_provider() -> str | None:
         return PROVIDER_DEEPSEEK
     if os.environ.get("ANTHROPIC_API_KEY"):
         return PROVIDER_ANTHROPIC
-    if os.environ.get("OPENAI_API_KEY"):
+    if os.environ.get("MAGNOLIA_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY"):
         return PROVIDER_OPENAI
     if os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY"):
         return PROVIDER_KIMI
     if os.environ.get("OPENROUTER_API_KEY"):
         return PROVIDER_OPENROUTER
-    if os.environ.get("MISTRAL_API_KEY"):
+    if os.environ.get("MAGNOLIA_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY"):
         return PROVIDER_MISTRAL
     if os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY"):
         return PROVIDER_ZAI
@@ -178,14 +180,14 @@ def _get_api_key(provider: str) -> str | None:
     if provider == PROVIDER_DEEPSEEK:
         return os.environ.get("DEEPSEEK_API_KEY")
     if provider == PROVIDER_OPENAI:
-        return os.environ.get("OPENAI_API_KEY")
+        return os.environ.get("MAGNOLIA_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if provider == PROVIDER_KIMI:
         # Magnolia-specific plan key first; KIMI_API_KEY is the models.dev convention.
         return os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY")
     if provider == PROVIDER_OPENROUTER:
         return os.environ.get("OPENROUTER_API_KEY")
     if provider == PROVIDER_MISTRAL:
-        return os.environ.get("MISTRAL_API_KEY")
+        return os.environ.get("MAGNOLIA_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
     if provider == PROVIDER_ZAI:
         # ZHIPU_API_KEY is the name OpenCode/models.dev use for Z.ai.
         return os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY")
@@ -451,10 +453,10 @@ _CRITIC_AUTODETECT_ORDER = (
 _PROVIDER_KEYS = {
     PROVIDER_DEEPSEEK: ("DEEPSEEK_API_KEY",),
     PROVIDER_ANTHROPIC: ("ANTHROPIC_API_KEY",),
-    PROVIDER_OPENAI: ("OPENAI_API_KEY",),
+    PROVIDER_OPENAI: ("MAGNOLIA_OPENAI_API_KEY", "OPENAI_API_KEY"),
     PROVIDER_KIMI: ("KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY"),
     PROVIDER_OPENROUTER: ("OPENROUTER_API_KEY",),
-    PROVIDER_MISTRAL: ("MISTRAL_API_KEY",),
+    PROVIDER_MISTRAL: ("MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
     PROVIDER_ZAI: ("ZHIPU_API_KEY", "ZAI_API_KEY"),
 }
 

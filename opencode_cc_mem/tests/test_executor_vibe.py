@@ -21,14 +21,29 @@ from compchem_memory.harness.render_vibe import native_artifacts
 
 
 ROOT = Path(__file__).parents[1]
-FORBIDDEN_ENV = {
+STRIPPED_ENV = {
     "CLAUDE_CONFIG_DIR": "forbidden-claude-config",
     "CODEX_HOME": "forbidden-codex-home",
     "VIBE_HOME": "forbidden-vibe-home",
     "CODEX_API_KEY": "forbidden-codex-key",
     "ANTHROPIC_API_KEY": "forbidden-anthropic-key",
     "ANTHROPIC_AUTH_TOKEN": "forbidden-anthropic-token",
+    "OPENAI_API_KEY": "forbidden-openai-key",
+    "MISTRAL_API_KEY": "forbidden-mistral-key",
 }
+PASSTHROUGH_ENV = {
+    "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
+    "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
+    "OPENROUTER_API_KEY": "forbidden-openrouter-key",
+    "DEEPSEEK_API_KEY": "forbidden-deepseek-key",
+    "KIMI_PLAN_MAGNOLIA_API_KEY": "forbidden-kimi-plan-key",
+    "KIMI_API_KEY": "forbidden-kimi-key",
+    "ZHIPU_API_KEY": "forbidden-zhipu-key",
+    "ZAI_API_KEY": "forbidden-zai-key",
+    "MAGNOLIA_LLM_API_KEY": "forbidden-memory-key",
+    "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
+}
+PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
 
 
 def _real_export(
@@ -118,12 +133,9 @@ output_dir.mkdir(parents=True, exist_ok=True)
 (state / f"call-{index}.json").write_text(json.dumps({
     "argv": argv,
     "cwd": os.getcwd(),
-    "forbidden_env": {
+    "client_env": {
         name: os.environ.get(name)
-        for name in (
-            "CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY",
-            "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-        )
+        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
         if name in os.environ
     },
     "telemetry": os.environ.get("VIBE_ENABLE_TELEMETRY"),
@@ -178,7 +190,7 @@ def _context(
             "accepted": True, "model": "selected-model", "identity": "fixture"
         },
     }
-    environment = {"PATH": os.environ.get("PATH", ""), **FORBIDDEN_ENV}
+    environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
     if stub_config is not None:
         environment["VIBE_STUB_CONFIG"] = str(stub_config)
     context = ExecContext(
@@ -310,7 +322,7 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
 
     assert result.outcome.kind == expected
     (call,) = _calls(state)
-    assert call["forbidden_env"] == {}
+    assert call["client_env"] == PASSTHROUGH_ENV
     assert call["telemetry"] == "false"
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1

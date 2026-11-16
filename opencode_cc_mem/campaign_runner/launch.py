@@ -39,6 +39,8 @@ FORBIDDEN_CLIENT_ENV = frozenset(
         "CODEX_API_KEY",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "MISTRAL_API_KEY",
     }
 )
 FORBIDDEN_PATH_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME"})
