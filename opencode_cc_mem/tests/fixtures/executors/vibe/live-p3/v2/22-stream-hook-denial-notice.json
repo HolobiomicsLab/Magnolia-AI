@@ -1,0 +1,22 @@
+{
+  "createdAt": 1794811016425,
+  "detail": {
+    "content": "Denied tool 'edit'",
+    "hookName": "probe-pre_tool",
+    "kind": "hook_completed",
+    "scope": "pre_tool",
+    "status": "error",
+    "toolCallId": "IQJmBR5LI",
+    "toolName": null
+  },
+  "generationStatus": "completed",
+  "id": "hook-notice-412c5151f6ef97c8",
+  "inputEntryId": null,
+  "level": "error",
+  "message": "Denied tool 'edit'",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "turnId": null,
+  "type": "notice",
+  "updatedAt": 1794811016425
+}

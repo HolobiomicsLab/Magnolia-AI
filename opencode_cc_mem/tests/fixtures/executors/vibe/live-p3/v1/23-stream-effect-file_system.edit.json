@@ -1,0 +1,62 @@
+{
+  "createdAt": 1794810922415,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "work/draft.txt",
+      "settledMessage": "work/draft.txt",
+      "settledVerb": "Edited",
+      "statusText": "Editing file",
+      "suffix": "",
+      "summary": "Editing work/draft.txt",
+      "verb": "Editing"
+    },
+    "input": {
+      "filePath": "work/draft.txt",
+      "newString": "draft v1",
+      "oldString": "draft v0",
+      "replaceAll": false
+    },
+    "kind": "file_edit",
+    "toolName": "file_system.edit"
+  },
+  "generationStatus": "completed",
+  "id": "effect-3679e8e3-96a8-50ae-82b1-bd549da301c4",
+  "inputEntryId": "user-turn-6bf8c5709f3f97086d7a1b781f817608-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": "bypass",
+    "approvalType": "always",
+    "decision": "execute",
+    "display": {
+      "approvalNote": null,
+      "message": "work/draft.txt",
+      "success": true,
+      "suffix": "",
+      "verb": "Edited",
+      "warnings": []
+    },
+    "durationMs": 0.0,
+    "output": {
+      "file": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/work/draft.txt",
+      "newString": null,
+      "occurrences": [
+        {
+          "newStartLine": 1,
+          "newText": "draft v1",
+          "oldText": "draft v0",
+          "startLine": 1
+        }
+      ],
+      "oldString": null,
+      "previousContent": "draft v0\n"
+    },
+    "outputText": "",
+    "status": "completed"
+  },
+  "title": "file_system.edit",
+  "turnId": "turn-6bf8c5709f3f97086d7a1b781f817608",
+  "type": "effect",
+  "updatedAt": 1794810922464
+}

@@ -1,0 +1,19 @@
+{
+  "call_id": "call_faf6198d8cf34790bf44421587294138",
+  "id": "ctco_01a1e30f-6e40-7e92-8a51-7f2224d439a3",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810801.728553,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "output": [
+    {
+      "text": "Script completed\nWall time 0.0 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "[{\"name\":\"apply_patch\",\"description\":\"The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.\\n\\nexec tool declaration:\\n```ts\\ndeclare const tools: { apply_patch(input: string): Promise<unknown>; };\\n```\"},{\"name\":\"exec_command\",\"description\":\"Runs a command in a PTY, returning output or a session ID for ongoing interaction.\\n\\nexec tool declaration:\\n```ts\\ndeclare const tools: { exec_command(args: {\\n  // Shell command to execute.\\n  cmd: string;\\n  // User-facing approval question for `require_escalated`; omit otherwise.\\n  justification?: string;\\n  // True runs the shell with -l/-i semantics; false disables them. Defaults to true.\\n  login?: boolean;\\n  // Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.\\n  max_output_tokens?: number;\\n  // Reusable approval prefix for `cmd`, only with `sandbox_permissions: \\\"require_escalated\\\"`; for example [\\\"git\\\", \\\"pull\\\"].\\n  prefix_rule?: Array<string>;\\n  // Per-command sandbox override. Defaults to `use_default`; use `require_escalated` for unsandboxed execution.\\n  sandbox_permissions?: \\\"use_default\\\" | \\\"require_escalated\\\";\\n  // Shell binary to launch. Defaults to the user's default shell.\\n  shell?: string;\\n  // True allocates a PTY for the command; false or omitted uses plain pipes.\\n  tty?: boolean;\\n  // Working directory for the command. Defaults to the turn cwd.\\n  workdir?: string;\\n  // Wait before yielding output. Defaults to 10000 ms; effective range is 250-30000 ms.\\n  yield_time_ms?: number;\\n}): Promise<{\\n  // Chunk identifier included when the response reports one.\\n  chunk_id?: string;\\n  // Process exit code when the command finished during this call.\\n  exit_code?: number;\\n  // Approximate token count before output truncation.\\n  original_token_count?: number;\\n  // Command output text, possibly truncated.\\n  output: string;\\n  // Session identifier to pass to write_stdin when the process is still running.\\n  session_id?: number;\\n  // Elapsed wall time spent waiting for output in seconds.\\n  wall_time_seconds: number;\\n}>; };\\n```\"},{\"name\":\"mcp__probe__echo\",\"description\":\"Return the text unchanged.\\n\\nexec tool declaration:\\n```ts\\ndeclare const tools: { mcp__probe__echo(args: { text: string; }): Promise<CallToolResult<{ result: string; }>>; };\\n```\"},{\"name\":\"mcp__probe__shell\",\"description\":\"Run a shell command (probe stand-in: records the request, executes nothing).\\n\\nexec tool declaration:\\n```ts\\ndeclare const tools: { mcp__probe__shell(args: { command: string; }): Promise<CallToolResult<{ result: string; }>>; };\\n```\"},{\"name\":\"mcp__probe__unlisted\",\"description\":\"Return the text unchanged (not on any role allowlist).\\n\\nexec tool declaration:\\n```ts\\ndeclare const tools: { mcp__probe__unlisted(args: { text: string; }): Promise<CallToolResult<{ result: string; }>>; };\\n```\"}]",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

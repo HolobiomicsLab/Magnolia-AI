@@ -1,0 +1,87 @@
+{
+  "errors": [],
+  "hooks": [
+    {
+      "currentHash": "sha256:78f24cc571b3dc68c62196fe5d7546947500a3799df77722ed19d566e4b92312",
+      "enabled": true,
+      "eventName": "preToolUse",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:pre_tool_use:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:3a0245f4a1795c4a140b4a63851a7447ba2f56d755671ebfa7e3e3a2de950a9c",
+      "enabled": true,
+      "eventName": "permissionRequest",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:permission_request:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:2be1ce37f265e0aa13998df9b60d629774a7617cfab1bc2816fbcce7beaa4d93",
+      "enabled": true,
+      "eventName": "postToolUse",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:post_tool_use:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:e4ce0f8c2442ec60e61f53ad1ef6c5cf5ec05088a3e11beb05d14071ffd5b499",
+      "enabled": true,
+      "eventName": "sessionStart",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:session_start:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:7946f902c7fa3f33954e383209c592cb122c3b1901d79ce6f140e1e72ef254dc",
+      "enabled": true,
+      "eventName": "sessionEnd",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:session_end:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:ff5c8f783f7547376141a7bc258112836c0197b9de620416f0af0c45287962cc",
+      "enabled": true,
+      "eventName": "userPromptSubmit",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:user_prompt_submit:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:15349e027273d2d59b7b887112e67bd65ba09f5c325a4ae314f759d4a9f889b0",
+      "enabled": true,
+      "eventName": "subagentStart",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:subagent_start:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:09d91f94f3a1426543210c280f8371886aba019ff30e4654fde472945bbe078d",
+      "enabled": true,
+      "eventName": "subagentStop",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:subagent_stop:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:9f0f8fb24e306e1d83ad533134cb66ca380ea4d9c8340aac258a334b7e9859d2",
+      "enabled": true,
+      "eventName": "stop",
+      "key": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json:stop:0:0",
+      "source": "project",
+      "sourcePath": "/TMPDIR/probe-p3-codex-omV8qQ/proj/.codex/hooks.json",
+      "trustStatus": "trusted"
+    }
+  ],
+  "warnings": []
+}

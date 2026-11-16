@@ -1,0 +1,43 @@
+{
+  "config_subset": {
+    "active_model": "zai-glm-5-3-flash",
+    "bypass_tool_permissions": true,
+    "disabled_tools": [
+      "file_system.bash",
+      "process.start",
+      "process.write",
+      "ask_user_question",
+      "cron"
+    ],
+    "enable_background_processes": true,
+    "enable_subagents": true,
+    "enable_telemetry": true,
+    "enabled_tools": [],
+    "model_aliases": [
+      "mistral-medium-3.5",
+      "zai-glm-5-3-flash"
+    ]
+  },
+  "cost_usd": 0.0,
+  "error": null,
+  "exit_code": 0,
+  "limits": {
+    "max_price": 0.05,
+    "max_tokens": null,
+    "max_turns": 12,
+    "time_limit_s": null
+  },
+  "outcome": "finished",
+  "schema_version": 1,
+  "session_id": "ses-fixture-1",
+  "stderr_notices": [],
+  "steps": 8,
+  "stop_reason": null,
+  "usage": {
+    "cached_input_tokens": 124416,
+    "input_tokens": 181627,
+    "output_tokens": 1390,
+    "total_tokens": 183017
+  },
+  "vibe_version": "3.1.2"
+}

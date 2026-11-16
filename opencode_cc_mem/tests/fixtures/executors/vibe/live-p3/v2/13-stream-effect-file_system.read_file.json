@@ -1,0 +1,46 @@
+{
+  "createdAt": 1794811010231,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "secret/.env",
+      "settledMessage": "secret/.env",
+      "settledVerb": "Read",
+      "statusText": "Reading file",
+      "suffix": "",
+      "summary": "Reading secret/.env",
+      "verb": "Reading"
+    },
+    "input": {
+      "filePath": "secret/.env",
+      "limit": 2000,
+      "offset": null
+    },
+    "kind": "file_read",
+    "toolName": "file_system.read_file"
+  },
+  "generationStatus": "completed",
+  "id": "effect-b94563de-4cf7-5fba-b294-fb4619d202e0",
+  "inputEntryId": "user-turn-4e278a7162f3f13d3b5a7cb3d0a5b14b-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "read: requested path matches a deny pattern",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "read: requested path matches a deny pattern",
+    "status": "skipped"
+  },
+  "title": "file_system.read_file",
+  "turnId": "turn-4e278a7162f3f13d3b5a7cb3d0a5b14b",
+  "type": "effect",
+  "updatedAt": 1794811010231
+}

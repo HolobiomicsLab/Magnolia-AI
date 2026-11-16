@@ -1,0 +1,24 @@
+{
+  "class": "meta",
+  "decision": "allow",
+  "mode": "crash",
+  "policy_sha256": "7afda8921be27b4b78ba04a5d2fb8b1d7e6565a753f40818a806780926d4eeb8",
+  "reason": "meta tool",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "permission_mode": "default",
+    "prompt_id": "0e542dee-62fa-445b-9542-679f42d363fd",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "max_results": 5,
+      "query": "select:NotebookEdit"
+    },
+    "tool_name": "ToolSearch",
+    "tool_use_id": "toolu_01SeAVEaJPfZQ5FcS5rKN8Ur",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

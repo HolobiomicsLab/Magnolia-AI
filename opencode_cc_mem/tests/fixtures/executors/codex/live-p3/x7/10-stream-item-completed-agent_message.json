@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "EVAL-OK 4",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "claude",
+    "-p",
+    "<prompt:claude-c7.txt>",
+    "--setting-sources",
+    "project",
+    "--mcp-config",
+    "/TMPDIR/probe-p3-claude-Pe5W5B/logs/claude-mcp.json",
+    "--strict-mcp-config",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--max-turns",
+    "1",
+    "--model",
+    "haiku",
+    "--tools",
+    ""
+  ],
+  "client": "claude",
+  "exit_status": "0",
+  "stderr_lines": [],
+  "synthetic": false,
+  "tag": "c7"
+}

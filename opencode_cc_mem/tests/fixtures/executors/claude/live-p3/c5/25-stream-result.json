@@ -1,0 +1,119 @@
+{
+  "api_error_status": null,
+  "duration_api_ms": 8660,
+  "duration_ms": 9260,
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "fast_mode_state": "off",
+  "first_content_frame_ms": 503,
+  "is_error": false,
+  "modelUsage": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 9967,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 9967,
+      "cacheReadInputTokens": 133460,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0040619,
+      "inputTokens": 14,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1465,
+      "provider": "firstParty",
+      "thinkingTokens": 575,
+      "webSearchRequests": 0
+    }
+  },
+  "model_usage_since_last_result": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 9967,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 9967,
+      "cacheReadInputTokens": 133460,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0040619,
+      "inputTokens": 14,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1465,
+      "provider": "firstParty",
+      "thinkingTokens": 575,
+      "webSearchRequests": 0
+    }
+  },
+  "num_turns": 7,
+  "permission_denials": [],
+  "queued_turn_count": 0,
+  "result": "1. Read secret/.env: OK \u2014 returned \"SENTINEL-213771c61078\"\n2. Read work/nb.ipynb: OK \u2014 returned `<cell id=\"c0\">print(1)</cell id=\"c0\">`\n3. ToolSearch select:NotebookEdit: OK \u2014 schema loaded\n4. NotebookEdit work/nb.ipynb c0 \"print(5)\": OK \u2014 \"Updated cell c0 with print(5)\". I passed the relative path as specified, though the tool's schema says it must be absolute.\n5. Write control/crash.txt \"x\": OK \u2014 \"File created successfully at: .../proj/control/crash.txt\"\n6. mcp__probe__shell \"echo crash\": OK \u2014 returned `{\"result\":\"recorded (not executed)\"}`. The call went through, but the result says the command was recorded and not executed, so no output was produced.",
+  "result_index": 0,
+  "safety_stops": 0,
+  "session_id": "ses-fixture-1",
+  "stop_reason": "end_turn",
+  "subagent_stats": {
+    "by_type": {},
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "system": 0,
+      "user": 0
+    },
+    "max_depth": 0,
+    "refused": {
+      "budget": 0,
+      "concurrency_limit": 0,
+      "depth_limit": 0
+    },
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "spawned": 0,
+    "spawned_by_subagents": 0,
+    "started_in_background": 0
+  },
+  "subtype": "success",
+  "terminal_reason": "completed",
+  "time_to_request_ms": 75,
+  "total_cost_usd": 0.0040619,
+  "ttft_ms": 1286,
+  "ttft_stream_ms": 503,
+  "type": "result",
+  "usage": {
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 9967,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 9967,
+    "cache_read_input_tokens": 133460,
+    "fallback_credit": null,
+    "inference_geo": "global",
+    "input_tokens": 14,
+    "iterations": [
+      {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 245,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 245,
+        "cache_read_input_tokens": 21290,
+        "input_tokens": 2,
+        "output_tokens": 279,
+        "type": "message"
+      }
+    ],
+    "output_tokens": 1465,
+    "output_tokens_details": {
+      "thinking_tokens": 575
+    },
+    "server_tool_use": {
+      "web_fetch_requests": 0,
+      "web_search_requests": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "uuid": "6c8ecb6a-01ad-4cf9-b226-5c1048854cc0"
+}

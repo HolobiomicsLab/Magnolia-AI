@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_2",
+    "text": "BLOCKED \u2014 exec_command: Command blocked by PreToolUse hook: probe policy missing or unreadable. Command: cat secret/.env  \nBLOCKED \u2014 mcp__probe__shell: Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__probe__shell  \nBLOCKED \u2014 apply_patch: Command blocked by PreToolUse hook: probe policy missing or unreadable.  \nBLOCKED \u2014 mcp__cua_repl__js: Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__cua_repl__js",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

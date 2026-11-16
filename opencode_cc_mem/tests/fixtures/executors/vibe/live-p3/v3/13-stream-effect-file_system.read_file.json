@@ -1,0 +1,57 @@
+{
+  "createdAt": 1794811008603,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "README.md",
+      "settledMessage": "README.md",
+      "settledVerb": "Read",
+      "statusText": "Reading file",
+      "suffix": "",
+      "summary": "Reading README.md",
+      "verb": "Reading"
+    },
+    "input": {
+      "filePath": "README.md",
+      "limit": 2000,
+      "offset": null
+    },
+    "kind": "file_read",
+    "toolName": "file_system.read_file"
+  },
+  "generationStatus": "completed",
+  "id": "effect-e8797064-20b6-5172-b9e9-0829a106eaea",
+  "inputEntryId": "user-turn-379e269a18cab3ff3c1ad869f62ba603-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": "bypass",
+    "approvalType": "always",
+    "decision": "execute",
+    "display": {
+      "approvalNote": null,
+      "message": "1 line from README.md",
+      "success": true,
+      "suffix": "",
+      "verb": "Read",
+      "warnings": []
+    },
+    "durationMs": 0.0,
+    "output": {
+      "content": "Probe project. ALLOWED-README-46eff7ab6a5e\n",
+      "filePath": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/README.md",
+      "numLines": 1,
+      "requestedLimit": 2000,
+      "requestedOffset": null,
+      "startLine": 1,
+      "totalLines": null,
+      "wasTruncated": false
+    },
+    "outputText": "",
+    "status": "completed"
+  },
+  "title": "file_system.read_file",
+  "turnId": "turn-379e269a18cab3ff3c1ad869f62ba603",
+  "type": "effect",
+  "updatedAt": 1794811008659
+}

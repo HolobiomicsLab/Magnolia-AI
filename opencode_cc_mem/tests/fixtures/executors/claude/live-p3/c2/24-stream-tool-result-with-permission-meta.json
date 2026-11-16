@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:Grep hook error: grep: recursive search root contains a denied or linked path",
+        "is_error": true,
+        "tool_use_id": "toolu_01TLtmqgs6VeVZNukYMCYE6o",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:02.632Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01TLtmqgs6VeVZNukYMCYE6o",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:Grep hook error: grep: recursive search root contains a denied or linked path",
+  "type": "user",
+  "uuid": "36a77556-ddf2-4a7e-9395-9d0640b5dd9d"
+}

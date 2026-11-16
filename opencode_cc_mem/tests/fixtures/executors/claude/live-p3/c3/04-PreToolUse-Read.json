@@ -1,0 +1,23 @@
+{
+  "class": "read",
+  "decision": "allow",
+  "mode": "enforce",
+  "policy_sha256": "3204d94ead3f9988abf4fbc7065f4abdc0c9cc2b4d38f2912f11465b9028f1e2",
+  "reason": "inside read roots",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "permission_mode": "default",
+    "prompt_id": "ebb895e1-0227-4d81-8931-44d4ea54e001",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "file_path": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/README.md"
+    },
+    "tool_name": "Read",
+    "tool_use_id": "toolu_01Jaowe7F4NFyh4hFijWwu1S",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

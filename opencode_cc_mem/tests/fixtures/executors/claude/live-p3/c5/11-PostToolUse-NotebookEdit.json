@@ -1,0 +1,38 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "crash",
+  "policy_sha256": "7afda8921be27b4b78ba04a5d2fb8b1d7e6565a753f40818a806780926d4eeb8",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "duration_ms": 2,
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "permission_mode": "default",
+    "prompt_id": "0e542dee-62fa-445b-9542-679f42d363fd",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "cell_id": "c0",
+      "new_source": "print(5)",
+      "notebook_path": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/work/nb.ipynb"
+    },
+    "tool_name": "NotebookEdit",
+    "tool_response": {
+      "cell_id": "c0",
+      "cell_type": "code",
+      "edit_mode": "replace",
+      "error": "",
+      "language": "python",
+      "new_source": "print(5)",
+      "notebook_path": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/work/nb.ipynb",
+      "old_source": "print(1)",
+      "original_file": "{\"cells\":[{\"cell_type\":\"code\",\"execution_count\":null,\"id\":\"c0\",\"metadata\":{},\"outputs\":[],\"source\":[\"print(1)\"]}],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}\n",
+      "updated_file": "{\n \"cells\": [\n  {\n   \"cell_type\": \"code\",\n   \"execution_count\": null,\n   \"id\": \"c0\",\n   \"metadata\": {},\n   \"outputs\": [],\n   \"source\": \"print(5)\"\n  }\n ],\n \"metadata\": {},\n \"nbformat\": 4,\n \"nbformat_minor\": 5\n}"
+    },
+    "tool_use_id": "toolu_01Xy7rzSaBZHykZxKkhf5gqM",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

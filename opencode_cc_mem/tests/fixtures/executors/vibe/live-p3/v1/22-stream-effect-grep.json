@@ -1,0 +1,46 @@
+{
+  "createdAt": 1794810919386,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "'ALLOWED' in docs",
+      "settledMessage": "'ALLOWED' in docs",
+      "settledVerb": "Searched",
+      "statusText": "Searching files",
+      "suffix": "",
+      "summary": "Grepping 'ALLOWED' in docs",
+      "verb": "Searching"
+    },
+    "input": {
+      "maxMatches": null,
+      "path": "/TMPDIR/probe-p3-vibe-DhLzfS/proj/docs",
+      "pattern": "ALLOWED"
+    },
+    "kind": "file_search",
+    "toolName": "grep"
+  },
+  "generationStatus": "completed",
+  "id": "effect-7026b99f-551c-50a2-bb16-9407cff1dc49",
+  "inputEntryId": "user-turn-6bf8c5709f3f97086d7a1b781f817608-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "shell tool file_system.bash denied by role policy",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "shell tool file_system.bash denied by role policy",
+    "status": "skipped"
+  },
+  "title": "file_system.bash",
+  "turnId": "turn-6bf8c5709f3f97086d7a1b781f817608",
+  "type": "effect",
+  "updatedAt": 1794810919386
+}

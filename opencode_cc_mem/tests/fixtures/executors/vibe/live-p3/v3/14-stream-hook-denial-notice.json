@@ -1,0 +1,22 @@
+{
+  "createdAt": 1794811009776,
+  "detail": {
+    "content": "Denied tool 'write_file'",
+    "hookName": "probe-pre_tool",
+    "kind": "hook_completed",
+    "scope": "pre_tool",
+    "status": "error",
+    "toolCallId": "WczTeEtVy",
+    "toolName": null
+  },
+  "generationStatus": "completed",
+  "id": "hook-notice-76e0e9c15f7f01b7",
+  "inputEntryId": null,
+  "level": "error",
+  "message": "Denied tool 'write_file'",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "turnId": null,
+  "type": "notice",
+  "updatedAt": 1794811009776
+}

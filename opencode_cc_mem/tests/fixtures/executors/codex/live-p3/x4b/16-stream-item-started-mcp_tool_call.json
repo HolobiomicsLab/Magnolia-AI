@@ -1,0 +1,15 @@
+{
+  "item": {
+    "arguments": {
+      "text": "resumed"
+    },
+    "error": null,
+    "id": "item_3",
+    "result": null,
+    "server": "probe",
+    "status": "in_progress",
+    "tool": "echo",
+    "type": "mcp_tool_call"
+  },
+  "type": "item.started"
+}

@@ -1,0 +1,22 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "PostToolUse",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "command": "*** Begin Patch\n*** Update File: /TMPDIR/probe-p3-codex-omV8qQ/proj/work/draft.txt\n@@\n-draft v0\n+draft v1\n*** End Patch"
+    },
+    "tool_name": "apply_patch",
+    "tool_response": "Exit code: 0\nWall time: 0.1 seconds\nOutput:\nSuccess. Updated the following files:\nM /TMPDIR/probe-p3-codex-omV8qQ/proj/work/draft.txt\n",
+    "tool_use_id": "exec-6eed75f9-e97b-415f-a108-d0b28b2e7ce1",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-30-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30c-7112-7463-ba51-a28475330cf7"
+  }
+}

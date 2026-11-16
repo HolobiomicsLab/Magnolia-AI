@@ -1,0 +1,10 @@
+{
+  "call_id": "call_5e8cb9728d9f4020b292ea694547b15a",
+  "id": "fco_01a1e30f-a68a-7693-b962-2e3a58b35b4e",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810816.138515,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "output": "Tool call blocked by PreToolUse hook: probe policy missing or unreadable. Tool: mcp__cua_repl__js",
+  "type": "function_call_output"
+}

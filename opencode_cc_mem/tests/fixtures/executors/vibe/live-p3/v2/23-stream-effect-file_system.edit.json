@@ -1,0 +1,47 @@
+{
+  "createdAt": 1794811016429,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "control/gate.txt",
+      "settledMessage": "control/gate.txt",
+      "settledVerb": "Edited",
+      "statusText": "Editing file",
+      "suffix": "",
+      "summary": "Editing control/gate.txt",
+      "verb": "Editing"
+    },
+    "input": {
+      "filePath": "control/gate.txt",
+      "newString": "open",
+      "oldString": "closed",
+      "replaceAll": false
+    },
+    "kind": "file_edit",
+    "toolName": "file_system.edit"
+  },
+  "generationStatus": "completed",
+  "id": "effect-6988ceb0-4ca5-5f0d-b345-c89ec3bc8bc5",
+  "inputEntryId": "user-turn-4e278a7162f3f13d3b5a7cb3d0a5b14b-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "edit: requested path outside the allowed roots",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "edit: requested path outside the allowed roots",
+    "status": "skipped"
+  },
+  "title": "file_system.edit",
+  "turnId": "turn-4e278a7162f3f13d3b5a7cb3d0a5b14b",
+  "type": "effect",
+  "updatedAt": 1794811016429
+}

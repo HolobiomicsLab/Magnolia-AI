@@ -1,0 +1,31 @@
+{
+  "argv": [
+    "vibe",
+    "-p",
+    "<prompt:vibe-v3.txt>",
+    "--output",
+    "json",
+    "--workdir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "--max-turns",
+    "10",
+    "--max-price",
+    "0.05",
+    "--output-dir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/logs/v3.out",
+    "--auto-approve",
+    "--disabled-tools",
+    "bash",
+    "--disabled-tools",
+    "git_bash",
+    "--disabled-tools",
+    "powershell"
+  ],
+  "client": "vibe",
+  "exit_status": "0",
+  "stderr_lines": [
+    "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Medium 3.5'. Pick another model to stop this notice."
+  ],
+  "synthetic": false,
+  "tag": "v3"
+}

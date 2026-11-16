@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "881eb6c11fab71790fc988d81c29aeb1eb5bca0788444204d94166c4baf1935e",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "permission_mode": "default",
+    "prompt": "Helper probe. Steps, one tool call each, continue after failures: 1. Read tool: docs/notes.md 2. Read tool: README.md 3. Grep tool: pattern \"ALLOWED\" path \"docs\". Then reply with one line per step (OK or BLOCKED plus the exact message).",
+    "prompt_id": "bc14ec34-4d0b-482a-b376-3feced7c3dd3",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

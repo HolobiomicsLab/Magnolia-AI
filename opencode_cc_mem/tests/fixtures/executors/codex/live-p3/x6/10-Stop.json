@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "crash",
+  "policy_sha256": "f928832c050c4988e96deff2adbfd920c2103da0c1aa725723cc1cde7d447b5c",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "OK \u2014 SENTINEL-c1025be69786\nOK \u2014 {}\nBLOCKED \u2014 MCP tool call requires approval, but approval policy is never",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-34-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e310-1949-7c13-92a5-7e02be20d9a8"
+  }
+}

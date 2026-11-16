@@ -1,0 +1,37 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "1\tProbe project. ALLOWED-README-213771c61078\n2\t",
+        "tool_use_id": "toolu_01Jaowe7F4NFyh4hFijWwu1S",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:00.537Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01Jaowe7F4NFyh4hFijWwu1S",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use_result": {
+    "file": {
+      "content": "Probe project. ALLOWED-README-213771c61078\n",
+      "filePath": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/README.md",
+      "numLines": 2,
+      "startLine": 1,
+      "totalLines": 2
+    },
+    "type": "text"
+  },
+  "type": "user",
+  "uuid": "6da05386-c1ba-4dfc-9a49-32940d5b12cd"
+}

@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "read: requested path matches a deny pattern",
+        "is_error": true,
+        "tool_use_id": "toolu_011ekoUSW8jrqT16wqNSqVyk",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:00.624Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_011ekoUSW8jrqT16wqNSqVyk",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: read: requested path matches a deny pattern",
+  "type": "user",
+  "uuid": "5d473b5d-a77d-48ae-a858-e199ef1f4f90"
+}

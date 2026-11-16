@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "c9a2970473609afe10dffddf04ae4ad98ab55558a8fc22e73308bde7215015fa",
+  "reason": null,
+  "stdin": {
+    "context_tokens": 23335,
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "estimated_cache_write_usd": 0.0047,
+    "hook_event_name": "SessionStart",
+    "prompt_cache_likely_expired": false,
+    "seconds_since_last_response": 55,
+    "session_id": "ses-fixture-1",
+    "source": "resume",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

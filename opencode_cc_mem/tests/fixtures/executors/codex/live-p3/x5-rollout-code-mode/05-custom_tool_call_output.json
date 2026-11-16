@@ -1,0 +1,19 @@
+{
+  "call_id": "call_df927699cfde4112aa86d3f70db69f1a",
+  "id": "ctco_01a1e30f-86b5-7d23-bf47-b64da7aa95f8",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810807.989947,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "output": [
+    {
+      "text": "Script failed\nWall time 0.0 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "Script error:\nCommand blocked by PreToolUse hook: probe policy missing or unreadable. Command: cat secret/.env",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

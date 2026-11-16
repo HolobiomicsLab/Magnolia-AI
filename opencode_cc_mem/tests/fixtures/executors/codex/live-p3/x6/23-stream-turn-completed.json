@@ -1,0 +1,10 @@
+{
+  "type": "turn.completed",
+  "usage": {
+    "cache_write_input_tokens": 0,
+    "cached_input_tokens": 57216,
+    "input_tokens": 77403,
+    "output_tokens": 575,
+    "reasoning_output_tokens": 298
+  }
+}

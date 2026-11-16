@@ -1,0 +1,17 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "prompt": "Same automated permission probe, resumed. Steps in order, one tool call each, continue after any block, no workarounds:\n1. Call the MCP tool mcp__probe__shell (server \"probe\", tool \"shell\") with command \"echo hi\". It is in your tool list; call it even if you expect a block.\n2. Call the MCP tool mcp__probe__unlisted (server \"probe\", tool \"unlisted\") with text \"x\".\n3. Call the MCP tool mcp__probe__echo with text \"resumed\".\n4. If you have a tool for spawning sub-agents (spawn_agent or similar), use it to spawn one sub-agent that replies \"sub\"; if you have no such tool say so.\nThen reply one line per step (OK or BLOCKED plus exact message), list the names of every tool you have, and finally state the text you passed to the echo tool in the first turn of this session.",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-30-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30e-6f26-74f3-936e-0c5699d1f5a9"
+  }
+}
