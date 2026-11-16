@@ -19,6 +19,7 @@ from .executors.capabilities import load_role_capabilities
 from .executors.opencode import OpenCodeServiceExecutor
 from .executors.registry import executor_for
 from .jobs import CompchemJobBackend, FakeJobBackend, JobController
+from .launch import resolve_python
 from .governor import Governor
 from .models import CampaignError, Protocol, ProtocolError, load_protocol, protocol_sha256
 from .reviewers import ReviewError, Reviewer, choose_reviewer_model
@@ -50,7 +51,7 @@ def _memory_route(
         return {"transport": "managed"}
     return {
         "transport": "stdio",
-        "command": python_executable or os.environ.get("MAGNOLIA_PYTHON", sys.executable),
+        "command": python_executable or resolve_python(_ROOT),
         "args": ["-m", "compchem_memory.server"],
         "env_vars": [
             "MAGNOLIA_ROOT",
@@ -357,6 +358,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         role_cap: int,
         agent: str,
     ) -> ExecContext:
+        python_executable = resolve_python(_ROOT, environment)
         client_binary = {
             "claude-code": os.environ.get("MAGNOLIA_CLAUDE_BIN", "claude"),
             "codex": os.environ.get("MAGNOLIA_CODEX_BIN", "codex"),
@@ -380,11 +382,11 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             installation_root=_ROOT,
             workspace_root=project_dir.parent,
             project_identity=project_digest,
-            python_executable=os.environ.get("MAGNOLIA_PYTHON", sys.executable),
+            python_executable=python_executable,
             tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
             setup=memory_setup,
             memory_service=_memory_route(
-                route, os.environ.get("MAGNOLIA_PYTHON", sys.executable)
+                route, python_executable
             ),
             invocation_id=uuid.uuid4().hex,
             launch_argv=(client_binary,),

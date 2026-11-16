@@ -153,8 +153,8 @@ def test_vibe_preserves_member_entries_and_is_idempotent(make_render):
     assert config["disabled_tools"] == ["mine.tool", "file_system.bash"]
     assert config["mcp_servers"][0]["name"] == "mine"
     assert [h["name"] for h in hooks][0] == "member"
-    assert "magnolia-old" not in [h["name"] for h in hooks]
-    assert len(hooks) == 7
+    assert hooks[1] == {"name": "magnolia-old", "type": "pre_tool", "command": "x"}
+    assert len(hooks) == 8
 
     before = {p: p.read_bytes() for p in (folder / "config.toml", folder / "hooks.toml")}
     apply(render(neutral, context))

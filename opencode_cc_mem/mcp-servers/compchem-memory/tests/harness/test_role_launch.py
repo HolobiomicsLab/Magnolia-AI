@@ -447,3 +447,71 @@ def test_required_hook_ignores_editable_install_and_forged_source_pycache(tmp_pa
     assert "forged" not in result.stdout
     assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert result.returncode == 0
+
+
+def _runner_tree(root):
+    source = root / "mcp-servers" / "compchem-memory" / "src"
+    package = source / "compchem_memory"
+    shutil.copytree(
+        ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
+        package,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    return package / "hook" / "runner.py"
+
+
+def _run_isolated_runner(runner, tmp_path):
+    return subprocess.run(
+        [sys.executable, "-I", str(runner), "claude", "pre-tool"],
+        input="{}", capture_output=True, text=True, timeout=20,
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        },
+    )
+
+
+@pytest.mark.parametrize("location", ("file-symlink", "directory-symlink", "wrong-tree"))
+def test_runner_refuses_relocated_or_symlinked_source(tmp_path, location):
+    runner = _runner_tree(tmp_path / "repo")
+    alternate = _runner_tree(tmp_path / "alternate")
+    (alternate.parent / "__main__.py").write_text(
+        "def main():\n    print('ALT_TREE_RAN')\n"
+    )
+    if location == "file-symlink":
+        runner.unlink()
+        runner.symlink_to(alternate)
+    elif location == "directory-symlink":
+        shutil.rmtree(runner.parent)
+        runner.parent.symlink_to(alternate.parent, target_is_directory=True)
+    else:
+        destination = tmp_path / "unexpected" / "compchem_memory"
+        destination.parent.mkdir()
+        shutil.copytree(alternate.parent.parent, destination)
+        runner = destination / "hook" / "runner.py"
+    result = _run_isolated_runner(runner, tmp_path)
+    assert result.returncode != 0
+    assert "ALT_TREE_RAN" not in result.stdout
+    assert "runner" in result.stderr.lower()
+
+
+@pytest.mark.parametrize("module", ("json", "typing", "re", "pathlib", "fractions", "statistics"))
+def test_runner_keeps_standard_library_before_repository_source(tmp_path, module):
+    runner = _runner_tree(tmp_path / "repo")
+    source = runner.parents[2]
+    (source / f"{module}.py").write_text("raise RuntimeError('SHADOW_STDLIB_RAN')\n")
+    (runner.parent / "__main__.py").write_text(
+        f"import {module}, sys\n"
+        "def main():\n"
+        f"    print({module}.__file__)\n"
+        "    print(*sys.path, sep=chr(10))\n"
+    )
+    result = _run_isolated_runner(runner, tmp_path)
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert not Path(lines[0]).is_relative_to(source)
+    search = lines[1:]
+    source_index = search.index(str(source))
+    assert source_index > 0
+    assert all(index > source_index for index, path in enumerate(search) if Path(path).name in {"site-packages", "dist-packages"})

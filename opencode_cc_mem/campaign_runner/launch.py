@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import stat
 import uuid
 from dataclasses import dataclass, replace
@@ -16,7 +17,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from compchem_memory.harness.neutral import NeutralConfig
-from compchem_memory.harness.ownership import is_magnolia_hook_command
+from compchem_memory.harness.ownership import is_magnolia_hook_command, parse_hook_command
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_claude import (
     native_artifacts as render_claude_native_artifacts,
@@ -27,7 +28,11 @@ from compchem_memory.harness.render_codex import (
 from compchem_memory.harness.render_vibe import (
     native_artifacts as render_vibe_native_artifacts,
 )
-from compchem_memory.harness.render_common import policy_files
+from compchem_memory.harness.render_common import (
+    REQUIRED_HOOK_TIMEOUT_S,
+    _required_pre_tool_command,
+    policy_files,
+)
 
 from .executors.contracts import ExecContext
 from .executors.registry import ExecutorRefused
@@ -586,13 +591,8 @@ def _hook_interpreter_digest(
     if not requested.is_absolute() or Path(selected) != requested:
         raise ExecutorRefused("hook interpreter differs from MAGNOLIA_PYTHON")
     repository_venv = context.installation_root.parent / ".venv"
-    repository_python = repository_venv / "bin" / "python3"
     inherited = os.environ if context.environment is None else context.environment
-    override = inherited.get("MAGNOLIA_PYTHON")
-    if override:
-        expected = Path(str(override))
-    else:
-        expected = repository_python
+    expected = Path(resolve_python(context.installation_root, inherited))
     if not expected.is_absolute() or requested != expected:
         raise ExecutorRefused("hook interpreter differs from Magnolia's resolver selection")
     if requested.parent.parent != repository_venv:
@@ -608,6 +608,16 @@ def _hook_interpreter_digest(
         "bare_system_python": False,
     }
     return _digest(_canonical_bytes(rule))
+
+
+def resolve_python(
+    installation_root: Path, environment: Mapping[str, str] | None = None
+) -> str:
+    """Select the override or repository venv without resolving interpreter symlinks."""
+    inherited = os.environ if environment is None else environment
+    return inherited.get("MAGNOLIA_PYTHON") or str(
+        installation_root.parent / ".venv" / "bin" / "python3"
+    )
 
 
 def _hook_source_digest(context: ExecContext) -> str:
@@ -684,9 +694,10 @@ def _identity_replacements(
         "{workspace_root}": context.workspace_root,
     }
     replacements = [
-        (str(path.resolve()), name)
+        (str(spelling), name)
         for name, path in named_paths.items()
         if path is not None
+        for spelling in (path, path.resolve())
     ]
     if context.python_executable:
         replacements.append((context.python_executable, "{python_executable}"))
@@ -721,6 +732,12 @@ def _normalize_identity_value(
     if isinstance(value, list):
         return [_normalize_identity_value(item, replacements) for item in value]
     if isinstance(value, str):
+        if key == "command" and (parsed := parse_hook_command(value)) is not None:
+            tokens, wrapped = parsed
+            command = shlex.join([_replace_identity_text(token, replacements) for token in tokens])
+            if wrapped:
+                return _required_pre_tool_command(command, tokens[-2], REQUIRED_HOOK_TIMEOUT_S)
+            return command
         return _replace_identity_text(value, replacements)
     return value
 
@@ -1248,6 +1265,9 @@ def _effective_environment(
         explicit["MAGNOLIA_MEMORY_MODEL"] = memory_model
     if isinstance(memory_provider, str) and memory_provider:
         explicit["MAGNOLIA_MEMORY_PROVIDER"] = memory_provider
+    if context.route.client == "claude-code" and context.memory_service.get("transport") == "stdio":
+        for name in ("MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER"):
+            explicit.setdefault(name, env.get(name, ""))
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
     service = context.memory_service

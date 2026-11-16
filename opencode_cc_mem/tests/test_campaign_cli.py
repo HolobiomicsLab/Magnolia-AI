@@ -3,6 +3,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -58,6 +61,32 @@ def test_claude_campaign_route_is_stdio_with_expanded_environment_names():
     assert memory["command"] == "/repo/.venv/bin/python3"
     assert memory["args"] == ["-m", "compchem_memory.server"]
     assert "MAGNOLIA_PROJECT_DIR" in memory["env_vars"]
+
+
+@pytest.mark.parametrize("override", (None, "/selected/.venv/bin/python3"))
+def test_campaign_uses_repository_interpreter_for_context_and_memory(tmp_path, monkeypatch, override):
+    from campaign_runner import cli
+
+    installation = tmp_path / "installation" / "opencode_cc_mem"
+    monkeypatch.setattr(cli, "_ROOT", installation)
+    monkeypatch.setattr(cli.sys, "executable", "/bare/python3")
+    monkeypatch.delenv("MAGNOLIA_PYTHON", raising=False)
+    if override:
+        monkeypatch.setenv("MAGNOLIA_PYTHON", override)
+    expected = override or str(installation.parent / ".venv/bin/python3")
+    protocol, brief = make_inputs(tmp_path)
+    payload = protocol_payload()
+    payload["worker"]["model"] = "claude-code/haiku"
+    protocol.write_text(json.dumps(payload))
+    run = tmp_path / "project/runs/test"
+    CampaignStore(run).initialize(protocol, brief)
+    monkeypatch.setattr(cli, "Governor", lambda: SimpleNamespace(policy=SimpleNamespace(max_turns_per_run=60)))
+    monkeypatch.setattr(cli, "executor_for", lambda route, role, context: context)
+    runner = cli._build_runner(SimpleNamespace(run_dir=str(run), command="run"))
+    context = runner.config.worker_factory("claude-code/haiku", 30)
+    assert context.python_executable == expected
+    assert context.memory_service["command"] == expected
+    assert _memory_route(context.route)["command"] == expected
 
 
 def make_inputs(tmp_path):

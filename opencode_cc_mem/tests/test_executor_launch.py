@@ -171,9 +171,10 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
     source.mkdir(parents=True, exist_ok=True)
     package = source / "compchem_memory"
     if not package.exists():
-        package.symlink_to(
+        shutil.copytree(
             ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
-            target_is_directory=True,
+            package,
+            ignore=shutil.ignore_patterns("__pycache__"),
         )
     repository_venv = installation.parent / ".venv"
     python = repository_venv / "bin" / "python3"
@@ -1006,6 +1007,62 @@ def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, rol
     route = _memory_route(context.route, context.python_executable)
 
     prepare_launch(replace(context, memory_service=route))
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_bound_identity_matches_two_independent_installations(tmp_path, monkeypatch, role):
+    from campaign_runner import launch as module
+
+    actual = module._normalized_launch_identity
+    identities = []
+
+    def capture(context, invocation, env, settings, mcp, native, policy):
+        replacements = module._identity_replacements(context, invocation)
+        bodies = (settings, mcp, policy, *native.values())
+        for body in bodies:
+            normalized = module._normalize_identity_body(body, replacements).decode()
+            assert str(context.installation_root) not in normalized
+            assert str(ROOT) not in normalized
+            assert str(tmp_path) not in normalized
+        identity = actual(context, invocation, env, settings, mcp, native, policy)
+        identities.append(identity["components"])
+        return identity
+
+    monkeypatch.setattr(module, "_normalized_launch_identity", capture)
+    launches = []
+    for name in ("first", "second installation"):
+        location = tmp_path / name
+        location.mkdir()
+        context = _production_claude_context(location, role=role)
+        assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
+        launches.append(prepare_launch(context))
+        assert identities[-1] == context.role_capabilities["claude-code"][role]["launch_identity"]["components"]
+    assert identities[0] == identities[1]
+    assert launches[0].required_capability_identity != launches[1].required_capability_identity
+
+
+@pytest.mark.parametrize("selection", ("unset", "environment", "setup"))
+def test_worker_memory_environment_references_are_defined(tmp_path, selection):
+    environment = {"PATH": os.environ.get("PATH", "")}
+    setup = {"memory_enabled": True}
+    expected = {"MAGNOLIA_MEMORY_MODEL": "", "MAGNOLIA_MEMORY_PROVIDER": ""}
+    if selection != "unset":
+        expected = {"MAGNOLIA_MEMORY_MODEL": "memory-model", "MAGNOLIA_MEMORY_PROVIDER": "provider"}
+    if selection == "environment":
+        environment.update(expected)
+    elif selection == "setup":
+        setup.update(memory_model="memory-model", memory_provider="provider")
+    context = _production_claude_context(
+        tmp_path, role="worker", environment=environment, setup=setup
+    )
+    launch = prepare_launch(context)
+    mcp = json.loads((launch.invocation_dir / "claude-mcp.json").read_text())
+    references = mcp["mcpServers"]["compchem-memory"]["env"]
+    assert set(references) == set(context.memory_service["env_vars"])
+    assert set(references) <= launch.env.keys()
+    expanded = {name: launch.env.get(name, value) for name, value in references.items()}
+    assert not any("${" in value for value in expanded.values())
+    assert {name: expanded[name] for name in expected} == expected
 
 
 @pytest.mark.parametrize("change", ("missing", "extra"))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from functools import partial
 from collections.abc import Mapping
 from typing import Any
 
@@ -27,6 +28,7 @@ from compchem_memory.harness.render_common import (
 )
 
 HARNESS = "vibe"
+_owns_entry = partial(owned, client=HARNESS)
 # (hook type, neutral event); the hook name is ``magnolia-<neutral event>``.
 EVENTS = (
     ("session_start", "session-start"),
@@ -54,13 +56,13 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     hooks_path = folder / "hooks.toml"
     validate_project_paths((config_path, hooks_path), context.project_dir)
     content, found, original = merged_toml(
-        config_path, owned, _config(neutral, context, config_path)
+        config_path, _owns_entry, _config(neutral, context, config_path)
     )
     files[config_path] = content
     conflicts += found
     _keep_backup(files, config_path, original)
     content, found, original = merged_toml(
-        hooks_path, owned, {"hooks": _hooks(context)}
+        hooks_path, _owns_entry, {"hooks": _hooks(context)}
     )
     files[hooks_path] = content
     conflicts += found

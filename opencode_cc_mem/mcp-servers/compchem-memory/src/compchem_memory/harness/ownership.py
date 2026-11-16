@@ -3,41 +3,120 @@
 from __future__ import annotations
 
 import re
+import shlex
+from pathlib import PurePosixPath
+
+from compchem_memory.harness.render_common import (
+    REQUIRED_HOOK_TIMEOUT_S,
+    _required_pre_tool_command,
+)
 
 MAGNOLIA_SERVERS = frozenset({"compchem-tools", "compchem-memory", "perspicacite"})
-VIBE_HOOK_PREFIX = "magnolia-"
-_COMMAND_BOUNDARY = r"(?:^|[\s;&|()])"
-_COMMAND_END = r"(?=$|[\s;&|()])"
-_LEGACY_HOOK = re.compile(
-    rf"{_COMMAND_BOUNDARY}-m\s+['\"]?compchem_memory\.hook['\"]?{_COMMAND_END}"
-)
-_RUNNER_HOOK = re.compile(
-    rf"compchem_memory[/\\]hook[/\\]runner\.py['\"]?{_COMMAND_END}"
+_CLIENTS = ("claude", "codex", "vibe")
+_PYTHON = re.compile(r"(?:python(?:\d+(?:\.\d+)*)?|py)")
+# Any well-formed event name, so entries for events no longer rendered are still ours to remove.
+_EVENT_TOKEN = re.compile(r"[a-z][a-z0-9-]{0,40}")
+_RUNNER_PARTS = (
+    "mcp-servers", "compchem-memory", "src", "compchem_memory", "hook", "runner.py"
 )
 
 
-def is_magnolia_hook_command(command: object) -> bool:
-    """Recognise legacy module hooks and the isolated repository runner."""
-    if not isinstance(command, str):
+def _shell_words(command: str) -> tuple[str, ...]:
+    if _has_shell_expansion(command):
+        return ()
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return tuple(lexer)
+
+
+def _has_shell_expansion(command: str) -> bool:
+    quote = None
+    escaped = False
+    for character in command:
+        if escaped:
+            escaped = False
+        elif character == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if character == quote:
+                quote = None
+            elif quote == '"' and character in "$`":
+                return True
+        elif character in "\"'":
+            quote = character
+        elif character in "$`*?[~":
+            return True
+    return False
+
+
+def _direct_hook(words: tuple[str, ...], client: str | None) -> bool:
+    if len(words) != 5 or words[-2] not in _CLIENTS or not _EVENT_TOKEN.fullmatch(words[-1]):
         return False
-    return bool(_LEGACY_HOOK.search(command) or _RUNNER_HOOK.search(command))
+    if client is not None and words[-2] != client:
+        return False
+    if words[0] != "{python_executable}" and not _PYTHON.fullmatch(PurePosixPath(words[0]).name):
+        return False
+    if words[1:3] == ("-m", "compchem_memory.hook"):
+        return True
+    runner = PurePosixPath(words[2])
+    return (
+        words[1] == "-I"
+        and (runner.is_absolute() or words[2].startswith("{installation_root}/"))
+        and runner.parts[-len(_RUNNER_PARTS):] == _RUNNER_PARTS
+    )
 
 
-def owned(kind: str, name: str | None, entry: dict) -> bool:
+def parse_hook_command(
+    command: object, client: str | None = None
+) -> tuple[tuple[str, ...], bool] | None:
+    """Return complete hook argv and wrapper presence, or None for member commands."""
+    if not isinstance(command, str):
+        return None
+    try:
+        words = _shell_words(command)
+        if _direct_hook(words, client):
+            return words, False
+        if len(words) == 3 and words[:2] == ("/bin/sh", "-c"):
+            return _parse_required_hook(words[2], client)
+    except ValueError:
+        return None
+    return None
+
+
+def _parse_required_hook(script: str, client: str | None):
+    marker = "__MAGNOLIA_HOOK_COMMAND__"
+    for candidate in (client,) if client is not None else _CLIENTS:
+        template = _shell_words(
+            _required_pre_tool_command(marker, candidate, REQUIRED_HOOK_TIMEOUT_S)
+        )[2]
+        before, after = template.split(marker)
+        if not script.startswith(before) or not script.endswith(after):
+            continue
+        words = _shell_words(script[len(before):-len(after)])
+        if _direct_hook(words, candidate) and words[-1] == "pre-tool":
+            return words, True
+    return None
+
+
+def is_magnolia_hook_command(command: object, client: str | None = None) -> bool:
+    """Recognise only a complete rendered hook for the requested client."""
+    return parse_hook_command(command, client) is not None
+
+
+def owned(kind: str, name: str | None, entry: dict, *, client: str | None = None) -> bool:
     """Ownership predicate for :mod:`compchem_memory.harness.files`.
 
-    Servers are owned by name. Hooks are owned when their command runs the Magnolia
-    hook module (for Claude and Codex matcher groups: any inner hook), or when a Vibe
-    hook's name starts with ``magnolia-``.
+    Servers are owned by name. Only complete commands for the renderer's client
+    own hooks; matcher groups must contain exclusively such hooks.
     """
     if kind == "server":
         return name in MAGNOLIA_SERVERS
     if not isinstance(entry, dict):
         return False
-    hook_name = name if name is not None else entry.get("name")
-    if isinstance(hook_name, str) and hook_name.startswith(VIBE_HOOK_PREFIX):
-        return True
-    if _runs_hook_module(entry):
+    if client is None:
+        return False
+    if _runs_hook_module(entry, client):
         return True
     inner = entry.get("hooks")
     # A matcher group is Magnolia's only when every hook in it is; a mixed group
@@ -45,11 +124,11 @@ def owned(kind: str, name: str | None, entry: dict) -> bool:
     return (
         isinstance(inner, list)
         and bool(inner)
-        and all(isinstance(hook, dict) and _runs_hook_module(hook) for hook in inner)
+        and all(isinstance(hook, dict) and _runs_hook_module(hook, client) for hook in inner)
     )
 
 
-def strip_owned_hooks(current: dict) -> dict:
+def strip_owned_hooks(current: dict, *, client: str = "codex") -> dict:
     """Remove Magnolia hooks, including groups under obsolete event keys."""
     hooks = current.get("hooks")
     if not isinstance(hooks, dict):
@@ -60,22 +139,22 @@ def strip_owned_hooks(current: dict) -> dict:
             cleaned[event] = groups
             continue
         kept = [
-            _strip_group(group)
+            _strip_group(group, client)
             for group in groups
-            if not (isinstance(group, dict) and owned("hook", None, group))
+            if not (isinstance(group, dict) and owned("hook", None, group, client=client))
         ]
         if kept:
             cleaned[event] = kept
     return {**current, "hooks": cleaned}
 
 
-def _strip_group(group):
+def _strip_group(group, client):
     inner = group.get("hooks") if isinstance(group, dict) else None
-    if not isinstance(inner, list) or owned("hook", None, group):
+    if not isinstance(inner, list) or owned("hook", None, group, client=client):
         return group
-    kept = [h for h in inner if not (isinstance(h, dict) and _runs_hook_module(h))]
+    kept = [h for h in inner if not (isinstance(h, dict) and _runs_hook_module(h, client))]
     return group if len(kept) == len(inner) else {**group, "hooks": kept}
 
 
-def _runs_hook_module(hook: dict) -> bool:
-    return is_magnolia_hook_command(hook.get("command"))
+def _runs_hook_module(hook: dict, client: str) -> bool:
+    return is_magnolia_hook_command(hook.get("command"), client)
