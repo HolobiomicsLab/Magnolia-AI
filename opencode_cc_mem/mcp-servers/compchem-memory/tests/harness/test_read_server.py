@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 from pathlib import Path
+import time
 
 import pytest
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 from compchem_memory.harness.read_server import ReadRefused, ReadServer
 
@@ -53,10 +58,11 @@ def test_read_server_confines_reads_to_policy_roots(tmp_path):
         "../outside/outside.txt",
         "alias/outside.txt",
         "Case.ENV",
-        "~/.ssh/id_rsa",
-        "$HOME/.ssh/id_rsa",
     ):
         with pytest.raises(ReadRefused):
+            server.read_file(path)
+    for path in ("~/.ssh/id_rsa", "$HOME/.ssh/id_rsa"):
+        with pytest.raises(ReadRefused, match="policy denied"):
             server.read_file(path)
 
 
@@ -102,3 +108,78 @@ def test_read_server_bounds_output(tmp_path, monkeypatch):
     assert found["truncated"] is True
     with pytest.raises(ReadRefused, match="complex"):
         server.search("re:^(line+)+$", "many.txt")
+
+
+def test_read_server_rechecks_open_descriptor_and_refuses_fifo(tmp_path, monkeypatch):
+    server, project, outside = _server(tmp_path)
+    race = project / "race.txt"
+    race.write_text("benign\n", encoding="utf-8")
+    loot = outside / "loot.txt"
+    loot.write_text("LOOT\n", encoding="utf-8")
+    original = __import__(
+        "compchem_memory.harness.read_server", fromlist=["read_target_allowed"]
+    ).read_target_allowed
+    swapped = False
+
+    def swap_after_check(path, cwd, policy, broad=False):
+        nonlocal swapped
+        allowed = original(path, cwd, policy, broad=broad)
+        if allowed and path == "race.txt" and not swapped:
+            swapped = True
+            race.unlink()
+            race.symlink_to(loot)
+        return allowed
+
+    monkeypatch.setattr(
+        "compchem_memory.harness.read_server.read_target_allowed", swap_after_check
+    )
+    with pytest.raises(ReadRefused):
+        server.read_file("race.txt")
+
+    fifo = project / "pipe"
+    os.mkfifo(fifo)
+    started = time.monotonic()
+    with pytest.raises(ReadRefused, match="regular file"):
+        server.read_file("pipe")
+    assert time.monotonic() - started < 1
+    with pytest.raises(ReadRefused, match="regular file"):
+        server.search("needle", "pipe")
+
+
+def test_read_server_search_caps_line_and_total_bytes(tmp_path, monkeypatch):
+    server, project, _outside = _server(tmp_path)
+    monkeypatch.setattr(server, "MAX_SEARCH_LINE_BYTES", 32)
+    monkeypatch.setattr(server, "MAX_SEARCH_TOTAL_BYTES", 96)
+    (project / "long.txt").write_text("a" * 200 + " needle\n", encoding="utf-8")
+
+    result = server.search("needle", "long.txt")
+
+    assert result["truncated"] is True
+    assert "line" in result["reason"] or "byte" in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
+    _server_instance, project, _outside = _server(tmp_path)
+    policy = _policy(tmp_path / "stdio-policy.json", project, role="reviewer")
+    (project / "notes.txt").write_text("hello\n", encoding="utf-8")
+    (project / "long.txt").write_text("a" * 8_192 + "\n", encoding="utf-8")
+    transport = StdioTransport(
+        command=os.environ.get("PYTHON", os.sys.executable),
+        args=["-P", "-m", "compchem_memory.harness.read_server"],
+        env={**os.environ, "MAGNOLIA_HOOK_POLICY": str(policy)},
+        cwd=str(project),
+    )
+    async with Client(transport) as client:
+        slow = asyncio.create_task(client.call_tool(
+            "search",
+            {"pattern": "re:a*a*a*a*a*b", "path": "long.txt"},
+            raise_on_error=False,
+        ))
+        await asyncio.sleep(0.1)
+        read = await asyncio.wait_for(client.call_tool(
+            "read_file", {"path": "notes.txt"}, raise_on_error=False
+        ), timeout=1.0)
+        assert read.is_error is False
+        result = await asyncio.wait_for(slow, timeout=5.0)
+        assert "truncated" in result.content[0].text

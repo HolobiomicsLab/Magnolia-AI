@@ -306,6 +306,19 @@ def test_hook_allows_read_server_tools_only_for_worker_reviewer(tmp_path):
             )
             assert decide(event, env) is None
 
+        parsed = codex.parse({
+            "hook_event_name": "PreToolUse",
+            "session_id": "session",
+            "cwd": str(project),
+            "tool_name": "mcp__magnolia_read__read_file",
+            "tool_input": {"path": "allowed.txt"},
+        }, "pre-tool")
+        assert parsed is not None
+        assert decide(parsed, env) is None
+        parsed.tool.input["path"] = "secret/token.txt"
+        parsed.tool.targets = (ToolTarget("secret/token.txt", "read"),)
+        assert decide(parsed, env) is not None
+
     helper = _write_policy(tmp_path / "helper.json", project, work, role="helper")
     assert decide(
         _event(
@@ -340,7 +353,7 @@ def test_codex_apply_patch_is_confined_to_worker_edit_root(tmp_path):
             "session_id": "session",
             "cwd": str(project),
             "tool_name": "apply_patch",
-            "tool_input": {"patch": patch},
+            "tool_input": {"command": patch},
         }, "pre-tool")
         assert parsed is not None
         return parsed
@@ -357,3 +370,38 @@ def test_codex_apply_patch_is_confined_to_worker_edit_root(tmp_path):
         f"*** Move to: {outside}\n"
         "*** End Patch"
     ), env) is not None
+
+
+def test_codex_apply_patch_decodes_indented_headers_and_fails_closed(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    env = _write_policy(tmp_path / "worker.json", project, work)
+
+    def decision(command: str, *, key: str = "command"):
+        event = codex.parse({
+            "hook_event_name": "PreToolUse",
+            "session_id": "session",
+            "cwd": str(project),
+            "tool_name": "apply_patch",
+            "tool_input": {key: command},
+        }, "pre-tool")
+        assert event is not None
+        return decide(event, env)
+
+    outside = project / "control.txt"
+    for whitespace in ("  ", "\t"):
+        command = (
+            "*** Begin Patch\n"
+            f"*** Add File: {work / 'ok.txt'}\n"
+            "+ok\n"
+            f"{whitespace}*** Add File: {outside}\n"
+            "+escaped\n"
+            "*** End Patch"
+        )
+        assert decision(command) is not None
+
+    malformed = "*** Begin Patch\n*** Rename File: hidden.txt\n*** End Patch"
+    assert decision(malformed) is not None
+    valid = f"*** Begin Patch\n*** Add File: {work / 'ok.txt'}\n+ok\n*** End Patch"
+    assert decision(valid, key="patch") is not None

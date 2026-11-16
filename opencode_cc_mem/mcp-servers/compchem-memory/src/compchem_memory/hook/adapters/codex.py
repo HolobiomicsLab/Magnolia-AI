@@ -69,16 +69,43 @@ def _decode_policy_targets(event: HookEvent) -> None:
             tool.targets = (ToolTarget(path, "read"),)
         return
     if name == "apply_patch":
-        patch = tool.input.get("patch")
+        patch = tool.input.get("command")
         if not isinstance(patch, str):
             return
-        prefixes = ("*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ")
-        paths = [
-            line.removeprefix(prefix)
-            for line in patch.splitlines()
-            for prefix in prefixes
-            if line.startswith(prefix) and line.removeprefix(prefix)
-        ]
-        if paths:
-            tool.policy_action = "native_edit"
-            tool.targets = tuple(ToolTarget(value, "edit") for value in paths)
+        paths = _patch_paths(patch)
+        if paths is None:
+            return
+        tool.policy_action = "native_edit"
+        tool.targets = tuple(ToolTarget(value, "edit") for value in paths)
+
+
+def _patch_paths(patch: str) -> list[str] | None:
+    """Decode the headers accepted by Codex 0.154, or fail closed."""
+    lines = patch.splitlines()
+    stripped = [line.strip() for line in lines if line.strip()]
+    if not stripped or stripped[0] != "*** Begin Patch":
+        return None
+    if stripped[-1] != "*** End Patch":
+        return None
+    prefixes = (
+        "*** Update File: ",
+        "*** Add File: ",
+        "*** Delete File: ",
+        "*** Move to: ",
+    )
+    markers = {"*** Begin Patch", "*** End Patch", "*** End of File"}
+    paths: list[str] = []
+    for line in lines:
+        header = line.strip()
+        if not header.startswith("***"):
+            continue
+        if header in markers:
+            continue
+        matched = next((prefix for prefix in prefixes if header.startswith(prefix)), None)
+        if matched is None:
+            return None
+        path = header.removeprefix(matched).strip()
+        if not path:
+            return None
+        paths.append(path)
+    return paths or None
