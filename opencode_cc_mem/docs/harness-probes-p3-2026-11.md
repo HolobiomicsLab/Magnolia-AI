@@ -46,6 +46,7 @@ All client × role rows remain **refused**. The synthetic implementation evidenc
 After the owner's explicit go, run the following ledger separately for each client. The hard cap is ten physical invocations per client across Task 0 and acceptance; every launch, resume, empty-output retry, and format repair consumes one. Stop rather than exceed the cap.
 
 1. Normal persisted-trust worker launch: prove executable/argv, selected-model delivery, project discovery, immutable hook/policy digest, native schemas, allowed read, and one edit under its own `work/`.
+   Claude gate: hooks delivered through `--settings` registered and ran.
 2. Worker negative matrix: deny direct/aliased/recursive secret reads; traversal and symlink reads; new-target, multi-file, move, and outside-project/outside-extra-temp edits; native/MCP shell; member/unknown tools; delegation; and code-mode inner calls.
 3. Reviewer launch: allow its named reads while denying every edit and every MCP/native action.
 4. Service-less helper with no tools: prove its own model, cap, schemas, and denial contract.
