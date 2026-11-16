@@ -27,7 +27,7 @@ PREREQUISITE_CELLS = (
     "usage_semantics",
 )
 ALL_CELLS = (*PREREQUISITE_CELLS, "quota_evidence")
-OPTIONAL_CELLS = ("http_header_expansion",)
+OPTIONAL_CELLS = ("http_api_key_env",)
 
 
 class CapabilityTableError(ValueError):

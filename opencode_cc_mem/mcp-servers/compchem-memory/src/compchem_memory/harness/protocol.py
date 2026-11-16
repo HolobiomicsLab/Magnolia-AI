@@ -27,6 +27,7 @@ class LaunchContext:
     noninteractive: bool = False
     role_policy: Mapping[str, Any] | None = None
     memory_service: Mapping[str, Any] | None = None
+    holder_pid: int | None = None
 
 
 @dataclass

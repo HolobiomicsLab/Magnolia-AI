@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from campaign_runner.cli import main  # noqa: E402
+from campaign_runner.cli import _memory_route, main  # noqa: E402
+from campaign_runner.routing import ResolvedRoute  # noqa: E402
 from campaign_runner.state import CampaignStore  # noqa: E402
 
 
@@ -39,6 +40,13 @@ def protocol_payload():
             },
         ],
     }
+
+
+def test_vibe_campaign_route_is_managed_and_never_static(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_URL", "http://127.0.0.1:9999/mcp")
+    route = ResolvedRoute("vibe", "model", "family", "vibe", "reviewer", "test")
+
+    assert _memory_route(route) == {"transport": "managed"}
 
 
 def make_inputs(tmp_path):

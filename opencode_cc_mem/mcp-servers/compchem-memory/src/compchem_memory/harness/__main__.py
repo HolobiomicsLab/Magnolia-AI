@@ -53,6 +53,7 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     launch.add_argument("--project", required=True)
     launch.add_argument("--python", required=True)
     launch.add_argument("--tools-port", required=True, type=int)
+    launch.add_argument("--holder-pid", type=int)
     launch.add_argument("--model")
     return parser.parse_args(argv)
 
@@ -83,6 +84,7 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         tools_port=args.tools_port,
         model=model,
         setup=setup,
+        holder_pid=args.holder_pid,
     )
     neutral = load(root / "opencode.json.template", _substitutions(context), setup)
     if os.environ.get("MAGNOLIA_DRY_RUN") != "1" and args.harness == "vibe" and any(
@@ -102,10 +104,11 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         neutral = bind_memory_service(neutral, handle.route())
         try:
             rendered = renderer(neutral, context)
+            token = token_for_handle(handle)
         except Exception:
             release_memory_service(handle)
             raise
-        rendered.env[TOKEN_ENV] = token_for_handle(handle)
+        rendered.env[TOKEN_ENV] = token
         rendered.env["MAGNOLIA_MEMORY_SERVICE_HANDLE"] = encode_handle(handle)
         return rendered, renderer
     return renderer(neutral, context), renderer

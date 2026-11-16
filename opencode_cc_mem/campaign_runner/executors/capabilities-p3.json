@@ -741,10 +741,10 @@
           "artifact": null,
           "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
-        "http_header_expansion": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "Vibe Authorization header ${VAR} expansion is unobserved; Task 9 keeps the route behind this unknown capability"
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -828,10 +828,10 @@
           "artifact": null,
           "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
-        "http_header_expansion": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "Vibe Authorization header ${VAR} expansion is unobserved; Task 9 keeps the route behind this unknown capability"
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -915,10 +915,10 @@
           "artifact": null,
           "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
-        "http_header_expansion": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "Vibe Authorization header ${VAR} expansion is unobserved; Task 9 keeps the route behind this unknown capability"
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -1002,10 +1002,10 @@
           "artifact": null,
           "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
-        "http_header_expansion": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "Vibe Authorization header ${VAR} expansion is unobserved; Task 9 keeps the route behind this unknown capability"
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",

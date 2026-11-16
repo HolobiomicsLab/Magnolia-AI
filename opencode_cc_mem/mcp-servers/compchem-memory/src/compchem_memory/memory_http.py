@@ -5,9 +5,12 @@ from __future__ import annotations
 import hmac
 import os
 from pathlib import Path
+from typing import Any, Awaitable, Callable
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
+from fastmcp.server.dependencies import get_http_headers
+from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -16,6 +19,59 @@ from compchem_memory.harness.memory_service import (
     _process_identity,
     project_digest,
 )
+
+
+def _request_project_header() -> str | None:
+    """Return the optional project hint for the current HTTP request."""
+    try:
+        headers = get_http_headers(include={"x-project-dir"})
+    except RuntimeError:
+        return None
+    value = headers.get("x-project-dir") or headers.get("X-Project-Dir")
+    return value if isinstance(value, str) and value.strip() else None
+
+
+class ProjectBindingMiddleware(Middleware):
+    """Reject cross-project HTTP messages before mounted tools or resources run."""
+
+    def __init__(self, project_dir: Path) -> None:
+        self.project_dir = project_dir.expanduser().resolve()
+
+    def _validate(self, value: Any) -> None:
+        if value in (None, ""):
+            return
+        target = Path(str(value)).expanduser().resolve()
+        if target != self.project_dir:
+            from compchem_memory.server import ProjectBindingError
+
+            raise ProjectBindingError(
+                f"memory HTTP service is bound to a different project: {self.project_dir}"
+            )
+
+    def _validate_header(self) -> None:
+        self._validate(_request_project_header())
+
+    async def on_request(
+        self,
+        context: MiddlewareContext[Any],
+        call_next: Callable[[MiddlewareContext[Any]], Awaitable[Any]],
+    ) -> Any:
+        self._validate_header()
+        return await call_next(context)
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[Any],
+        call_next: Callable[[MiddlewareContext[Any]], Awaitable[Any]],
+    ) -> Any:
+        self._validate_header()
+        arguments = getattr(context.message, "arguments", None)
+        if isinstance(arguments, dict):
+            self._validate(arguments.get("project_dir"))
+        return await call_next(context)
+
+    async def check_resource_access(self, context: MiddlewareContext[Any]) -> None:
+        self._validate_header()
 
 
 def health_payload(project_dir: Path, process_identity: str) -> dict[str, str]:
@@ -37,6 +93,11 @@ def build_server(token: str) -> FastMCP:
         {token: {"client_id": "magnolia-memory", "scopes": []}}
     )
     app = FastMCP("compchem-memory-http", auth=verifier)
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1":
+        project = os.environ.get("MAGNOLIA_PROJECT_DIR")
+        if not project:
+            raise RuntimeError("memory HTTP service requires a bound project directory")
+        app.add_middleware(ProjectBindingMiddleware(Path(project)))
     app.mount(memory_app)
 
     @app.custom_route("/health", methods=["GET"])

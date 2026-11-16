@@ -54,7 +54,12 @@ def make_workspace(tmp_path: Path) -> Path:
     agents = bin_dir / "magnolia-agents-daemon"
     agents.write_text(
         "import os, pathlib\n"
-        "pathlib.Path(os.environ['SENTINEL_DIR'], 'daemon-ran-agents').touch()\n")
+        "root = pathlib.Path(os.environ['SENTINEL_DIR'])\n"
+        "(root / 'daemon-ran-agents').touch()\n"
+        "(root / 'daemon-agents-env.json').write_text(__import__('json').dumps({\n"
+        "  'deepseek': os.environ.get('DEEPSEEK_API_KEY'),\n"
+        "  'bearer': os.environ.get('MAGNOLIA_MEMORY_SERVICE_TOKEN'),\n"
+        "}))\n")
     return root
 
 
@@ -337,6 +342,43 @@ def test_real_claude_launch_execs_client_after_daemons(tmp_path):
     out = json.loads(proc.stdout)  # the stub ran
     assert out["argv"][0] == "claude" and "--settings" in out["argv"]
     assert (tmp_path / "daemon-ran-tools").exists()
+
+
+def test_vibe_client_stripping_does_not_strip_shared_daemon_environment(tmp_path):
+    ws = make_workspace(tmp_path)
+    fake_src = (
+        ws
+        / "opencode_cc_mem"
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    harness = fake_src / "harness"
+    harness.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("")
+    (harness / "__init__.py").write_text("")
+    (harness / "__main__.py").write_text(
+        "import sys\n"
+        "sys.stdout.buffer.write("
+        "b'vibe\\0\\0MAGNOLIA_MEMORY_SERVICE_TOKEN=service-bearer\\0'"
+        "+ b'MAGNOLIA_MEMORY_SERVICE_HANDLE=fake-handle\\0')\n"
+    )
+    proc = run_raw(
+        ws,
+        ["--harness", "vibe", PROJECT],
+        env={"DEEPSEEK_API_KEY": "daemon-provider-key"},
+        dry=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    deadline = time.time() + 3
+    path = tmp_path / "daemon-agents-env.json"
+    while time.time() < deadline and not path.exists():
+        time.sleep(0.1)
+    assert json.loads(path.read_text()) == {
+        "deepseek": "daemon-provider-key",
+        "bearer": None,
+    }
 
 
 def test_setup_set_json_keeps_other_keys(tmp_path):

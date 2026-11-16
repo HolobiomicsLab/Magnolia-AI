@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from types import SimpleNamespace
 from dataclasses import replace
 from pathlib import Path
 
@@ -573,9 +574,12 @@ def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
 
     assert rendered["transport"] == "http"
     assert rendered["url"] == route["url"]
-    assert rendered["headers"]["Authorization"] == (
-        "Bearer ${MAGNOLIA_MEMORY_SERVICE_TOKEN}"
-    )
+    assert rendered["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert "headers" not in rendered
+    assert "${" not in repr(rendered)
     assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
     memory_keys = set(PASSTHROUGH_CLIENT_ENV) - {"MAGNOLIA_CRITIC_API_KEY"}
     assert not (memory_keys & set(launch.env))
@@ -587,6 +591,47 @@ def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
             memory_service={**route, "url": "http://127.0.0.1:9877/mcp"},
         )
     )
+
+
+def test_campaign_vibe_managed_route_acquires_project_service(
+    tmp_path, monkeypatch
+):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("managed-service-token\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": "http://127.0.0.1:43101/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context: acquired.append(context) or handle,
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", ""), "OPENAI_API_KEY": "provider"},
+    )
+
+    launch = prepare_launch(context)
+
+    assert len(acquired) == 1
+    assert acquired[0].project_dir == context.project_dir
+    assert launch.memory_service_handle is handle
+    rendered = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )["mcp_servers"][0]
+    assert rendered["url"] == "http://127.0.0.1:43101/mcp"
+    assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
 
 
 def test_memory_role_without_route_is_refused(tmp_path):

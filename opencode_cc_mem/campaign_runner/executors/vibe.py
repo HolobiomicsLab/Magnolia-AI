@@ -179,6 +179,13 @@ class VibeExecutor:
     resume_artifact: ResumeArtifact | None = None
 
     def __post_init__(self) -> None:
+        try:
+            self._validate_prepared()
+        except Exception:
+            self._release_memory_service()
+            raise
+
+    def _validate_prepared(self) -> None:
         if self.role == "worker":
             raise ExecutorRefused("D4: Vibe worker denial matrix and resume gate have not passed")
         if self.role not in {"reviewer", "helper", "evaluator"}:
@@ -198,6 +205,38 @@ class VibeExecutor:
             self._accept_resume_artifact(self.resume_artifact)
 
     def run(
+        self,
+        prompt: str,
+        cwd: str | Path,
+        attempt_dir: Path,
+        stem: str = "worker",
+        resume_session: str | None = None,
+        retries: int | None = None,
+        control: ProcessControl | None = None,
+    ) -> WorkerResult:
+        try:
+            return self._run(
+                prompt,
+                cwd,
+                attempt_dir,
+                stem=stem,
+                resume_session=resume_session,
+                retries=retries,
+                control=control,
+            )
+        finally:
+            self._release_memory_service()
+
+    def _release_memory_service(self) -> None:
+        handle = getattr(self.prepared, "memory_service_handle", None)
+        if handle is None:
+            return
+        from compchem_memory.harness.memory_service import release_memory_service
+
+        release_memory_service(handle)
+        object.__setattr__(self.prepared, "memory_service_handle", None)
+
+    def _run(
         self,
         prompt: str,
         cwd: str | Path,
