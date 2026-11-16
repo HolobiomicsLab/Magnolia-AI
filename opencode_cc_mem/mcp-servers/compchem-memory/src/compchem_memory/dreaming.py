@@ -107,7 +107,7 @@ def _recently_checked(meta: dict[str, Any], config: DreamingConfig) -> bool:
     if not raw:
         return False
     try:
-        checked = datetime.fromisoformat(str(raw)[:19])
+        checked = datetime.fromisoformat(str(raw))
     except (ValueError, TypeError):
         return False
     checked = checked if checked.tzinfo else checked.replace(tzinfo=timezone.utc)

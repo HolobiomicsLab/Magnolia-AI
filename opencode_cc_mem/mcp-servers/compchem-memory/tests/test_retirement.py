@@ -159,3 +159,24 @@ def test_record_opportunity_appends(tmp_path):
     led = tmp_path / ".magnolia" / "reflex" / "exposure.jsonl"
     rows = [json.loads(l) for l in led.read_text().splitlines()]
     assert len(rows) == 2 and rows[0]["kind"] == "retrieval_opportunity"
+
+
+def test_created_dt_preserves_explicit_offset(tmp_path):
+    """CET/CEST `created` values must not be reinterpreted as UTC.
+
+    Staging files are stamped in local time with a numeric offset; truncating
+    the offset shifted every entry by one hour after the DST change.
+    """
+    from compchem_memory.retirement import _created_dt
+
+    p = tmp_path / "entry.md"
+    dt = _created_dt({"created": "2026-11-13T20:49:59.604191+01:00"}, p)
+    assert dt == datetime(2026, 11, 13, 19, 49, 59, 604191, tzinfo=timezone.utc)
+
+
+def test_created_dt_naive_still_read_as_utc(tmp_path):
+    from compchem_memory.retirement import _created_dt
+
+    p = tmp_path / "entry.md"
+    dt = _created_dt({"created": "2026-11-13T20:49:59"}, p)
+    assert dt == datetime(2026, 11, 13, 20, 49, 59, tzinfo=timezone.utc)

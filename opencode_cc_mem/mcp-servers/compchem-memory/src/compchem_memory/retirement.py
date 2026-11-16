@@ -75,10 +75,20 @@ def _load_opportunities(store: Path) -> list[datetime]:
 
 
 def _created_dt(meta: dict, path: Path) -> datetime | None:
-    raw = meta.get("created") or ""
+    """Parse an entry's `created` timestamp as an instant.
+
+    Staging entries are written in the operator's local time with an explicit
+    offset (staging_io.py). Keep that offset: truncating it and stamping UTC
+    would shift every CET/CEST entry by one or two hours, which is visible in
+    retirement deadlines and in the age math. Naive values (older entries) are
+    still interpreted as UTC for backward compatibility.
+    """
+    raw = str(meta.get("created") or "").strip().strip("'\"")
     try:
-        dt = datetime.fromisoformat(str(raw).strip("'\"")[:19])
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     except (ValueError, TypeError):
         try:
             return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
