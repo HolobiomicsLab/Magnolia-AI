@@ -10,6 +10,15 @@ from pathlib import Path
 
 import pytest
 
+from campaign_runner.executors.contracts import (
+    LimitInfo,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+)
+from campaign_runner.executors.registry import ExecutorRefused
+from campaign_runner.workers import WorkerResult
+
 _SCRIPT = Path(__file__).resolve().parents[1] / "softwares" / "bin" / "magnolia-agents-daemon"
 _spec = importlib.util.spec_from_file_location(
     "agents_daemon", _SCRIPT, loader=SourceFileLoader("agents_daemon", str(_SCRIPT)))
@@ -20,11 +29,19 @@ _spec.loader.exec_module(d)
 def _root(tmp_path):
     root = tmp_path / "mroot"
     root.mkdir(parents=True, exist_ok=True)
+    for lane in ("literature", "xiulian"):
+        project = root / "opencode_cc_mem" / "projects" / lane
+        (project / "inbox").mkdir(parents=True, exist_ok=True)
+        (project / "agent.json").write_text(
+            json.dumps({"enabled": True}), encoding="utf-8"
+        )
     return str(root)
 
 
 def _task(inbox: Path, name: str = "20260924_ask.task.md", status: str = "open",
           body: str = "Summarize the paper.") -> Path:
+    if not inbox.name.startswith("from-"):
+        inbox = inbox / "from-xiulian"
     inbox.mkdir(parents=True, exist_ok=True)
     f = inbox / name
     f.write_text(f"# Task: ask\n- from: xiulian\n- date: 2026-09-24\n"
@@ -453,6 +470,8 @@ def test_wait_for_ignores_non_terminal_run_records(tmp_path):
 
 
 def _ticket(inbox: Path, name: str, status: str = "open") -> Path:
+    if not inbox.name.startswith("from-"):
+        inbox = inbox / "from-literature"
     inbox.mkdir(parents=True, exist_ok=True)
     f = inbox / name
     f.write_text(f"---\nstatus: {status}\nfrom: literature\nto: xiulian\n"
@@ -611,6 +630,7 @@ def test_scheduled_sweep_letter_written_once(tmp_path):
     assert d.scheduled_sweep_letters(root, lanes) == 1
     letters = list((Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox").glob("*scheduled-sweep.task.md"))
     assert len(letters) == 1 and "Run the sweep." in letters[0].read_text()
+    assert d.admit_letter(root, "literature", letters[0]).is_scheduled is True
     # second call same day: no duplicate
     assert d.scheduled_sweep_letters(root, lanes) == 0
 
@@ -642,7 +662,8 @@ def test_always_on_session_key_forwarded_only_when_present(tmp_path):
     inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
     legacy = _task(inbox, "legacy.task.md")
     keyed = _task(inbox, "keyed.task.md")
-    keyed.write_text("status: open\nsession-key: thread-a\n\n## Request\nKeyed.\n")
+    keyed.write_text("# Task: ask\n- from: xiulian\n- date: 2026-09-24\n- status: open\n"
+                     "session-key: thread-a\n\n## Request\nKeyed.\n")
     seen = []
 
     def runner(agent, project_dir, root_, prompt, timeout_s, **kw):
@@ -691,3 +712,283 @@ def test_thread_sessions_are_independent_and_legacy_is_unchanged(tmp_path, monke
     state = d.load_state(root)["lanes"]["literature"]
     assert state["session_id"] == "ses_5"
     assert state["sessions"] == {"thread-a": "ses_4", "thread-b": "ses_3"}
+
+
+def test_opencode_policy_change_starts_fresh_session(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True})
+    project = str(tmp_path)
+    d.save_state(
+        root,
+        {
+            "done": {},
+            "lanes": {
+                "literature": {
+                    "session_id": "legacy-id",
+                    "session": {
+                        "client": "opencode",
+                        "model": "deepseek/deepseek-flash",
+                        "session_id": "old-policy-id",
+                        "project_digest": d._project_digest(project),
+                        "role": "helper",
+                        "policy_digest": "obsolete-policy",
+                    },
+                }
+            },
+        },
+    )
+    calls = []
+
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
+        calls.append(list(extra_args))
+        return {"session_id": "fresh-id", "final_text": "FINAL ANSWER: ok",
+                "all_text": "ok", "n_tools": 0, "rc": 0, "stderr_tail": ""}
+
+    monkeypatch.setattr(d, "_run_once", fake_run_once)
+    d.default_runner("literature", project, root, "new policy", 60)
+
+    assert calls == [["new policy"]]
+    session = d.load_state(root)["lanes"]["literature"]["session"]
+    assert session["session_id"] == "fresh-id"
+    assert session["policy_digest"] != "obsolete-policy"
+
+
+# ---------------------------------------------------------------------------
+# Plan 3 helper routes, identity-bound sessions, quota and visible refusals
+# ---------------------------------------------------------------------------
+
+
+def _registered_letter(root: str, *, model: str = "claude-code/haiku", capabilities=None):
+    sender = _lane(root, "xiulian")
+    lane = _lane(
+        root,
+        "literature",
+        {
+            "enabled": True,
+            "model": model,
+            "required_capabilities": capabilities or [],
+        },
+    )
+    inbox = lane / "inbox" / "from-xiulian"
+    return _task(inbox), sender
+
+
+def _worker_result(
+    *,
+    session_id="session-1",
+    final="FINAL ANSWER: done",
+    outcome=None,
+    client="claude-code",
+    model="haiku",
+    policy="policy-1",
+    project="project-1",
+):
+    identity = SessionIdentity(client, model, session_id, project, "helper", policy)
+    artifact = ResumeArtifact(client, session_id, policy, "helper", project)
+    return WorkerResult(
+        0,
+        False,
+        0.01,
+        session_id,
+        final,
+        final,
+        0,
+        {},
+        1,
+        [],
+        [],
+        outcome=outcome or RunOutcome("success"),
+        session_identity=identity,
+        resume_artifact=artifact,
+    )
+
+
+def test_daemon_route_and_model_reach_client(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(
+        root, model="claude-code/haiku", capabilities=["native_read"]
+    )
+    lane = task.parents[2]
+    captured = {}
+
+    class FakeExecutor:
+        prepared = type("Prepared", (), {"invocation_dir": tmp_path / "invocation"})()
+
+        def run(self, prompt, cwd, attempt_dir, **kwargs):
+            captured.update(cwd=Path(cwd), prompt=prompt)
+            return _worker_result()
+
+    def helper_executor(route, context):
+        captured["route"] = route
+        return FakeExecutor()
+
+    monkeypatch.setattr(d, "_helper_executor", helper_executor)
+    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    monkeypatch.setattr(d, "_configuration_digest", lambda context: "policy-1")
+
+    answer = d.default_runner("literature", str(lane), root, "PROMPT", 60)
+
+    assert answer == "FINAL ANSWER: done"
+    assert captured["route"].client == "claude-code"
+    assert captured["route"].model == "haiku"
+
+
+def test_daemon_session_resume_and_route_switch(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    lane = _lane(root, "literature", {"enabled": True, "model": "claude-code/haiku"})
+    (lane / "docs").mkdir()
+    calls = []
+
+    class FakeExecutor:
+        def __init__(self, route, context):
+            self.route = route
+            self.context = context
+            self.prepared = type(
+                "Prepared", (), {"invocation_dir": tmp_path / f"inv-{len(calls)}"}
+            )()
+
+        def run(self, prompt, cwd, attempt_dir, **kwargs):
+            calls.append((self.route.client, self.route.model, kwargs.get("resume_session")))
+            sid = kwargs.get("resume_session") or f"session-{len(calls)}"
+            return _worker_result(
+                session_id=sid,
+                client=self.route.client,
+                model=self.route.model,
+                policy=f"policy-{self.route.client}",
+                project=self.context.project_identity,
+            )
+
+    monkeypatch.setattr(d, "_helper_executor", lambda route, context: FakeExecutor(route, context))
+    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    monkeypatch.setattr(
+        d, "_configuration_digest", lambda context: f"policy-{context.route.client}"
+    )
+
+    d.default_runner("literature", str(lane), root, "one", 60)
+    d.default_runner("literature", str(lane), root, "two", 60)
+    cfg = json.loads((lane / "agent.json").read_text())
+    cfg["model"] = "codex/gpt-5.6-sol"
+    (lane / "agent.json").write_text(json.dumps(cfg), encoding="utf-8")
+    d.default_runner("literature", str(lane), root, "three", 60)
+
+    assert calls[0][2] is None
+    assert calls[1][2] == "session-1"
+    assert calls[2][0:2] == ("codex", "gpt-5.6-sol")
+    assert calls[2][2] is None
+
+
+def test_daemon_quota_bypasses_fresh_session_recovery(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    lane = _lane(root, "literature", {"enabled": True, "model": "claude-code/haiku"})
+    (lane / "docs").mkdir()
+    d.save_state(
+        root,
+        {
+            "done": {},
+            "lanes": {
+                "literature": {
+                    "session": {
+                        "client": "claude-code",
+                        "model": "haiku",
+                        "session_id": "stale",
+                        "project_digest": d._project_digest(lane),
+                        "role": "helper",
+                        "policy_digest": "policy-claude-code",
+                        "configuration_identity_digest": "policy-claude-code",
+                        "launch_path": str(tmp_path / "launch.json"),
+                    }
+                }
+            },
+        },
+    )
+    calls = []
+
+    class FakeExecutor:
+        prepared = type("Prepared", (), {"invocation_dir": tmp_path})()
+
+        def run(self, *args, **kwargs):
+            calls.append(kwargs.get("resume_session"))
+            return _worker_result(
+                session_id="stale",
+                final="",
+                outcome=RunOutcome(
+                    "quota", LimitInfo("quota", None, "fixture", "hold-1")
+                ),
+            )
+
+    monkeypatch.setattr(d, "_helper_executor", lambda route, context: FakeExecutor())
+    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    monkeypatch.setattr(d, "_configuration_digest", lambda context: "policy-claude-code")
+
+    with pytest.raises(d.HelperQuotaWaiting):
+        d.default_runner("literature", str(lane), root, "PROMPT", 60)
+
+    assert calls == ["stale"]
+
+
+def test_daemon_wait_survives_restart(tmp_path):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(root)
+
+    def quota(*args, **kwargs):
+        raise d.HelperQuotaWaiting("claude-code", "hold-1", None, "quota")
+
+    assert d.handle_task(task, "literature", root, runner=quota) == "waiting_quota"
+    assert d.get_status(task.read_text()) == "open"
+    assert str(task.resolve()) in d.load_state(root)["quota_waits"]
+    assert d.discover_tasks(root, d.discover_lanes(root)) == []
+    assert d.resume_quota_waits(root, "literature") == 1
+    assert d.discover_tasks(root, d.discover_lanes(root)) == [task]
+
+
+def test_sender_refusal_starts_no_client_and_acquires_no_slot(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    lane = Path(root) / "opencode_cc_mem" / "projects" / "literature"
+    task = _task(lane / "inbox" / "from-missing")
+    task.write_text(task.read_text().replace("from: xiulian", "from: missing"))
+    calls = []
+
+    monkeypatch.setattr(
+        d,
+        "_build_helper_context",
+        lambda *args, **kwargs: calls.append("governor") or None,
+    )
+
+    assert d.handle_task(task, "literature", root, runner=d.default_runner) == "refused"
+    assert calls == []
+    assert "did not launch" in task.with_name("20260924_ask_reply.md").read_text()
+
+
+def test_daemon_no_tools_helper_reports_capability_limit(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(root, capabilities=[])
+    starts = []
+
+    def refuse(route, context):
+        starts.append("registry")
+        raise ExecutorRefused("helper no-tools capability row is unavailable")
+
+    monkeypatch.setattr(d, "_helper_executor", refuse)
+    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    result = d.handle_task(task, "literature", root, runner=d.default_runner)
+
+    assert result == "refused"
+    assert starts == ["registry"]
+    assert "capability" in task.with_name("20260924_ask_reply.md").read_text()
+
+
+def test_daemon_required_capability_unavailable_refuses(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(root, capabilities=["browser"])
+    launched = []
+
+    def refuse(route, context):
+        assert context.required_capabilities == ("browser",)
+        raise ExecutorRefused("unsupported required capabilities: browser")
+
+    monkeypatch.setattr(d, "_helper_executor", refuse)
+    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    monkeypatch.setattr(d, "_run_once", lambda *a, **k: launched.append(True))
+
+    assert d.handle_task(task, "literature", root, runner=d.default_runner) == "refused"
+    assert launched == []

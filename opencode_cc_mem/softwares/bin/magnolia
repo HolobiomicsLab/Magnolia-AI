@@ -1151,7 +1151,7 @@ fi
 # Single-instance via its own flock; a second launch is a quiet no-op.
 # Kill switch: MAGNOLIA_AGENTS=0. Non-fatal by design.
 if [ "${MAGNOLIA_DRY_RUN:-0}" != "1" ] && [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemon" ]; then
-    nohup python3 "$SCRIPT_DIR/magnolia-agents-daemon" \
+    nohup "$PYTHON_CMD" "$SCRIPT_DIR/magnolia-agents-daemon" \
         --root "$REPO_ROOT" >/dev/null 2>&1 &
     disown || true
 fi

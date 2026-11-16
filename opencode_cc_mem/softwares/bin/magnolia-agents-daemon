@@ -18,9 +18,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
+import uuid
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,24 +34,13 @@ sys.path[:0] = [
     str(_INSTALLATION_ROOT / "mcp-servers" / "compchem-tools" / "src"),
 ]
 
+from campaign_runner.helper_admission import (  # noqa: E402
+    AdmissionRefused,
+    admit_letter,
+    write_generation_receipt,
+)
+
 AGENTS: tuple[str, ...] = ()
-
-
-def _default_lanes() -> tuple[str, ...]:
-    """Deployment lane names from local config — never hardcoded.
-
-    Order: MAGNOLIA_AGENTD_AGENTS env, then
-    ~/.config/magnolia/agents-daemon-lanes.txt (comma/newline separated).
-    Empty means discovery-only (projects with agent.json)."""
-    raw = os.environ.get("MAGNOLIA_AGENTD_AGENTS")
-    if raw is None:
-        cfg = Path.home() / ".config" / "magnolia" / "agents-daemon-lanes.txt"
-        if cfg.is_file():
-            raw = cfg.read_text(encoding="utf-8", errors="replace")
-    return tuple(x.strip() for x in (raw or "").replace("\n", ",").split(",") if x.strip())
-
-
-AGENTS = _default_lanes()
 AGENT_REGISTRY_NAME = "agent.json"
 SCAN_INTERVAL_S = 10
 TASK_TIMEOUT_S = 30 * 60
@@ -61,6 +53,7 @@ TASK_TIMEOUT_S = 30 * 60
 STATUS_HEADER_LINES = 15
 _STATUS_LINE_RE = re.compile(r"^([\s>*-]*status:\s*)(\S+?)[ \t]*$", re.I)
 _VALID_RID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")   # wait_for rid: path-safe charset
+SAFE_LANE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 _TERMINAL_RUN_STATUSES = frozenset(
     {"success", "completed", "pass", "fail", "failed", "error", "cancelled"})
 _TICKET_RE = re.compile(r"^ticket:[ \t]*idea[ \t]*$", re.I | re.M)
@@ -97,6 +90,23 @@ RESUME_NOTE = (
     "letter right now, beginning with the line 'FINAL ANSWER:'. Keep it "
     "under 40 lines."
 )
+
+
+class HelperQuotaWaiting(RuntimeError):
+    """A helper letter must remain pending behind a durable quota hold."""
+
+    def __init__(
+        self,
+        key: str,
+        hold_id: str | None,
+        reset_at: datetime | None,
+        reason: str,
+    ) -> None:
+        self.key = key
+        self.hold_id = hold_id
+        self.reset_at = reset_at
+        self.reason = reason
+        super().__init__(reason)
 
 
 # ----------------------------------------------------------------- paths ---
@@ -176,20 +186,20 @@ def is_deferred_task(text: str) -> str | None:
 
 
 def discover_lanes(root: str) -> dict:
-    """Lane registry: DEFAULT lanes (literature, xiulian — the current
-    deployment) UNION projects declaring <project>/agent.json.
+    """Return canonical project lanes declaring a safe ``agent.json``.
 
     agent.json: {enabled: bool, model: str, schedule_days: float,
-    schedule_task: str}. Unknown projects become lanes; default lanes may
-    override settings (e.g. xiulian's schedule). enabled:false removes a lane
-    even if it is a default."""
-    lanes: dict[str, dict] = {name: {} for name in AGENTS}
+    schedule_task: str}. ``enabled:false`` removes the lane. Legacy configured
+    names without a project registration are intentionally not admitted."""
+    lanes: dict[str, dict] = {}
     proj_root = Path(root) / "opencode_cc_mem" / "projects"
     if not proj_root.is_dir():
         return lanes
     for d in sorted(proj_root.iterdir()):
+        if d.is_symlink() or not d.is_dir() or SAFE_LANE_RE.fullmatch(d.name) is None:
+            continue
         cfg_f = d / AGENT_REGISTRY_NAME
-        if not cfg_f.is_file():
+        if cfg_f.is_symlink() or not cfg_f.is_file():
             continue
         try:
             cfg = json.loads(cfg_f.read_text(encoding="utf-8"))
@@ -205,18 +215,131 @@ def discover_lanes(root: str) -> dict:
     return lanes
 
 
+def _letter_digest(path: Path) -> str:
+    """Return a durable digest for one already-admitted regular letter."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _quota_wait_is_active(root: str, letter: Path) -> bool:
+    """Keep an unchanged letter parked until its known reset has passed."""
+    state = load_state(root)
+    waits = state.setdefault("quota_waits", {})
+    key = str(letter.resolve())
+    wait = waits.get(key)
+    if not isinstance(wait, dict):
+        return False
+    try:
+        unchanged = wait.get("letter_digest") == _letter_digest(letter)
+    except OSError:
+        unchanged = False
+    reset = wait.get("reset_at")
+    due = False
+    if reset:
+        try:
+            due = datetime.fromisoformat(str(reset)) <= datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            due = False
+    if unchanged and not due:
+        return True
+    waits.pop(key, None)
+    save_state(root, state)
+    return False
+
+
+def resume_quota_waits(root: str, lane: str | None = None) -> int:
+    """Explicitly clear durable helper quota waits, optionally for one lane."""
+    state = load_state(root)
+    waits = state.setdefault("quota_waits", {})
+    removed = 0
+    for key, wait in tuple(waits.items()):
+        if lane is not None and isinstance(wait, dict) and wait.get("lane") != lane:
+            continue
+        del waits[key]
+        removed += 1
+    if removed:
+        save_state(root, state)
+    return removed
+
+
+def _refusal_signature(letter: Path) -> dict[str, int] | None:
+    """Return non-following file metadata sufficient to suppress hot retries."""
+    try:
+        details = letter.lstat()
+    except OSError:
+        return None
+    return {
+        "device": details.st_dev,
+        "inode": details.st_ino,
+        "size": details.st_size,
+        "mtime_ns": details.st_mtime_ns,
+    }
+
+
+def _refusal_is_current(root: str, letter: Path) -> bool:
+    """Skip one unchanged rejected path without reading its body."""
+    state = load_state(root)
+    refusals = state.setdefault("refusals", {})
+    key = os.path.abspath(os.fspath(letter))
+    refusal = refusals.get(key)
+    if not isinstance(refusal, dict):
+        return False
+    if refusal.get("signature") == _refusal_signature(letter):
+        return True
+    refusals.pop(key, None)
+    save_state(root, state)
+    return False
+
+
+def _mark_admission_refusal(root: str, lane: str, refusal: AdmissionRefused) -> None:
+    """Make a safe refusal visible without following an untrusted path."""
+    letter = refusal.letter
+    if not refusal.can_mark or letter is None or letter.is_symlink():
+        log_line(root, f"[{lane}] admission refused: {refusal.reason}")
+        return
+    try:
+        write_reply(
+            letter,
+            lane,
+            "## Letter refused\n\n"
+            f"Magnolia did not launch a client: {refusal.reason}",
+        )
+        state = load_state(root)
+        state.setdefault("refusals", {})[
+            os.path.abspath(os.fspath(letter))
+        ] = {
+            "lane": lane,
+            "reason": refusal.reason,
+            "signature": _refusal_signature(letter),
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        save_state(root, state)
+    except OSError:
+        pass
+    log_line(root, f"[{lane}] {letter.name} -> refused ({refusal.reason})")
+
+
 def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
     """All open task letters not already handled (path + content hash).
     Deferred letters (wait_for) are excluded — the job-delivery pass owns
     them. `lanes` defaults to the legacy pair for backwards compatibility."""
-    lanes = lanes if lanes is not None else {name: {} for name in AGENTS}
+    lanes = lanes if lanes is not None else discover_lanes(root)
     state = load_state(root)
     found: list[Path] = []
     for agent in lanes:
         inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
         if not inbox.is_dir():
             continue
+        if inbox.is_symlink():
+            log_line(root, f"[{agent}] inbox symlink refused")
+            continue
         for f in sorted(inbox.rglob("*.task.md")):
+            if _refusal_is_current(root, f):
+                continue
+            try:
+                admit_letter(root, agent, f)
+            except AdmissionRefused as exc:
+                _mark_admission_refusal(root, agent, exc)
+                continue
             try:
                 text = f.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -225,6 +348,8 @@ def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
                 continue
             if is_deferred_task(text):
                 continue  # parked on a job — the delivery pass owns it
+            if _quota_wait_is_active(root, f):
+                continue
             digest = hashlib.sha1(f.read_bytes()).hexdigest()
             if state["done"].get(str(f)) == digest:
                 continue  # already handled, unchanged
@@ -312,7 +437,8 @@ def is_final_answer(text: str) -> bool:
 
 
 def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
-              extra_args: list, run_log: Path | None, binary: str = "opencode") -> dict:
+              extra_args: list, run_log: Path | None, binary: str = "opencode",
+              governance=None) -> dict:
     """One headless `opencode run --model M --format json [extra_args]`.
     Returns parse_run_events output plus "rc" and "stderr_tail"; appends
     the raw events to run_log so failures stay diagnosable (the daemon
@@ -336,25 +462,147 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         ),
     )
     assert isinstance(executor, OpenCodeHelperExecutor)
-    proc = executor.run(
-        extra_args,
-        cwd=project_dir,
-        environment=env,
-        timeout_seconds=timeout_s,
-    )
-    parsed = parse_run_events(proc.stdout or "")
-    parsed["rc"] = proc.returncode
-    parsed["stderr_tail"] = (proc.stderr or "")[-2000:]
+    if governance is None:
+        proc = executor.run(
+            extra_args,
+            cwd=project_dir,
+            environment=env,
+            timeout_seconds=timeout_s,
+        )
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        returncode = proc.returncode
+        outcome = None
+    else:
+        from campaign_runner.executors.contracts import LimitInfo, RunOutcome
+        from campaign_runner.governor import Admission, AdmissionRequest, QuotaWaiting
+        from campaign_runner.process import run_process
+        from campaign_runner.workers import _invocation_control
+
+        request = AdmissionRequest(
+            route=governance.route,
+            invocation_id=f"{governance.parent_run_id}:{uuid.uuid4().hex}",
+            parent_run_id=governance.parent_run_id,
+            project_digest=governance.project_digest,
+            run_kind="helper",
+            role_cap=governance.role_cap,
+        )
+        while True:
+            admission = governance.governor.admit(request)
+            if isinstance(admission, Admission):
+                break
+            if admission.reason in {"quota", "daily_limit", "cancelled"}:
+                limit = LimitInfo(
+                    admission.reason,
+                    admission.reset_at,
+                    "usage governor",
+                    admission.hold_id,
+                )
+                return {
+                    "session_id": None,
+                    "final_text": "",
+                    "all_text": "",
+                    "n_tools": 0,
+                    "rc": 0,
+                    "stderr_tail": "",
+                    "outcome": RunOutcome("quota", limit),
+                }
+            if not governance.governor.wait(admission):
+                return {
+                    "session_id": None,
+                    "final_text": "",
+                    "all_text": "",
+                    "n_tools": 0,
+                    "rc": 1,
+                    "stderr_tail": "usage admission cancelled",
+                    "outcome": RunOutcome("cancelled"),
+                }
+        attempt_dir = (run_log.parent if run_log else state_dir(env["MAGNOLIA_ROOT"]))
+        stdout_path = attempt_dir / f"opencode-{uuid.uuid4().hex}.jsonl"
+        stderr_path = attempt_dir / f"opencode-{uuid.uuid4().hex}.err.log"
+        with admission:
+            process = run_process(
+                executor.argv(extra_args),
+                project_dir,
+                executor.environment_with_cap(env),
+                timeout_s,
+                stdout_path,
+                stderr_path,
+                _invocation_control(None, admission),
+            )
+            stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+            stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+            returncode = process.returncode
+            outcome = process.outcome or _text_quota_outcome(stdout, stderr, returncode)
+            if outcome is None:
+                outcome = RunOutcome("success" if returncode == 0 else "failure")
+            if process.client_started:
+                admission.release(outcome=outcome)
+    parsed = parse_run_events(stdout)
+    parsed["rc"] = returncode
+    parsed["stderr_tail"] = stderr[-2000:]
+    if outcome is not None:
+        parsed["outcome"] = outcome
     if run_log is not None:
         try:
             with run_log.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps({"_attempt": len(extra_args) and extra_args[0][:60] or "",
-                                     "_rc": proc.returncode}) + "\n")
-                fh.write(proc.stdout or "")
+                                     "_rc": returncode}) + "\n")
+                fh.write(stdout)
                 fh.write("\n")
         except OSError:
             pass
     return parsed
+
+
+_ORIGINAL_RUN_ONCE = _run_once
+
+
+def _text_quota_outcome(stdout: str, stderr: str, returncode: int):
+    """Recognize explicit terminal quota signals without matching normal prose."""
+    from campaign_runner.executors.contracts import LimitInfo, RunOutcome
+
+    if returncode == 0:
+        return None
+    text = f"{stdout}\n{stderr}".lower()
+    signals = (
+        "rate_limit",
+        "rate limit",
+        "session limit",
+        "weekly limit",
+        "billing_error",
+        "quota exceeded",
+    )
+    if not any(signal in text for signal in signals):
+        return None
+    return RunOutcome("quota", LimitInfo("client quota", None, "client output"))
+
+
+def _event_quota_outcome(event):
+    """Detect documented quota terms only on terminal client event shapes."""
+    from campaign_runner.executors.contracts import LimitInfo, RunOutcome
+
+    if not isinstance(event, dict):
+        return None
+    event_type = str(event.get("type", "")).lower()
+    is_terminal = event_type in {"error", "turn.failed", "result"}
+    is_terminal = is_terminal or event.get("is_error") is True
+    if not is_terminal:
+        return None
+    text = json.dumps(event, sort_keys=True).lower()
+    if not any(
+        signal in text
+        for signal in (
+            "rate_limit",
+            "rate limit",
+            "session limit",
+            "weekly limit",
+            "billing_error",
+            "quota exceeded",
+        )
+    ):
+        return None
+    return RunOutcome("quota", LimitInfo("client quota", None, "client event"))
 
 
 def _opencode_bin() -> str:
@@ -496,6 +744,396 @@ def _set_lane_session(root: str, agent: str, session_key: str | None,
     save_state(root, state)
 
 
+def _lane_config(project_dir: str | Path) -> dict:
+    """Load one lane's registry mapping without accepting non-object JSON."""
+    path = Path(project_dir) / AGENT_REGISTRY_NAME
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _setup_config(root: str) -> dict:
+    """Load checkout-local route and client setup for helper execution."""
+    path = Path(root) / "opencode_cc_mem" / ".magnolia" / "llm-setup.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _project_digest(project_dir: str | Path) -> str:
+    """Return the canonical project identity used by executor sessions."""
+    return hashlib.sha256(str(Path(project_dir).resolve()).encode()).hexdigest()
+
+
+def _resolve_helper_route(root: str, project_dir: str, model: str | None):
+    """Resolve the helper route from lane, role, and global setup precedence."""
+    from campaign_runner.routing import resolve_route
+
+    setup = _setup_config(root)
+    lane = _lane_config(project_dir)
+    if model:
+        lane = {**lane, "model": model}
+    return resolve_route(
+        "helper",
+        {
+            "agent": {"json": lane},
+            "routes": setup.get("routes", {}),
+            "harness": setup.get("harness"),
+            "main_model": setup.get("main_model"),
+            "models": setup.get("models", {}),
+        },
+    )
+
+
+def _client_binary(route) -> str:
+    """Resolve the selected native client without adding trust bypasses."""
+    configured = {
+        "claude-code": os.environ.get("MAGNOLIA_CLAUDE_BIN", "claude"),
+        "codex": os.environ.get("MAGNOLIA_CODEX_BIN", "codex"),
+        "vibe": os.environ.get("MAGNOLIA_VIBE_BIN", "vibe"),
+    }[route.client]
+    found = shutil.which(configured)
+    return str(Path(found).resolve()) if found else configured
+
+
+def _role_capabilities():
+    """Load capability evidence and turn an invalid snapshot into refusal."""
+    from campaign_runner.executors.capabilities import (
+        CapabilityTableError,
+        load_role_capabilities,
+    )
+    from campaign_runner.executors.registry import ExecutorRefused
+
+    try:
+        return load_role_capabilities()
+    except CapabilityTableError as exc:
+        raise ExecutorRefused(f"helper capability evidence is unavailable: {exc}") from exc
+
+
+def _build_helper_context(
+    route,
+    agent: str,
+    project_dir: str,
+    root: str,
+    timeout_s: int,
+):
+    """Build one registry context with capability and governor evidence."""
+    from campaign_runner.executors.contracts import ExecContext
+    from campaign_runner.governor import Governor
+    from campaign_runner.launch import resolve_python
+    from campaign_runner.workers import InvocationGovernance
+
+    project = Path(project_dir).resolve()
+    lane = _lane_config(project)
+    requested = lane.get("required_capabilities", [])
+    if not isinstance(requested, list) or any(
+        not isinstance(item, str) or not item for item in requested
+    ):
+        requested = ["invalid-required-capabilities"]
+    role_cap = lane.get("max_turns", 40)
+    if isinstance(role_cap, bool) or not isinstance(role_cap, int) or role_cap < 1:
+        role_cap = 40
+    run_dir = state_dir(root) / "helper-runs" / agent
+    control_dir = run_dir / "control"
+    work_dir = run_dir / "work"
+    control_dir.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    environment = dict(os.environ)
+    environment.update(
+        MAGNOLIA_ROOT=root,
+        MAGNOLIA_PROJECT_DIR=str(project),
+        MAGNOLIA_WORKSPACE_ROOT=str(project.parent),
+    )
+    setup = _setup_config(root)
+    python = resolve_python(_INSTALLATION_ROOT, environment)
+    governor = Governor()
+    project_identity = _project_digest(project)
+    governance = InvocationGovernance(
+        governor,
+        route,
+        f"helper:{agent}:{uuid.uuid4().hex}",
+        project_identity,
+        role_cap=role_cap,
+    )
+    read_roots = (project / "docs",) if "native_read" in requested else ()
+    return ExecContext(
+        route=route,
+        role="helper",
+        project_dir=project,
+        run_dir=run_dir,
+        control_dir=control_dir,
+        work_dir=work_dir,
+        timeout_seconds=timeout_s,
+        role_cap=role_cap,
+        governor_cap=governor.policy.max_turns_per_run,
+        opencode_binary=_opencode_bin(),
+        agent=agent,
+        role_capabilities=_role_capabilities(),
+        installation_root=_INSTALLATION_ROOT,
+        workspace_root=project.parent,
+        project_identity=project_identity,
+        python_executable=python,
+        tools_port=_tools_port(agent, root),
+        setup=setup,
+        required_capabilities=tuple(requested),
+        capability_read_roots=read_roots,
+        invocation_id=uuid.uuid4().hex,
+        launch_argv=(_client_binary(route),),
+        environment=environment,
+        governance=governance,
+    )
+
+
+def _configuration_digest(context) -> str:
+    """Compute the executor configuration identity used for safe resume."""
+    from campaign_runner.launch import configuration_identity
+
+    return configuration_identity(context)
+
+
+def _opencode_policy_digest(route) -> str:
+    """Return the stable policy identity for the legacy OpenCode helper path."""
+    policy = {
+        "client": route.client,
+        "model": route.model,
+        "role": "helper",
+        "subscription_key": route.subscription_key,
+        "answer_contract": "final-answer-v1",
+        "resume_max": RESUME_MAX,
+    }
+    return hashlib.sha256(
+        json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _helper_executor(route, context):
+    """Return the registry-selected helper executor or a visible refusal."""
+    from campaign_runner.executors.registry import executor_for
+
+    return executor_for(route, "helper", context)
+
+
+def _lane_structured(state: dict, agent: str, session_key: str | None) -> dict | None:
+    """Stored structured session identity of the lane or of one thread key."""
+    lane = (state.get("lanes", {}).get(agent) or {})
+    if session_key:
+        stored = (lane.get("structured_sessions", {}) or {}).get(session_key)
+    else:
+        stored = lane.get("session")
+    return stored if isinstance(stored, dict) else None
+
+
+def _store_lane_session(root: str, agent: str, session_key: str | None,
+                        payload: dict, keep_legacy_id: bool = False) -> None:
+    """Persist a structured session without clobbering concurrent lane updates.
+
+    A keyed letter uses its own ``sessions[key]`` slot (the id) plus the
+    structured identity under ``structured_sessions[key]``; the legacy slot is
+    untouched. The unkeyed lane keeps ``session`` (and, for the OpenCode path,
+    the plain ``session_id``)."""
+    state = load_state(root)
+    lane = state.setdefault("lanes", {}).setdefault(agent, {})
+    if session_key:
+        lane.setdefault("sessions", {})[session_key] = payload["session_id"]
+        lane.setdefault("structured_sessions", {})[session_key] = payload
+    else:
+        lane["session"] = payload
+        if keep_legacy_id:
+            lane["session_id"] = payload["session_id"]
+        else:
+            lane.pop("session_id", None)
+    save_state(root, state)
+
+
+def _matching_session(state: dict, agent: str, route, context,
+                      session_key: str | None = None) -> dict | None:
+    """Return a stored session only when route, project, role, and policy match."""
+    stored = _lane_structured(state, agent, session_key)
+    if stored is None:
+        return None
+    expected = {
+        "client": route.client,
+        "model": route.model,
+        "project_digest": context.project_identity,
+        "role": "helper",
+    }
+    if any(stored.get(key) != value for key, value in expected.items()):
+        return None
+    current = _configuration_digest(context)
+    if stored.get("configuration_identity_digest") != current:
+        return None
+    return stored
+
+
+def _resume_context(context, stored: dict):
+    """Attach the prior run-owned launch and typed resume artifact."""
+    from campaign_runner.executors.contracts import ResumeArtifact
+
+    artifact = ResumeArtifact(
+        stored["client"],
+        stored["session_id"],
+        stored["configuration_identity_digest"],
+        stored["role"],
+        stored["project_digest"],
+    )
+    return replace(
+        context,
+        resume_from=Path(stored["launch_path"]),
+        resume_artifact=artifact,
+    )
+
+
+def _persist_registered_session(
+    root: str, agent: str, result, executor, context,
+    session_key: str | None = None,
+) -> None:
+    """Persist the complete client/model/project/role/policy session identity."""
+    identity = result.session_identity
+    artifact = result.resume_artifact
+    if identity is None or artifact is None or not result.session_id:
+        return
+    payload = asdict(identity)
+    payload.update(
+        configuration_identity_digest=artifact.configuration_identity_digest,
+        launch_path=str(executor.prepared.invocation_dir / "launch.json"),
+    )
+    _store_lane_session(root, agent, session_key, payload)
+
+
+def _clear_lane_session(root: str, agent: str,
+                        session_key: str | None = None) -> None:
+    """Forget one stale lane binding without changing unrelated daemon state."""
+    state = load_state(root)
+    lane = state.setdefault("lanes", {}).setdefault(agent, {})
+    if session_key:
+        lane.setdefault("sessions", {})[session_key] = None
+        (lane.get("structured_sessions") or {}).pop(session_key, None)
+    else:
+        lane.pop("session", None)
+        lane["session_id"] = None
+    save_state(root, state)
+
+
+def _quota_from_result(route, result) -> HelperQuotaWaiting | None:
+    """Translate a typed executor quota outcome into daemon wait metadata."""
+    outcome = result.outcome
+    if outcome is None or outcome.kind != "quota":
+        return None
+    limit = outcome.limit
+    return HelperQuotaWaiting(
+        route.subscription_key,
+        limit.hold_id if limit else None,
+        limit.reset_at if limit else None,
+        limit.reason if limit else "quota",
+    )
+
+
+def _call_run_once(*args, governance=None, **kwargs):
+    """Keep legacy test seams while governing the production OpenCode call."""
+    if _run_once is _ORIGINAL_RUN_ONCE:
+        kwargs["governance"] = governance
+    return _run_once(*args, **kwargs)
+
+
+def _registered_runner(
+    agent: str,
+    project_dir: str,
+    root: str,
+    prompt: str,
+    timeout_s: int,
+    route,
+    session_key: str | None = None,
+) -> str:
+    """Run a non-OpenCode helper with typed resume and quota semantics."""
+    from campaign_runner.executors.registry import ExecutorRefused
+
+    context = _build_helper_context(route, agent, project_dir, root, timeout_s)
+    stored = _matching_session(
+        load_state(root), agent, route, context, session_key
+    )
+    resumed = stored is not None
+    if stored is not None:
+        context = _resume_context(context, stored)
+    executor = _helper_executor(route, context)
+    if hasattr(executor, "quota_detector"):
+        executor.quota_detector = _event_quota_outcome
+    session_id = stored.get("session_id") if stored else None
+    current_prompt = prompt
+    healed = False
+    attempt = 0
+    narration = ""
+    while True:
+        attempt += 1
+        attempt_dir = state_dir(root) / "runs" / f"{uuid.uuid4().hex}-{agent}"
+        result = executor.run(
+            current_prompt,
+            project_dir,
+            attempt_dir,
+            stem="helper",
+            resume_session=session_id,
+            retries=0,
+        )
+        quota = _quota_from_result(route, result)
+        if quota is not None:
+            raise quota
+        outcome = result.outcome.kind if result.outcome is not None else None
+        if outcome == "refused":
+            detail = next(
+                (
+                    str(item.get("message"))
+                    for item in result.errors
+                    if isinstance(item, dict) and item.get("message")
+                ),
+                "executor refused the helper invocation",
+            )
+            raise ExecutorRefused(detail)
+        if result.session_id:
+            _persist_registered_session(
+                root, agent, result, executor, context, session_key
+            )
+        marker = is_final_answer(result.final_text)
+        narration = result.all_text or result.final_text or narration
+        log_line(
+            root,
+            f"[{agent}] attempt {attempt} rc={result.returncode} "
+            f"tools={result.tool_calls} marker={'yes' if marker else 'no'} "
+            f"route={route.client}/{route.model}",
+        )
+        failed = result.returncode != 0 or outcome not in (None, "success")
+        if failed:
+            if resumed and not healed:
+                healed = True
+                resumed = False
+                _clear_lane_session(root, agent, session_key)
+                context = _build_helper_context(
+                    route, agent, project_dir, root, timeout_s
+                )
+                executor = _helper_executor(route, context)
+                if hasattr(executor, "quota_detector"):
+                    executor.quota_detector = _event_quota_outcome
+                session_id = None
+                current_prompt = prompt
+                continue
+            raise RuntimeError(
+                f"{route.client} helper failed with outcome={outcome} "
+                f"and exit={result.returncode}"
+            )
+        if marker:
+            return result.final_text
+        session_id = result.session_id
+        if attempt > RESUME_MAX or not session_id:
+            break
+        current_prompt = RESUME_NOTE
+    raise RuntimeError(
+        f"helper never produced a FINAL ANSWER after {attempt} attempt(s). "
+        f"Last narration:\n\n{narration[-3000:]}"
+    )
+
+
 def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                    timeout_s: int, model: str | None = None,
                    session_key: str | None = None) -> str:
@@ -525,8 +1163,13 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     session_key is opt-in always-on metadata. None preserves the legacy
     state["lanes"][agent]["session_id"]; a key uses the independent
     state["lanes"][agent]["sessions"][key] slot instead."""
-    model = model or os.environ.get("MAGNOLIA_AGENTS_MODEL",
-                                    "deepseek/deepseek-flash")
+    route = _resolve_helper_route(root, project_dir, model)
+    if route.client != "opencode":
+        return _registered_runner(
+            agent, project_dir, root, prompt, timeout_s, route,
+            session_key=session_key,
+        )
+    model = route.model or ""
     env = dict(os.environ)
     env["MAGNOLIA_ROOT"] = root
     env["MAGNOLIA_PROJECT_DIR"] = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
@@ -540,10 +1183,32 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
             str(Path.home() / ".local/share/opencode/opencode-v2.db"))
     _render_project_config(root, agent)
     _ensure_tools_daemon(root, env)
+    from campaign_runner.governor import Governor
+    from campaign_runner.workers import InvocationGovernance
+
+    governor = Governor()
+    governance = InvocationGovernance(
+        governor,
+        route,
+        f"helper:{agent}:{uuid.uuid4().hex}",
+        _project_digest(project_dir),
+        role_cap=40,
+    )
     # Legacy letters resume the lane's one session. Always-on letters may name
     # a thread key, which gets an independent session slot in the same file.
     state = load_state(root)
+    structured = _lane_structured(state, agent, session_key)
     lane_sid = _get_lane_session(state, agent, session_key)
+    policy_digest = _opencode_policy_digest(route)
+    if isinstance(structured, dict):
+        matches = (
+            structured.get("client") == "opencode"
+            and structured.get("model") == model
+            and structured.get("project_digest") == _project_digest(project_dir)
+            and structured.get("role") == "helper"
+            and structured.get("policy_digest") == policy_digest
+        )
+        lane_sid = structured.get("session_id") if matches else None
     try:
         runs_dir(root).mkdir(parents=True, exist_ok=True)
         run_log = runs_dir(root) / (f"{datetime.now(timezone.utc):%Y%m%d_%H%M%S}_"
@@ -557,15 +1222,39 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     attempt = 0
     while True:
         attempt += 1
-        parsed = _run_once(model, project_dir, env, timeout_s, args, run_log,
-                           binary=_opencode_bin())
+        parsed = _call_run_once(
+            model,
+            project_dir,
+            env,
+            timeout_s,
+            args,
+            run_log,
+            binary=_opencode_bin(),
+            governance=governance,
+        )
         if parsed.get("session_id"):
             # Resume the next letter in this lane or thread session.
-            _set_lane_session(root, agent, session_key, parsed["session_id"])
+            _store_lane_session(root, agent, session_key, {
+                "client": "opencode",
+                "model": model,
+                "session_id": parsed["session_id"],
+                "project_digest": _project_digest(project_dir),
+                "role": "helper",
+                "policy_digest": policy_digest,
+            }, keep_legacy_id=True)
         marker = is_final_answer(parsed["final_text"])
         log_line(root, f"[{agent}] attempt {attempt} rc={parsed['rc']} "
                        f"tools={parsed['n_tools']} "
                        f"marker={'yes' if marker else 'no'} model={model}")
+        outcome = parsed.get("outcome")
+        if outcome is not None and outcome.kind == "quota":
+            limit = outcome.limit
+            raise HelperQuotaWaiting(
+                route.subscription_key,
+                limit.hold_id if limit else None,
+                limit.reset_at if limit else None,
+                limit.reason if limit else "quota",
+            )
         if parsed["rc"] != 0:
             if resumed and not healed:
                 # Stale/expired stored session id bricks the lane: every
@@ -574,7 +1263,7 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
                 # retry the SAME letter in a fresh session.
                 healed = True
                 try:
-                    _set_lane_session(root, agent, session_key, None)
+                    _clear_lane_session(root, agent, session_key)
                 except Exception:
                     pass
                 log_line(root, f"[{agent}] resume failed rc={parsed['rc']} — "
@@ -600,6 +1289,14 @@ def handle_task(task_file: Path, agent: str, root: str,
     """Run one task letter; write the reply; flip its status; update state.
     Returns 'done' or 'error' (the letter is consumed either way — a failed
     task is reported in the reply file, not retried in a loop)."""
+    from campaign_runner.executors.registry import ExecutorRefused
+
+    try:
+        admitted = admit_letter(root, agent, task_file)
+    except AdmissionRefused as exc:
+        _mark_admission_refusal(root, agent, exc)
+        return "refused"
+    task_file = admitted.letter
     state = load_state(root)
     text = task_file.read_text(encoding="utf-8", errors="replace")
     project_dir = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
@@ -634,6 +1331,31 @@ def handle_task(task_file: Path, agent: str, root: str,
                       **runner_kwargs)
         # The agent printed the answer (stdout IS the reply); always
         # overwrite so a re-run never leaves a stale earlier reply.
+        write_reply(task_file, agent, body)
+    except HelperQuotaWaiting as waiting:
+        state = load_state(root)
+        state.setdefault("quota_waits", {})[str(task_file.resolve())] = {
+            "lane": agent,
+            "letter_digest": _letter_digest(task_file),
+            "subscription_key": waiting.key,
+            "hold_id": waiting.hold_id,
+            "reset_at": waiting.reset_at.isoformat() if waiting.reset_at else None,
+            "reason": waiting.reason,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        save_state(root, state)
+        log_line(
+            root,
+            f"[{agent}] {task_file.name} -> waiting_quota "
+            f"({waiting.key}, hold={waiting.hold_id or 'unknown'})",
+        )
+        return "waiting_quota"
+    except ExecutorRefused as e:
+        status = "refused"
+        body = (
+            "## Helper capability refused\n\n"
+            f"Magnolia did not launch a fallback client: {e.reason}"
+        )
         write_reply(task_file, agent, body)
     except Exception as e:
         status = "error"
@@ -695,7 +1417,10 @@ def scan_once(root: str, agents=AGENTS, runner=default_runner, lanes: dict | Non
     # `agents` accepts the legacy name tuple; `lanes` (from discover_lanes)
     # is the registry path and wins when given.
     lane_map = lanes if lanes is not None else (
-        agents if isinstance(agents, dict) else {a: {} for a in agents})
+        discover_lanes(root)
+        if agents is AGENTS
+        else (agents if isinstance(agents, dict) else {a: {} for a in agents})
+    )
     results = []
     for f in discover_tasks(root, lane_map):
         agent = f.parts[f.parts.index("projects") + 1]
@@ -718,9 +1443,14 @@ def deliver_wait_for(root: str, lanes: dict) -> int:
     for agent in lanes:
         inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
         runs = Path(root) / "opencode_cc_mem" / "projects" / agent / ".magnolia" / "runs"
-        if not inbox.is_dir():
+        if inbox.is_symlink() or not inbox.is_dir():
             continue
         for f in sorted(inbox.rglob("*.task.md")):
+            try:
+                admit_letter(root, agent, f)
+            except AdmissionRefused as exc:
+                _mark_admission_refusal(root, agent, exc)
+                continue
             try:
                 text = f.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -787,7 +1517,7 @@ def scheduled_sweep_letters(root: str, lanes: dict) -> int:
             except ValueError:
                 pass
         inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
-        if not inbox.is_dir():
+        if inbox.is_symlink() or not inbox.is_dir():
             continue
         letter = inbox / f"{now:%Y-%m-%d}_{agent}-scheduled-sweep.task.md"
         if letter.exists():
@@ -799,6 +1529,7 @@ def scheduled_sweep_letters(root: str, lanes: dict) -> int:
                 f"# Scheduled sweep ({agent})\n\n- from: agents-daemon\n"
                 f"- date: {now:%Y-%m-%d}\n- status: open\n\n## Request\n\n"
                 f"{task_text}\n", encoding="utf-8")
+            write_generation_receipt(root, agent, letter)
             swept[agent] = now.isoformat()
             save_state(root, state)
             log_line(root, f"[{agent}] scheduled sweep letter written")
@@ -835,6 +1566,13 @@ def main(argv: list[str] | None = None) -> int:
                          "(--once now LOCKS by default: two runners resuming one "
                          "lane session corrupt state.json, panel B8)")
     ap.add_argument("--interval", type=int, default=SCAN_INTERVAL_S)
+    ap.add_argument(
+        "--resume-quota",
+        nargs="?",
+        const="*",
+        metavar="LANE",
+        help="clear durable quota waits for every lane or one named lane",
+    )
     args = ap.parse_args(argv)
     if os.environ.get("MAGNOLIA_AGENTS", "") == "0":
         print("agents daemon disabled (MAGNOLIA_AGENTS=0)")
@@ -842,6 +1580,10 @@ def main(argv: list[str] | None = None) -> int:
     if acquire_lock(args.root) is None and not args.force:
         print("agents daemon already running")
         return 0
+    if args.resume_quota is not None:
+        lane = None if args.resume_quota == "*" else args.resume_quota
+        cleared = resume_quota_waits(args.root, lane)
+        print(f"cleared {cleared} helper quota wait(s)")
     log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")
     while True:
         try:
