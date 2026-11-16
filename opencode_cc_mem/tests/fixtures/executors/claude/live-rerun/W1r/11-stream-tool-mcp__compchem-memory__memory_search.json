@@ -1,0 +1,21 @@
+{
+  "is_error": false,
+  "result_head": "{\"result\":\"[]\"}",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01K26AJuk3yiKh96Agnxtzui",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_01K26AJuk3yiKh96Agnxtzui",
+    "input": {
+      "keyword": "gate"
+    },
+    "name": "mcp__compchem-memory__memory_search"
+  }
+}

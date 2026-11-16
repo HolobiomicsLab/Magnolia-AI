@@ -1,0 +1,21 @@
+{
+  "is_error": false,
+  "result_head": "{\"result\":\"{\\n  \\\"content\\\": \\\"[\\\\n  {\\\\n    \\\\\\\"event_type\\\\\\\": \\\\\\\"session_start\\\\\\\",\\\\n    \\\\\\\"timestamp\\\\\\\": \\\\\\\"2026-11-16T16:31:58.002663+00:00\\\\\\\",\\\\n    \\\\\\\"session_id\\\\\\\": \\\\\\\"2026-11-16_163158\\\\\\\",\\\\n    \\\\\\\"project_id\\\\\\\": \\\\\\\"project\\\\\\\",\\\\n    \\\\\\\"project_dir\\\\\\\": \\\\\\\"/private/var/folde",
+  "tool_result_meta": [
+    {
+      "id": "toolu_0177Fmztjxh2BwUz4tN9HBLQ",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_0177Fmztjxh2BwUz4tN9HBLQ",
+    "input": {
+      "task_description": "permission gate"
+    },
+    "name": "mcp__compchem-memory__memory_get_context"
+  }
+}

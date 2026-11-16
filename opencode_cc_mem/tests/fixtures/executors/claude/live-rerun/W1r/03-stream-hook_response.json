@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "hook_event": "SessionStart",
+  "hook_id": "2e97a393-1fd7-45dc-8865-fc2b2f1c770f",
+  "hook_name": "SessionStart:startup",
+  "outcome": "success",
+  "output": "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"<!-- magnolia-boot-context:project -->\\n\\n[MAGNOLIA BOOT CONTEXT \u2014 project project]\\n\\n\\n\\n[Magnolia \u00b7 auto-memory] Before acting on this request, your FIRST tool call must be `memory_get_context(task_description=\\\"<one-line summary of this request>\\\")`. Exception: for a pure recap request (status / pending tasks / where were we), answer from the SESSION HANDOVER already in your context and skip the call. Otherwise the returned project entries and skill-tier rules inform your approach \u2014 accumulated learnings often hold the fix, the right parameters, or a known pitfall for this exact task, and the longer the project runs the more likely that is. (This call is read-only and safe even if the turn is exploratory; it also surfaces any pending memory-review proposals.)\"}}\n",
+  "session_id": "ses-fixture-1",
+  "stderr": "",
+  "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"<!-- magnolia-boot-context:project -->\\n\\n[MAGNOLIA BOOT CONTEXT \u2014 project project]\\n\\n\\n\\n[Magnolia \u00b7 auto-memory] Before acting on this request, your FIRST tool call must be `memory_get_context(task_description=\\\"<one-line summary of this request>\\\")`. Exception: for a pure recap request (status / pending tasks / where were we), answer from the SESSION HANDOVER already in your context and skip the call. Otherwise the returned project entries and skill-tier rules inform your approach \u2014 accumulated learnings often hold the fix, the right parameters, or a known pitfall for this exact task, and the longer the project runs the more likely that is. (This call is read-only and safe even if the turn is exploratory; it also surfaces any pending memory-review proposals.)\"}}\n",
+  "subtype": "hook_response",
+  "type": "system",
+  "uuid": "74b19c4c-408b-4a66-9e8b-811eb9703b2e"
+}

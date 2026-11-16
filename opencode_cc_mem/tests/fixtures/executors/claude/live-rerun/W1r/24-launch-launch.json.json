@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "/HOME/<elided>"
+  ],
+  "artifacts": {
+    "claude-mcp.json": "16259789cbb62b31c671c593d0bf0820c96d28263d6958831ced024252afea14",
+    "claude-settings.json": "913a6a641cbcd82734b53046dab5aaff13ebfde55008ed3678f96112761739fd",
+    "mcp.json": "042019064d764c6a015883129062525a107a11acbc8ae49b7236185e577841ea",
+    "policy.json": "0e7f1f8887c3c00941cf4a89c5a413c8546186157bdf60cdd9653b9544e6390e",
+    "settings.json": "264471b4587dc4c9bc021bd2d9f915d823ccda4009c2e9e6d85f12be66516f74"
+  },
+  "client": "claude-code",
+  "config_digest": "f7b8d5a4303251b1681f93ac5e7d8b58d1eec46bda715f39fecced9db777f36c",
+  "discovery_dir": "<G>/project",
+  "invocation_dir": "<G>/project/run/control/executors/gate-W1r",
+  "model": "haiku",
+  "policy_digest": "0e7f1f8887c3c00941cf4a89c5a413c8546186157bdf60cdd9653b9544e6390e",
+  "project_identity": "live-gate-project",
+  "required_capability_identity": "b5d447fe199c4d3684e2d2910f81c9faeb822ac3fb34a5c5b15f3231a48d469e",
+  "role": "worker",
+  "schema_version": "magnolia-prepared-launch-v1",
+  "trusted": true
+}

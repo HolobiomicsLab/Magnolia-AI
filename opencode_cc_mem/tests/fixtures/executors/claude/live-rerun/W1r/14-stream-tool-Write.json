@@ -1,0 +1,23 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Write hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01QMpWXZ4YXtfy5QpsexQRjo",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_01QMpWXZ4YXtfy5QpsexQRjo",
+    "input": {
+      "content": "x",
+      "file_path": "<G>/project/README-planted.txt"
+    },
+    "name": "Write"
+  }
+}

@@ -484,3 +484,33 @@ defines no GLM model (grep), and its model catalog is fetched at session start, 
 effective config of v2/v3 offered only `mistral-medium-3.5`. **No id or price for "GLM 5.2" can be established without
 starting a session.** The first telemetry-off run must therefore read `config.models` and the model reported in
 `export.json`, and stop if the requested alias is absent: Vibe falls back silently (see v2/v3).
+
+## Claude live re-run on the final launch binding (3f2e3f1) — 16 November 2026, 16:31–16:35 UTC
+
+Run under the owner's authorisation of 16 Nov (Claude subscription; 3 invocations; Claude total 17 of 30). Code: a
+`git archive 3f2e3f1` snapshot. Unlike the 02b5f43 gate, the launch used the **production capability table**
+(`load_role_capabilities()`), the production worker memory route (`campaign_runner/cli.py:_memory_route()`, seven
+variable names, stdio), the repository `.venv` hook interpreter (`MAGNOLIA_PYTHON` set to it) and an absolute temporary
+`XDG_STATE_HOME`. Same throwaway project layout and sentinels as the original gate; no provider key in the client or
+memory-server environment; no `--bare`, bypass or trust flags; `CLAUDE_CONFIG_DIR` unset. Fixtures:
+`tests/fixtures/executors/claude/live-rerun/{W1r,H1r,E1r}/` (scrubbed; `make_fixtures.py --check` exits 0).
+
+| Run | Role | Outcome | Turns / cap | Cost USD |
+|---|---|---|---|---|
+| W1r | worker | `memory_get_context`, Read docs, Read+Edit and Write in `run/work`, `memory_search` allowed; `secret/.env`, the symlink alias, a Write at the project root and Bash denied by the hook | 12 / 25 | 0.005870 |
+| H1r | helper | tool list exactly `[Read]`, no MCP; `docs/notes.md` allowed, `README.md` denied | 3 / 25 | 0.001322 |
+| E1r | evaluator | tool list `[]`, no MCP, one turn, `EVAL-OK 4` | 1 / 1 | 0.001060 |
+
+Observed: (1) the production gate accepted all three roles, all 11 bound identity components equal to the table
+(client 2.1.325, `84590fef…`; `hook_runner` `7430de9e…`; `hook_source` `2216e082…`); (2) every hook event registered in
+the runner form `<repo>/.venv/bin/python3 -I <repo>/…/compchem_memory/hook/runner.py claude <event>`, pre-tool under
+`/bin/sh -c`, no traceback, empty client stderr; (3) `.pyc` only under the run's `PYTHONPYCACHEPREFIX`, no `__pycache__`
+in the source tree; (4) normal allow/deny decisions written by the hook itself (`MAGNOLIA_CONTROL_DIR` reached it);
+(5) the worker memory server started from the seven-name route; Claude printed no warning for the two empty memory-model
+variables and no literal `${…}` appeared; (6) one ledger receipt per invocation, `billing subscription`, cap equal to
+`--max-turns`, usage complete, `session_identity` now recorded; (7) hook bindings landed under the temporary
+`XDG_STATE_HOME`; the owner's state directory was byte-identical before and after. Nothing was left running.
+
+Still open (not blockers): the worker sees all 26 memory tools (allowlist enforced by the hook only, as ruled); the
+SessionStart boot context reaches every role; the memory server and the hook's background worker start with `-m`
+without `-I` from the project directory (sweep 2).

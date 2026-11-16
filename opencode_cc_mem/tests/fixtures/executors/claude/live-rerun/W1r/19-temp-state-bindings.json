@@ -1,0 +1,13 @@
+{
+  "content": {
+    "project": {
+      "name": "project",
+      "project_dir": "<G>/project",
+      "root": "<G>/project",
+      "root_mode": false,
+      "store": "<G>/project/.magnolia"
+    }
+  },
+  "file": "bindings/claude-1bc8f649-76df-417f-b11e-1aa7b5d78fc6.json",
+  "note": "hook binding written under the temp XDG_STATE_HOME for this session"
+}

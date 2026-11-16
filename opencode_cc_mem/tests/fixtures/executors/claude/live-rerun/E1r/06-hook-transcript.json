@@ -1,0 +1,24 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1309
+    },
+    {
+      "kind": "prompt",
+      "text_chars": 157
+    },
+    {
+      "kind": "assistant",
+      "text_chars": 125
+    },
+    {
+      "kind": "session-end"
+    }
+  ]
+}
