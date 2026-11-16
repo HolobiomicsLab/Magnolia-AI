@@ -283,6 +283,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
             "env_vars": [
                 "MAGNOLIA_HOOK_POLICY",
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
+                "MAGNOLIA_HOOK_POLICY_SHA256",
             ],
         }
     for relative, body in native_artifacts(expected_context, servers).items():
@@ -298,6 +299,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     assert config["mcp_servers"]["magnolia-read"]["env_vars"] == [
         "MAGNOLIA_HOOK_POLICY",
         "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
     ]
     assert executor.prepared.env["MAGNOLIA_HOOK_POLICY"] == str(
         invocation / "policy.json"
@@ -387,6 +389,7 @@ def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
             "env_vars": [
                 "MAGNOLIA_HOOK_POLICY",
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
+                "MAGNOLIA_HOOK_POLICY_SHA256",
             ],
         }
     }

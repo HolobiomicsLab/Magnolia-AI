@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,11 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
-from compchem_memory.harness.read_server import ReadRefused, ReadServer
+from compchem_memory.harness.read_server import (
+    ReadRefused,
+    ReadServer,
+    _descriptor_path,
+)
 
 
 def _policy(path: Path, project: Path, *, role: str = "worker") -> Path:
@@ -71,6 +76,48 @@ def test_read_server_refuses_without_policy(tmp_path):
         ReadServer.from_environment({}, cwd=tmp_path)
     with pytest.raises(ReadRefused, match="invalid"):
         ReadServer.from_policy_file(tmp_path / "missing.json", cwd=tmp_path)
+
+
+def test_read_server_refuses_policy_digest_mismatch(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    policy = _policy(tmp_path / "policy.json", project)
+    digest = hashlib.sha256(policy.read_bytes()).hexdigest()
+
+    server = ReadServer.from_environment(
+        {
+            "MAGNOLIA_HOOK_POLICY": str(policy),
+            "MAGNOLIA_HOOK_POLICY_SHA256": digest,
+        },
+        cwd=project,
+    )
+    (project / "allowed.txt").write_text("ok\n", encoding="utf-8")
+    assert server.read_file("allowed.txt")["content"] == "ok\n"
+
+    policy.write_text(policy.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ReadRefused, match="digest"):
+        server.read_file("allowed.txt")
+    with pytest.raises(ReadRefused, match="digest"):
+        ReadServer.from_environment(
+            {
+                "MAGNOLIA_HOOK_POLICY": str(policy),
+                "MAGNOLIA_HOOK_POLICY_SHA256": digest,
+            },
+            cwd=project,
+        )
+
+
+def test_descriptor_path_requires_opened_inode_identity(tmp_path):
+    target = tmp_path / "target.txt"
+    target.write_text("opened\n", encoding="utf-8")
+    descriptor = os.open(target, os.O_RDONLY)
+    try:
+        target.unlink()
+        target.write_text("replacement\n", encoding="utf-8")
+        with pytest.raises(ReadRefused, match="identity|verify"):
+            _descriptor_path(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def test_read_server_search_refuses_denied_descendants(tmp_path):
@@ -167,7 +214,13 @@ async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
     transport = StdioTransport(
         command=os.environ.get("PYTHON", os.sys.executable),
         args=["-P", "-m", "compchem_memory.harness.read_server"],
-        env={**os.environ, "MAGNOLIA_HOOK_POLICY": str(policy)},
+        env={
+            **os.environ,
+            "MAGNOLIA_HOOK_POLICY": str(policy),
+            "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(
+                policy.read_bytes()
+            ).hexdigest(),
+        },
         cwd=str(project),
     )
     async with Client(transport) as client:

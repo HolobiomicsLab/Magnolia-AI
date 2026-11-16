@@ -139,6 +139,7 @@ def test_required_role_env_wins(tmp_path):
     assert launch.env["MAGNOLIA_MODEL"] == "selected-model"
     assert Path(launch.env["MAGNOLIA_HOOK_POLICY"]).is_absolute()
     assert launch.env["MAGNOLIA_HOOK_POLICY_REQUIRED"] == "1"
+    assert launch.env["MAGNOLIA_HOOK_POLICY_SHA256"] == launch.policy_digest
     assert launch.env["MAGNOLIA_DOORBELL"] == "0"
 
 
@@ -188,6 +189,19 @@ def test_codex_read_server_identity_is_stable_across_invocations(tmp_path):
     second = configuration_identity(replace(context, invocation_id="inv-b"))
 
     assert first == second
+
+
+def test_codex_read_server_receives_policy_digest_by_name(tmp_path):
+    launch = prepare_launch(_context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    ))
+
+    config = _artifact_text(launch)
+    assert "MAGNOLIA_HOOK_POLICY_SHA256" in config
+    assert launch.env["MAGNOLIA_HOOK_POLICY_SHA256"] == launch.policy_digest
 
 
 def test_claude_vibe_opencode_launch_unchanged(tmp_path):

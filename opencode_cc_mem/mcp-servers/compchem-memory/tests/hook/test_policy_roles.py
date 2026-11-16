@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 from compchem_memory.hook.adapters import claude, codex
 from compchem_memory.hook.events import HookEvent, ToolCall, ToolTarget
@@ -19,6 +25,9 @@ def _write_policy(
     edit_roots: list[str] | None = None,
     role: str = "worker",
 ) -> dict[str, str]:
+    if project.resolve().is_relative_to(path.parent.resolve()):
+        path = path.parent / "policies" / path.name
+    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema_version": "magnolia-role-v1",
         "role": role,
@@ -49,6 +58,8 @@ def _write_policy(
     return {
         "MAGNOLIA_HOOK_POLICY": str(path),
         "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+        "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "MAGNOLIA_CONTROL_DIR": str(path.parent / "control"),
     }
 
 
@@ -405,3 +416,198 @@ def test_codex_apply_patch_decodes_indented_headers_and_fails_closed(tmp_path):
     assert decision(malformed) is not None
     valid = f"*** Begin Patch\n*** Add File: {work / 'ok.txt'}\n+ok\n*** End Patch"
     assert decision(valid, key="patch") is not None
+
+
+def test_required_policy_digest_mismatch_denies_every_tool(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    policy_path = tmp_path / "policy.json"
+    env = _write_policy(policy_path, project, work)
+    policy_path = Path(env["MAGNOLIA_HOOK_POLICY"])
+    allowed = _event(project, "native_read", ToolTarget(str(project), "read"))
+    assert decide(allowed, env) is None
+
+    payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    payload["edit_roots"] = [str(project)]
+    policy_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert decide(allowed, env) is not None
+
+
+def test_edit_targets_never_include_control_or_policy_directory(tmp_path):
+    project = tmp_path / "project"
+    run = project / "runs" / "r1"
+    work = run / "work"
+    control = run / "control"
+    policy_dir = project / "policy-store"
+    work.mkdir(parents=True)
+    control.mkdir(parents=True)
+    policy_dir.mkdir()
+    policy_path = policy_dir / "policy.json"
+    env = _write_policy(policy_path, project, work, edit_roots=[str(project)])
+    env["MAGNOLIA_CONTROL_DIR"] = str(control)
+
+    for target in (control / "state.json", policy_dir / "replacement.json"):
+        event = _event(
+            project,
+            "native_edit",
+            ToolTarget(str(target), "edit"),
+            raw_name="apply_patch",
+        )
+        assert decide(event, env) is not None
+
+    allowed = _event(
+        project,
+        "native_edit",
+        ToolTarget(str(project / "src.py"), "edit"),
+        raw_name="apply_patch",
+    )
+    assert decide(allowed, env) is None
+
+
+def test_policy_escalation_chain_stops_at_policy_rewrite(tmp_path):
+    project = tmp_path / "project"
+    run = project / "runs" / "r1"
+    work = run / "work"
+    control = run / "control"
+    policy_path = control / "executors" / "inv" / "policy.json"
+    work.mkdir(parents=True)
+    policy_path.parent.mkdir(parents=True)
+    source = project / "src.py"
+    source.write_text("orig\n", encoding="utf-8")
+    env = _write_policy(policy_path, project, work)
+    original_policy = policy_path.read_bytes()
+
+    def decision(command: str):
+        event = codex.parse({
+            "hook_event_name": "PreToolUse",
+            "session_id": "session",
+            "cwd": str(project),
+            "tool_name": "apply_patch",
+            "tool_input": {"command": command},
+        }, "pre-tool")
+        assert event is not None
+        return decide(event, env)
+
+    direct = "*** Begin Patch\n*** Update File: src.py\n@@\n-orig\n+owned\n*** End Patch\n"
+    malicious = (
+        "*** Begin Patch\n"
+        "*** Add File: runs/r1/work/x\r../../../control/executors/inv/policy.json\n"
+        "+{\"edit_roots\": [\".\"]}\n"
+        "*** End Patch\n"
+    )
+
+    assert decision(direct) is not None
+    assert decision(malicious) is not None
+    assert policy_path.read_bytes() == original_policy
+    assert decision(direct) is not None
+    assert source.read_text(encoding="utf-8") == "orig\n"
+
+
+def _snapshot_files(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+@pytest.mark.skipif(shutil.which("apply_patch") is None, reason="offline apply_patch unavailable")
+def test_offline_apply_patch_variants_are_denied_or_match_decoded_targets(tmp_path):
+    """Differentially check every re-review separator/path exploit class."""
+    apply_patch = shutil.which("apply_patch")
+    assert apply_patch is not None
+    separators = ("\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+    patches = [
+        f"*** Begin Patch\n*** Add File: work/x{sep}../../../keep.txt\n+pwned\n*** End Patch\n"
+        for sep in separators
+    ]
+    patches.extend((
+        (
+            "*** Begin Patch\n"
+            "*** Add File: work/x\r../../../control/executors/inv/evil.json\n"
+            "+{}\n*** End Patch\n"
+        ),
+        (
+            "*** Begin Patch\n*** Add File: work/x\r../seed.txt\n+s\n"
+            "*** Update File: work/x\r../../../control/executors/inv/state.json\n"
+            "@@\n-{}\n+{\"changed\": true}\n*** End Patch\n"
+        ),
+        (
+            "*** Begin Patch\n*** Add File: work/x\r../seed.txt\n+s\n"
+            "*** Add File: work/x\r../../../control/executors/inv/policy.json\n"
+            "+{}\n*** End Patch\n"
+        ),
+        (
+            "*** Begin Patch\n*** Add File: work/x\r../seed.txt\n+s\n"
+            "*** Delete File: work/x\r../../../control/executors/inv/policy.json\n"
+            "*** End Patch\n"
+        ),
+        (
+            "*** Begin Patch\n*** Add File: work/y\r../seed.txt\n+s\n"
+            "*** Update File: work/a.txt\n"
+            "*** Move to: work/y\r../../../moved.txt\n"
+            "@@\n-a\n+b\n*** End Patch\n"
+        ),
+        "*** Begin Patch\n*** Add File:  work/leading.txt\n+x\n*** End Patch\n",
+        "*** Begin Patch\n*** Add File: \twork/tab.txt\n+x\n*** End Patch\n",
+        "*** Begin Patch\n*** Add File: work/trailing.txt \n+x\n*** End Patch\n",
+    ))
+    many = "".join(
+        f"*** Add File: work/f{index}.txt\n+{index}\n" for index in range(300)
+    )
+    patches.append(
+        f"*** Begin Patch\n{many}*** Add File: work/z\r../../../keep.txt\n+pwned\n*** End Patch\n"
+    )
+    escaped_writes = 0
+
+    for index, patch in enumerate(patches):
+        case = tmp_path / f"case-{index}"
+        project = case / "project"
+        work = project / "work"
+        policy_path = project / "control" / "executors" / "inv" / "policy.json"
+        work.mkdir(parents=True)
+        policy_path.parent.mkdir(parents=True)
+        (work / "a.txt").write_text("a\n", encoding="utf-8")
+        (policy_path.parent / "state.json").write_text("{}\n", encoding="utf-8")
+        (project / "keep.txt").write_text("keep\n", encoding="utf-8")
+        env = _write_policy(policy_path, project, work)
+        event = codex.parse({
+            "hook_event_name": "PreToolUse",
+            "session_id": "session",
+            "cwd": str(project),
+            "tool_name": "apply_patch",
+            "tool_input": {"command": patch},
+        }, "pre-tool")
+        assert event is not None and event.tool is not None
+        blocked = decide(event, env) is not None
+        before = _snapshot_files(project)
+        subprocess.run(
+            [apply_patch, patch],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "HOME": str(case),
+                "CODEX_HOME": str(case / "codex-home"),
+            },
+        )
+        after = _snapshot_files(project)
+        changed = {
+            name
+            for name in before.keys() | after.keys()
+            if before.get(name) != after.get(name)
+        }
+        decoded = {
+            str((project / target.path).resolve().relative_to(project))
+            for target in event.tool.targets
+            if not Path(target.path).is_absolute()
+        }
+        escaped_writes += sum(not name.startswith("work/") for name in changed)
+        assert blocked or changed <= decoded
+
+    assert escaped_writes > 0

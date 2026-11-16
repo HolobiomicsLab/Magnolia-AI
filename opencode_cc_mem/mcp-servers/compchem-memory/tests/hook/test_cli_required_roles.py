@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import inspect
 import json
@@ -57,8 +58,15 @@ def _run(harness: str, payload: str, tmp_path: Path, policy: Path | None):
     )
     if policy is not None:
         env["MAGNOLIA_HOOK_POLICY"] = str(policy)
+        env["MAGNOLIA_HOOK_POLICY_SHA256"] = (
+            hashlib.sha256(policy.read_bytes()).hexdigest()
+            if policy.is_file()
+            else "0" * 64
+        )
+        env["MAGNOLIA_CONTROL_DIR"] = str(tmp_path / "control")
     else:
         env.pop("MAGNOLIA_HOOK_POLICY", None)
+        env.pop("MAGNOLIA_HOOK_POLICY_SHA256", None)
     return subprocess.run(
         [sys.executable, "-m", "compchem_memory.hook", harness, "pre-tool"],
         input=payload,

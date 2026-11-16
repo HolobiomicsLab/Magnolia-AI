@@ -109,7 +109,9 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
         raise ExecutorRefused(
             "capability configuration identity does not match discovered configuration"
         )
-    env = _effective_environment(context, invocation_dir / "policy.json")
+    env = _effective_environment(
+        context, invocation_dir / "policy.json", policy_digest
+    )
     if context.resume_from is not None:
         return _resume_launch(
             context,
@@ -538,6 +540,7 @@ def _codex_mcp_servers(
         "env_vars": [
             "MAGNOLIA_HOOK_POLICY",
             "MAGNOLIA_HOOK_POLICY_REQUIRED",
+            "MAGNOLIA_HOOK_POLICY_SHA256",
         ],
     }
     return servers
@@ -645,7 +648,9 @@ def _invocation_dir(context: ExecContext) -> Path:
     return path
 
 
-def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str, str]:
+def _effective_environment(
+    context: ExecContext, policy_path: Path, policy_digest: str
+) -> dict[str, str]:
     inherited = os.environ if context.environment is None else context.environment
     env = {
         str(key): str(value)
@@ -668,6 +673,7 @@ def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str,
     explicit = {
         "MAGNOLIA_HOOK_POLICY": str(policy_path.resolve()),
         "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+        "MAGNOLIA_HOOK_POLICY_SHA256": policy_digest,
         "MAGNOLIA_DOORBELL": "0",
         "MAGNOLIA_CLIENT": context.route.client,
         "MAGNOLIA_ROLE": context.role,
