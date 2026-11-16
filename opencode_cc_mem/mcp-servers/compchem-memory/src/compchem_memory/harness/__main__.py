@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from compchem_memory.harness.files import atomic_write, validate_project_paths
-from compchem_memory.harness.neutral import NeutralConfig, load
+from compchem_memory.harness.neutral import NeutralConfig, bind_memory_service, load
 from compchem_memory.harness.protocol import RENDERERS, Launch, LaunchContext, Renderer
 
 
@@ -85,6 +85,29 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         setup=setup,
     )
     neutral = load(root / "opencode.json.template", _substitutions(context), setup)
+    if os.environ.get("MAGNOLIA_DRY_RUN") != "1" and args.harness == "vibe" and any(
+        server.name == "compchem-memory" and server.enabled
+        for server in neutral.servers
+    ):
+        from compchem_memory.harness.memory_service import (
+            TOKEN_ENV,
+            encode_handle,
+            ensure_memory_service,
+            release_memory_service,
+            token_for_handle,
+        )
+
+        handle = ensure_memory_service(context)
+        context.memory_service = handle.route()
+        neutral = bind_memory_service(neutral, handle.route())
+        try:
+            rendered = renderer(neutral, context)
+        except Exception:
+            release_memory_service(handle)
+            raise
+        rendered.env[TOKEN_ENV] = token_for_handle(handle)
+        rendered.env["MAGNOLIA_MEMORY_SERVICE_HANDLE"] = encode_handle(handle)
+        return rendered, renderer
     return renderer(neutral, context), renderer
 
 

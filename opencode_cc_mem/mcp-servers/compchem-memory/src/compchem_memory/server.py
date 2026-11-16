@@ -104,6 +104,24 @@ PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
 
 
+class ProjectBindingError(ValueError):
+    """Raised when an HTTP request targets a project other than its service pin."""
+
+
+def _enforce_http_project_binding(project_dir: str | None) -> str:
+    """Resolve one request target and reject a different strict HTTP project."""
+    requested = project_context.effective_project_dir(project_dir)
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") != "1":
+        return requested
+    bound = Path(PROJECT_DIR).expanduser().resolve()
+    target = Path(requested).expanduser().resolve()
+    if target != bound:
+        raise ProjectBindingError(
+            f"memory HTTP service is bound to a different project: {bound}"
+        )
+    return str(target)
+
+
 def _claim_once(name: str) -> bool:
     """Claim a once-per-PROCESS side effect (boot pipeline, distill timer).
 
@@ -363,7 +381,8 @@ from . import project_context
 
 
 def _resolve_project_store(project_dir: str | None = None) -> str:
-    pd = resolve_project_dir(project_dir, project_context.effective_project_dir())
+    requested = _enforce_http_project_binding(project_dir)
+    pd = resolve_project_dir(requested, project_context.effective_project_dir())
     ensure_project_store(pd)
     return pd
 
@@ -410,6 +429,7 @@ def _write_guard(project_dir: str | None, allow_cross_project: bool) -> str | No
     caller's assertion that project_dir is intentional — needed when opencode
     v2's shared service has pinned this server to another project (2026-11-10).
     """
+    _enforce_http_project_binding(project_dir)
     pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
     guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
     if guard.kind != "cross_write":
@@ -722,6 +742,7 @@ def memory_verify_claim(
 
     Call this when: grounding a quantitative claim before writing it to
     memory, or checking an entry/receipt against the run that produced it."""
+    _enforce_http_project_binding(project_dir)
     guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=False)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
