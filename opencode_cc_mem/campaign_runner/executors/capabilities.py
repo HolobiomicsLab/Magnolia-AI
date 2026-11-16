@@ -82,7 +82,7 @@ def project_role_capabilities(table: Mapping[str, Any]) -> dict[str, Any]:
         model_delivery = _observed_value(cells["model_delivery"], {})
         projected[row["client"]][row["role"]] = {
             "accepted": accepted,
-            "stale": bool(row.get("stale", False)),
+            "stale": row.get("stale") is not False,
             "trusted": _observed_value(cells["trust"], False) is True,
             "identity": _observed_value(cells["hook_policy_digest"]),
             "discovery_dir": _observed_value(cells["discovery_dir"]),
@@ -110,6 +110,8 @@ def _validate_row(row: Any, index: int, repository_root: Path) -> None:
         raise CapabilityTableError(f"row {index} must be an object")
     if row.get("client") not in CLIENTS or row.get("role") not in ROLES:
         raise CapabilityTableError(f"row {index} has an unknown client or role")
+    if not isinstance(row.get("stale"), bool):
+        raise CapabilityTableError(f"row {index}.stale must be a boolean")
     cells = row.get("cells")
     if not isinstance(cells, Mapping) or set(cells) != set(ALL_CELLS):
         raise CapabilityTableError(f"row {index} must contain every capability cell")
@@ -125,6 +127,8 @@ def _validate_row(row: Any, index: int, repository_root: Path) -> None:
     _validate_cell(gate, f"row {index}.gate", repository_root)
     if not isinstance(gate.get("reason"), str) or not gate["reason"]:
         raise CapabilityTableError(f"row {index}.gate requires a reason")
+    if gate["reason"].startswith(("D2:", "D4:")) and gate["status"] != "refused":
+        raise CapabilityTableError(f"row {index}.gate D2/D4 refusal must be refused")
 
 
 def _validate_cell(cell: Any, label: str, repository_root: Path) -> None:
@@ -133,6 +137,8 @@ def _validate_cell(cell: Any, label: str, repository_root: Path) -> None:
     status = cell.get("status")
     if status not in CELL_STATUSES:
         raise CapabilityTableError(f"{label} has unknown status {status!r}")
+    if status == "observed" and cell.get("value") in (None, "", [], {}):
+        raise CapabilityTableError(f"{label} observed evidence requires a non-empty value")
     artifact = cell.get("artifact")
     if artifact is None:
         if status != "unknown":
@@ -146,20 +152,29 @@ def _validate_cell(cell: Any, label: str, repository_root: Path) -> None:
     resolved = repository_root / artifact_path
     if not resolved.is_file():
         raise CapabilityTableError(f"{label} artifact does not exist: {artifact}")
-    if status == "observed" and _is_synthetic_artifact(resolved, artifact_path):
+    if status == "observed" and _is_synthetic_artifact(resolved, artifact_path, label):
         raise CapabilityTableError(f"{label} observed evidence is synthetic: {artifact}")
 
 
-def _is_synthetic_artifact(path: Path, relative_path: Path) -> bool:
+def _is_synthetic_artifact(path: Path, relative_path: Path, label: str) -> bool:
     if "synthetic" in relative_path.parts:
         return True
-    if path.suffix.lower() != ".json":
+    suffix = path.suffix.lower()
+    if suffix not in {".json", ".jsonl"}:
         return False
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return _contains_synthetic_marker(payload)
+        text = path.read_text(encoding="utf-8")
+        payloads = [json.loads(text)] if suffix == ".json" else _parse_jsonl(text)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CapabilityTableError(f"{label} observed artifact failed to parse: {path}") from exc
+    return any(_contains_synthetic_marker(payload) for payload in payloads)
+
+
+def _parse_jsonl(text: str) -> list[Any]:
+    payloads = [json.loads(line) for line in text.splitlines() if line.strip()]
+    if not payloads:
+        raise json.JSONDecodeError("empty JSONL artifact", text, 0)
+    return payloads
 
 
 def _contains_synthetic_marker(value: Any) -> bool:

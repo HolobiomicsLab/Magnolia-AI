@@ -6,7 +6,7 @@ Machine-readable source: `campaign_runner/executors/capabilities-p3.json` (schem
 
 ## Initial gate
 
-`identity` is observed for all rows from `docs/harness-probes-2026-11.md`. Vibe `usage_semantics` is also observed from `tests/fixtures/executors/vibe/recorded/export.json`. Claude's `modelUsage` and Codex's `turn.completed.usage` were dropped by the P0 scrubber, so their usage semantics remain unknown. Constructed quota controls are `synthetic-only` and do not certify an account signal.
+`identity` is observed for all rows from `docs/harness-probes-2026-11.md`. Vibe's recorded export establishes only the counter shape from one non-resumed free-model run; it does not establish parent/subagent inclusion, resume deltas, or paid cost semantics. Usage semantics therefore remain unknown for all three clients. Constructed quota controls are `synthetic-only` and do not certify an account signal.
 
 | Client | Role | Gate | Blocking cells |
 |---|---|---|---|
@@ -18,10 +18,10 @@ Machine-readable source: `campaign_runner/executors/capabilities-p3.json` (schem
 | Codex | reviewer | **refused (D2)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
 | Codex | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
 | Codex | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
-| Vibe | worker | **refused (D4)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps |
-| Vibe | reviewer | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps |
-| Vibe | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps |
-| Vibe | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps |
+| Vibe | worker | **refused (D4)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | reviewer | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
 
 D2 refuses both Codex campaign roles until the full normal-trust gate passes; a read-only sandbox or changed working directory is insufficient. D4 refuses Vibe worker edits until guarded edits and the complete path gate pass. P0 Codex and Vibe runs used `--dangerously-bypass-hook-trust` and `--trust`; they do not satisfy the normal persisted-trust cell.
 
@@ -59,3 +59,5 @@ After the owner's explicit go, run the following ledger separately for each clie
 Use Claude `-p --output-format stream-json --verbose`, Codex `exec --json`, and Vibe `-p --output json --output-dir` with the implemented normal-trust configuration. Never use `--trust`, hook-trust bypass, permission bypass, alternate credential homes, or subscription credentials. Vibe keeps telemetry disabled. Capture a quota signal only if it appears naturally in these runs; do not exhaust an account.
 
 Tasks 6–8 must bind the rows to the implemented policy, renderer, and executor digests, then repeat only changed observations inside the same cap before enabling a role. D3's project-bound HTTP memory service remains required for Vibe-memory acceptance; it does not block no-tools helper/evaluator proof.
+
+The table's `discovery_dir` evidence is composed with runtime project discovery by Tasks 6–8; the static table value is never fed directly to launch.

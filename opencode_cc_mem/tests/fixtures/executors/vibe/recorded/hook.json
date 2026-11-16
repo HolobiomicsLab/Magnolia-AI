@@ -1,10 +1,16 @@
 {
   "synthetic": false,
   "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/vibe/parent/03-pre_tool.json",
+  "dropped_keys": [
+    "cwd",
+    "parent_session_id",
+    "session_id",
+    "tool_call_id",
+    "transcript_path"
+  ],
   "hook_event_name": "pre_tool",
   "tool_name": "mcp_probe.echo",
   "tool_input": {
     "text": "top"
   }
 }
-
