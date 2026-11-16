@@ -5,10 +5,13 @@ with elevation to durable doctrine via the git-tracked rules/ directory (the
 former .magnolia/skills skill tier was retired; protocols live in
 .opencode/skills/, loaded on demand by the agent)."""
 
+import faulthandler
 import json
 import os
 import sys
+import threading
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -128,6 +131,49 @@ def _build_boot_steps(project_dir):
     ]
 
 
+class _StdoutToStderr:
+    """Keep the real stdout buffer for MCP JSON-RPC; send text prints to stderr.
+
+    `mcp.server.stdio` writes frames through `sys.stdout.buffer`, while every
+    `print()` in the server path writes through `sys.stdout.write`. Sharing one
+    stream is what let a boot-handover diagnostic line corrupt a tool response
+    (2026-11-16). Exposing `.buffer` preserves the transport; routing `.write`
+    to stderr keeps diagnostics out of the protocol.
+    """
+
+    def __init__(self, real: Any):
+        self._real = real
+        self.buffer = getattr(real, "buffer", None)
+
+    def write(self, data: str) -> int:
+        return sys.stderr.write(data)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+
+def _crash_log(where: str, exc: BaseException | None = None) -> None:
+    """Append a traceback to .magnolia/crash.log. Never raises.
+
+    The boot pipeline runs in a daemon thread; without this, a `BaseException`
+    (or a native crash captured by faulthandler) leaves only a closed MCP
+    connection and a missing boot-timing row. The log is intentionally separate
+    from boot-timing so it survives a hard process death."""
+    try:
+        p = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.now(timezone.utc).isoformat()} {where} ---\n")
+            if exc is not None:
+                traceback.print_exception(type(exc), exc, exc.__traceback__, file=f)
+            f.flush()
+    except Exception:
+        pass
+
+
 def _run_startup_scan_background():
     """Run startup_scan, handover, boot_context, audit, then write .current-session-id.
 
@@ -161,7 +207,9 @@ def _run_startup_scan_background():
         except Exception:
             pass
         suffix = "" if ok else f" (error: {error})"
-        print(f"[boot-timing] {step}: {int(ms)} ms{suffix}")
+        # stdout is the MCP JSON-RPC channel. Boot diagnostics must never be
+        # printed there, or a stray line can corrupt a tool response.
+        print(f"[boot-timing] {step}: {int(ms)} ms{suffix}", file=sys.stderr)
 
     def _worker():
         _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
@@ -170,8 +218,10 @@ def _run_startup_scan_background():
             t0 = time.monotonic()
             try:
                 step_fn()
-            except Exception as e:
-                print(f"[{step_name}] error: {e}")
+            except BaseException as e:  # noqa: BLE001 - a boot step must not kill the server
+                _crash_log(f"boot step {step_name}", e)
+                print(f"[{step_name}] error: {type(e).__name__}: {e}",
+                      file=sys.stderr)
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
             else:
                 _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
@@ -246,11 +296,13 @@ def _distill_timer_tick(project_dir: str) -> None:
         smoke.maybe_run_scheduled(project_dir)
         if not _offpeak_gate_disabled() and _is_peak_time():
             print("[distill_timer] peak hours (UTC) — skipping sweep; "
-                  "backlog will run at the next off-peak tick")
+                  "backlog will run at the next off-peak tick",
+                  file=sys.stderr)
             return
         scan_and_distill(project_dir)
     except Exception as e:
-        print(f"[distill_timer] tick error: {e}")
+        _crash_log("distill_timer tick", e)
+        print(f"[distill_timer] tick error: {e}", file=sys.stderr)
 
 
 def _run_distill_timer_background() -> None:
@@ -315,7 +367,7 @@ def _safe_version_commit(store: Path, message: str) -> None:
     try:
         versioning.commit_all(store, message)
     except Exception as e:  # noqa: BLE001 - versioning must never break distill
-        print(f"[versioning] commit skipped: {e}")
+        print(f"[versioning] commit skipped: {e}", file=sys.stderr)
 
 
 def _drop_review_file(pd: str, filename: str) -> None:
@@ -1290,4 +1342,31 @@ def get_runs_index() -> str:
 
 
 if __name__ == "__main__":
+    # A native crash (sqlite/ssl/…) must leave a stack trace, not just a closed
+    # MCP pipe. Keep the handle alive for the lifetime of the process.
+    _crash_file = None
+    try:
+        _crash_path = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
+        _crash_path.parent.mkdir(parents=True, exist_ok=True)
+        _crash_file = _crash_path.open("a", encoding="utf-8")
+        faulthandler.enable(file=_crash_file, all_threads=True)
+    except Exception:
+        pass
+
+    def _thread_excepthook(args) -> None:
+        if args.exc_type is SystemExit:
+            return
+        _crash_log(
+            f"thread {args.thread.name if args.thread else '?'}",
+            args.exc_value,
+        )
+        threading.__excepthook__(args)
+
+    threading.excepthook = _thread_excepthook
+
+    # stdout is the MCP transport. Route stray diagnostics to stderr while
+    # preserving the real buffer for JSON-RPC (see _StdoutToStderr).
+    if getattr(sys.stdout, "buffer", None) is not None:
+        sys.stdout = _StdoutToStderr(sys.stdout)
+
     mcp.run()
