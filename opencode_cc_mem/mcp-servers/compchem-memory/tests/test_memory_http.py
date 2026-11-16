@@ -4,6 +4,7 @@ import os
 import signal
 import socket
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -155,6 +156,7 @@ def test_service_exits_after_last_holder_dies_and_grace(tmp_path, monkeypatch):
         4200: "ps:4200:holder",
     }
     monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    monkeypatch.setattr(memory_service, "_process_exists", lambda pid: pid in identities)
     clock = [10.0]
     watchdog = _watchdog(project, clock)
 
@@ -168,6 +170,7 @@ def test_service_exits_after_last_holder_dies_and_grace(tmp_path, monkeypatch):
 
 def test_watchdog_never_signals_other_processes(monkeypatch):
     raised = []
+    removed = []
 
     class StopEvent:
         def wait(self, interval):
@@ -175,6 +178,10 @@ def test_watchdog_never_signals_other_processes(monkeypatch):
 
     class Watchdog:
         def should_exit(self):
+            return True
+
+        def remove_owned_state(self):
+            removed.append(True)
             return True
 
     monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
@@ -187,6 +194,223 @@ def test_watchdog_never_signals_other_processes(monkeypatch):
     memory_http._watchdog_loop(Watchdog(), 0.01, StopEvent())
 
     assert raised == [signal.SIGTERM]
+    assert removed == [True]
+
+
+def test_watchdog_wait_failure_takes_service_down(monkeypatch):
+    raised = []
+
+    class StopEvent:
+        def wait(self, interval):
+            raise RuntimeError("watchdog wait failed")
+
+        def is_set(self):
+            return False
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
+
+    memory_http._watchdog_loop(object(), 0.01, StopEvent())
+
+    assert raised == [signal.SIGTERM]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        PermissionError("locked state"),
+        IsADirectoryError("service.lock is a directory"),
+        OSError(28, "no space left on device"),
+    ],
+)
+def test_watchdog_fails_closed_when_state_check_raises(monkeypatch, failure):
+    raised = []
+
+    class StopEvent:
+        def wait(self, interval):
+            return False
+
+        def is_set(self):
+            return False
+
+    class Watchdog:
+        def should_exit(self):
+            raise failure
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
+
+    memory_http._watchdog_loop(Watchdog(), 0.01, StopEvent())
+
+    assert raised == [signal.SIGTERM]
+
+
+def test_watchdog_fails_closed_when_provisional_refresh_fills_disk(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    _state, record = _watchdog_record(project, provisional=True)
+    record["observed_command"] = ["/wrapper", "-m", "compchem_memory.memory_http"]
+    memory_service._write_record(_state, record)
+    monkeypatch.setattr(
+        memory_http,
+        "_process_identity",
+        lambda pid: {
+            4100: "ps:4100:acquirer",
+            4101: "ps:4101:service",
+        }.get(pid),
+    )
+    monkeypatch.setattr(
+        memory_service,
+        "_process_command",
+        lambda pid: ("/framework/Python", "-m", "compchem_memory.memory_http"),
+    )
+    monkeypatch.setattr(
+        memory_service,
+        "_write_record",
+        lambda *args: (_ for _ in ()).throw(OSError(28, "no space left on device")),
+    )
+    raised = []
+
+    class StopEvent:
+        def wait(self, interval):
+            return False
+
+        def is_set(self):
+            return False
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
+
+    memory_http._watchdog_loop(_watchdog(project, [0.0]), 0.01, StopEvent())
+
+    assert raised == [signal.SIGTERM]
+
+
+@pytest.mark.parametrize("slow", [False, True])
+def test_failed_or_slow_holder_probe_is_unknown_until_hard_limit(
+    tmp_path, monkeypatch, slow, caplog
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"id": "holder", "pid": 4200, "process_identity": "ps:4200:holder"}
+    _watchdog_record(project, holders=[holder])
+
+    def identity(pid):
+        if pid == 4200 and slow:
+            time.sleep(0.02)
+        if pid == 4200:
+            return None
+        return {4100: "ps:4100:acquirer", 4101: None}.get(pid)
+
+    monkeypatch.setattr(memory_http, "_process_identity", identity)
+    monkeypatch.setattr(memory_service, "_process_exists", lambda pid: True)
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+    watchdog.unknown_limit_seconds = 120.0
+
+    assert watchdog.should_exit() is False
+    clock[0] = 6.0
+    assert watchdog.should_exit() is False
+    clock[0] = 119.9
+    assert watchdog.should_exit() is False
+    clock[0] = 120.0
+    assert watchdog.should_exit() is True
+    assert "unknown" in caplog.text.lower()
+
+
+def test_holder_without_id_uses_same_definition_on_both_sides(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"pid": 4200, "process_identity": "ps:4200:holder"}
+    _watchdog_record(project, holders=[holder])
+    monkeypatch.setattr(
+        memory_http,
+        "_process_identity",
+        lambda pid: {
+            4100: "ps:4100:acquirer",
+            4101: "ps:4101:service",
+            4200: "ps:4200:holder",
+        }.get(pid),
+    )
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+
+    assert memory_service._holder_liveness(holder) == "dead"
+    assert watchdog.should_exit() is False
+    clock[0] = 5.0
+    assert watchdog.should_exit() is True
+
+
+def test_watchdog_removes_state_only_when_record_still_names_self(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    state, record = _watchdog_record(project)
+    (state / "bearer-token").write_text("token\n", encoding="utf-8")
+    os.chmod(state / "bearer-token", 0o600)
+    monkeypatch.setattr(memory_http, "_process_identity", lambda pid: None)
+    watchdog = _watchdog(project, [0.0])
+
+    assert watchdog.remove_owned_state() is True
+    assert not (state / "service.json").exists()
+    assert not (state / "bearer-token").exists()
+
+    memory_service._write_record(state, {**record, "service_identity": "replacement"})
+    (state / "bearer-token").write_text("replacement-token\n", encoding="utf-8")
+    os.chmod(state / "bearer-token", 0o600)
+
+    assert watchdog.remove_owned_state() is False
+    assert (state / "service.json").exists()
+    assert (state / "bearer-token").exists()
+
+
+def test_watchdog_uses_acquirer_state_dir_when_service_home_differs(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    state, _record = _watchdog_record(project)
+    other_home = tmp_path / "service-home"
+    other_home.mkdir()
+    monkeypatch.setenv("HOME", str(other_home))
+    monkeypatch.setattr(
+        memory_http,
+        "_process_identity",
+        lambda pid: {4100: "ps:4100:acquirer"}.get(pid),
+    )
+    watchdog = memory_http.ServiceWatchdog(
+        project,
+        service_identity="service-id",
+        process_pid=4101,
+        process_identity="ps:4101:service",
+        acquirer_pid=4100,
+        acquirer_identity="ps:4100:acquirer",
+        state_dir=state,
+        now=lambda: 0.0,
+    )
+
+    assert watchdog.should_exit() is False
+    assert not (other_home / ".magnolia").exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "raw", "default", "minimum", "maximum", "expected"),
+    [
+        (memory_http.WATCHDOG_ENV, "0.01", 2.0, 0.5, 30.0, 0.5),
+        (memory_http.WATCHDOG_ENV, "300", 2.0, 0.5, 30.0, 30.0),
+        (memory_http.GRACE_ENV, "1", 10.0, 5.0, 600.0, 5.0),
+        (memory_http.GRACE_ENV, "1000", 10.0, 5.0, 600.0, 600.0),
+    ],
+)
+def test_service_timings_are_clamped_and_logged(
+    monkeypatch, caplog, name, raw, default, minimum, maximum, expected
+):
+    monkeypatch.setenv(name, raw)
+
+    assert memory_http._seconds_from_env(
+        name, default, minimum=minimum, maximum=maximum
+    ) == expected
+    assert "clamp" in caplog.text.lower()
 
 
 def test_memory_http_rejects_cross_project_request(tmp_path, monkeypatch):

@@ -242,7 +242,7 @@ def release_memory_service(handle: ServiceHandle) -> bool:
             return False
         holders = [
             holder
-            for holder in _live_holders(record.get("holders", []))
+            for holder in _active_holders(record.get("holders", []))
             if holder.get("id") != handle.holder_id
         ]
         if holders:
@@ -420,8 +420,8 @@ def _reuse(
     except OSError:
         return None
     url = f"http://127.0.0.1:{port}/mcp"
-    live_holders = _live_holders(record.get("holders", []))
-    if not live_holders:
+    active_holders = _active_holders(record.get("holders", []))
+    if not active_holders:
         return None
     if _process_is_stopped(pid):
         return None
@@ -442,7 +442,7 @@ def _reuse(
         return None
     if not _holder_is_live(holder):
         raise ExecutorRefused("memory service holder identity is no longer live")
-    record["holders"] = [*live_holders, holder]
+    record["holders"] = [*active_holders, holder]
     _write_record(state, record)
     return _handle(record, project, holder["id"])
 
@@ -487,7 +487,15 @@ def _start_service(
             TOKEN_ENV: token,
         }
     )
-    command = [python, "-m", SERVICE_MODULE, "--project-dir", str(project)]
+    command = [
+        python,
+        "-m",
+        SERVICE_MODULE,
+        "--project-dir",
+        str(project),
+        "--state-dir",
+        str(state),
+    ]
     process = None
     with _startup_signal_handlers():
         try:
@@ -503,6 +511,7 @@ def _start_service(
                     "port": port,
                     "project_digest": digest,
                     "project_dir": str(project),
+                    "state_dir": str(state),
                     "process_identity": identity,
                     "service_identity": service_identity,
                     "token_file": str(token_file),
@@ -638,24 +647,67 @@ def _new_holder(pid: int) -> dict[str, Any]:
 
 def _holder_is_live(holder: Mapping[str, Any]) -> bool:
     """Return whether a previously verified holder still has the same start token."""
+    return _holder_liveness(holder) == "live"
+
+
+def _process_exists(pid: int) -> bool | None:
+    """Return process existence, or ``None`` when the OS probe itself failed."""
+    if sys.platform == "linux":
+        try:
+            Path(f"/proc/{pid}").stat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return None
+        return True
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-o", "pid=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "TZ": "UTC"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
+    return True
+
+
+def _holder_liveness(
+    holder: Mapping[str, Any],
+    *,
+    identity_probe: Any = None,
+    existence_probe: Any = None,
+) -> str:
+    """Classify one holder with one shared definition for client and service."""
     pid = holder.get("pid")
     identity = holder.get("process_identity")
-    return isinstance(pid, int) and bool(identity) and _process_identity(pid) == identity
+    if not holder.get("id") or not isinstance(pid, int) or not identity:
+        return "dead"
+    probe_identity = identity_probe or _process_identity
+    actual = probe_identity(pid)
+    if actual is not None:
+        return "live" if actual == identity else "dead"
+    probe_existence = existence_probe or _process_exists
+    exists = probe_existence(pid)
+    return "dead" if exists is False else "unknown"
 
 
-def _live_holders(value: Any) -> list[dict[str, Any]]:
+def _active_holders(value: Any) -> list[dict[str, Any]]:
+    """Keep verified-live and temporarily-unknown holders; drop only known-dead ones."""
     if not isinstance(value, list):
         return []
-    live = []
+    active = []
     for holder in value:
-        if not isinstance(holder, dict) or not holder.get("id"):
+        if not isinstance(holder, dict):
             continue
-        pid = holder.get("pid")
-        expected = holder.get("process_identity")
-        if not isinstance(pid, int) or not expected or _process_identity(pid) != expected:
+        if _holder_liveness(holder) == "dead":
             continue
-        live.append(holder)
-    return live
+        active.append(holder)
+    return active
 
 
 def _handle_matches(handle: ServiceHandle, record: Any) -> bool:
@@ -703,9 +755,7 @@ def _remove_state_files(state: Path) -> None:
 
 
 def _ensure_private_state_dir(state: Path) -> None:
-    root = Path.home() / ".magnolia"
-    services = root / "services"
-    root.mkdir(parents=True, exist_ok=True)
+    services = state.parent
     for directory in (services, state):
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(directory, 0o700)
@@ -892,7 +942,15 @@ def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
         return False
     if project_digest(project) != digest:
         return False
-    suffix = ("-m", SERVICE_MODULE, "--project-dir", str(project))
+    old_suffix = ("-m", SERVICE_MODULE, "--project-dir", str(project))
+    suffixes = [old_suffix]
+    state_value = record.get("state_dir")
+    if state_value:
+        try:
+            state = Path(str(state_value)).expanduser().resolve()
+        except OSError:
+            return False
+        suffixes = [(*old_suffix, "--state-dir", str(state))]
     candidates = [recorded]
     if record.get("provisional") is True:
         candidates.append(record.get("final_command"))
@@ -900,9 +958,15 @@ def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
     for candidate in candidates:
         if isinstance(candidate, (list, tuple)):
             candidate = tuple(candidate)
-            bound = len(candidate) >= 5 and candidate[-4:] == suffix
+            bound = any(
+                len(candidate) > len(suffix) and candidate[-len(suffix):] == suffix
+                for suffix in suffixes
+            )
         elif isinstance(candidate, str):
-            bound = candidate.endswith(" " + " ".join(suffix) + "\n")
+            bound = any(
+                candidate.endswith(" " + " ".join(suffix) + "\n")
+                for suffix in suffixes
+            )
         else:
             continue
         if bound and candidate == live_command:

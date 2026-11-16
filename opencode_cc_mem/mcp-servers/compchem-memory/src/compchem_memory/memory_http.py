@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import logging
 import math
 import os
 import signal
@@ -35,6 +36,12 @@ ACQUIRER_PID_ENV = "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID"
 ACQUIRER_IDENTITY_ENV = "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY"
 DEFAULT_WATCHDOG_SECONDS = 2.0
 DEFAULT_GRACE_SECONDS = 10.0
+DEFAULT_UNKNOWN_LIMIT_SECONDS = 120.0
+MIN_WATCHDOG_SECONDS = 0.5
+MAX_WATCHDOG_SECONDS = 30.0
+MIN_GRACE_SECONDS = 5.0
+MAX_GRACE_SECONDS = 600.0
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,24 +55,44 @@ class ServiceWatchdog:
     acquirer_pid: int
     acquirer_identity: str
     grace_seconds: float = DEFAULT_GRACE_SECONDS
+    unknown_limit_seconds: float = DEFAULT_UNKNOWN_LIMIT_SECONDS
+    state_dir: Path | None = None
     now: Callable[[], float] = time.monotonic
     started_at: float = field(init=False)
     last_holder_at: float = field(init=False)
+    unknown_since: float | None = field(init=False, default=None)
+    unknown_limit_logged: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self.project_dir = self.project_dir.expanduser().resolve()
+        if self.state_dir is None:
+            self.state_dir = service_state.private_state_dir(self.project_dir)
+        else:
+            self.state_dir = self.state_dir.expanduser().resolve()
         self.started_at = self.now()
         self.last_holder_at = self.started_at
 
     def should_exit(self) -> bool:
         """Return true once the record or verified-holder contract is lost."""
-        state = service_state.private_state_dir(self.project_dir)
+        state = self.state_dir
+        assert state is not None
         with service_state._state_lock(state):
             record = service_state._read_record(state)
             if record is None or not self._record_names_self(record):
                 return True
             self._refresh_provisional_record(state, record)
             return self._ownership_expired(record)
+
+    def remove_owned_state(self) -> bool:
+        """Remove only this service's still-current record and bearer token."""
+        state = self.state_dir
+        assert state is not None
+        with service_state._state_lock(state):
+            record = service_state._read_record(state)
+            if record is None or not self._record_names_self(record):
+                return False
+            service_state._remove_state_files(state)
+            return True
 
     def _record_names_self(self, record: dict[str, Any]) -> bool:
         try:
@@ -79,7 +106,6 @@ class ServiceWatchdog:
             and recorded_pid == self.process_pid
             and record.get("process_identity") == self.process_identity
             and record.get("service_identity") == self.service_identity
-            and _process_identity(self.process_pid) == self.process_identity
         )
 
     def _refresh_provisional_record(
@@ -100,55 +126,122 @@ class ServiceWatchdog:
 
     def _ownership_expired(self, record: dict[str, Any]) -> bool:
         checked_at = self.now()
-        if self._has_live_holder(record.get("holders")):
+        holder_states = self._holder_states(record.get("holders"))
+        if "live" in holder_states:
             self.last_holder_at = checked_at
-        elif checked_at - self.last_holder_at >= self.grace_seconds:
-            return True
+            self._clear_unknown()
+        elif "unknown" in holder_states:
+            if self._unknown_expired(checked_at, "holder"):
+                return True
+        else:
+            self._clear_unknown()
+            if checked_at - self.last_holder_at >= self.grace_seconds:
+                return True
         provisional_expired = (
             record.get("provisional") is True
             and checked_at - self.started_at >= self.grace_seconds
         )
-        return provisional_expired and not self._acquirer_is_live()
-
-    def _has_live_holder(self, holders: Any) -> bool:
-        if not isinstance(holders, list):
+        if not provisional_expired:
             return False
-        return any(
-            isinstance(holder, dict)
-            and isinstance(holder.get("pid"), int)
-            and bool(holder.get("process_identity"))
-            and _process_identity(holder["pid"]) == holder["process_identity"]
-            for holder in holders
-        )
+        acquirer_state = self._acquirer_liveness()
+        if acquirer_state == "dead":
+            return True
+        if acquirer_state == "unknown":
+            return self._unknown_expired(checked_at, "acquirer")
+        return False
 
-    def _acquirer_is_live(self) -> bool:
-        return bool(
-            self.acquirer_pid > 0
-            and self.acquirer_identity
-            and _process_identity(self.acquirer_pid) == self.acquirer_identity
-        )
+    def _holder_states(self, holders: Any) -> set[str]:
+        if not isinstance(holders, list):
+            return set()
+        return {
+            service_state._holder_liveness(
+                holder,
+                identity_probe=_process_identity,
+                existence_probe=service_state._process_exists,
+            )
+            for holder in holders
+            if isinstance(holder, dict)
+        }
+
+    def _clear_unknown(self) -> None:
+        self.unknown_since = None
+        self.unknown_limit_logged = False
+
+    def _unknown_expired(self, checked_at: float, subject: str) -> bool:
+        if self.unknown_since is None:
+            self.unknown_since = checked_at
+        if checked_at - self.unknown_since < self.unknown_limit_seconds:
+            return False
+        if not self.unknown_limit_logged:
+            LOGGER.warning(
+                "memory service %s identity remained unknown for %.1f seconds; "
+                "watchdog is failing closed",
+                subject,
+                self.unknown_limit_seconds,
+            )
+            self.unknown_limit_logged = True
+        return True
+
+    def _acquirer_liveness(self) -> str:
+        if self.acquirer_pid <= 0 or not self.acquirer_identity:
+            return "dead"
+        actual = _process_identity(self.acquirer_pid)
+        if actual is not None:
+            return "live" if actual == self.acquirer_identity else "dead"
+        exists = service_state._process_exists(self.acquirer_pid)
+        return "dead" if exists is False else "unknown"
 
 
 def _watchdog_loop(
     watchdog: ServiceWatchdog, interval: float, stop_event: threading.Event
 ) -> None:
     """Poll ownership and ask this process to stop without targeting another PID."""
-    while not stop_event.wait(interval):
-        if watchdog.should_exit():
-            signal.raise_signal(signal.SIGTERM)
-            return
+    should_stop = False
+    try:
+        while not stop_event.wait(interval):
+            try:
+                should_stop = watchdog.should_exit()
+            except BaseException:
+                LOGGER.exception("memory service watchdog check failed; failing closed")
+                should_stop = True
+            if should_stop:
+                break
+    except BaseException:
+        LOGGER.exception("memory service watchdog loop stopped unexpectedly; failing closed")
+        should_stop = True
+    is_set = getattr(stop_event, "is_set", lambda: False)
+    if not should_stop or is_set():
+        return
+    remover = getattr(watchdog, "remove_owned_state", None)
+    if callable(remover):
+        try:
+            remover()
+        except BaseException:
+            LOGGER.exception("memory service watchdog could not remove its owned state")
+    signal.raise_signal(signal.SIGTERM)
 
 
-def _seconds_from_env(name: str, default: float, *, allow_zero: bool = False) -> float:
-    """Read a finite non-negative service timing value."""
+def _seconds_from_env(
+    name: str, default: float, *, minimum: float, maximum: float
+) -> float:
+    """Read and clamp one finite service timing value."""
     try:
         value = float(os.environ.get(name, str(default)))
     except ValueError as exc:
         raise RuntimeError(f"{name} must be a number") from exc
-    minimum = 0.0 if allow_zero else 0.001
-    if not math.isfinite(value) or value < minimum:
-        raise RuntimeError(f"{name} must be at least {minimum}")
-    return value
+    if math.isnan(value):
+        raise RuntimeError(f"{name} must be a number")
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        LOGGER.warning(
+            "%s value %s is out of range; clamping to %s (allowed %.1f-%.1f)",
+            name,
+            value,
+            clamped,
+            minimum,
+            maximum,
+        )
+    return clamped
 
 
 def _request_project_headers() -> tuple[str, ...]:
@@ -254,6 +347,7 @@ def main(argv: list[str] | None = None) -> None:
     """Run one authenticated streamable-HTTP service on IPv4 loopback only."""
     parser = argparse.ArgumentParser(prog="python -m compchem_memory.memory_http")
     parser.add_argument("--project-dir", required=True, type=Path)
+    parser.add_argument("--state-dir", required=True, type=Path)
     args = parser.parse_args(argv)
     if os.environ.get("MAGNOLIA_PROJECT_BOUND") != "1":
         raise RuntimeError("memory HTTP service requires strict project binding")
@@ -275,8 +369,18 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("memory HTTP service acquirer pid is invalid") from exc
     if not service_identity or acquirer_pid <= 0 or not acquirer_identity:
         raise RuntimeError("memory HTTP service supervision identity is incomplete")
-    interval = _seconds_from_env(WATCHDOG_ENV, DEFAULT_WATCHDOG_SECONDS)
-    grace = _seconds_from_env(GRACE_ENV, DEFAULT_GRACE_SECONDS, allow_zero=True)
+    interval = _seconds_from_env(
+        WATCHDOG_ENV,
+        DEFAULT_WATCHDOG_SECONDS,
+        minimum=MIN_WATCHDOG_SECONDS,
+        maximum=MAX_WATCHDOG_SECONDS,
+    )
+    grace = _seconds_from_env(
+        GRACE_ENV,
+        DEFAULT_GRACE_SECONDS,
+        minimum=MIN_GRACE_SECONDS,
+        maximum=MAX_GRACE_SECONDS,
+    )
     watchdog = ServiceWatchdog(
         bound,
         service_identity=service_identity,
@@ -285,6 +389,7 @@ def main(argv: list[str] | None = None) -> None:
         acquirer_pid=acquirer_pid,
         acquirer_identity=acquirer_identity,
         grace_seconds=grace,
+        state_dir=args.state_dir,
     )
     stop_event = threading.Event()
     watcher = threading.Thread(
