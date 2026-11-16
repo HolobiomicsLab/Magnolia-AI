@@ -1,5 +1,7 @@
 import json
+import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -9,21 +11,26 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from campaign_runner.executors.contracts import (
-    LimitInfo, RunOutcome, SessionIdentity, UsageRecord,
+    LimitInfo, ResumeArtifact, RunOutcome, SessionIdentity, UsageRecord,
 )
 from campaign_runner.governor import AdmissionRequest, Governor, Policy, QuotaWaiting
 from campaign_runner.jobs import FakeJobBackend, JobController
-from campaign_runner.reviewers import ReviewResult
+from campaign_runner.reviewers import Reviewer, ReviewResult
 from campaign_runner.runner import CampaignRunner, RunnerConfig
 from campaign_runner.routing import ResolvedRoute
 from campaign_runner.state import CampaignStore, QuotaWait
-from campaign_runner.workers import WorkerResult, empty_usage
+from campaign_runner.workers import (
+    InvocationGovernance,
+    OpenCodeExecutor,
+    WorkerResult,
+    empty_usage,
+)
 
 
 NOW = datetime(2026, 11, 16, 9, tzinfo=timezone.utc)
 
 
-def _store(tmp_path, *, review=False):
+def _store(tmp_path, *, review=False, repair=False):
     source = tmp_path / "source"
     source.mkdir()
     payload = {
@@ -45,6 +52,7 @@ def _store(tmp_path, *, review=False):
             "outputs": ["work/out.md"],
             "gate": [sys.executable, "-c", "raise SystemExit(0)"],
             "review": review,
+            "on_gate_fail": "repair" if repair else "human",
         }],
     }
     protocol = source / "protocol.json"
@@ -235,3 +243,429 @@ def test_new_session_identity_reaches_ledger_receipt(tmp_path):
     )
     row = json.loads((tmp_path / "usage.jsonl").read_text())
     assert row["session_identity"]["session_id"] == "new-session"
+
+
+def _real_governor(tmp_path, **policy):
+    return Governor(
+        Policy(min_seconds_between_runs=1, **policy),
+        ledger_path=tmp_path / "usage.jsonl",
+        clock=lambda: NOW,
+    )
+
+
+def _shared_hold(governor):
+    route = ResolvedRoute(
+        "opencode", "provider/model", "model", "opencode:provider", "worker", "test"
+    )
+    first = governor.admit(AdmissionRequest(route, "one", None, "project", "worker"))
+    first.mark_started(pid=1, pgid=1, process_start_token="one")
+    first.release(outcome=RunOutcome("quota", LimitInfo("quota", None, "test")))
+    return governor.quota_wait("opencode:provider").hold_id
+
+
+def test_typed_daily_limit_creates_durable_checkpoint(tmp_path):
+    store = _store(tmp_path)
+    reset = NOW + timedelta(hours=15)
+    worker = ResultWorker(
+        store.run_dir,
+        [
+            WorkerResult(
+                0,
+                False,
+                0.0,
+                None,
+                "",
+                "",
+                0,
+                empty_usage(),
+                0,
+                [],
+                [],
+                outcome=RunOutcome(
+                    "quota", LimitInfo("daily_limit", reset, "usage governor")
+                ),
+            )
+        ],
+    )
+
+    state = _runner(store, worker, _real_governor(tmp_path / "governor")).run_once()[
+        "state"
+    ]
+
+    assert state["state"] == "waiting_quota"
+    assert state["attempt"] == 0
+    assert state["quota_wait"]["reset_at"] == reset.isoformat()
+    assert state["quota_wait"]["hold_id"]
+
+
+def test_real_opencode_daily_limit_waits_without_launching(tmp_path):
+    store = _store(tmp_path)
+    route = ResolvedRoute(
+        "opencode", "provider/model", "model", "opencode:provider", "worker", "test"
+    )
+    governor = _real_governor(tmp_path / "governor", max_runs_per_day=1)
+    prior = governor.admit(AdmissionRequest(route, "prior", None, "project", "worker"))
+    prior.mark_started(pid=1, pgid=1, process_start_token="prior")
+    prior.release(outcome=RunOutcome("success"))
+    marker = tmp_path / "opencode-launched"
+    binary = tmp_path / "opencode"
+    binary.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 99\n", encoding="utf-8")
+    binary.chmod(0o755)
+    executor = OpenCodeExecutor(
+        binary=str(binary),
+        model="provider/model",
+        agent="campaign-worker",
+        governance=InvocationGovernance(governor, route, "campaign:q", "project"),
+    )
+
+    state = _runner(store, executor, governor).run_once()["state"]
+
+    assert state["state"] == "waiting_quota"
+    assert state["attempt"] == 0
+    assert state["quota_wait"]["reset_at"] == (
+        NOW.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    ).isoformat()
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "outcome_kind",
+    ["turn_limit", "price_limit", "model_mismatch", "cap_reached"],
+)
+def test_non_review_reviewer_outcome_never_passes(tmp_path, monkeypatch, outcome_kind):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class InvalidReviewerExecutor:
+        def run(self, *args, **kwargs):
+            return WorkerResult(
+                0,
+                False,
+                0.1,
+                "review-session",
+                "",
+                "",
+                0,
+                empty_usage(),
+                1,
+                [],
+                [],
+                outcome=RunOutcome(outcome_kind),
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: InvalidReviewerExecutor(),
+    )
+
+    state = _runner(store, worker, HoldGovernor(), Reviewer(binary="unused")).run_once()[
+        "state"
+    ]
+
+    assert state["state"] == "waiting_human"
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+    assert receipt["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    ("outcome", "returncode"),
+    [(RunOutcome("success"), 0), (RunOutcome("failure"), 1)],
+)
+def test_empty_or_failed_reviewer_never_passes(
+    tmp_path, monkeypatch, outcome, returncode
+):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class EmptyReviewerExecutor:
+        def run(self, *args, **kwargs):
+            return WorkerResult(
+                returncode,
+                False,
+                0.1,
+                "review-session",
+                "",
+                "",
+                0,
+                empty_usage(),
+                1,
+                [],
+                [],
+                outcome=outcome,
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: EmptyReviewerExecutor(),
+    )
+
+    state = _runner(store, worker, HoldGovernor(), Reviewer(binary="unused")).run_once()[
+        "state"
+    ]
+
+    assert state["state"] == "waiting_human"
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+    assert receipt["status"] == "failed"
+
+
+def test_invalid_reviewer_uses_repair_budget_then_waits_human(tmp_path, monkeypatch):
+    store = _store(tmp_path, review=True, repair=True)
+    worker = ResultWorker(store.run_dir, [_result(), _result()])
+
+    class CappedReviewerExecutor:
+        def run(self, *args, **kwargs):
+            return WorkerResult(
+                0,
+                False,
+                0.1,
+                "review-session",
+                "",
+                "",
+                0,
+                empty_usage(),
+                1,
+                [],
+                [],
+                outcome=RunOutcome("turn_limit"),
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: CappedReviewerExecutor(),
+    )
+    runner = _runner(store, worker, HoldGovernor(), Reviewer(binary="unused"))
+
+    state = runner.run_once()["state"]
+
+    assert state["state"] == "waiting_human"
+    assert state["attempt"] == 2
+    assert worker.calls == 2
+
+
+def test_reviewer_daily_limit_waits_once(tmp_path, monkeypatch):
+    store = _store(tmp_path, review=True)
+    governor = _real_governor(tmp_path / "governor")
+    worker = ResultWorker(store.run_dir, [_result()])
+    reset = NOW + timedelta(hours=15)
+    calls = 0
+
+    class DailyLimitedReviewer:
+        def run(self, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return WorkerResult(
+                0,
+                False,
+                0.1,
+                "review-session",
+                "",
+                "",
+                0,
+                empty_usage(),
+                0,
+                [],
+                [],
+                outcome=RunOutcome(
+                    "quota", LimitInfo("daily_limit", reset, "usage governor")
+                ),
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: DailyLimitedReviewer(),
+    )
+
+    state = _runner(store, worker, governor, Reviewer(binary="unused")).run_once()[
+        "state"
+    ]
+
+    assert state["state"] == "waiting_quota"
+    assert state["quota_wait"]["suspended_phase"] == "reviewer"
+    assert state["quota_wait"]["reset_at"] == reset.isoformat()
+    assert calls == 1
+
+
+def test_manual_shared_hold_release_wakes_all_campaigns(tmp_path):
+    governor_dir = tmp_path / "governor"
+    governor_dir.mkdir()
+    governor = _real_governor(governor_dir)
+    hold_id = _shared_hold(governor)
+    stores = []
+    for name in ("a", "b"):
+        campaign_dir = tmp_path / name
+        campaign_dir.mkdir()
+        store = _store(campaign_dir)
+        store.wait_for_quota(
+            QuotaWait(
+                "quota",
+                "opencode:provider",
+                NOW,
+                hold_id,
+                None,
+                "pre-worker",
+                "work",
+                0,
+            )
+        )
+        stores.append(store)
+    first = _runner(stores[0], ResultWorker(stores[0].run_dir, [_result()]), governor)
+    second = _runner(stores[1], ResultWorker(stores[1].run_dir, [_result()]), governor)
+
+    assert first.resume_quota(manual=True).state == "queued"
+    assert second.run_once()["state"]["state"] == "completed"
+
+
+def test_resumed_opencode_database_usage_is_delta(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    cumulative_values = iter((100.0, 300.0))
+
+    def cumulative(path, session):
+        return {**empty_usage(), "input_tokens": next(cumulative_values)}
+
+    monkeypatch.setattr("campaign_runner.runner.read_session_usage", cumulative)
+    worker = ResultWorker(
+        store.run_dir,
+        [_result(quota=True, attempts=1, text="partial"), _result()],
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner.config.usage_db = "db"
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "completed"
+    assert store.load().usage["input_tokens"] == 300.0
+
+
+def test_resumed_worker_prelaunch_quota_preserves_session(tmp_path):
+    store = _store(tmp_path)
+    calls = []
+
+    class RecordingWorker(ResultWorker):
+        def run(self, *args, **kwargs):
+            calls.append(kwargs.get("resume_session"))
+            return super().run(*args, **kwargs)
+
+    worker = RecordingWorker(
+        store.run_dir,
+        [
+            _result(quota=True, attempts=1, text="partial"),
+            _result(quota=True, attempts=0, text=""),
+            _result(),
+        ],
+    )
+    runner = _runner(store, worker, HoldGovernor())
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "completed"
+    assert calls == [None, "session", "session"]
+
+
+def test_resumed_worker_prelaunch_quota_preserves_resume_artifact(tmp_path):
+    store = _store(tmp_path)
+    artifact = ResumeArtifact(
+        "claude-code", "session", "config", "worker", "project"
+    )
+    seen = []
+
+    @dataclass
+    class ResumeAwareWorker:
+        results: list[WorkerResult]
+        resume_artifact: ResumeArtifact | None = None
+        resume_permitted: bool = False
+
+        def run(self, *args, **kwargs):
+            seen.append((kwargs.get("resume_session"), self.resume_artifact))
+            result = self.results.pop(0)
+            if not result.outcome or result.outcome.kind != "quota":
+                (store.run_dir / "work").mkdir(parents=True, exist_ok=True)
+                (store.run_dir / "work" / "out.md").write_text("done")
+            return result
+
+    first = _result(quota=True, attempts=1, text="partial")
+    first.resume_artifact = artifact
+    worker = ResumeAwareWorker(
+        [first, _result(quota=True, attempts=0, text=""), _result()]
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner._worker_model = lambda stage: "claude-code/sonnet"
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    checkpoint = store.load().quota_wait
+    assert checkpoint.resume_artifact == artifact
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "completed"
+    assert seen == [(None, None), ("session", artifact), ("session", artifact)]
+
+
+def test_missing_non_opencode_identity_is_recorded_unavailable(tmp_path):
+    store = _store(tmp_path)
+    worker = ResultWorker(store.run_dir, [_result()])
+    runner = _runner(store, worker, HoldGovernor())
+    runner._worker_model = lambda stage: "claude-code/sonnet"
+
+    runner.run_once()
+
+    record = json.loads(store.distill_queue_path.read_text().splitlines()[-1])
+    assert record["session_ids"] == []
+    assert record["sessions"] == []
+    assert record["unavailable"] == [
+        {
+            "harness": "claude-code",
+            "session_id": "session",
+            "reason": "missing_session_identity",
+        }
+    ]
+
+
+def test_resumed_worker_reconciles_stale_empty_lease(tmp_path):
+    store = _store(tmp_path)
+    worker = ResultWorker(
+        store.run_dir, [_result(quota=True, attempts=1, text="partial"), _result()]
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner.run_once()
+    runner.resume_quota(manual=True)
+    path = store.leases_dir / "work-1.json"
+    path.write_text(
+        json.dumps(
+            {
+                "stage": "work",
+                "attempt": 1,
+                "owner_pid": 99999999,
+                "owner_pgid": 99999999,
+                "hostname": os.uname().nodename,
+            }
+        )
+    )
+
+    state = runner.run_once()["state"]
+
+    assert state["state"] == "completed"
+    assert not path.exists()
+
+
+def test_resumed_worker_keeps_unknown_lease_busy(tmp_path):
+    store = _store(tmp_path)
+    worker = ResultWorker(
+        store.run_dir, [_result(quota=True, attempts=1, text="partial"), _result()]
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner.run_once()
+    runner.resume_quota(manual=True)
+    path = store.leases_dir / "work-1.json"
+    path.write_text(json.dumps({"stage": "work", "attempt": 1}))
+
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "running"
+    assert result["actions"] == ["busy: attempt lease owner is unknown: work/1"]
+    assert path.exists()

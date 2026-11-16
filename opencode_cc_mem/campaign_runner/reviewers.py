@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -12,7 +12,12 @@ from .accounting import read_session_usage
 from .process import ProcessControl
 from .security import SecurityError, ensure_within
 from .workers import InvocationGovernance, empty_usage
-from .executors.contracts import ExecContext, RunOutcome, SessionIdentity
+from .executors.contracts import (
+    ExecContext,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+)
 from .executors.registry import executor_for
 from .routing import resolve_route
 
@@ -58,6 +63,7 @@ class ReviewResult:
     stopped_reason: str | None = None
     outcome: RunOutcome | None = None
     session_identity: SessionIdentity | None = None
+    resume_artifact: ResumeArtifact | None = None
 
 
 def model_family(model: str) -> str:
@@ -227,6 +233,7 @@ class Reviewer:
         attempt_dir: Path,
         run_dir: Path,
         control: ProcessControl | None = None,
+        resume_artifact: ResumeArtifact | None = None,
     ) -> ReviewResult:
         route = resolve_route("reviewer", {"reviewer": {"model": model}})
         context = (
@@ -247,6 +254,8 @@ class Reviewer:
                 governance=self.governance,
             )
         )
+        if resume_artifact is not None:
+            context = replace(context, resume_artifact=resume_artifact)
         executor = executor_for(route, "reviewer", context)
         usage = empty_usage()
         session_id: str | None = None
@@ -280,6 +289,7 @@ class Reviewer:
                     stopped_reason=result.stopped_reason,
                     outcome=result.outcome,
                     session_identity=session_identity,
+                    resume_artifact=getattr(result, "resume_artifact", None),
                 )
             if result.stopped_reason:
                 return ReviewResult(
@@ -293,6 +303,7 @@ class Reviewer:
                     stopped_reason=result.stopped_reason,
                     outcome=result.outcome,
                     session_identity=session_identity,
+                    resume_artifact=getattr(result, "resume_artifact", None),
                 )
             try:
                 issues, followups = validate_review(_extract_json(result.final_text), run_dir)
@@ -311,6 +322,7 @@ class Reviewer:
                 attempts=attempts,
                 model=model,
                 session_identity=session_identity,
+                resume_artifact=getattr(result, "resume_artifact", None),
             )
         raise ReviewError("; ".join(errors) if errors else "review failed")
 

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
-from .executors.contracts import SessionIdentity
+from .executors.contracts import ResumeArtifact, SessionIdentity
 from .models import (
     CampaignError,
     Protocol,
@@ -127,6 +127,7 @@ QUOTA_WAIT_KEYS = {
     "session_identity",
     "result_ref",
     "retry_cursor",
+    "resume_artifact",
 }
 SESSION_IDENTITY_KEYS = {
     "client",
@@ -135,6 +136,13 @@ SESSION_IDENTITY_KEYS = {
     "project_digest",
     "role",
     "policy_digest",
+}
+RESUME_ARTIFACT_KEYS = {
+    "client",
+    "session_id",
+    "configuration_identity_digest",
+    "role",
+    "project_identity",
 }
 
 
@@ -203,6 +211,25 @@ def _session_identity_from_dict(value: Any) -> SessionIdentity:
     return SessionIdentity(model=model, **required)
 
 
+def _resume_artifact_from_dict(value: Any) -> ResumeArtifact:
+    if not isinstance(value, dict):
+        raise StateError("quota resume_artifact must be an object")
+    unknown = sorted(set(value) - RESUME_ARTIFACT_KEYS)
+    missing = sorted(RESUME_ARTIFACT_KEYS - set(value))
+    if unknown or missing:
+        detail = unknown if unknown else missing
+        label = "unknown" if unknown else "missing"
+        raise StateError(
+            f"quota resume_artifact has {label} fields: " + ", ".join(detail)
+        )
+    return ResumeArtifact(
+        **{
+            key: _required_text(value[key], f"resume_artifact.{key}")
+            for key in RESUME_ARTIFACT_KEYS
+        }
+    )
+
+
 @dataclass(frozen=True)
 class QuotaWait:
     """Durable continuation checkpoint for a quota-suspended campaign role."""
@@ -218,6 +245,7 @@ class QuotaWait:
     session_identity: SessionIdentity | None = None
     result_ref: str | None = None
     retry_cursor: int | None = None
+    resume_artifact: ResumeArtifact | None = None
 
     def __post_init__(self) -> None:
         for name in ("reason", "subscription_key", "hold_id", "stage"):
@@ -243,6 +271,10 @@ class QuotaWait:
             or self.retry_cursor < 0
         ):
             raise StateError("quota retry_cursor must be a non-negative integer")
+        if self.resume_artifact is not None and not isinstance(
+            self.resume_artifact, ResumeArtifact
+        ):
+            raise StateError("quota resume_artifact must be a ResumeArtifact")
 
     @classmethod
     def from_dict(cls, value: Any) -> "QuotaWait":
@@ -250,7 +282,7 @@ class QuotaWait:
         if not isinstance(value, dict):
             raise StateError("quota_wait must be an object")
         unknown = sorted(set(value) - QUOTA_WAIT_KEYS)
-        missing = sorted(QUOTA_WAIT_KEYS - set(value))
+        missing = sorted((QUOTA_WAIT_KEYS - {"resume_artifact"}) - set(value))
         if unknown:
             raise StateError(f"quota_wait has unknown fields: {', '.join(unknown)}")
         if missing:
@@ -274,6 +306,11 @@ class QuotaWait:
             ),
             result_ref=value["result_ref"],
             retry_cursor=value["retry_cursor"],
+            resume_artifact=(
+                _resume_artifact_from_dict(value["resume_artifact"])
+                if value.get("resume_artifact") is not None
+                else None
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -296,6 +333,14 @@ class QuotaWait:
             "session_identity": session,
             "result_ref": self.result_ref,
             "retry_cursor": self.retry_cursor,
+            "resume_artifact": (
+                {
+                    key: getattr(self.resume_artifact, key)
+                    for key in RESUME_ARTIFACT_KEYS
+                }
+                if self.resume_artifact is not None
+                else None
+            ),
         }
 
 
