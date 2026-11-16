@@ -451,6 +451,47 @@ def _save_candidate(store: Path, candidate: dict, session_key: str) -> str:
                           opencode_session_id=session_key)
 
 
+def _attach_transcript_origins(
+    candidates: list[dict[str, Any]], messages: list[dict], ref: Any,
+) -> list[dict[str, Any]]:
+    """Attach only message origins that can be tied to each candidate."""
+    from compchem_memory.staging_io import normalize_origins
+
+    base = _session_origin(ref)
+    for candidate in candidates:
+        tools = {
+            str(tool).lower() for tool in candidate.get("tools", [])
+            if isinstance(tool, str) and tool
+        }
+        matched: list[dict[str, str]] = []
+        for message in messages:
+            info = message.get("info") if isinstance(message, dict) else None
+            message_origin = dict(info.get("origin", {})) if isinstance(info, dict) else {}
+            for part in message.get("parts", []) if isinstance(message, dict) else []:
+                if not isinstance(part, dict) or part.get("type") != "tool":
+                    continue
+                name = part.get("tool") or part.get("name")
+                if not isinstance(name, str) or name.lower() not in tools:
+                    continue
+                origin = {**base, **message_origin, "tool": name}
+                server = part.get("server")
+                if isinstance(server, str) and server:
+                    origin["mcp_server"] = server
+                matched.append(origin)
+        candidate["origins"] = normalize_origins(matched or [base])
+    return candidates
+
+
+def _session_origin(ref: Any) -> dict[str, str]:
+    """Return the client/session identity and optional bound model/role."""
+    origin = {"client": ref.harness, "session_id": ref.session_id}
+    if getattr(ref, "model", None):
+        origin["model"] = ref.model
+    if getattr(ref, "role", None):
+        origin["role"] = ref.role
+    return origin
+
+
 def _default_distiller(transcript: str) -> list[dict[str, Any]]:
     from compchem_memory.extraction import AutomaticMemoryExtractor
     return AutomaticMemoryExtractor().distill_transcript(transcript)
@@ -621,6 +662,7 @@ def distill_session_transcript(
     if distillation_failed:
         return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
+    _attach_transcript_origins(kept, new_msgs, ref)
 
     if not commit:
         return {"status": "preview", "candidates": kept}
@@ -745,6 +787,7 @@ def ingest_opencode_sessions(
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
+        _attach_transcript_origins(kept, new_msgs, ref)
 
         # Admission gate (distill-admission plan R1-R4): when
         # MAGNOLIA_ADMISSION_GATE is enabled, candidates pass through the

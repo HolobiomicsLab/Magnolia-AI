@@ -142,3 +142,25 @@ def test_prompt_v2_mandatory_sections_present():
     for marker in ("Quantitative grounding", "CAVEAT:", "Symptoms:", "Cause:",
                    "Fix:", "failure_pattern", "USE THE MOST SPECIFIC TYPE"):
         assert marker in EXTRACTION_SYSTEM_PROMPT, f"missing marker: {marker!r}"
+
+
+def test_generated_candidate_gets_only_matching_tool_origins(tmp_path, monkeypatch):
+    extractor = AutomaticMemoryExtractor()
+    events = [
+        {"event_type": "tool_success", "session_id": "s1", "source": "member-a",
+         "tool": "measure_a", "result_summary": "a"},
+        {"event_type": "tool_success", "session_id": "s1", "source": "member-b",
+         "tool": "measure_b", "result_summary": "b"},
+    ]
+    monkeypatch.setattr("compchem_memory.extraction.is_llm_available", lambda: True)
+    monkeypatch.setattr(extractor, "_llm_distill", lambda _: [{
+        "title": "A result", "content": "a", "tools": ["measure_a"]
+    }])
+
+    candidate = extractor._generate_candidates(events)[0]
+
+    assert candidate["origins"] == [{
+        "session_id": "s1",
+        "tool": "measure_a",
+        "mcp_server": "member-a",
+    }]

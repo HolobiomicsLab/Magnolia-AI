@@ -201,6 +201,8 @@ class HookEvent:
     agent: AgentRef | None = None
     assistant_text: str | None = None
     transcript_ref: str | None = None
+    model: str | None = None
+    role: str | None = None
 
     EVENTS = EVENTS
 
@@ -232,6 +234,8 @@ class HookEvent:
             agent=_agent_ref(d.get("agent")),
             assistant_text=d.get("assistant_text"),
             transcript_ref=d.get("transcript_ref"),
+            model=_optional_text(d.get("model")),
+            role=_optional_text(d.get("role")),
         )
 
 
@@ -246,6 +250,11 @@ def _required_text(d: dict, key: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"hook payload is missing a non-empty {key!r}")
     return value
+
+
+def _optional_text(value: object) -> str | None:
+    """Keep an observed non-empty string; represent everything else as unknown."""
+    return value if isinstance(value, str) and value else None
 
 
 def _tool_call(value: object) -> ToolCall | None:

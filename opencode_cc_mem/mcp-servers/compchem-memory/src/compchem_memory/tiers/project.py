@@ -137,7 +137,10 @@ class ProjectManager:
         references: list[str] | None = None,
         notebook_section: str | None = None,
         run_ids: list[str] | None = None,
+        origins: list[dict[str, str]] | None = None,
     ) -> str:
+        from compchem_memory.staging_io import normalize_origins
+
         if entry_type not in ENTRY_TYPES:
             entry_type = "note"
         if staging:
@@ -165,6 +168,7 @@ class ProjectManager:
             "source": source,
             "observation_count": 1,
             "confidence": confidence,
+            "origins": normalize_origins(origins or []),
         }
         if related_entries:
             frontmatter["related_entries"] = related_entries
@@ -210,6 +214,7 @@ class ProjectManager:
                     "confidence": meta.get("confidence", 0.5),
                     "observation_count": meta.get("observation_count", 0),
                     "source": meta.get("source", ""),
+                    "origins": meta.get("origins", []),
                     "path": str(f),
                 }
             )
@@ -274,6 +279,7 @@ class ProjectManager:
                 "confidence": meta.get("confidence", 0.5),
                 "observation_count": meta.get("observation_count", 0),
                 "source": meta.get("source", ""),
+                "origins": meta.get("origins", []),
                 "path": str(f),
                 "tier": "staging",
                 "score": score,
@@ -550,6 +556,7 @@ class ProjectManager:
         entry_name: str,
         session_id: str | None = None,
         content: str | None = None,
+        origins: list[dict[str, str]] | None = None,
     ) -> bool:
         """Increment observation_count on a staging entry; record session_id if
         provided. If `content` is given and not already present, append it as a
@@ -571,6 +578,10 @@ class ProjectManager:
                     atomic_write_text(f, text.rstrip() + block)
                 self._update_entry_frontmatter(f, "observation_count", new_count)
                 self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
+                from compchem_memory.staging_io import union_origins
+
+                merged = union_origins(meta.get("origins", []), origins or [])
+                self._update_entry_frontmatter(f, "origins", merged)
                 return True
         return False
 

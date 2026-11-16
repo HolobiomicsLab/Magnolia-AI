@@ -39,6 +39,18 @@ V2_RESULT_CAP = 64_000
 _session_managers: dict[str, SessionManager] = {}
 
 
+def _capture_origin(source: str, tool: str) -> dict[str, str]:
+    """Build a tool origin from capture facts and bound launch context."""
+    origin = {"tool": tool, "mcp_server": source}
+    client = os.environ.get("MAGNOLIA_CLIENT")
+    role = os.environ.get("MAGNOLIA_ROLE")
+    if client:
+        origin["client"] = client
+    if role:
+        origin["role"] = role
+    return origin
+
+
 def _resolve_project_dir(project_dir: str | None) -> str:
     """Resolve the project dir the same way the tools do: explicit kwarg, else
     the server's pinned MAGNOLIA_PROJECT_DIR, else cwd.
@@ -344,6 +356,7 @@ def captured(source: str):
                 mgr.record("tool_call", {
                     "source": source,
                     "tool": tool_name,
+                    "origin": _capture_origin(source, tool_name),
                     **_call_fields(full_fidelity, args, kwargs),
                 })
             except Exception:
@@ -359,6 +372,7 @@ def captured(source: str):
                         mgr.record("tool_error", {
                             "source": source,
                             "tool": tool_name,
+                            "origin": _capture_origin(source, tool_name),
                             "duration_ms": duration_ms,
                             "capture_version": (
                                 CAPTURE_VERSION_FULL
@@ -379,6 +393,7 @@ def captured(source: str):
                     mgr.record("tool_success", {
                         "source": source,
                         "tool": tool_name,
+                        "origin": _capture_origin(source, tool_name),
                         "duration_ms": duration_ms,
                         **_result_fields(full_fidelity, result),
                     })

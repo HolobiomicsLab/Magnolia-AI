@@ -97,6 +97,20 @@ class TestProjectManager:
         assert mgr.search_staging(str(project_dir), tags=["docking"])
         assert mgr.search_staging(str(project_dir), keyword="nomatch-zzz") == []
 
+    def test_search_and_confirm_keep_origins(self, project_dir):
+        mgr = ProjectManager(project_dir)
+        path = mgr.create_entry(
+            str(project_dir), "Origin staged", "traceable result", staging=True,
+            origins=[{"client": "claude", "session_id": "s1"}],
+        )
+
+        shown = mgr.search_staging(str(project_dir), keyword="traceable")
+        promoted = mgr.confirm_staging(str(project_dir), Path(path).name)
+
+        assert shown[0]["origins"] == [{"client": "claude", "session_id": "s1"}]
+        promoted_meta = mgr._parse_frontmatter(Path(promoted).read_text())
+        assert promoted_meta["origins"] == shown[0]["origins"]
+
     def test_search_entries_multiword_matches_any_token(self, project_dir):
         mgr = ProjectManager(project_dir)
         mgr.create_entry(str(project_dir), "RKALQ Finding", "RKALQ register shift detail")

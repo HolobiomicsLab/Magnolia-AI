@@ -465,13 +465,14 @@ class AutomaticMemoryExtractor:
         # Fallback to heuristic extraction
         if not candidates:
             for err, resolution in self._find_error_resolutions(events):
+                tool = _tool_for_error(events, err)
                 candidates.append(
                     {
                         "type": "error_resolution",
                         "title": f"Resolved: {err[:80]}",
                         "content": f"## Error\n{err}\n\n## Resolution\n{resolution}",
                         "tags": ["error-resolution", "auto"],
-                        "tools": [],
+                        "tools": [tool] if tool else [],
                         "confidence": 0.8,
                     }
                 )
@@ -519,7 +520,7 @@ class AutomaticMemoryExtractor:
                     }
                 )
 
-        return candidates
+        return _attach_event_origins(candidates, events)
 
     def preview(self, session_path: Path) -> list[dict[str, Any]]:
         """Compute candidate learnings and return them. Saves nothing, advances
@@ -701,3 +702,66 @@ def _link_run_ids(store: Path, candidate: dict[str, Any]) -> list[str]:
         if run_id and run_id in text:
             run_ids.append(run_id)
     return run_ids
+
+
+def _tool_for_error(events: list[dict[str, Any]], error: str) -> str | None:
+    """Return the observed tool that emitted an extracted error."""
+    for event in events:
+        if event.get("event_type") == "tool_error" and event.get("error") == error:
+            tool = event.get("tool")
+            return tool if isinstance(tool, str) and tool else None
+    return None
+
+
+def _attach_event_origins(
+    candidates: list[dict[str, Any]], events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Bind candidates to matching captured tools, or only to known sessions."""
+    from compchem_memory.staging_io import normalize_origins
+
+    for candidate in candidates:
+        tools = {
+            str(tool).lower() for tool in candidate.get("tools", [])
+            if isinstance(tool, str) and tool
+        }
+        matched = [
+            _event_origin(event, include_tool=True)
+            for event in events
+            if str(event.get("tool") or "").lower() in tools
+        ]
+        origins = normalize_origins(matched)
+        if not origins:
+            origins = normalize_origins([
+                _event_origin(event, include_tool=False) for event in events
+            ])
+        candidate["origins"] = origins
+    return candidates
+
+
+def _event_origin(event: dict[str, Any], *, include_tool: bool) -> dict[str, str]:
+    """Extract observed origin fields from one captured session event."""
+    stored = event.get("origin")
+    origin = dict(stored) if isinstance(stored, dict) else {}
+    direct = {
+        "client": event.get("client"),
+        "session_id": event.get("session_id"),
+        "model": event.get("model"),
+        "role": event.get("role"),
+    }
+    for field, value in direct.items():
+        if isinstance(value, str) and value:
+            origin.setdefault(field, value)
+    agent = event.get("agent")
+    if isinstance(agent, dict) and agent.get("id"):
+        origin.setdefault("agent_id", agent["id"])
+        if agent.get("type"):
+            origin.setdefault("agent_type", agent["type"])
+    if include_tool:
+        if isinstance(event.get("tool"), str) and event["tool"]:
+            origin.setdefault("tool", event["tool"])
+        if isinstance(event.get("source"), str) and event["source"]:
+            origin.setdefault("mcp_server", event["source"])
+    else:
+        for field in ("agent_id", "agent_type", "tool", "mcp_server"):
+            origin.pop(field, None)
+    return origin
