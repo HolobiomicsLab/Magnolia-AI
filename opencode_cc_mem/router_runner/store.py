@@ -259,18 +259,22 @@ class ControlStore:
         *,
         hold_id: str | None = None,
         reset_at: str | None = None,
+        clear_input: bool = False,
     ) -> None:
-        """Persist a waiter transition without changing its private input."""
+        """Persist a waiter transition and optionally erase completed input."""
+        changes = {
+            "state": state,
+            "hold_id": hold_id,
+            "reset_at": reset_at,
+            "updated_at": now,
+        }
+        if clear_input:
+            changes.update({"text": "", "context": ""})
         self.update(
             "eval_waiters",
             "waiter_id",
             waiter_id,
-            {
-                "state": state,
-                "hold_id": hold_id,
-                "reset_at": reset_at,
-                "updated_at": now,
-            },
+            changes,
         )
         self.conn.commit()
 
