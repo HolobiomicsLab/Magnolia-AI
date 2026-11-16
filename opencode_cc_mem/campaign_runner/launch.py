@@ -103,6 +103,30 @@ MEMORY_PROVIDER_ENV = frozenset(
         "ZAI_API_KEY",
     }
 )
+EXPLICIT_CHILD_ENV_NAMES = frozenset(
+    {
+        "COMPCHEM_TOOLS_PORT",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORK_DIR",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "PYTHONPYCACHEPREFIX",
+    }
+)
 DEFAULT_GOVERNOR_CAP = 60
 ROLE_CONFIG_NAMES = {
     "worker": "campaign-worker",
@@ -144,6 +168,7 @@ class PreparedLaunch:
     policy_digest: str
     config_digest: str
     required_capability_identity: str
+    protected_env_names: frozenset[str]
     client_sha256: str | None = None
     memory_service_handle: Any = None
 
@@ -1687,9 +1712,33 @@ def _prepared(
         policy_digest=policy_digest,
         config_digest=config_digest,
         required_capability_identity=capability_identity,
+        protected_env_names=_contract_environment_names(context, env),
         client_sha256=client_sha256,
         memory_service_handle=context.memory_service.get("_handle"),
     )
+
+
+def _contract_environment_names(
+    context: ExecContext, env: Mapping[str, str]
+) -> frozenset[str]:
+    """Return env names Magnolia deliberately sets or forwards by contract."""
+    names = set(EXPLICIT_CHILD_ENV_NAMES)
+    names.update(str(name) for name in context.renderer_env)
+    if context.route is not None and context.route.model:
+        names.add("MAGNOLIA_MODEL")
+    if context.setup.get("memory_model"):
+        names.add("MAGNOLIA_MEMORY_MODEL")
+    if context.setup.get("memory_provider"):
+        names.add("MAGNOLIA_MEMORY_PROVIDER")
+    if context.route is not None and context.route.client == "vibe":
+        names.add("VIBE_ENABLE_TELEMETRY")
+    service_names = context.memory_service.get("env_vars", ())
+    if isinstance(service_names, (list, tuple)):
+        names.update(str(name) for name in service_names)
+    authorization = context.memory_service.get("authorization_env")
+    if isinstance(authorization, str):
+        names.add(authorization)
+    return frozenset(names & set(env))
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:

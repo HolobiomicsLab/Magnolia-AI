@@ -592,7 +592,16 @@ def test_codex_allows_builtin_openai_owner_provider(tmp_path):
     assert isinstance(executor_for(context.route, "helper", context), CodexExecutor)
 
 
-@pytest.mark.parametrize("provider", ("openai", "ollama", "lmstudio"))
+@pytest.mark.parametrize(
+    "provider",
+    (
+        "openai",
+        "ollama",
+        "lmstudio",
+        "amazon-bedrock",
+        "amazon-bedrock-runtime",
+    ),
+)
 def test_codex_refuses_owner_definition_of_builtin_provider(tmp_path, provider):
     context = _context(tmp_path)
     trust = Path(context.setup["codex_user_config_path"])
@@ -632,6 +641,45 @@ def test_codex_refuses_nonempty_owner_shell_filters_with_named_key(tmp_path):
     )
 
     with pytest.raises(ExecutorRefused, match=r"shell_environment_policy\.filters"):
+        executor_for(context.route, "helper", context)
+
+
+@pytest.mark.parametrize(
+    ("owner_setting", "variant"),
+    (
+        (
+            '[SHELL_ENVIRONMENT_POLICY]\nx = 1\n'
+            '[shell_environment_policy.set]\nOPENAI_API_KEY = "sentinel"\n',
+            "SHELL_ENVIRONMENT_POLICY",
+        ),
+        (
+            '[shell-environment-policy]\nx = 1\n'
+            '[shell_environment_policy.set]\nHTTPS_PROXY = "sentinel"\n',
+            "shell-environment-policy",
+        ),
+        (
+            '[shell_environment_policy]\nSET = {}\n'
+            '[shell_environment_policy.set]\nPATH = "sentinel"\n',
+            "SET",
+        ),
+        (
+            '[shell_environment_policy]\nFILTERS = {}\n'
+            '[shell_environment_policy.filters]\nCUSTOM = "keep"\n',
+            "FILTERS",
+        ),
+        ('MODEL_PROVIDER = "openai"\n', "MODEL_PROVIDER"),
+        ('[MODEL_PROVIDERS.openrouter]\nname = "custom"\n', "MODEL_PROVIDERS"),
+        ('OPENAI-BASE-URL = "https://redirect.invalid"\n', "OPENAI-BASE-URL"),
+    ),
+)
+def test_codex_refuses_ambiguous_owner_security_key_variant(
+    tmp_path, owner_setting, variant
+):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(owner_setting + trust.read_text())
+
+    with pytest.raises(ExecutorRefused, match=variant):
         executor_for(context.route, "helper", context)
 
 
@@ -683,6 +731,19 @@ def test_codex_allows_and_hashes_benign_owner_shell_set_value(tmp_path):
     assert value not in json.dumps(relevant)
 
 
+def test_codex_parent_environment_does_not_protect_benign_owner_set(tmp_path):
+    context = _context(tmp_path)
+    name = "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"
+    context.environment[name] = "inherited-parent-value"
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + f'\n[shell_environment_policy.set]\n{name} = "owner-value"\n'
+    )
+
+    assert isinstance(executor_for(context.route, "helper", context), CodexExecutor)
+
+
 @pytest.mark.parametrize("role", ("helper", "evaluator"))
 def test_codex_helper_evaluator_digest_keeps_unpinned_execution_settings(role):
     payload = {
@@ -704,11 +765,22 @@ def test_codex_worker_reviewer_digest_drops_only_their_pins(role):
             "unbounded_connection_retries": False,
         },
         "shell_environment_policy": {"inherit": "all"},
-        "sandbox_workspace_write": {"exclude_slash_tmp": True},
+        "sandbox_workspace_write": {
+            "network_access": True,
+            "writable_roots": ["/owner"],
+            "exclude_slash_tmp": True,
+            "exclude_tmpdir_env_var": False,
+            "future_setting": "kept",
+        },
     }
 
     assert _relevant_owner_config(payload, role=role) == {
-        "features": {"unbounded_connection_retries": False}
+        "features": {"unbounded_connection_retries": False},
+        "sandbox_workspace_write": {
+            "exclude_slash_tmp": True,
+            "exclude_tmpdir_env_var": False,
+            "future_setting": "kept",
+        },
     }
 
 
@@ -1082,6 +1154,10 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["--config=network_access=true"],
         ["-c", 'shell_environment_policy.inherit="all"'],
         ["-c", "features.computer_use=true"],
+        ['-capproval_policy="on-request"'],
+        ['-c=approval_policy="on-request"'],
+        ['--config=approval_policy="on-request"'],
+        ["-cdangerously_bypass_approvals_and_sandbox=true"],
         ["--enable", "computer_use"],
         ["--enable=computer_use"],
     ),

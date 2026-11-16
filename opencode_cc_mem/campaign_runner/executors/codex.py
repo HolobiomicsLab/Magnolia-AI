@@ -75,7 +75,13 @@ ISOLATION_PINNED_OWNER_KEYS = frozenset({
     "shell_environment_policy",
     "web_search",
 })
-BUILTIN_PROVIDER_IDS = frozenset({"openai", "ollama", "lmstudio"})
+BUILTIN_PROVIDER_IDS = frozenset({
+    "amazon-bedrock",
+    "amazon-bedrock-runtime",
+    "lmstudio",
+    "ollama",
+    "openai",
+})
 NONEXECUTING_OWNER_KEYS = frozenset({
     "desktop",
     "marketplaces",
@@ -483,7 +489,7 @@ class CodexExecutor:
         payload = _read_codex_config(path)
         _refuse_owner_redirects(
             payload,
-            protected_env_names=frozenset(self.prepared.env),
+            protected_env_names=self.prepared.protected_env_names,
         )
         self._disable_overrides = tuple(
             self._discovered_disable_overrides(owner_payload=payload)
@@ -858,8 +864,11 @@ def _refuse_owner_redirects(
 
 
 def _redirect_key(payload: Mapping[str, Any]) -> str | None:
+    variant = _redirect_key_variant(payload)
+    if variant is not None:
+        return variant
     for raw_key, value in payload.items():
-        key = str(raw_key).casefold().replace("-", "_")
+        key = str(raw_key)
         if key == "model_providers":
             if not isinstance(value, Mapping):
                 return str(raw_key)
@@ -875,35 +884,53 @@ def _redirect_key(payload: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _redirect_key_variant(payload: Mapping[str, Any]) -> str | None:
+    for raw_key in payload:
+        key = str(raw_key)
+        normalized = key.casefold().replace("-", "_")
+        if key != normalized and (
+            normalized in {"model_provider", "model_providers"}
+            or _is_base_url_key(normalized)
+        ):
+            return key
+    return None
+
+
 def _unsafe_shell_environment_key(
     payload: Mapping[str, Any], protected_env_names: frozenset[str]
 ) -> str | None:
     """Return the first owner shell-policy key that can alter governed execution."""
-    raw_name, policy = _normalized_entry(payload, "shell_environment_policy")
-    if raw_name is None or not isinstance(policy, Mapping):
+    variant = _key_variant(payload, "shell_environment_policy")
+    if variant is not None:
+        return variant
+    policy = payload.get("shell_environment_policy")
+    if not isinstance(policy, Mapping):
         return None
-    filters_name, filters = _normalized_entry(policy, "filters")
-    if filters_name is not None and filters:
-        return f"{raw_name}.{filters_name}"
-    set_name, entries = _normalized_entry(policy, "set")
-    if set_name is None:
+    for wanted in ("filters", "set"):
+        variant = _key_variant(policy, wanted)
+        if variant is not None:
+            return f"shell_environment_policy.{variant}"
+    filters = policy.get("filters")
+    if filters:
+        return "shell_environment_policy.filters"
+    if "set" not in policy:
         return None
+    entries = policy["set"]
     if not isinstance(entries, Mapping):
-        return f"{raw_name}.{set_name}"
+        return "shell_environment_policy.set"
     protected = {name.casefold() for name in protected_env_names}
     for name in entries:
         if _is_protected_environment_name(str(name), protected):
-            return f"{raw_name}.{set_name}.{name}"
+            return f"shell_environment_policy.set.{name}"
     return None
 
 
-def _normalized_entry(
-    payload: Mapping[str, Any], wanted: str
-) -> tuple[str | None, Any]:
-    for raw_key, value in payload.items():
-        if str(raw_key).casefold().replace("-", "_") == wanted:
-            return str(raw_key), value
-    return None, None
+def _key_variant(payload: Mapping[str, Any], wanted: str) -> str | None:
+    for raw_key in payload:
+        key = str(raw_key)
+        if key != wanted and key.casefold().replace("-", "_") == wanted:
+            return key
+    return None
 
 
 def _is_protected_environment_name(name: str, protected: set[str]) -> bool:
@@ -954,6 +981,19 @@ def _relevant_owner_config(
         key = str(raw_key)
         normalized = key.casefold().replace("-", "_")
         if normalized in NONEXECUTING_OWNER_KEYS:
+            continue
+        if (
+            role in {"worker", "reviewer"}
+            and normalized == "sandbox_workspace_write"
+            and isinstance(value, Mapping)
+        ):
+            remaining = {
+                str(name): setting
+                for name, setting in value.items()
+                if str(name) not in {"network_access", "writable_roots"}
+            }
+            if remaining:
+                relevant[key] = remaining
             continue
         if normalized in pinned_owner_keys:
             if (
@@ -1011,7 +1051,7 @@ def _relevant_owner_config(
 
 
 def _hashed_shell_environment_set(policy: Mapping[str, Any]) -> dict[str, Any]:
-    _raw_name, entries = _normalized_entry(policy, "set")
+    entries = policy.get("set")
     if not isinstance(entries, Mapping):
         return {}
     return {
@@ -1052,6 +1092,8 @@ def _validate_final_argv(argv: list[str]) -> None:
             _validate_config_override(options[index + 1], pinned)
         elif value.startswith("--config="):
             _validate_config_override(value.split("=", 1)[1], pinned)
+        elif value.startswith("-c") and len(value) > 2:
+            _validate_config_override(value[2:].removeprefix("="), pinned)
         if value == "--enable" and index + 1 < len(options):
             _validate_feature_switch(options[index + 1], True, pinned)
         elif value.startswith("--enable="):
