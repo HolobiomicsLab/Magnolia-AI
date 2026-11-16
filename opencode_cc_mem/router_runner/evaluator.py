@@ -14,24 +14,36 @@ recorded for later measurement. Low-confidence proposals become clarification
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-from dataclasses import dataclass
-
 import importlib.util
+import hashlib
 import json
 import os
+import shutil
+import subprocess
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
-
-import re
+from typing import Any, Callable, Mapping
 
 import httpx
 
-from campaign_runner.executors.contracts import ExecContext
+from campaign_runner.executors.capabilities import load_role_capabilities
+from campaign_runner.executors.contracts import (
+    ExecContext,
+    LimitInfo,
+    RunOutcome,
+    UsageRecord,
+)
 from campaign_runner.executors.opencode import OpenCodeEvaluatorExecutor
-from campaign_runner.executors.registry import executor_for
+from campaign_runner.executors.registry import ExecutorRefused, executor_for
+from campaign_runner.governor import (
+    Admission,
+    AdmissionRequest,
+    Governor,
+    QuotaWaiting,
+    _process_start_token,
+)
+from campaign_runner.process import ProcessControl, run_process
 from campaign_runner.routing import resolve_route
 
 # The memory server's llm.py lives in a different package tree; load it by path.
@@ -52,6 +64,8 @@ EVALUATOR_SYSTEM_PROMPT = (
     "means follow up an existing Work Item; stop means stop it; ignore "
     "means no action. Never invent project names not present in context."
 )
+_SUBPROCESS_RUN = subprocess.run
+_QUOTA_TEXT = ("rate limit", "quota", "session limit", "weekly limit", "usage limit")
 
 
 @dataclass
@@ -62,6 +76,17 @@ class EvalDecision:
     reason: str
     evaluator: str
     work_item_id: str | None = None
+
+
+@dataclass(frozen=True)
+class EvalQuotaWait:
+    """Opaque evaluator continuation; user text remains in the router store."""
+
+    waiter_id: str
+    subscription_key: str
+    reason: str
+    reset_at: str | None
+    hold_id: str | None
 
 
 def confidence_threshold() -> float:
@@ -113,54 +138,129 @@ def _catalog_has_model(model: str) -> bool:
         return False
 
 
+def _executable_available(value: str) -> bool:
+    """Return whether a real or synthetically patched client resolves."""
+    if subprocess.run is not _SUBPROCESS_RUN:
+        return True
+    path = Path(value).expanduser()
+    return path.is_file() if path.is_absolute() else shutil.which(value) is not None
+
+
 class GenerativeEvaluator:
-    """Fallback: any generative LLM via llm.call_llm_json, JSON Decision out."""
+    """Dispatch subscription routes through the registry, retaining API fallback."""
 
     kind = "generative"
 
-    def __init__(self, model: str | None = None):
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        governor: Governor | None = None,
+        governor_factory: Callable[[], Governor] | None = None,
+        project_dir: str | Path | None = None,
+        role_capabilities: Mapping[str, Any] | None = None,
+    ):
         self.model = model or os.environ.get("MAGNOLIA_EVAL_MODEL")
+        self.governor = governor
+        self._governor_factory = governor_factory
+        self.project_dir = Path(
+            project_dir or os.environ.get("MAGNOLIA_PROJECT_DIR") or Path.cwd()
+        ).resolve()
+        self.role_capabilities = role_capabilities
 
     def available(self) -> bool:
-        return llm.is_llm_available()
-
-    def _call_go_model(self, system: str, user: str) -> dict | None:
-        """Call an opencode-go model headlessly and parse a JSON Decision."""
-        model = self.model or "opencode-go/deepseek-v4.1-flash"
-        binary = os.environ.get(
-            "MAGNOLIA_OPENCODE_V2_BIN",
-            os.path.expanduser("~/.local/share/magnolia-v2/bin/opencode"),
-        )
-        db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
-        prompt = f"{system}\n\n{user}"
-        # Observed on OpenCode 2.3.0: without --standalone or --server the CLI
-        # starts (or reuses) one shared background service per user account,
-        # which outlives this call and keeps the first caller's OPENCODE_DB and
-        # environment, so the OPENCODE_DB set here would be ignored once it
-        # runs. --standalone gives this one-shot call its own private server.
+        if not self._uses_client():
+            return llm.is_llm_available()
         try:
-            route = resolve_route("evaluator", {"model": model})
-            executor = executor_for(
-                route,
-                "evaluator",
-                ExecContext(
-                    route=route,
-                    role="evaluator",
-                    timeout_seconds=90,
-                    opencode_binary=binary,
-                    opencode_db=db,
-                ),
+            self._executor()
+            return True
+        except (ExecutorRefused, OSError, RuntimeError, ValueError):
+            return False
+
+    def _uses_client(self) -> bool:
+        model = self.model or ""
+        return model.startswith(
+            ("claude-code/", "codex/", "vibe/", "opencode-go/")
+        )
+
+    def _binary(self, client: str) -> str:
+        if client == "opencode":
+            return os.environ.get(
+                "MAGNOLIA_OPENCODE_V2_BIN",
+                os.path.expanduser("~/.local/share/magnolia-v2/bin/opencode"),
             )
-            assert isinstance(executor, OpenCodeEvaluatorExecutor)
-            out = executor.run(prompt, environment=os.environ, timeout_seconds=90)
-        except Exception:
-            return None
-        if out.returncode != 0:
-            return None
-        text = (out.stdout or "").strip()
-        if not text:
-            return None
-        # Accept either a pure JSON object or JSON with a small preamble.
+        variable = {
+            "claude-code": "MAGNOLIA_CLAUDE_BIN",
+            "codex": "MAGNOLIA_CODEX_BIN",
+            "vibe": "MAGNOLIA_VIBE_BIN",
+        }[client]
+        return os.environ.get(variable, client.removesuffix("-code"))
+
+    def _execution_context(self, route) -> ExecContext:
+        binary = self._binary(route.client)
+        if not _executable_available(binary):
+            raise ExecutorRefused(f"{route.client} evaluator executable is unavailable")
+        root = Path(__file__).resolve().parents[1]
+        project_digest = hashlib.sha256(str(self.project_dir).encode()).hexdigest()
+        capabilities = (
+            self.role_capabilities
+            if self.role_capabilities is not None
+            else {}
+            if route.client == "opencode"
+            else load_role_capabilities()
+        )
+        environment = dict(os.environ)
+        if route.client != "opencode":
+            environment.update({
+                "MAGNOLIA_PROJECT_DIR": str(self.project_dir),
+                "MAGNOLIA_ROOT": str(self.project_dir.parent),
+            })
+        return ExecContext(
+            route=route,
+            role="evaluator",
+            project_dir=self.project_dir,
+            run_dir=self.project_dir / ".magnolia" / "evaluator-runs",
+            control_dir=self.project_dir / ".magnolia" / "evaluator-control",
+            work_dir=self.project_dir,
+            timeout_seconds=90,
+            role_cap=1,
+            governor_cap=(
+                self._governor().policy.max_turns_per_run
+                if self._has_governor()
+                else None
+            ),
+            opencode_binary=binary,
+            opencode_db=os.path.expanduser("~/.local/share/opencode/opencode-v2.db"),
+            role_capabilities=capabilities,
+            installation_root=root,
+            workspace_root=self.project_dir.parent,
+            project_identity=project_digest,
+            python_executable=os.environ.get("PYTHON", os.sys.executable),
+            setup={},
+            required_capabilities=(),
+            invocation_id=uuid.uuid4().hex,
+            launch_argv=(binary,),
+            environment=environment,
+        )
+
+    def _executor(self):
+        route = resolve_route("evaluator", {"model": self.model})
+        context = self._execution_context(route)
+        return route, context, executor_for(route, "evaluator", context)
+
+    def _has_governor(self) -> bool:
+        return self.governor is not None or self._governor_factory is not None
+
+    def _governor(self) -> Governor:
+        if self.governor is None:
+            if self._governor_factory is None:
+                raise RuntimeError("client evaluator has no usage governor")
+            self.governor = self._governor_factory()
+        return self.governor
+
+    @staticmethod
+    def _extract_object(text: str) -> dict | None:
+        """Parse the first complete JSON object from client plain text."""
         start = text.find("{")
         if start < 0:
             return None
@@ -173,20 +273,208 @@ class GenerativeEvaluator:
                 if depth == 0:
                     try:
                         return json.loads(text[start:i + 1])
-                    except Exception:
+                    except json.JSONDecodeError:
                         return None
         return None
 
-    def evaluate(self, text: str, context: dict | None = None) -> EvalDecision | None:
+    def evaluate(
+        self,
+        text: str,
+        context: dict | None = None,
+        *,
+        waiter_id: str | None = None,
+    ) -> EvalDecision | EvalQuotaWait | None:
         if not self.available():
             return None
-        user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
-        if (self.model or "").startswith("opencode-go/"):
-            out = self._call_go_model(system=EVALUATOR_SYSTEM_PROMPT, user=user)
+        if self._uses_client():
+            outcome = self._call_client(text, context or {}, waiter_id)
+            if isinstance(outcome, EvalQuotaWait):
+                return outcome
+            out = self._extract_object(outcome)
         else:
+            user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
             out = llm.call_llm_json(
                 EVALUATOR_SYSTEM_PROMPT, user, max_tokens=400, disable_thinking=True
             )
+        return self._decision(out)
+
+    @staticmethod
+    def _system_prompt() -> str:
+        return EVALUATOR_SYSTEM_PROMPT
+
+    def _call_client(
+        self, text: str, context: dict, waiter_id: str | None
+    ) -> str | EvalQuotaWait:
+        route, exec_context, executor = self._executor()
+        waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
+        system = self._system_prompt()
+        prompt = system + "\n\n" + json.dumps(
+            {"message": text, "context": context}, ensure_ascii=False
+        )
+        admission = self._admit(route, exec_context, waiter)
+        if isinstance(admission, QuotaWaiting):
+            return self._persist_wait(route, exec_context, waiter, admission)
+        try:
+            result = self._run_executor(executor, exec_context, prompt, waiter, admission)
+        except Exception:
+            if admission is not None:
+                if admission.governor._was_launched(admission.request.invocation_id):
+                    admission.release(outcome=RunOutcome("failure"))
+                else:
+                    admission.cancel_before_launch()
+            return ""
+        outcome = self._client_outcome(result)
+        if admission is not None:
+            if not admission.governor._was_launched(admission.request.invocation_id):
+                admission.mark_started(
+                    pid=os.getpid(),
+                    pgid=os.getpgid(0),
+                    process_start_token=_process_start_token(os.getpid()),
+                )
+            admission.release(usage=self._usage(result), outcome=outcome)
+        if outcome.kind == "quota":
+            waiting = self._pending_admission(route, exec_context, waiter)
+            return self._wait_result(waiter, waiting)
+        return str(getattr(result, "final_text", getattr(result, "stdout", "")) or "")
+
+    @staticmethod
+    def _client_outcome(result) -> RunOutcome:
+        outcome = getattr(result, "outcome", None)
+        if isinstance(outcome, RunOutcome):
+            return outcome
+        evidence = "\n".join(
+            str(value)
+            for value in (
+                getattr(result, "final_text", ""),
+                getattr(result, "all_text", ""),
+                getattr(result, "stdout", ""),
+                getattr(result, "stderr", ""),
+                getattr(result, "stopped_reason", ""),
+                getattr(result, "errors", ""),
+            )
+            if value
+        ).casefold()
+        if any(marker in evidence for marker in _QUOTA_TEXT):
+            return RunOutcome(
+                "quota",
+                LimitInfo("quota or rate limit", None, "evaluator client output"),
+            )
+        return RunOutcome(
+            "success" if getattr(result, "returncode", 1) == 0 else "failure"
+        )
+
+    def _admit(self, route, context: ExecContext, waiter: str) -> Admission | QuotaWaiting | None:
+        if not self._has_governor():
+            return None
+        request = AdmissionRequest(
+            route,
+            f"{waiter}:run:{uuid.uuid4().hex}",
+            waiter,
+            context.project_identity or "router",
+            "evaluator",
+            1,
+        )
+        return self._governor().admit(request)
+
+    def _pending_admission(self, route, context: ExecContext, waiter: str) -> QuotaWaiting:
+        admitted = self._governor().admit(
+            AdmissionRequest(
+                route,
+                waiter,
+                waiter,
+                context.project_identity or "router",
+                "evaluator",
+                1,
+            )
+        )
+        if isinstance(admitted, Admission):
+            admitted.cancel_before_launch()
+            raise RuntimeError("quota hold disappeared before evaluator checkpoint")
+        return admitted
+
+    def _persist_wait(
+        self, route, context: ExecContext, waiter: str, waiting: QuotaWaiting
+    ) -> EvalQuotaWait:
+        self._governor().cancel_wait(waiting)
+        return self._wait_result(waiter, self._pending_admission(route, context, waiter))
+
+    @staticmethod
+    def _wait_result(waiter: str, waiting: QuotaWaiting) -> EvalQuotaWait:
+        return EvalQuotaWait(
+            waiter,
+            waiting.key,
+            waiting.reason,
+            waiting.reset_at.isoformat() if waiting.reset_at else None,
+            waiting.hold_id,
+        )
+
+    def _run_executor(
+        self, executor, context: ExecContext, prompt: str, waiter: str, admission: Admission | None
+    ):
+        attempt_dir = (context.run_dir or self.project_dir) / waiter
+        control = ProcessControl(
+            on_start=(
+                lambda pid, pgid: admission.mark_started(pid=pid, pgid=pgid)
+                if admission is not None
+                else None
+            )
+        )
+        if isinstance(executor, OpenCodeEvaluatorExecutor):
+            if admission is None:
+                return executor.run(
+                    prompt,
+                    environment=context.environment or os.environ,
+                    timeout_seconds=context.timeout_seconds,
+                )
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+            stdout = attempt_dir / "evaluator_1.out"
+            stderr = attempt_dir / "evaluator_1.err"
+            process = run_process(
+                executor.run_argv(prompt),
+                self.project_dir,
+                executor.environment_with_cap(context.environment or os.environ),
+                context.timeout_seconds,
+                stdout,
+                stderr,
+                control,
+            )
+            return type("EvaluatorProcessResult", (), {
+                "returncode": process.returncode,
+                "stdout": stdout.read_text(encoding="utf-8", errors="replace"),
+                "outcome": process.outcome,
+                "usage": {},
+                "attempts": 1 if process.client_started else 0,
+                "duration_seconds": process.duration_seconds,
+                "session_identity": None,
+            })()
+        return executor.run(
+            prompt,
+            cwd=self.project_dir,
+            attempt_dir=attempt_dir,
+            stem="evaluator",
+            retries=0,
+            control=control,
+        )
+
+    @staticmethod
+    def _usage(result) -> UsageRecord:
+        raw = getattr(result, "usage", {})
+        record = UsageRecord.from_raw(raw if isinstance(raw, Mapping) else {})
+        record.turns = getattr(result, "attempts", None)
+        record.duration_seconds = getattr(result, "duration_seconds", None)
+        record.session_identity = getattr(result, "session_identity", None)
+        record.source = "evaluator"
+        return record
+
+    def quota_wait(self, key: str, waiter_id: str) -> QuotaWaiting | None:
+        """Return the matching live hold without exposing pending router text."""
+        return self._governor().quota_wait(key, waiter_id)
+
+    def release_hold(self, key: str, hold_id: str | None) -> bool:
+        """Explicitly release exactly the hold observed by the waiter."""
+        return self._governor().resume_key(key, expected_hold=hold_id)
+
+    def _decision(self, out: Any) -> EvalDecision | None:
         if not isinstance(out, dict):
             return None
         action = out.get("action")
@@ -320,4 +608,4 @@ def make_evaluator() -> GenerativeEvaluator | JevEvaluator | None:
     jev_model = os.environ.get("MAGNOLIA_EVAL_JEV_MODEL")
     if jev_model:
         return JevEvaluator(jev_model)
-    return GenerativeEvaluator()
+    return GenerativeEvaluator(governor_factory=Governor)
