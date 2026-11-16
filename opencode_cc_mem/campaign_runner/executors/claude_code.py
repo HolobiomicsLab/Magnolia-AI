@@ -25,7 +25,13 @@ from campaign_runner.workers import (
     WorkerResult,
 )
 
-from .contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .contracts import (
+    LimitInfo,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+    UsageRecord,
+)
 from .registry import ExecutorRefused
 
 if TYPE_CHECKING:
@@ -246,6 +252,7 @@ class ClaudeCodeExecutor:
     timeout_seconds: int = 1800
     governance: InvocationGovernance | None = None
     resume_permitted: bool = False
+    resume_artifact: ResumeArtifact | None = None
     quota_detector: QuotaDetector | None = None
 
     def __post_init__(self) -> None:
@@ -271,6 +278,8 @@ class ClaudeCodeExecutor:
             raise WorkerError(f"forbidden Claude launch flag: {forbidden}")
         if len(self.prepared.argv) != 1:
             raise WorkerError("Claude prepared argv must contain exactly one executable")
+        if self.resume_artifact is not None:
+            self._accept_resume_artifact(self.resume_artifact)
 
     def run(
         self,
@@ -285,10 +294,15 @@ class ClaudeCodeExecutor:
         """Run at most one same-session empty-output retry."""
         if retries not in (None, 0, 1):
             raise WorkerError("Claude permits at most one empty-output retry")
+        if self.resume_artifact is not None:
+            if resume_session not in (None, self.resume_artifact.session_id):
+                raise ExecutorRefused("Claude resume session differs from its artifact")
+            resume_session = self.resume_artifact.session_id
         if resume_session is not None and not self.resume_permitted:
-            raise ExecutorRefused(
-                "Claude resume requires the same prepared configuration identity"
-            )
+            if self.resume_artifact is None:
+                raise ExecutorRefused(
+                    "Claude resume requires the same prepared configuration identity"
+                )
         if resume_session is not None:
             self._require_bound_session(resume_session)
         retry_limit = 1 if retries is None else retries
@@ -420,6 +434,8 @@ class ClaudeCodeExecutor:
             stopped_reason,
             errors,
             outcome,
+            identity,
+            self._resume_artifact(session_id),
         )
 
     def _argv(self, prompt: str, session_id: str | None, max_turns: int) -> list[str]:
@@ -521,6 +537,25 @@ class ClaudeCodeExecutor:
     def _binding_path(self) -> Path:
         return self.prepared.invocation_dir / "session-bindings.json"
 
+    def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
+        if session_id is None:
+            return None
+        binding = self._binding_identity()
+        return ResumeArtifact(
+            "claude-code",
+            session_id,
+            binding["configuration_identity_digest"],
+            binding["role"],
+            binding["project_identity"],
+        )
+
+    def _accept_resume_artifact(self, artifact: ResumeArtifact) -> None:
+        if artifact != self._resume_artifact(artifact.session_id):
+            raise ExecutorRefused(
+                "Claude resume artifact does not match client, role, policy, or project"
+            )
+        self._bind_session(artifact.session_id)
+
     def _load_bindings(self) -> dict[str, Any]:
         path = self._binding_path()
         if not path.exists():
@@ -604,7 +639,7 @@ class ClaudeCodeExecutor:
             admitted = governance.governor.admit(request, control)
             if isinstance(admitted, Admission):
                 return admitted
-            if admitted.reason in {"quota", "cancelled"}:
+            if admitted.reason in {"quota", "daily_limit", "cancelled"}:
                 return admitted
             if not governance.governor.wait(admitted, control):
                 return QuotaWaiting(admitted.key, admitted.caller_id, "cancelled")
@@ -615,12 +650,19 @@ class ClaudeCodeExecutor:
         assert self.governance is not None
         self.governance.governor.cancel_wait(waiting)
         reason = _control_reason(control) or waiting.reason
-        if waiting.reason != "quota":
+        if waiting.reason not in {"quota", "daily_limit"}:
             return RunOutcome("cancelled"), reason
         return (
             RunOutcome(
                 "quota",
-                LimitInfo("governor quota", waiting.reset_at, "usage governor"),
+                LimitInfo(
+                    "daily_limit"
+                    if waiting.reason == "daily_limit"
+                    else "governor quota",
+                    waiting.reset_at,
+                    "usage governor",
+                    waiting.hold_id,
+                ),
             ),
             reason,
         )

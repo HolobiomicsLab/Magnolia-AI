@@ -17,6 +17,7 @@ class LimitInfo:
     reason: str
     reset_at: datetime | None
     evidence_source: str
+    hold_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.reset_at is not None and (
@@ -93,6 +94,7 @@ class ExecContext:
     environment: Mapping[str, str] | None = None
     renderer_env: Mapping[str, str] = field(default_factory=dict)
     resume_from: Path | None = None
+    resume_artifact: "ResumeArtifact | None" = None
     prompt: str | None = None
     governance: Any = None
 
@@ -139,6 +141,29 @@ class SessionIdentity:
             other.role,
             other.policy_digest,
         )
+
+
+@dataclass(frozen=True)
+class ResumeArtifact:
+    """Opaque-enough typed proof binding one resumable client session."""
+
+    client: str
+    session_id: str
+    configuration_identity_digest: str
+    role: str
+    project_identity: str
+
+    def __post_init__(self) -> None:
+        if not all(
+            (
+                self.client,
+                self.session_id,
+                self.configuration_identity_digest,
+                self.role,
+                self.project_identity,
+            )
+        ):
+            raise ValueError("resume artifact fields must be non-empty")
 
 
 def _number(value: Any) -> float | int | None:
@@ -241,6 +266,7 @@ class UsageRecord:
                         if self.outcome.limit.reset_at
                         else None,
                         "evidence_source": self.outcome.limit.evidence_source,
+                        "hold_id": self.outcome.limit.hold_id,
                     }
                     if self.outcome.limit
                     else None

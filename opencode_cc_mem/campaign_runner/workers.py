@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
-from .executors.contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .executors.contracts import (
+    LimitInfo,
+    ResumeArtifact,
+    RunOutcome,
+    SessionIdentity,
+    UsageRecord,
+)
 from .governor import (
     Admission,
     AdmissionRequest,
@@ -61,6 +67,8 @@ class WorkerResult:
     stopped_reason: str | None = None
     errors: list[dict[str, Any]] = field(default_factory=list)
     outcome: RunOutcome | None = None
+    session_identity: SessionIdentity | None = None
+    resume_artifact: ResumeArtifact | None = None
 
 
 class WorkerExecutor(Protocol):
@@ -244,9 +252,12 @@ class OpenCodeExecutor:
                     typed_outcome = RunOutcome(
                         "quota",
                         LimitInfo(
-                            "governor quota",
+                            "daily_limit"
+                            if admission.reason == "daily_limit"
+                            else "governor quota",
                             admission.reset_at,
                             "usage governor",
+                            admission.hold_id,
                         ),
                     )
                 else:

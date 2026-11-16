@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tomllib
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from campaign_runner.executors.codex import (
     require_codex_trust,
 )
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome
-from campaign_runner.governor import Governor, Policy
+from campaign_runner.governor import Governor, Policy, QuotaWaiting
 from campaign_runner.launch import configuration_identity
 from campaign_runner.routing import ResolvedRoute
 from campaign_runner.workers import EMPTY_OUTPUT_NOTE, InvocationGovernance
@@ -344,10 +345,13 @@ def test_codex_cap_stops_lingering_process_group(tmp_path):
 
     assert result.outcome.kind == "cap_reached"
     assert result.stopped_reason == "cap_reached"
+    assert result.session_identity.session_id == "cap-thread"
+    assert result.resume_artifact.session_id == "cap-thread"
     assert not (state / "was-not-terminated").exists()
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
     assert json.loads(rows[0])["outcome"]["kind"] == "cap_reached"
+    assert json.loads(rows[0])["session_identity"]["session_id"] == "cap-thread"
 
 
 def test_codex_normal_exit_over_cap_keeps_client_outcome(tmp_path):
@@ -436,6 +440,93 @@ def test_codex_quota_precedes_success_empty_retry(tmp_path):
     assert result.attempts == 1
     assert len(_calls(state)) == 1
     assert not (state / "was-not-terminated").exists()
+    assert result.session_identity.session_id == "quota-thread"
+    assert result.resume_artifact.session_id == "quota-thread"
+
+
+def test_codex_daily_limit_returns_without_client_or_attempt(tmp_path):
+    stream = _jsonl(tmp_path / "unused.jsonl", [])
+    binary, config, state = _stub(tmp_path, [stream])
+    reset = datetime(2026, 11, 17, tzinfo=timezone.utc)
+
+    class DailyGovernor:
+        policy = Policy(min_seconds_between_runs=1)
+
+        def admit(self, request, control=None):
+            return QuotaWaiting(
+                request.route.subscription_key,
+                request.invocation_id,
+                "daily_limit",
+                reset,
+                "daily-hold",
+            )
+
+        def cancel_wait(self, waiting):
+            return True
+
+        def wait(self, waiting, control=None):
+            raise AssertionError("daily limit must not wait inside the executor")
+
+    route = ResolvedRoute("codex", "gpt-test", "family", "codex", "evaluator", "test")
+    governance = InvocationGovernance(
+        DailyGovernor(), route, "parent-run", "project-fixture", role_cap=1
+    )
+    context = _context(
+        tmp_path,
+        role="evaluator",
+        binary=binary,
+        stub_config=config,
+        governance=governance,
+    )
+
+    result = executor_for(context.route, "evaluator", context).run(
+        "evaluate", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "quota"
+    assert result.outcome.limit.reason == "daily_limit"
+    assert result.outcome.limit.reset_at == reset
+    assert result.outcome.limit.hold_id == "daily-hold"
+    assert result.attempts == 0
+    assert _calls(state) == []
+
+
+def test_codex_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
+    first_stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    resumed_stream = _jsonl(tmp_path / "resumed.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "again"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 15}},
+    ])
+    binary, config, state = _stub(tmp_path, [first_stream, resumed_stream])
+    first_context = _context(
+        tmp_path, role="evaluator", binary=binary, stub_config=config
+    )
+    first_executor = executor_for(first_context.route, "evaluator", first_context)
+    first = first_executor.run("first", first_context.project_dir, tmp_path / "attempt-1", retries=0)
+    resume_context = replace(
+        first_context,
+        resume_from=first_executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "evaluator", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.session_id == "bound"
+    assert "resume" in _calls(state)[1]["argv"]
+    wrong_role = replace(first.resume_artifact, role="helper")
+    with pytest.raises(ExecutorRefused, match="resume artifact"):
+        executor_for(
+            resume_context.route,
+            "evaluator",
+            replace(resume_context, resume_artifact=wrong_role),
+        )
 
 
 @pytest.mark.parametrize("damage", ("hook", "mcp", "model"))

@@ -148,7 +148,10 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 max_turns=effective_cap,
                 timeout_seconds=context.timeout_seconds,
                 governance=context.governance,
-                resume_permitted=context.resume_from is not None,
+                resume_permitted=(
+                    context.resume_from is not None or context.resume_artifact is not None
+                ),
+                resume_artifact=context.resume_artifact,
             )
         if route.client == "codex":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
@@ -177,7 +180,10 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 max_turns=effective_cap,
                 timeout_seconds=context.timeout_seconds,
                 governance=context.governance,
-                resume_permitted=context.resume_from is not None,
+                resume_permitted=(
+                    context.resume_from is not None or context.resume_artifact is not None
+                ),
+                resume_artifact=context.resume_artifact,
                 reasoning_effort=str(context.setup.get("codex_reasoning_effort", "low")),
                 user_config_path=Path(
                     str(
@@ -218,6 +224,7 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 timeout_seconds=context.timeout_seconds,
                 governance=context.governance,
                 max_price=float(price) if price is not None else None,
+                resume_artifact=context.resume_artifact,
             )
         raise ExecutorRefused(f"{route.client} {role} executor is not implemented in this task")
     if role == "service":

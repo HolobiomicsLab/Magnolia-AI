@@ -17,7 +17,7 @@ from campaign_runner.executors.claude_code import (
     ClaudeCodeExecutor,
     parse_claude_stream,
 )
-from campaign_runner.governor import Governor, Policy
+from campaign_runner.governor import Governor, Policy, QuotaWaiting
 from campaign_runner.launch import configuration_identity
 from campaign_runner.process import ProcessControl
 from campaign_runner.routing import ResolvedRoute
@@ -250,6 +250,9 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
 
     assert isinstance(executor, ClaudeCodeExecutor)
     assert "ALLOWED-README" in result.final_text
+    assert result.session_identity.session_id == result.session_id
+    assert result.resume_artifact.session_id == result.session_id
+    assert result.resume_artifact.client == "claude-code"
     (call,) = _calls(state)
     argv = call["argv"]
     assert argv[0] == str(binary)
@@ -735,6 +738,97 @@ def test_claude_observed_quota_precedes_success_empty_retry(tmp_path):
     assert result.outcome.kind == "quota"
     assert result.attempts == 1
     assert len(_calls(state)) == 1
+    assert result.session_identity.session_id == "quota-session"
+    assert result.resume_artifact.session_id == "quota-session"
+
+
+def test_claude_daily_limit_returns_without_client_or_attempt(tmp_path):
+    stream = _jsonl(tmp_path / "unused.jsonl", [])
+    binary, config, state = _stub(tmp_path, [stream])
+    reset = datetime(2026, 11, 17, tzinfo=timezone.utc)
+
+    class DailyGovernor:
+        policy = Policy(min_seconds_between_runs=1)
+
+        def admit(self, request, control=None):
+            return QuotaWaiting(
+                request.route.subscription_key,
+                request.invocation_id,
+                "daily_limit",
+                reset,
+                "daily-hold",
+            )
+
+        def cancel_wait(self, waiting):
+            return True
+
+        def wait(self, waiting, control=None):
+            raise AssertionError("daily limit must not wait inside the executor")
+
+    route = ResolvedRoute(
+        "claude-code", "haiku", "claude-haiku", "claude-code", "evaluator", "test"
+    )
+    governance = InvocationGovernance(
+        DailyGovernor(), route, "parent-run", "project-digest", role_cap=1
+    )
+    context = _context(
+        tmp_path, binary, config, role="evaluator", role_cap=1, governance=governance
+    )
+
+    result = executor_for(context.route, "evaluator", context).run(
+        "evaluate", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "quota"
+    assert result.outcome.limit.reason == "daily_limit"
+    assert result.outcome.limit.reset_at == reset
+    assert result.outcome.limit.hold_id == "daily-hold"
+    assert result.attempts == 0
+    assert _calls(state) == []
+
+
+def test_claude_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
+    stream = _jsonl(
+        tmp_path / "first.jsonl",
+        [{"type": "result", "subtype": "success", "session_id": "bound", "result": "ok", "is_error": False}],
+    )
+    resumed = _jsonl(
+        tmp_path / "resumed.jsonl",
+        [{"type": "result", "subtype": "success", "session_id": "bound", "result": "again", "is_error": False}],
+    )
+    binary, config, state = _stub(tmp_path, [stream, resumed])
+    first_context = _context(tmp_path, binary, config, role="evaluator", role_cap=1)
+    first_executor = executor_for(first_context.route, "evaluator", first_context)
+    first = first_executor.run("first", first_context.project_dir, tmp_path / "attempt-1")
+    resume_context = replace(
+        first_context,
+        resume_from=first_executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "evaluator", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.session_id == "bound"
+    resume_argv = _calls(state)[1]["argv"]
+    assert resume_argv[resume_argv.index("--resume") + 1] == "bound"
+    wrong_client = replace(first.resume_artifact, client="codex")
+    with pytest.raises(ExecutorRefused, match="resume artifact"):
+        executor_for(
+            resume_context.route,
+            "evaluator",
+            replace(resume_context, resume_artifact=wrong_client),
+        )
+    wrong_policy = replace(
+        first.resume_artifact, configuration_identity_digest="different-policy"
+    )
+    with pytest.raises(ExecutorRefused, match="resume artifact"):
+        executor_for(
+            resume_context.route,
+            "evaluator",
+            replace(resume_context, resume_artifact=wrong_policy),
+        )
 
 
 def test_claude_argv_failure_releases_reservation(tmp_path, monkeypatch):

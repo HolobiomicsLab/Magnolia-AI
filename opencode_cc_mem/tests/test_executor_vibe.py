@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,7 @@ import pytest
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome
 from campaign_runner.executors.vibe import VibeExecutor, parse_vibe_export, require_vibe_trust
-from campaign_runner.governor import Governor, Policy
+from campaign_runner.governor import Governor, Policy, QuotaWaiting
 from campaign_runner.launch import configuration_identity
 from campaign_runner.process import ProcessControl
 from campaign_runner.routing import ResolvedRoute
@@ -321,11 +323,19 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
     )
 
     assert result.outcome.kind == expected
+    if payload is None:
+        assert result.session_identity is None
+        assert result.resume_artifact is None
+    else:
+        assert result.session_identity.session_id == "vibe-session"
+        assert result.resume_artifact.session_id == "vibe-session"
     (call,) = _calls(state)
     assert call["client_env"] == PASSTHROUGH_ENV
     assert call["telemetry"] == "false"
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
+    if payload is not None:
+        assert json.loads(rows[0])["session_identity"]["session_id"] == "vibe-session"
     diagnostics = [item["kind"] for item in result.errors]
     assert ("model_mismatch" in diagnostics) is (expected == "model_mismatch")
 
@@ -361,6 +371,85 @@ def test_vibe_quota_precedes_success_empty_without_retry(tmp_path):
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
     assert json.loads(rows[0])["outcome"]["kind"] == "quota"
+    assert result.session_identity.session_id == "vibe-session"
+    assert result.resume_artifact.session_id == "vibe-session"
+
+
+def test_vibe_daily_limit_returns_without_client_or_attempt(tmp_path):
+    export = tmp_path / "unused.json"
+    export.write_text(json.dumps(_real_export()))
+    binary, config, state = _stub(tmp_path, [export])
+    reset = datetime(2026, 11, 17, tzinfo=timezone.utc)
+
+    class DailyGovernor:
+        policy = Policy(min_seconds_between_runs=1)
+
+        def admit(self, request, control=None):
+            return QuotaWaiting(
+                request.route.subscription_key,
+                request.invocation_id,
+                "daily_limit",
+                reset,
+                "daily-hold",
+            )
+
+        def cancel_wait(self, waiting):
+            return True
+
+        def wait(self, waiting, control=None):
+            raise AssertionError("daily limit must not wait inside the executor")
+
+    route = ResolvedRoute(
+        "vibe", "selected-model", "family", "vibe", "reviewer", "test"
+    )
+    governance = InvocationGovernance(
+        DailyGovernor(), route, "parent-run", "project-fixture", role_cap=8
+    )
+    context = _context(
+        tmp_path, binary=binary, stub_config=config, governance=governance
+    )
+
+    result = executor_for(context.route, "reviewer", context).run(
+        "review", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "quota"
+    assert result.outcome.limit.reason == "daily_limit"
+    assert result.outcome.limit.reset_at == reset
+    assert result.outcome.limit.hold_id == "daily-hold"
+    assert result.attempts == 0
+    assert _calls(state) == []
+
+
+def test_vibe_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
+    first_export = tmp_path / "first.json"
+    first_export.write_text(json.dumps(_real_export()))
+    resumed_export = tmp_path / "resumed.json"
+    resumed_export.write_text(json.dumps(_real_export()))
+    binary, config, state = _stub(tmp_path, [first_export, resumed_export])
+    first_context = _context(tmp_path, binary=binary, stub_config=config)
+    first_executor = executor_for(first_context.route, "reviewer", first_context)
+    first = first_executor.run("first", first_context.project_dir, tmp_path / "attempt-1")
+    resume_context = replace(
+        first_context,
+        resume_from=first_executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "reviewer", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.session_id == "vibe-session"
+    resume_argv = _calls(state)[1]["argv"]
+    assert resume_argv[resume_argv.index("--resume") + 1] == "vibe-session"
+    wrong_project = replace(first.resume_artifact, project_identity="other-project")
+    with pytest.raises(ExecutorRefused, match="resume artifact"):
+        executor_for(
+            resume_context.route,
+            "reviewer",
+            replace(resume_context, resume_artifact=wrong_project),
+        )
 
 
 @pytest.mark.parametrize("damage", ("hook", "mcp", "tool", "model"))
