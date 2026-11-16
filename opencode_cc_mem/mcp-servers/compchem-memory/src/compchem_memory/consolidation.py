@@ -23,6 +23,7 @@ from compchem_memory.reflex_common import (
     parse_frontmatter_file as _parse_entry,
     pending_indices as _pending_indices,
 )
+from compchem_memory.staging_io import union_origins
 
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
@@ -134,6 +135,9 @@ def merge_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     merged_meta["tags"] = sorted(tags)
     merged_meta["tools"] = sorted(tools)
     merged_meta["confidence"] = confidence
+    origins = union_origins(*(entry["meta"].get("origins") for entry in entries))
+    if origins:
+        merged_meta["origins"] = origins
 
     body = canonical["body"]
     others = [e for e in entries if e is not canonical]
@@ -384,6 +388,7 @@ def consolidate_project_findings(
                 "title": preview["meta"].get("title", ""),
                 "observation_count": preview["meta"]["observation_count"],
                 "observed_in_sessions": preview["meta"]["observed_in_sessions"],
+                "origins": preview["meta"].get("origins", []),
                 "body": preview["body"],
             },
         })

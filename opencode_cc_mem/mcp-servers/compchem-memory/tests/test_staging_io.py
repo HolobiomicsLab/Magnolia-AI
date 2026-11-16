@@ -64,6 +64,27 @@ def test_save_candidate_stamps_observed_in_sessions_from_provenance(store):
     assert meta["observed_in_sessions"] == ["ses_live"]
 
 
+def test_save_candidate_prefers_canonical_session_for_observations(store):
+    from compchem_memory.staging_io import save_candidate
+
+    path = save_candidate(
+        store,
+        {
+            "title": "t",
+            "content": "c",
+            "origins": [
+                {"session_id": "ses_origin"},
+                {"session_id": "ses_live"},
+            ],
+        },
+        source="opencode_distill",
+        opencode_session_id="ses_live",
+    )
+
+    meta = yaml.safe_load(Path(path).read_text().split("---")[1])
+    assert meta["observed_in_sessions"] == ["ses_live"]
+
+
 def test_save_candidate_omits_observed_in_sessions_without_provenance(store):
     from compchem_memory.staging_io import save_candidate
 
@@ -87,3 +108,4 @@ def test_save_candidate_persists_normalized_origins(store):
 
     meta = yaml.safe_load(Path(path).read_text().split("---")[1])
     assert meta["origins"] == [{"client": "codex", "session_id": "s1"}]
+    assert meta["observed_in_sessions"] == ["s1"]
