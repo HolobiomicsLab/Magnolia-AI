@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""magnolia-agents-daemon — mailbox watcher for the helper agents.
+"""magnolia-agents-daemon — mailbox watcher for registered helper lanes.
 
-Two helper agents (literature, xiulian) live in their project directories.
-This daemon watches their inboxes for TASK letters (`*.task.md` with a
+This daemon watches registered project inboxes for TASK letters (`*.task.md` with a
 `status: open` line); for each it runs a headless `opencode run` in that
 project, then writes a reply file beside the letter and marks it done.
 
@@ -35,9 +34,12 @@ sys.path[:0] = [
 ]
 
 from campaign_runner.helper_admission import (  # noqa: E402
+    AdmittedLetter,
     AdmissionRefused,
     admit_letter,
+    consume_generation_receipt,
     write_generation_receipt,
+    write_scheduled_letter,
 )
 
 AGENTS: tuple[str, ...] = ()
@@ -197,25 +199,43 @@ def discover_lanes(root: str) -> dict:
             lanes.pop(d.name, None)
             continue
         lanes[d.name] = cfg
+    configured = set(filter(None, re.split(r"[,\s]+", os.environ.get(
+        "MAGNOLIA_AGENTD_AGENTS", ""
+    ))))
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    lane_file = config_home / "magnolia" / "agents-daemon-lanes.txt"
+    try:
+        configured.update(
+            line.strip() for line in lane_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+    except OSError:
+        pass
+    for name in sorted(configured):
+        if SAFE_LANE_RE.fullmatch(name) is None:
+            log_line(root, f"[registry] configured lane has unsafe name: {name!r}")
+            continue
+        if name not in lanes:
+            log_line(root, f"[registry] configured lane {name!r} has no enabled agent.json")
     return lanes
 
 
-def _letter_digest(path: Path) -> str:
+def _letter_digest(letter: AdmittedLetter) -> str:
     """Return a durable digest for one already-admitted regular letter."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return letter.digest()
 
 
-def _quota_wait_is_active(root: str, letter: Path) -> bool:
+def _quota_wait_is_active(root: str, letter: AdmittedLetter) -> bool:
     """Keep an unchanged letter parked until its known reset has passed."""
     state = load_state(root)
     waits = state.setdefault("quota_waits", {})
-    key = str(letter.resolve())
+    key = str(letter.letter)
     wait = waits.get(key)
     if not isinstance(wait, dict):
         return False
     try:
         unchanged = wait.get("letter_digest") == _letter_digest(letter)
-    except OSError:
+    except (OSError, AdmissionRefused):
         unchanged = False
     reset = wait.get("reset_at")
     due = False
@@ -244,6 +264,38 @@ def resume_quota_waits(root: str, lane: str | None = None) -> int:
     if removed:
         save_state(root, state)
     return removed
+
+
+def request_quota_resume(root: str, lane: str | None) -> Path:
+    """Queue a durable control request for the singleton daemon."""
+    requests = state_dir(root) / "quota-resume-requests"
+    requests.mkdir(parents=True, exist_ok=True)
+    request = requests / f"{uuid.uuid4().hex}.json"
+    with request.open("x", encoding="utf-8") as handle:
+        json.dump({"lane": lane, "requested_at": datetime.now(timezone.utc).isoformat()}, handle)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return request
+
+
+def apply_quota_resume_requests(root: str) -> int:
+    """Consume queued resume requests inside the running daemon loop."""
+    requests = state_dir(root) / "quota-resume-requests"
+    cleared = 0
+    if not requests.is_dir():
+        return cleared
+    for request in sorted(requests.glob("*.json")):
+        try:
+            payload = json.loads(request.read_text(encoding="utf-8"))
+            lane = payload.get("lane") if isinstance(payload, dict) else None
+            if lane is not None and SAFE_LANE_RE.fullmatch(str(lane)) is None:
+                raise ValueError("unsafe lane")
+            cleared += resume_quota_waits(root, str(lane) if lane else None)
+            request.unlink()
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            log_line(root, f"[quota] invalid resume request {request.name}: {exc}")
+    return cleared
 
 
 def _refusal_signature(letter: Path) -> dict[str, int] | None:
@@ -276,18 +328,9 @@ def _refusal_is_current(root: str, letter: Path) -> bool:
 
 
 def _mark_admission_refusal(root: str, lane: str, refusal: AdmissionRefused) -> None:
-    """Make a safe refusal visible without following an untrusted path."""
+    """Record a refusal without writing beside a letter that failed admission."""
     letter = refusal.letter
-    if not refusal.can_mark or letter is None or letter.is_symlink():
-        log_line(root, f"[{lane}] admission refused: {refusal.reason}")
-        return
-    try:
-        write_reply(
-            letter,
-            lane,
-            "## Letter refused\n\n"
-            f"Magnolia did not launch a client: {refusal.reason}",
-        )
+    if letter is not None:
         state = load_state(root)
         state.setdefault("refusals", {})[
             os.path.abspath(os.fspath(letter))
@@ -298,9 +341,8 @@ def _mark_admission_refusal(root: str, lane: str, refusal: AdmissionRefused) -> 
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }
         save_state(root, state)
-    except OSError:
-        pass
-    log_line(root, f"[{lane}] {letter.name} -> refused ({refusal.reason})")
+    shown = letter.name if letter is not None else "unresolved letter"
+    log_line(root, f"[{lane}] {shown} -> refused ({refusal.reason})")
 
 
 def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
@@ -321,24 +363,27 @@ def discover_tasks(root: str, lanes: dict | None = None) -> list[Path]:
             if _refusal_is_current(root, f):
                 continue
             try:
-                admit_letter(root, agent, f)
+                admitted = admit_letter(root, agent, f)
             except AdmissionRefused as exc:
                 _mark_admission_refusal(root, agent, exc)
                 continue
             try:
-                text = f.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if not is_open_task(text):
-                continue
-            if is_deferred_task(text):
-                continue  # parked on a job — the delivery pass owns it
-            if _quota_wait_is_active(root, f):
-                continue
-            digest = hashlib.sha1(f.read_bytes()).hexdigest()
-            if state["done"].get(str(f)) == digest:
-                continue  # already handled, unchanged
-            found.append(f)
+                text = admitted.read_text()
+                if not is_open_task(text):
+                    continue
+                if admitted.is_scheduled and admitted.generation_consumed:
+                    log_line(root, f"[{agent}] {f.name} -> refused (generation consumed)")
+                    continue
+                if is_deferred_task(text):
+                    continue  # parked on a job — the delivery pass owns it
+                if _quota_wait_is_active(root, admitted):
+                    continue
+                digest = hashlib.sha1(text.encode()).hexdigest()
+                if state["done"].get(str(f)) == digest:
+                    continue  # already handled, unchanged
+                found.append(f)
+            finally:
+                admitted.close()
     return found
 
 
@@ -369,13 +414,19 @@ def _upsert_wait_for(letter: str, rid: str) -> str:
     return letter.rstrip() + f"\n\nwait_for: job:{rid}\n"
 
 
-def write_reply(task_file: Path, agent: str, body: str) -> Path:
-    reply = task_file.with_name(task_file.stem.replace(".task", "") + "_reply.md")
-    header = (f"# Reply: {task_file.stem}\n\n"
+def write_reply(
+    task: AdmittedLetter,
+    agent: str,
+    body: str,
+    *,
+    replace_existing: bool = True,
+) -> Path:
+    header = (f"# Reply: {task.letter.stem}\n\n"
               f"- from: agents-daemon ({agent} helper)\n"
               f"- date: {datetime.now(timezone.utc).isoformat()}\n\n")
-    reply.write_text(header + body + "\n", encoding="utf-8")
-    return reply
+    return task.write_reply(
+        header + body + "\n", replace_existing=replace_existing
+    )
 
 
 def runs_dir(root: str) -> Path:
@@ -423,7 +474,7 @@ def is_final_answer(text: str) -> bool:
 
 def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
               extra_args: list, run_log: Path | None, binary: str = "opencode",
-              governance=None) -> dict:
+              governance=None, resolved_route=None) -> dict:
     """One headless `opencode run --model M --format json [extra_args]`.
     Returns parse_run_events output plus "rc" and "stderr_tail"; appends
     the raw events to run_log so failures stay diagnosable (the daemon
@@ -433,7 +484,9 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
     from campaign_runner.executors.registry import executor_for
     from campaign_runner.routing import resolve_route
 
-    route = resolve_route("helper", {"agent": {"json": {"model": model}}})
+    route = resolved_route or resolve_route(
+        "helper", {"agent": {"json": {"model": model}}}
+    )
     executor = executor_for(
         route,
         "helper",
@@ -446,7 +499,8 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
             environment=env,
         ),
     )
-    assert isinstance(executor, OpenCodeHelperExecutor)
+    if not isinstance(executor, OpenCodeHelperExecutor):
+        raise RuntimeError("OpenCode helper route resolved to an incompatible executor")
     if governance is None:
         proc = executor.run(
             extra_args,
@@ -518,7 +572,8 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
             stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
             stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
             returncode = process.returncode
-            outcome = process.outcome or _text_quota_outcome(stdout, stderr, returncode)
+            quota_outcome = _text_quota_outcome(stdout, stderr, returncode)
+            outcome = quota_outcome or process.outcome
             if outcome is None:
                 outcome = RunOutcome("success" if returncode == 0 else "failure")
             if process.client_started:
@@ -538,9 +593,6 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         except OSError:
             pass
     return parsed
-
-
-_ORIGINAL_RUN_ONCE = _run_once
 
 
 def _text_quota_outcome(stdout: str, stderr: str, returncode: int):
@@ -965,9 +1017,8 @@ def _quota_from_result(route, result) -> HelperQuotaWaiting | None:
 
 
 def _call_run_once(*args, governance=None, **kwargs):
-    """Keep legacy test seams while governing the production OpenCode call."""
-    if _run_once is _ORIGINAL_RUN_ONCE:
-        kwargs["governance"] = governance
+    """Run every OpenCode helper invocation through the supplied governor."""
+    kwargs["governance"] = governance
     return _run_once(*args, **kwargs)
 
 
@@ -1155,6 +1206,7 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
             run_log,
             binary=_opencode_bin(),
             governance=governance,
+            resolved_route=route,
         )
         if parsed.get("session_id"):
             # Lane session persistence: resume next letter in the same session.
@@ -1228,115 +1280,116 @@ def handle_task(task_file: Path, agent: str, root: str,
     except AdmissionRefused as exc:
         _mark_admission_refusal(root, agent, exc)
         return "refused"
-    task_file = admitted.letter
-    state = load_state(root)
-    text = task_file.read_text(encoding="utf-8", errors="replace")
-    project_dir = str(Path(root) / "opencode_cc_mem" / "projects" / agent)
-    is_ticket = bool(_TICKET_RE.search(_header_window(text)))
-    prompt = (
-        f"You are the on-duty {agent} helper. A request letter arrived in "
-        f"your inbox:\n\n---\n{text}\n---\n\n"
-        f"Do the work it asks for. Rules: work only inside your own project "
-        f"directory ({project_dir}) and the inbox folders; do NOT use the "
-        f"memory tools (this letter is self-contained); do NOT try to write "
-        f"or edit any files — headless runs cannot approve file-write "
-        f"permissions. Instead, give your complete answer as your final "
-        f"message. Answer contract: your FINAL message must BEGIN with the "
-        f"line 'FINAL ANSWER:' followed by the complete answer — never end "
-        f"your turn without it; if you are still investigating, keep "
-        f"calling tools instead of stopping."
-        + (_TICKET_TRAILER_HINT if is_ticket else "\n")
-    )
-    status = "done"
-    body = ""
-    # Per-lane model (agent.json `model`): forwarded to the runner only when
-    # set, so injected test runners with the 5-arg signature keep working.
-    lane_model = (lane_cfg or {}).get("model") or None
     try:
-        body = runner(agent, project_dir, root, prompt, timeout_s,
-                      **({"model": lane_model} if lane_model else {}))
-        # The agent printed the answer (stdout IS the reply); always
-        # overwrite so a re-run never leaves a stale earlier reply.
-        write_reply(task_file, agent, body)
-    except HelperQuotaWaiting as waiting:
+        task_file = admitted.letter
+        if admitted.is_scheduled and admitted.generation_consumed:
+            log_line(root, f"[{agent}] {task_file.name} -> refused (generation consumed)")
+            return "refused"
+        text = admitted.read_text()
+        project_dir = str(admitted.lane_project)
+        is_ticket = bool(_TICKET_RE.search(_header_window(text)))
+        prompt = (
+            f"You are the on-duty {agent} helper. A request letter arrived in "
+            f"your inbox:\n\n---\n{text}\n---\n\n"
+            f"Do the work it asks for. Rules: work only inside your own project "
+            f"directory ({project_dir}) and the inbox folders; do NOT use the "
+            f"memory tools (this letter is self-contained); do NOT try to write "
+            f"or edit any files — headless runs cannot approve file-write "
+            f"permissions. Instead, give your complete answer as your final "
+            f"message. Answer contract: your FINAL message must BEGIN with the "
+            f"line 'FINAL ANSWER:' followed by the complete answer — never end "
+            f"your turn without it; if you are still investigating, keep "
+            f"calling tools instead of stopping."
+            + (_TICKET_TRAILER_HINT if is_ticket else "\n")
+        )
+        status = "done"
+        body = ""
+        lane_model = (lane_cfg or {}).get("model") or None
+        try:
+            body = runner(
+                agent,
+                project_dir,
+                root,
+                prompt,
+                timeout_s,
+                **({"model": lane_model} if lane_model else {}),
+            )
+        except HelperQuotaWaiting as waiting:
+            state = load_state(root)
+            state.setdefault("quota_waits", {})[str(task_file)] = {
+                "lane": agent,
+                "letter_digest": admitted.digest(),
+                "subscription_key": waiting.key,
+                "hold_id": waiting.hold_id,
+                "reset_at": waiting.reset_at.isoformat() if waiting.reset_at else None,
+                "reason": waiting.reason,
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+            }
+            save_state(root, state)
+            log_line(
+                root,
+                f"[{agent}] {task_file.name} -> waiting_quota "
+                f"({waiting.key}, hold={waiting.hold_id or 'unknown'})",
+            )
+            return "waiting_quota"
+        except ExecutorRefused as exc:
+            status = "refused"
+            body = (
+                "## Helper capability refused\n\n"
+                f"Magnolia did not launch a fallback client: {exc.reason}"
+            )
+        except Exception as exc:
+            status = "error"
+            body = f"## Task failed\n\nThe helper run raised: {exc}\n\n"
+            body += "To try again, set this letter's `status:` line back to `open`."
+
+        try:
+            write_reply(
+                admitted,
+                agent,
+                body,
+                replace_existing=status != "refused",
+            )
+        except AdmissionRefused as exc:
+            log_line(root, f"[{agent}] reply refused: {exc.reason}")
+            if status == "done":
+                status = "error"
+
+        final_status = status
+        final_text = set_status(text, status)
+        if status == "done" and is_ticket:
+            tstat = _TRAILER_STATUS_RE.search(body or "")
+            park = _TRAILER_PARK_RE.search(body or "")
+            new_state = tstat.group(1).lower() if tstat else None
+            if park and new_state in (None, "prototyped"):
+                final_status = "prototyped"
+                final_text = _upsert_wait_for(
+                    set_status(text, final_status), park.group(1)
+                )
+            elif new_state in ("evaluated", "accepted", "rejected", "prototyped"):
+                final_status = new_state
+                final_text = set_status(text, final_status)
+
+        try:
+            admitted.write_text(final_text)
+        except AdmissionRefused as exc:
+            log_line(root, f"[{agent}] letter write refused: {exc.reason}")
+            return "refused"
+
         state = load_state(root)
-        state.setdefault("quota_waits", {})[str(task_file.resolve())] = {
-            "lane": agent,
-            "letter_digest": _letter_digest(task_file),
-            "subscription_key": waiting.key,
-            "hold_id": waiting.hold_id,
-            "reset_at": waiting.reset_at.isoformat() if waiting.reset_at else None,
-            "reason": waiting.reason,
-            "recorded_at": datetime.now(timezone.utc).isoformat(),
-        }
-        save_state(root, state)
-        log_line(
-            root,
-            f"[{agent}] {task_file.name} -> waiting_quota "
-            f"({waiting.key}, hold={waiting.hold_id or 'unknown'})",
-        )
-        return "waiting_quota"
-    except ExecutorRefused as e:
-        status = "refused"
-        body = (
-            "## Helper capability refused\n\n"
-            f"Magnolia did not launch a fallback client: {e.reason}"
-        )
-        write_reply(task_file, agent, body)
-    except Exception as e:
-        status = "error"
-        body = f"## Task failed\n\nThe helper run raised: {e}\n\n"
-        body += "To try again, set this letter's `status:` line back to `open`."
-        write_reply(task_file, agent, body)
-
-    # Ticket answers may steer the lifecycle via the reply trailer: the lane
-    # decides, the daemon writes (lanes have no file permissions).
-    if status == "done" and is_ticket:
-        tstat = _TRAILER_STATUS_RE.search(body or "")
-        park = _TRAILER_PARK_RE.search(body or "")
-        new_state = tstat.group(1).lower() if tstat else None
-        if park and new_state in (None, "prototyped"):
-            # builder hop: park the ticket on the run; NOT done — the
-            # terminal run record re-opens it for the evaluation hop.
-            letter = _upsert_wait_for(set_status(text, "prototyped"),
-                                      park.group(1))
-            try:
-                task_file.write_text(letter, encoding="utf-8")
-            except Exception:
-                pass
-            state = load_state(root)          # runner may have saved state
+        if final_status == "prototyped" and is_deferred_task(final_text):
             state["done"].pop(str(task_file), None)
-            save_state(root, state)
-            log_line(root, f"[{agent}] {task_file.name} -> prototyped "
-                           f"(parked on {park.group(1)})")
-            return "prototyped"
-        if new_state in ("evaluated", "accepted", "rejected", "prototyped"):
-            try:
-                task_file.write_text(set_status(text, new_state),
-                                     encoding="utf-8")
-            except Exception:
-                pass
-            state = load_state(root)          # runner may have saved state
-            state["done"][str(task_file)] = \
-                hashlib.sha1(task_file.read_bytes()).hexdigest()
-            save_state(root, state)
-            log_line(root, f"[{agent}] {task_file.name} -> {new_state}")
-            return new_state
-        # missing/unknown trailer on a ticket: consumed like any letter
-        # (visible in the reply file; never re-runs)
-
-    try:
-        task_file.write_text(set_status(text, status), encoding="utf-8")
-    except Exception:
-        pass
-    # reload: the runner persists lane-session ids mid-run; the snapshot from
-    # before the run must not clobber them (lost-update class, panel A7/B6)
-    state = load_state(root)
-    state["done"][str(task_file)] = \
-        hashlib.sha1(task_file.read_bytes()).hexdigest()
-    save_state(root, state)
-    log_line(root, f"[{agent}] {task_file.name} -> {status}")
-    return status
+        else:
+            state["done"][str(task_file)] = hashlib.sha1(
+                admitted.read_text().encode()
+            ).hexdigest()
+        save_state(root, state)
+        if admitted.is_scheduled:
+            consume_generation_receipt(admitted)
+        log_line(root, f"[{agent}] {task_file.name} -> {final_status}")
+        return final_status
+    finally:
+        admitted.close()
 
 
 def scan_once(root: str, agents=AGENTS, runner=default_runner, lanes: dict | None = None) -> list[str]:
@@ -1373,46 +1426,42 @@ def deliver_wait_for(root: str, lanes: dict) -> int:
             continue
         for f in sorted(inbox.rglob("*.task.md")):
             try:
-                admit_letter(root, agent, f)
+                admitted = admit_letter(root, agent, f)
             except AdmissionRefused as exc:
                 _mark_admission_refusal(root, agent, exc)
                 continue
             try:
-                text = f.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            rid = is_deferred_task(text)
-            if not rid:
-                continue
-            rec = runs / f"{rid}.yaml"
-            if not rec.is_file():
-                # submit_job writes date-prefixed records (YYYYMMDD_<run_id>.yaml);
-                # fall back to a run-id-suffix match so wait_for fires for real
-                # records (found 2026-10-08: exact-name lookup never matched).
-                hits = sorted(runs.glob(f"*_{rid}.yaml")) if runs.is_dir() else []
-                if not hits:
-                    continue  # job still pending
-                rec = hits[-1]
-            try:
-                status_m = re.search(r"^status:\s*(\S+)",
-                                     rec.read_text(encoding="utf-8", errors="replace"), re.M)
-            except OSError:
-                continue
-            result = status_m.group(1) if status_m else "unknown"
-            if result not in _TERMINAL_RUN_STATUSES:
-                # running/pending — submit_job writes the record at SUBMISSION
-                # time; delivering here would burn the single hop on a job
-                # that has not finished (panel verdict #2)
-                continue
-            new_text = WAIT_FOR_RE.sub("", text) + (
-                f"\n\n## Job result ({rid})\n\n- status: {result}\n- record: {rec}\n")
-            new_text = set_status(new_text, "open")
-            try:
-                f.write_text(new_text, encoding="utf-8")
+                text = admitted.read_text()
+                rid = is_deferred_task(text)
+                if not rid:
+                    continue
+                rec = runs / f"{rid}.yaml"
+                if not rec.is_file():
+                    hits = sorted(runs.glob(f"*_{rid}.yaml")) if runs.is_dir() else []
+                    if not hits:
+                        continue
+                    rec = hits[-1]
+                try:
+                    status_m = re.search(
+                        r"^status:\s*(\S+)",
+                        rec.read_text(encoding="utf-8", errors="replace"),
+                        re.M,
+                    )
+                except OSError:
+                    continue
+                result = status_m.group(1) if status_m else "unknown"
+                if result not in _TERMINAL_RUN_STATUSES:
+                    continue
+                new_text = WAIT_FOR_RE.sub("", text) + (
+                    f"\n\n## Job result ({rid})\n\n- status: {result}\n- record: {rec}\n"
+                )
+                admitted.write_text(set_status(new_text, "open"))
                 log_line(root, f"[{agent}] wait_for delivered: {rid} -> {f.name}")
                 delivered += 1
-            except OSError:
-                pass
+            except AdmissionRefused as exc:
+                log_line(root, f"[{agent}] wait_for write refused: {exc.reason}")
+            finally:
+                admitted.close()
     return delivered
 
 
@@ -1445,23 +1494,26 @@ def scheduled_sweep_letters(root: str, lanes: dict) -> int:
         inbox = Path(root) / "opencode_cc_mem" / "projects" / agent / "inbox"
         if inbox.is_symlink() or not inbox.is_dir():
             continue
-        letter = inbox / f"{now:%Y-%m-%d}_{agent}-scheduled-sweep.task.md"
-        if letter.exists():
+        name = f"{now:%Y-%m-%d}_{agent}-scheduled-sweep.task.md"
+        letter = inbox / name
+        if letter.exists() and not letter.is_symlink():
             swept[agent] = now.isoformat()  # already sent today — no duplicate
             save_state(root, state)
             continue
         try:
-            letter.write_text(
+            content = (
                 f"# Scheduled sweep ({agent})\n\n- from: agents-daemon\n"
                 f"- date: {now:%Y-%m-%d}\n- status: open\n\n## Request\n\n"
-                f"{task_text}\n", encoding="utf-8")
+                f"{task_text}\n"
+            )
+            letter = write_scheduled_letter(root, agent, name, content)
             write_generation_receipt(root, agent, letter)
             swept[agent] = now.isoformat()
             save_state(root, state)
             log_line(root, f"[{agent}] scheduled sweep letter written")
             sent += 1
-        except OSError:
-            pass
+        except (OSError, AdmissionRefused) as exc:
+            log_line(root, f"[{agent}] scheduled sweep refused: {exc}")
     return sent
 
 _LOCK_FH = None  # module-level: if the file object is garbage-collected, the
@@ -1500,10 +1552,21 @@ def main(argv: list[str] | None = None) -> int:
         help="clear durable quota waits for every lane or one named lane",
     )
     args = ap.parse_args(argv)
+    try:
+        args.root = str(Path(args.root).resolve(strict=True))
+    except OSError as exc:
+        print(f"agents daemon root refused: {exc}")
+        return 2
     if os.environ.get("MAGNOLIA_AGENTS", "") == "0":
         print("agents daemon disabled (MAGNOLIA_AGENTS=0)")
         return 0
-    if acquire_lock(args.root) is None and not args.force:
+    lock = acquire_lock(args.root)
+    if lock is None and args.resume_quota is not None:
+        lane = None if args.resume_quota == "*" else args.resume_quota
+        request_quota_resume(args.root, lane)
+        print("quota resume request queued for running agents daemon")
+        return 0
+    if lock is None and not args.force:
         print("agents daemon already running")
         return 0
     if args.resume_quota is not None:
@@ -1513,6 +1576,7 @@ def main(argv: list[str] | None = None) -> int:
     log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")
     while True:
         try:
+            apply_quota_resume_requests(args.root)
             lanes = discover_lanes(args.root)
             scheduled_sweep_letters(args.root, lanes)   # due schedules -> letters
             deliver_wait_for(args.root, lanes)          # job landed -> reopen ticket
