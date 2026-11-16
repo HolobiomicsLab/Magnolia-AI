@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "source": "constructed Claude-shaped Codex hook input; not observed in P0",
+  "path_field": "file_path",
+  "read": {
+    "session_id": "synthetic-codex",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_use_id": "synthetic-read",
+    "turn_id": "synthetic-turn",
+    "tool_input": {"file_path": "__PATH__"}
+  }
+}

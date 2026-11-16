@@ -8,7 +8,7 @@
       "opencode_cc_mem/docs/harness-campaign-2026-11-15.md"
     ]
   },
-  "note": "Offline initial gate. Live Task 0 Steps 2-5 were not authorized.",
+  "note": "Offline initial gate plus Task 6 synthetic-only native schemas. Live acceptance is still required; every role remains refused.",
   "rows": [
     {
       "client": "claude-code",
@@ -56,9 +56,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -138,9 +138,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -220,9 +220,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -302,9 +302,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -384,9 +384,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -466,9 +466,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -548,9 +548,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -630,9 +630,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -712,9 +712,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -806,9 +806,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -900,9 +900,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -994,9 +994,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "native_schemas": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
         },
         "allowed_actions": {
           "status": "unknown",
@@ -1044,4 +1044,3 @@
     }
   ]
 }
-

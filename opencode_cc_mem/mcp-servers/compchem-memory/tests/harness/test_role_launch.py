@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_common import harness_dir, policy_files
@@ -95,3 +96,52 @@ def test_role_policy_cannot_weaken_neutral_tool_denial(tmp_path):
     )
 
     assert json.loads(next(iter(files.values())))["deny_tools"] == ["bash", "shell"]
+
+
+@pytest.mark.parametrize(
+    ("client", "hook_file", "hook_marker"),
+    (
+        ("claude", "settings.json", "PreToolUse"),
+        ("codex", ".codex/hooks.json", "PreToolUse"),
+        ("vibe", ".vibe/hooks.toml", "magnolia-pre-tool"),
+    ),
+)
+def test_noninteractive_role_env_all_three_clients(
+    tmp_path, client, hook_file, hook_marker
+):
+    project = tmp_path / "project"
+    control = tmp_path / "run" / "control"
+    context = LaunchContext(
+        root=tmp_path,
+        project="project-id",
+        project_dir=project,
+        python="/venv/bin/python",
+        tools_port=8123,
+        model="selected-model",
+        setup={},
+        run_dir=tmp_path / "run",
+        control_dir=control,
+        work_dir=tmp_path / "run" / "work",
+        role="reviewer",
+        invocation_id=f"{client}-reviewer",
+        noninteractive=True,
+        role_policy={"role": "reviewer", "mcp_tool_allowlist": []},
+    )
+
+    launch = RENDERERS[client](NeutralConfig([], frozenset({"bash"})), context)
+
+    policy_path = control / "executors" / f"{client}-reviewer" / "policy.json"
+    assert launch.env["MAGNOLIA_HOOK_POLICY"] == str(policy_path.resolve())
+    assert launch.env["MAGNOLIA_HOOK_POLICY_REQUIRED"] == "1"
+    assert launch.env["MAGNOLIA_DOORBELL"] == "0"
+    if client == "claude":
+        rendered_hook = launch.files[policy_path.parent / hook_file]
+    else:
+        rendered_hook = launch.files[project / hook_file]
+    text = rendered_hook.decode("utf-8")
+    assert hook_marker in text
+    assert "compchem_memory.hook" in text
+    assert not any(
+        forbidden in " ".join(launch.argv) + text
+        for forbidden in ("--trust", "--dangerously", "bypass")
+    )

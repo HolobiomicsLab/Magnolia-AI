@@ -1,0 +1,191 @@
+"""Required campaign-role policy checks across neutral tool targets."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from compchem_memory.hook.adapters import claude
+from compchem_memory.hook.events import HookEvent, ToolCall, ToolTarget
+from compchem_memory.hook.policy import decide
+
+
+def _write_policy(
+    path: Path,
+    project: Path,
+    work: Path,
+    *,
+    edit_roots: list[str] | None = None,
+) -> dict[str, str]:
+    payload = {
+        "schema_version": "magnolia-role-v1",
+        "role": "worker",
+        "policy_role": "campaign-worker",
+        "canonical_read_roots": [str(project)],
+        "read_deny_patterns": ["**/*.env*", "**/*.env*/**", "**/secret/**"],
+        "deny_path_forms": ["requested", "resolved"],
+        "edit_roots": [str(work)] if edit_roots is None else edit_roots,
+        "effective_capabilities": [
+            "native_read", "native_glob", "native_grep", "native_edit",
+        ],
+        "mcp_tool_allowlist": [
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ],
+        "delegation_policy": "deny",
+        "required_capability_identity": "fixture-identity",
+        "deny_unknown_tools": True,
+        "deny_shell": True,
+        "deny_unconfined_code_execution": True,
+        "deny_tools": ["bash", "shell", "delegate", "code"],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return {
+        "MAGNOLIA_HOOK_POLICY": str(path),
+        "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
+    }
+
+
+def _event(
+    cwd: Path,
+    action: str | None,
+    *targets: ToolTarget,
+    raw_name: str = "Read",
+) -> HookEvent:
+    return HookEvent(
+        "claude",
+        "pre-tool",
+        "session",
+        str(cwd),
+        tool=ToolCall(
+            raw_name.lower(), None, raw_name, "call", {},
+            policy_action=action, targets=tuple(targets),
+        ),
+    )
+
+
+def test_role_policy_all_targets(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    outside = tmp_path / "outside"
+    secret = project / "secret"
+    work.mkdir(parents=True)
+    clean = project / "clean"
+    clean.mkdir()
+    outside.mkdir()
+    secret.mkdir()
+    (project / "allowed.txt").write_text("ok", encoding="utf-8")
+    (project / ".env").write_text("secret", encoding="utf-8")
+    (outside / "outside.txt").write_text("no", encoding="utf-8")
+    (secret / "token.txt").write_text("no", encoding="utf-8")
+    (project / "alias").symlink_to(secret, target_is_directory=True)
+    env = _write_policy(tmp_path / "policy.json", project, work)
+
+    allowed = (
+        _event(project, "native_read", ToolTarget("allowed.txt", "read")),
+        _event(project, "native_edit", ToolTarget(str(work / "new.txt"), "edit")),
+        _event(project, "native_edit", ToolTarget(str(work / "missing" / "new.txt"), "edit")),
+        _event(
+            project,
+            "native_grep",
+            ToolTarget(str(clean), "search", broad=True),
+            raw_name="Grep",
+        ),
+    )
+    assert all(decide(event, env) is None for event in allowed)
+
+    denied = (
+        _event(project, "native_read", ToolTarget(".env", "read")),
+        _event(project, "native_read", ToolTarget("alias/token.txt", "read")),
+        _event(work, "native_read", ToolTarget("../../../outside/outside.txt", "read")),
+        _event(project, "native_read", ToolTarget(str(outside / "new" / "file"), "read")),
+        _event(
+            project,
+            "native_edit",
+            ToolTarget(str(work / "a.txt"), "edit"),
+            ToolTarget(str(outside / "b.txt"), "edit"),
+            raw_name="Patch",
+        ),
+        _event(
+            project,
+            "native_edit",
+            ToolTarget(str(work / "source.txt"), "edit"),
+            ToolTarget(str(outside / "destination.txt"), "edit"),
+            raw_name="Move",
+        ),
+        _event(
+            project,
+            "native_glob",
+            ToolTarget(str(project), "search", broad=True),
+            raw_name="Glob",
+        ),
+        _event(project, "native_read", raw_name="Read"),
+        _event(project, None, raw_name="UnknownTool"),
+    )
+    assert all(decide(event, env) is not None for event in denied)
+
+    reviewer_env = _write_policy(
+        tmp_path / "reviewer.json", project, work, edit_roots=[]
+    )
+    assert decide(
+        _event(project, "native_edit", ToolTarget(str(work / "review.txt"), "edit")),
+        reviewer_env,
+    ) is not None
+
+    omitted_root = claude.parse(
+        {
+            "session_id": "session",
+            "cwd": str(clean),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {"pattern": "**/*.py"},
+        },
+        "pre-tool",
+    )
+    assert omitted_root is not None
+    assert omitted_root.tool is not None
+    assert omitted_root.tool.targets[0].path == str(clean)
+    assert decide(omitted_root, env) is None
+
+    narrowed_search = claude.parse(
+        {
+            "session_id": "session",
+            "cwd": str(project),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {"pattern": "**/*.py"},
+        },
+        "pre-tool",
+    )
+    assert narrowed_search is not None
+    assert decide(narrowed_search, env) is None
+
+
+def test_campaign_mcp_shell_member_tool_delegation_and_inner_call_denied(tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    env = _write_policy(tmp_path / "policy.json", project, work)
+
+    allowed_memory = _event(
+        project, "mcp", raw_name="mcp__compchem-memory__memory_search"
+    )
+    assert decide(allowed_memory, env) is None
+
+    denied_names = (
+        "Bash",
+        "mcp__compchem-tools__run_shell",
+        "mcp__member__read_private",
+        "Agent",
+        "Task",
+        "spawn_agent",
+        "agents.spawn",
+        "run_typescript",
+        "code",
+        "NotebookEdit",
+        "apply_patch",
+        "Move",
+    )
+    for raw_name in denied_names:
+        assert decide(_event(project, None, raw_name=raw_name), env) is not None

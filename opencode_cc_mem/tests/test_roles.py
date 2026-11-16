@@ -93,3 +93,14 @@ def test_all_registry_roles_have_policy():
     assert policies["campaign-reviewer"].edit_roots == ()
     assert policies["helper"].delegation_policy == "deny"
     assert policies["evaluator"].allowed_native_capabilities == ()
+
+
+def test_worker_exact_three_memory_reads_reviewer_none():
+    policies = roles.load_policies()
+
+    assert policies["campaign-worker"].mcp_tool_allowlist == (
+        "mcp:compchem-memory.memory_get_context",
+        "mcp:compchem-memory.memory_search",
+        "mcp:compchem-memory.memory_get_run_history",
+    )
+    assert policies["campaign-reviewer"].mcp_tool_allowlist == ()

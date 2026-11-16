@@ -148,6 +148,17 @@ def _block_text(block: object) -> str | None:
 
 
 @dataclass
+class ToolTarget:
+    """One adapter-decoded path target for required role enforcement."""
+
+    path: str
+    access: str
+    broad: bool = False
+    inclusions: tuple[str, ...] = ()
+    exclusions: tuple[str, ...] = ()
+
+
+@dataclass
 class ToolCall:
     """One tool invocation, with ``output`` already reduced to text."""
 
@@ -158,6 +169,8 @@ class ToolCall:
     input: dict
     output: str | None = None
     is_error: bool = False
+    policy_action: str | None = None
+    targets: tuple[ToolTarget, ...] = ()
 
 
 @dataclass
