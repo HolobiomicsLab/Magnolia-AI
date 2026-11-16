@@ -1,0 +1,111 @@
+{
+  "call_id": "call_74a31ad9eab74a489d0da5f619adce50",
+  "id": "ctco_01a1e366-5437-72d3-9ce0-75743476cda3",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794816496.695261,
+    "turn_id": "01a1e366-2b3c-71f3-8002-5f3af652afd7"
+  },
+  "output": [
+    {
+      "text": "Script completed\nWall time 0.0 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "GLOBALS(76): ALL_TOOLS,AggregateError,Array,ArrayBuffer,AsyncDisposableStack,BigInt,BigInt64Array,BigUint64Array,Boolean,DataView,Date,DisposableStack,Error,EvalError,FinalizationRegistry,Float16Array,Float32Array,Float64Array,Function,Infinity,Int16Array,Int32Array,Int8Array,Intl,Iterator,JSON,Map,Math,NaN,Number,Object,Promise,Proxy,RangeError,ReferenceError,Reflect,RegExp,Set,String,SuppressedError,Symbol,SyntaxError,TypeError,URIError,Uint16Array,Uint32Array,Uint8Array,Uint8ClampedArray,WeakMap,WeakRef,WeakSet,audio,clearTimeout,decodeURI,decodeURIComponent,encodeURI,encodeURIComponent,escape,eval,exit,generatedImage,globalThis,image,isFinite,isNaN,load,notify,parseFloat,parseInt,setTimeout,store,text,tools,undefined,unescape,yield_control",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF tools: object",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF ALL_TOOLS: object",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF text: function",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF console: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF setTimeout: function",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF WebAssembly: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF SharedArrayBuffer: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF Atomics: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF eval: function",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF Function: function",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF load: function",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF read: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF readFile: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF readline: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF print: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF os: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF std: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF scriptArgs: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "TYPEOF import.meta: n/a",
+      "type": "input_text"
+    },
+    {
+      "text": "TOOLS: apply_patch,create_goal,exec_command,get_goal,image_gen__imagegen,list_mcp_resource_templates,list_mcp_resources,<198 mcp__codex_apps__* connected-app tools elided>,mcp__probe__echo,mcp__probe__shell,mcp__probe__unlisted,multi_agent_v1__close_agent,multi_agent_v1__resume_agent,multi_agent_v1__send_input,multi_agent_v1__spawn_agent,multi_agent_v1__wait_agent,read_mcp_resource,request_plugin_install,update_goal,view_image,web__run,write_stdin",
+      "type": "input_text"
+    },
+    {
+      "text": "FUNCTION-CTOR: undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "EVAL: 2",
+      "type": "input_text"
+    },
+    {
+      "text": "IMPORT-FILE: error undefined",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

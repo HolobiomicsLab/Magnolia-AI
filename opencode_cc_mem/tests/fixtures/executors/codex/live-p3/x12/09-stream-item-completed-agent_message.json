@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "SRC load: function () { [native code] }SRC store: function () { [native code] }SRC notify: function () { [native code] }SRC exit: function () { [native code] }SRC yield_control: function () { [native code] }SRC image: function () { [native code] }SRC audio: function () { [native code] }SRC generatedImage: function () { [native code] }SRC setTimeout: function () { [native code] }LOAD /TMPDIR/probe-p3-outside-JSUnwZ/loadme.js: OK undefinedLOAD /TMPDIR/probe-p3-codex-omV8qQ/proj/secret/.env: OK undefinedLOAD /TMPDIR/probe-p3-codex-omV8qQ/proj/README.md: OK undefinedSTORE-GET: FAIL undefined",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}
