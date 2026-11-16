@@ -1269,3 +1269,236 @@ def test_real_service_reexec_and_spaced_project_release_without_duplicates(tmp_p
             if process.poll() is None:
                 process.kill()
             process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("raw_ps", [False, True])
+def test_provisional_record_reaps_bootstrap_or_final_command_only(tmp_path, monkeypatch, raw_ps):
+    project = tmp_path / "project with  spaces"
+    project.mkdir()
+    started, stopped = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+    command = ("/test/python", "-m", memory_service.SERVICE_MODULE, "--project-dir", str(project.resolve()))
+    runtime = "/framework path/Python.app/Contents/MacOS/Python"
+    bootstrap = (runtime, "-c", memory_service._UNMASK_AND_EXEC, *command)
+    final = (runtime, *command[1:])
+    if raw_ps:
+        bootstrap, final = " ".join(bootstrap) + "\n", " ".join(final) + "\n"
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: bootstrap)
+    provisional = {}
+    wait_ready = memory_service._wait_ready
+
+    def ready(*args):
+        provisional.update(json.loads((memory_service.private_state_dir(project) / "service.json").read_text()))
+        monkeypatch.setattr(memory_service, "_process_command", lambda pid: final)
+        return wait_ready(*args)
+
+    monkeypatch.setattr(memory_service, "_wait_ready", ready)
+    handle = memory_service.ensure_memory_service(_context(project))
+
+    assert provisional["final_command"] == (final if raw_ps else list(final))
+    assert memory_service._service_signal_safe(provisional) is True
+    assert memory_service._service_signal_safe({**provisional, "provisional": False}) is False
+    assert memory_service._service_signal_safe({**provisional, "process_identity": "stale"}) is False
+    changed = final.replace(runtime, "/other/python", 1) if raw_ps else ("/other/python", *final[1:])
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: changed)
+    assert memory_service._service_signal_safe(provisional) is False
+    foreign = final.replace(str(project), str(tmp_path / "foreign")) if raw_ps else (*final[:-1], str(tmp_path / "foreign"))
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: foreign)
+    assert memory_service._service_signal_safe({**provisional, "final_command": foreign}) is False
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: bootstrap)
+    assert memory_service._service_signal_safe(provisional) is True
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: final)
+    memory_service._discard_record(provisional, memory_service.private_state_dir(project), handle.project_digest)
+    assert stopped == [(4101, "ps:4101:start")]
+
+
+def test_sigkill_during_readiness_next_acquire_reaps_old_service(tmp_path, monkeypatch):
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 0))
+        except OSError as exc:
+            pytest.skip(f"loopback bind unavailable: {exc}")
+    if not memory_service._process_identity(os.getpid()):
+        pytest.skip("OS process start identity is unavailable")
+    project = tmp_path / "killed acquirer project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    marker = tmp_path / "ready"
+    environment = {
+        "HOME": str(Path.home()), "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        "OPENAI_API_KEY": "loopback-sentinel", "OPENAI_BASE_URL": "http://127.0.0.1:9",
+        "HTTP_PROXY": "http://127.0.0.1:9", "HTTPS_PROXY": "http://127.0.0.1:9",
+        "NO_PROXY": "127.0.0.1",
+    }
+    code = f"""
+import time
+from pathlib import Path
+from types import SimpleNamespace
+from compchem_memory.harness import memory_service as ms
+# Keep the bootstrap observable until its provisional record is durable.
+ms._UNMASK_AND_EXEC = 'import time; time.sleep(0.5); ' + ms._UNMASK_AND_EXEC
+wait_ready = ms._wait_ready
+def hold_readiness(*args):
+    assert wait_ready(*args) is not None
+    Path({str(marker)!r}).write_text('ready')
+    time.sleep(60)
+ms._wait_ready = hold_readiness
+ms.ensure_memory_service(SimpleNamespace(
+    project_dir=Path({str(project)!r}), python={sys.executable!r}, holder_pid={os.getpid()},
+    setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
+    environment={environment!r},
+))
+"""
+    acquirer = subprocess.Popen([sys.executable, "-c", code], env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    processes, old_pid = [], None
+    start_process = memory_service._start_process
+
+    def start(*args):
+        process = start_process(*args)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(memory_service, "_start_process", start)
+    try:
+        deadline = time.monotonic() + 20
+        while not marker.exists() and acquirer.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists(), acquirer.communicate(timeout=1)
+        record = json.loads((state / "service.json").read_text())
+        old_pid = record["pid"]
+        assert record["provisional"] is True
+        assert record["observed_command"][1] == "-c"
+        assert tuple(record["observed_command"]) != memory_service._process_command(old_pid)
+        acquirer.kill()
+        acquirer.wait(timeout=5)
+        context = _context(project, key="loopback-sentinel")
+        context.python, context.environment = sys.executable, environment
+        context.setup["memory_service_timeout"] = 15
+
+        handle = memory_service.ensure_memory_service(context)
+
+        assert len(processes) == 1
+        assert memory_service._process_identity(old_pid) is None or memory_service._reap_if_exited(old_pid)
+        assert processes[0].poll() is None
+        assert json.loads((state / "service.json").read_text())["pid"] == processes[0].pid
+        assert memory_service.release_memory_service(handle) is True
+        processes[0].wait(timeout=5)
+    finally:
+        if acquirer.poll() is None:
+            acquirer.kill()
+        acquirer.communicate(timeout=5)
+        if old_pid is None and (state / "service.json").exists():
+            old_pid = json.loads((state / "service.json").read_text())["pid"]
+        if old_pid is not None:
+            try:
+                os.kill(old_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("disposition", ["campaign", "default_int", "python_int", "ignore_hup"])
+def test_startup_signal_preserves_previous_disposition(tmp_path, monkeypatch, disposition):
+    project = tmp_path / "project"
+    project.mkdir()
+    started, _ = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+    state, stopped = memory_service.private_state_dir(project), []
+    signum = signal.SIGTERM if disposition == "campaign" else signal.SIGINT
+    previous_handler = signal.SIG_DFL
+    if disposition == "campaign":
+        from campaign_runner.cli import _install_signal_handlers
+        original = signal.getsignal(signum)
+        _install_signal_handlers()
+        previous_handler = signal.getsignal(signum)
+        signal.signal(signum, original)
+    elif disposition == "python_int":
+        previous_handler = signal.default_int_handler
+    elif disposition == "ignore_hup":
+        signum, previous_handler = signal.SIGHUP, signal.SIG_IGN
+    wait_ready = memory_service._wait_ready
+
+    def interrupt(*args):
+        signal.raise_signal(signum)
+        return wait_ready(*args)
+
+    monkeypatch.setattr(memory_service, "_wait_ready", interrupt)
+    monkeypatch.setattr(memory_service, "_stop_started_process", lambda process: stopped.append(process.pid))
+    original = signal.signal(signum, previous_handler)
+    try:
+        if disposition == "ignore_hup":
+            handle = memory_service.ensure_memory_service(_context(project))
+            assert stopped == []
+            assert memory_service.release_memory_service(handle) is True
+        else:
+            with pytest.raises(KeyboardInterrupt):
+                memory_service.ensure_memory_service(_context(project))
+            assert stopped == [4101]
+            assert not (state / "service.json").exists()
+            assert not (state / "bearer-token").exists()
+        assert signal.getsignal(signum) == previous_handler
+    finally:
+        signal.signal(signum, original)
+
+
+def test_second_signal_during_startup_cleanup_cannot_leave_state(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    _stub_runtime(monkeypatch)
+    state = memory_service.private_state_dir(project)
+    masks = []
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    def stop(process):
+        masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+        signal.raise_signal(signal.SIGTERM)
+
+    monkeypatch.setattr(memory_service, "_wait_ready", interrupt)
+    monkeypatch.setattr(memory_service, "_stop_started_process", stop)
+    with pytest.raises((KeyboardInterrupt, SystemExit)):
+        memory_service.ensure_memory_service(_context(project))
+
+    assert not (state / "service.json").exists()
+    assert not (state / "bearer-token").exists()
+    assert memory_service.STARTUP_SIGNALS <= masks[0]
+    assert signal.pthread_sigmask(signal.SIG_BLOCK, []) == previous_mask
+
+
+@pytest.mark.parametrize("command", ["run", "daemon"])
+def test_campaign_stop_runs_after_interrupted_memory_start(tmp_path, monkeypatch, command):
+    from campaign_runner import cli
+
+    project = tmp_path / "project"
+    project.mkdir()
+    _stub_runtime(monkeypatch)
+    state, stops = memory_service.private_state_dir(project), []
+
+    class Runner:
+        def run_once(self):
+            return memory_service.ensure_memory_service(_context(project))
+
+        def run_forever(self, *args):
+            self.run_once()
+
+        def request_stop(self, reason, *, stop_processes):
+            assert not (state / "service.json").exists()
+            assert not (state / "bearer-token").exists()
+            stops.append((reason, stop_processes))
+            return None, []
+
+    monkeypatch.setattr(cli, "_build_runner", lambda args: Runner())
+    monkeypatch.setattr(memory_service, "_wait_ready", lambda *args: signal.raise_signal(signal.SIGTERM))
+    monkeypatch.setattr(memory_service, "_stop_started_process", lambda process: None)
+    original = signal.getsignal(signal.SIGTERM)
+    try:
+        assert cli.main([command, str(tmp_path / "run")]) == 130
+        assert stops == [(f"{command} interrupted", True)]
+    finally:
+        signal.signal(signal.SIGTERM, original)
