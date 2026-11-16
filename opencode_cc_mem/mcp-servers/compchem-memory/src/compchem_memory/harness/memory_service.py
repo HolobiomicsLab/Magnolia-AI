@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 import fcntl
 import hashlib
 import json
 import logging
 import os
 import secrets
-import shlex
 import signal
 import socket
 import subprocess
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -52,6 +54,13 @@ DEFAULT_READY_TIMEOUT_SECONDS = 10.0
 READY_INTERVAL_SECONDS = 0.1
 HEALTH_TIMEOUT_SECONDS = 2.0
 SERVICE_MODULE = "compchem_memory.memory_http"
+STARTUP_SIGNALS = frozenset({signal.SIGINT, signal.SIGTERM, signal.SIGHUP})
+_UNMASK_AND_EXEC = (
+    "import os, signal, sys; "
+    "signal.pthread_sigmask(signal.SIG_UNBLOCK, "
+    "{signal.SIGINT, signal.SIGTERM, signal.SIGHUP}); "
+    "os.execvp(sys.argv[1], sys.argv[1:])"
+)
 LOGGER = logging.getLogger(__name__)
 SAFE_BASE_ENV = frozenset(
     {
@@ -222,6 +231,8 @@ def ensure_memory_service(context: Any) -> ServiceHandle:
 
 def release_memory_service(handle: ServiceHandle) -> bool:
     """Release one holder and stop only its verified service when references reach zero."""
+    if handle.project_digest != project_digest(handle.project_dir):
+        return False
     state = private_state_dir(handle.project_dir)
     with _state_lock(state):
         record = _read_record(state)
@@ -238,7 +249,7 @@ def release_memory_service(handle: ServiceHandle) -> bool:
             return False
         stopped = False
         if _service_signal_safe(record):
-            stopped = _terminate_owned(int(record["pid"]), str(record["process_identity"]))
+            stopped = _terminate_owned(record)
         if stopped:
             _remove_state_files(state)
         return stopped
@@ -348,22 +359,33 @@ def _read_record(state: Path) -> dict[str, Any] | None:
         value = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         LOGGER.warning(
             "memory service record is unreadable; leaving any named process untouched"
         )
         return None
-    return value if isinstance(value, dict) else None
+    if not isinstance(value, dict):
+        LOGGER.warning(
+            "memory service record is not an object; leaving any named process untouched"
+        )
+        return None
+    return value
 
 
 def _write_record(state: Path, record: Mapping[str, Any]) -> None:
     path = state / "service.json"
     temporary = state / f".{path.name}.{os.getpid()}.tmp"
-    temporary.write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    os.chmod(temporary, 0o600)
+    with temporary.open("w", encoding="utf-8") as stream:
+        os.fchmod(stream.fileno(), 0o600)
+        stream.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(temporary, path)
+    descriptor = os.open(state, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _reuse(
@@ -458,54 +480,86 @@ def _start_service(
         }
     )
     command = [python, "-m", SERVICE_MODULE, "--project-dir", str(project)]
-    process = _start_process(
-        command,
-        project,
-        child_environment,
-        log_path,
-    )
-    try:
-        identity = _process_identity(process.pid)
-        if not identity:
-            raise ExecutorRefused("memory service process identity could not be verified")
-        digest = project_digest(project)
-        url = f"http://127.0.0.1:{port}/mcp"
-        timeout = float(
-            setup.get("memory_service_timeout", DEFAULT_READY_TIMEOUT_SECONDS)
-        )
-        record = {
-            "pid": process.pid,
-            "port": port,
-            "project_digest": digest,
-            "project_dir": str(project),
-            "process_identity": identity,
-            "service_identity": service_identity,
-            "token_file": str(token_file),
-            "command": command,
-            "holders": [holder],
-            "provisional": True,
-        }
-        _write_record(state, record)
-        health = _wait_ready(process, url, token, timeout)
-        expected = {
-            "project_digest": digest,
-            "process_identity": identity,
-            "service_identity": service_identity,
-        }
-        if health != expected:
-            raise ExecutorRefused(
-                "memory service did not become ready with the bound project identity; "
-                f"inspect {log_path}"
+    process = None
+    with _startup_signal_handlers():
+        try:
+            with _blocked_startup_signals():
+                process = _start_process(command, project, child_environment, log_path)
+                identity = _process_identity(process.pid)
+                if not identity:
+                    raise ExecutorRefused("memory service process identity could not be verified")
+                digest = project_digest(project)
+                record = {
+                    "pid": process.pid,
+                    "port": port,
+                    "project_digest": digest,
+                    "project_dir": str(project),
+                    "process_identity": identity,
+                    "service_identity": service_identity,
+                    "token_file": str(token_file),
+                    "command": command,
+                    "observed_command": _process_command(process.pid),
+                    "holders": [holder],
+                    "provisional": True,
+                }
+                _write_record(state, record)
+            url = f"http://127.0.0.1:{port}/mcp"
+            timeout = float(
+                setup.get("memory_service_timeout", DEFAULT_READY_TIMEOUT_SECONDS)
             )
-        if not _holder_is_live(holder):
-            raise ExecutorRefused("memory service holder identity is no longer live")
-        record.pop("provisional", None)
-        _write_record(state, record)
-        return _handle(record, project, holder["id"])
-    except BaseException:
-        _stop_started_process(process)
-        _remove_state_files(state)
-        raise
+            health = _wait_ready(process, url, token, timeout)
+            expected = {
+                "project_digest": digest,
+                "process_identity": identity,
+                "service_identity": service_identity,
+            }
+            if health != expected:
+                raise ExecutorRefused(
+                    "memory service did not become ready with the bound project identity; "
+                    f"inspect {log_path}"
+                )
+            record["observed_command"] = _process_command(process.pid)
+            if not _service_process_matches(record):
+                raise ExecutorRefused("memory service ready process command could not be verified")
+            if not _holder_is_live(holder):
+                raise ExecutorRefused("memory service holder identity is no longer live")
+            record.pop("provisional", None)
+            _write_record(state, record)
+            return _handle(record, project, holder["id"])
+        except BaseException:
+            if process is not None:
+                _stop_started_process(process)
+            _remove_state_files(state)
+            raise
+
+
+@contextmanager
+def _startup_signal_handlers() -> Iterator[None]:
+    """Route startup interruption through the owned-process cleanup block."""
+    if threading.current_thread() is not threading.main_thread():
+        raise ExecutorRefused("memory service startup requires the main thread for signal cleanup")
+    previous = {signum: signal.getsignal(signum) for signum in STARTUP_SIGNALS}
+
+    def interrupt(signum: int, frame: Any) -> None:
+        raise SystemExit(128 + signum)
+
+    try:
+        for signum in STARTUP_SIGNALS:
+            signal.signal(signum, interrupt)
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
+@contextmanager
+def _blocked_startup_signals() -> Iterator[None]:
+    """Defer interruption until the spawned PID has a durable record."""
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, STARTUP_SIGNALS)
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
 
 
 def _wait_ready(
@@ -608,7 +662,7 @@ def _discard_record(
         and _service_signal_safe(record)
     )
     if signal_safe:
-        if not _terminate_owned(pid, expected):
+        if not _terminate_owned(record):
             LOGGER.warning(
                 "verified memory service record could not be reaped; process left untouched"
             )
@@ -662,7 +716,7 @@ def _start_process(
     log = log_path.open("ab", buffering=0)
     try:
         return subprocess.Popen(
-            argv,
+            [argv[0], "-c", _UNMASK_AND_EXEC, *argv],
             cwd=str(cwd),
             env=dict(environment),
             stdin=subprocess.DEVNULL,
@@ -678,25 +732,74 @@ def _process_identity(pid: int) -> str | None:
     return _verified_process_start_token(pid)
 
 
-def _process_command(pid: int) -> tuple[str, ...] | None:
+def _process_command(pid: int) -> tuple[str, ...] | str | None:
+    """Read native argv boundaries, or preserve the complete ps output verbatim."""
+    if sys.platform == "linux":
+        try:
+            raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except OSError:
+            return None
+        if not raw or not raw.endswith(b"\0"):
+            return None
+        return tuple(os.fsdecode(arg) for arg in raw[:-1].split(b"\0"))
+    if sys.platform == "darwin":
+        command = _macos_process_command(pid)
+        if command is not None:
+            return command
+    return _ps_process_command(pid)
+
+
+def _macos_process_command(pid: int) -> tuple[str, ...] | None:
+    """Read KERN_PROCARGS2 without exposing the following environment bytes."""
+    try:
+        sysctl = ctypes.CDLL(None, use_errno=True).sysctl
+        sysctl.argtypes = [
+            ctypes.POINTER(ctypes.c_int), ctypes.c_uint, ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t), ctypes.c_void_p, ctypes.c_size_t,
+        ]
+        sysctl.restype = ctypes.c_int
+        mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2, pid.
+        size = ctypes.c_size_t(os.sysconf("SC_ARG_MAX"))
+        buffer = ctypes.create_string_buffer(size.value)
+        if sysctl(mib, len(mib), buffer, ctypes.byref(size), None, 0) != 0:
+            return None
+        return _argv_from_procargs(buffer.raw[:size.value])
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _argv_from_procargs(raw: bytes) -> tuple[str, ...] | None:
+    """Decode argc, executable-path padding and exactly argc native arguments."""
+    width = ctypes.sizeof(ctypes.c_int)
+    argc = int.from_bytes(raw[:width], sys.byteorder, signed=True)
+    if len(raw) < width or argc <= 0:
+        return None
+    try:
+        start = raw.index(b"\0", width) + 1
+    except ValueError:
+        return None
+    while raw[start:start + 1] == b"\0":
+        start += 1
+    arguments = raw[start:].split(b"\0")
+    if len(arguments) <= argc:
+        return None
+    return tuple(os.fsdecode(arg) for arg in arguments[:argc])
+
+
+def _ps_process_command(pid: int) -> str | None:
     try:
         result = subprocess.run(
             ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
             check=False,
             capture_output=True,
-            text=True,
             timeout=1,
             env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    command = result.stdout.strip()
-    if result.returncode != 0 or not command:
+    if result.returncode != 0 or not result.stdout.strip():
         return None
-    try:
-        return tuple(shlex.split(command))
-    except ValueError:
-        return None
+    return os.fsdecode(result.stdout)
 
 
 def _process_is_stopped(pid: int) -> bool:
@@ -744,44 +847,26 @@ def _listener_owned_by_pid(pid: int, port: int) -> bool:
     return result.returncode == 0 and f"p{pid}" in result.stdout.splitlines()
 
 
-def _is_memory_service_command(command: tuple[str, ...] | None) -> bool:
-    return bool(
-        command
-        and len(command) in {3, 5}
-        and command[1:3] == ("-m", SERVICE_MODULE)
-        and (len(command) == 3 or command[3] == "--project-dir")
-        and Path(command[0]).name.startswith("python")
-    )
-
-
-def _service_commands_match(
-    recorded: tuple[str, ...], actual: tuple[str, ...] | None
-) -> bool:
-    if not _is_memory_service_command(recorded) or not _is_memory_service_command(actual):
-        return False
-    assert actual is not None
-    return (
-        len(recorded) == len(actual)
-        and recorded[1:] == actual[1:]
-        and Path(recorded[0]).expanduser().resolve()
-        == Path(actual[0]).expanduser().resolve()
-    )
-
-
 def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
-    """Verify the exact service command and its project argument."""
+    """Require the exact observed argv and canonical project-bound service suffix."""
     try:
         pid = int(record["pid"])
         project = Path(str(record["project_dir"])).expanduser().resolve()
         digest = str(record["project_digest"])
-        recorded = tuple(str(value) for value in record["command"])
+        recorded = record["observed_command"]
     except (KeyError, TypeError, ValueError, OSError):
         return False
-    if project_digest(project) != digest or len(recorded) != 5:
+    if project_digest(project) != digest:
         return False
-    if recorded[3:] != ("--project-dir", str(project)):
+    suffix = ("-m", SERVICE_MODULE, "--project-dir", str(project))
+    if isinstance(recorded, (list, tuple)):
+        recorded = tuple(recorded)
+        bound = len(recorded) >= 5 and recorded[-4:] == suffix
+    elif isinstance(recorded, str):
+        bound = recorded.endswith(" " + " ".join(suffix) + "\n")
+    else:
         return False
-    return _service_commands_match(recorded, _process_command(pid))
+    return bound and recorded == _process_command(pid)
 
 
 def _service_process_matches(record: Mapping[str, Any]) -> bool:
@@ -823,22 +908,54 @@ def _stop_started_process(process: Any) -> None:
         pass
 
 
-def _terminate_owned(pid: int, expected_identity: str) -> bool:
-    if _process_identity(pid) != expected_identity:
+def _terminate_owned(record: Mapping[str, Any]) -> bool:
+    if not _service_signal_safe(record):
         return False
+    pid = int(record["pid"])
+    expected_identity = str(record["process_identity"])
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         return True
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
-        if _process_identity(pid) != expected_identity:
+        if _process_identity(pid) != expected_identity or _reap_if_exited(pid):
             return True
         time.sleep(0.05)
-    if _process_identity(pid) != expected_identity:
+    if _process_identity(pid) != expected_identity or _reap_if_exited(pid):
         return True
+    if not _service_signal_safe(record):
+        return False
     os.kill(pid, signal.SIGKILL)
     return True
+
+
+def _reap_if_exited(pid: int) -> bool:
+    """Treat an exited, not yet reaped service as stopped; reap it when it is our child.
+
+    After SIGTERM the process may linger as a zombie whose start token still matches
+    while its argv is gone, so the exact-command check can no longer succeed.
+    """
+    try:
+        waited, _status = os.waitpid(pid, os.WNOHANG)
+        if waited == pid:
+            return True
+    except ChildProcessError:
+        pass
+    except OSError:
+        return False
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-o", "stat=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and result.stdout.strip().startswith("Z")
 
 
 def _health(

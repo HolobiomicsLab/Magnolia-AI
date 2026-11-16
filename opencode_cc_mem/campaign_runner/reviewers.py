@@ -282,81 +282,87 @@ class Reviewer:
                 resume_from=resume_from,
             )
         executor = executor_for(route, "reviewer", context)
-        usage = empty_usage()
-        session_id: str | None = None
-        current_prompt = prompt
-        errors: list[str] = []
-        attempts = 0
-        for retry_index in range(self.max_retries + 1):
-            result = executor.run(
-                current_prompt,
-                cwd,
-                attempt_dir,
-                stem="reviewer" if retry_index == 0 else f"reviewer_retry_{retry_index}",
-                resume_session=session_id,
-                retries=0,
-                control=control,
-            )
-            attempts += result.attempts
-            _merge_usage(usage, result.usage)
-            if result.session_id:
-                session_id = result.session_id
-            session_identity = getattr(result, "session_identity", None)
-            result_artifact = getattr(result, "resume_artifact", None)
-            result_resume_from = _bound_invocation_dir(
-                executor, result_artifact, context.control_dir
-            )
-            if result.outcome is not None and result.outcome.overrides_repair:
+        try:
+            usage = empty_usage()
+            session_id: str | None = None
+            current_prompt = prompt
+            errors: list[str] = []
+            attempts = 0
+            for retry_index in range(self.max_retries + 1):
+                result = executor.run(
+                    current_prompt,
+                    cwd,
+                    attempt_dir,
+                    stem="reviewer" if retry_index == 0 else f"reviewer_retry_{retry_index}",
+                    resume_session=session_id,
+                    retries=0,
+                    control=control,
+                )
+                attempts += result.attempts
+                _merge_usage(usage, result.usage)
+                if result.session_id:
+                    session_id = result.session_id
+                session_identity = getattr(result, "session_identity", None)
+                result_artifact = getattr(result, "resume_artifact", None)
+                result_resume_from = _bound_invocation_dir(
+                    executor, result_artifact, context.control_dir
+                )
+                if result.outcome is not None and result.outcome.overrides_repair:
+                    return ReviewResult(
+                        issues=[],
+                        followups=[],
+                        raw_text=result.final_text,
+                        session_id=session_id,
+                        usage=self._resolve_usage(route.client, session_id, usage),
+                        attempts=attempts,
+                        model=model,
+                        stopped_reason=result.stopped_reason,
+                        outcome=result.outcome,
+                        session_identity=session_identity,
+                        resume_artifact=result_artifact,
+                        resume_from=result_resume_from,
+                    )
+                if result.stopped_reason:
+                    return ReviewResult(
+                        issues=[],
+                        followups=[],
+                        raw_text=result.final_text,
+                        session_id=session_id,
+                        usage=self._resolve_usage(route.client, session_id, usage),
+                        attempts=attempts,
+                        model=model,
+                        stopped_reason=result.stopped_reason,
+                        outcome=result.outcome,
+                        session_identity=session_identity,
+                        resume_artifact=result_artifact,
+                        resume_from=result_resume_from,
+                    )
+                try:
+                    issues, followups = validate_review(_extract_json(result.final_text), run_dir)
+                except ReviewError as exc:
+                    errors.append(str(exc))
+                    if not result.session_id or result.timed_out or result.returncode != 0:
+                        break
+                    current_prompt = REVIEW_FORMAT_NOTE
+                    continue
                 return ReviewResult(
-                    issues=[],
-                    followups=[],
+                    issues=issues,
+                    followups=followups,
                     raw_text=result.final_text,
                     session_id=session_id,
                     usage=self._resolve_usage(route.client, session_id, usage),
                     attempts=attempts,
                     model=model,
-                    stopped_reason=result.stopped_reason,
-                    outcome=result.outcome,
                     session_identity=session_identity,
                     resume_artifact=result_artifact,
                     resume_from=result_resume_from,
                 )
-            if result.stopped_reason:
-                return ReviewResult(
-                    issues=[],
-                    followups=[],
-                    raw_text=result.final_text,
-                    session_id=session_id,
-                    usage=self._resolve_usage(route.client, session_id, usage),
-                    attempts=attempts,
-                    model=model,
-                    stopped_reason=result.stopped_reason,
-                    outcome=result.outcome,
-                    session_identity=session_identity,
-                    resume_artifact=result_artifact,
-                    resume_from=result_resume_from,
-                )
-            try:
-                issues, followups = validate_review(_extract_json(result.final_text), run_dir)
-            except ReviewError as exc:
-                errors.append(str(exc))
-                if not result.session_id or result.timed_out or result.returncode != 0:
-                    break
-                current_prompt = REVIEW_FORMAT_NOTE
-                continue
-            return ReviewResult(
-                issues=issues,
-                followups=followups,
-                raw_text=result.final_text,
-                session_id=session_id,
-                usage=self._resolve_usage(route.client, session_id, usage),
-                attempts=attempts,
-                model=model,
-                session_identity=session_identity,
-                resume_artifact=result_artifact,
-                resume_from=result_resume_from,
-            )
-        raise ReviewError("; ".join(errors) if errors else "review failed")
+            raise ReviewError("; ".join(errors) if errors else "review failed")
+        finally:
+            close = getattr(executor, "close", None)
+            if callable(close):
+                close()
+
 
     def _resolve_usage(
         self,
