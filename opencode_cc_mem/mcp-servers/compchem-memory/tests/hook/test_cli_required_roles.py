@@ -225,6 +225,46 @@ def test_required_adapter_policy_render_stdout_failure_blocks(tmp_path, monkeypa
     assert _invoke_main(monkeypatch, "write-failure", native) != 0
 
 
+def test_required_diagnostic_runs_after_denial_and_cannot_change_status(
+    tmp_path, monkeypatch
+):
+    from compchem_memory.hook import __main__ as cli
+    from compchem_memory.hook import policy
+
+    event = cli._required_failure_event("vibe", "pre-tool", {"cwd": str(tmp_path)})
+    decision_error = RuntimeError("policy decision failed")
+
+    def fail_decision(*args):
+        raise decision_error
+
+    monkeypatch.setattr(policy, "decide", fail_decision)
+    response, diagnostic = cli._policy_response(
+        event, {"MAGNOLIA_HOOK_POLICY_REQUIRED": "1"}
+    )
+    assert response.block is not None
+    assert diagnostic is decision_error
+    order = []
+    monkeypatch.setattr(cli, "_write_rendered", lambda *args: order.append("emit"))
+    monkeypatch.setattr(cli, "_record_denied", lambda *args: order.append("record"))
+
+    def broken_log(*args):
+        order.append("log")
+        raise OSError("diagnostic store unavailable")
+
+    monkeypatch.setattr(cli, "_log_error", broken_log)
+
+    code = cli._render_policy_block(
+        vibe,
+        event,
+        response,
+        {"MAGNOLIA_HOOK_POLICY_REQUIRED": "1"},
+        diagnostic=diagnostic,
+    )
+
+    assert code == 0
+    assert order == ["emit", "log", "record"]
+
+
 def test_optional_interactive_shell_policy_unchanged(tmp_path):
     env = dict(os.environ)
     env.update(HOME=str(tmp_path / "home"), XDG_STATE_HOME=str(tmp_path / "state"))

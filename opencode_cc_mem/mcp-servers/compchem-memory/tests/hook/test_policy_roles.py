@@ -193,6 +193,45 @@ def test_role_policy_all_targets(tmp_path):
         assert parsed is not None
         assert decide(parsed, env) is not None
 
+    ambiguous_searches = (
+        "{..,x}/outside/*",
+        ".{.,}/outside/*",
+        r"\.\./outside/*",
+        "[.][.]/outside/*",
+        "{/etc,x}/*",
+        f"{{{outside},x}}/*",
+    )
+    for pattern in ambiguous_searches:
+        parsed = claude.parse(
+            {
+                "session_id": "session",
+                "cwd": str(project),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Glob",
+                "tool_input": {"path": str(clean), "pattern": pattern},
+            },
+            "pre-tool",
+        )
+        assert parsed is not None
+        assert decide(parsed, env) is not None
+
+    assert decide(
+        _event(project, "native_read", ToolTarget("$HOME/.ssh/id_rsa", "read")),
+        env,
+    ) is not None
+    dollar_search = claude.parse(
+        {
+            "session_id": "session",
+            "cwd": str(project),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Glob",
+            "tool_input": {"path": str(clean), "pattern": "$HOME/**/*"},
+        },
+        "pre-tool",
+    )
+    assert dollar_search is not None
+    assert decide(dollar_search, env) is not None
+
 
 def test_broad_search_scan_bound_denies(tmp_path, monkeypatch):
     project = tmp_path / "project"

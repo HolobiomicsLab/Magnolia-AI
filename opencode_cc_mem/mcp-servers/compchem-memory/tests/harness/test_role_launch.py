@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,10 @@ from compchem_memory.harness.render_common import (
     harness_dir,
     policy_files,
 )
+from compchem_memory.hook.events import native_tool
+
+
+FIXTURES = Path(__file__).parents[4] / "tests" / "fixtures" / "executors"
 
 
 def test_noninteractive_policy_is_run_owned_and_required(tmp_path):
@@ -164,6 +169,107 @@ def _pre_tool_command(launch, project, policy_path, client):
 
     hooks = tomllib.loads(launch.files[project / ".vibe/hooks.toml"].decode())["hooks"]
     return next(hook["command"] for hook in hooks if hook["name"] == "magnolia-pre-tool")
+
+
+def _worker_policy(project, work):
+    return {
+        "schema_version": "magnolia-role-v1",
+        "role": "worker",
+        "policy_role": "campaign-worker",
+        "canonical_read_roots": [str(project)],
+        "read_deny_patterns": ["**/*.env*", "**/*.env*/**"],
+        "deny_path_forms": ["requested", "resolved"],
+        "edit_roots": [str(work)],
+        "effective_capabilities": [
+            "native_read", "native_glob", "native_grep", "native_edit",
+        ],
+        "mcp_tool_allowlist": [
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ],
+        "delegation_policy": "deny",
+        "required_capability_identity": "fixture-identity",
+        "deny_unknown_tools": True,
+        "deny_shell": True,
+        "deny_unconfined_code_execution": True,
+    }
+
+
+def _native_payload(client, fixture, path):
+    payload = json.loads(json.dumps(fixture))
+    payload["cwd"] = str(path.parent)
+    path_field = "path" if client == "vibe" else "file_path"
+    payload["tool_input"][path_field] = str(path)
+    return payload
+
+
+@pytest.mark.parametrize("client", ("claude", "codex", "vibe"))
+def test_rendered_required_hook_preserves_allowed_stdin_and_denies(client, tmp_path):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    control = tmp_path / "run" / "control"
+    work.mkdir(parents=True)
+    allowed_file = project / "allowed.txt"
+    allowed_file.write_text("ok", encoding="utf-8")
+    denied_file = tmp_path / "outside.txt"
+    denied_file.write_text("secret", encoding="utf-8")
+    context = LaunchContext(
+        root=tmp_path,
+        project="project-id",
+        project_dir=project,
+        python=sys.executable,
+        tools_port=8123,
+        model="selected-model",
+        setup={},
+        run_dir=tmp_path / "run",
+        control_dir=control,
+        work_dir=work,
+        role="worker",
+        invocation_id=f"{client}-worker",
+        noninteractive=True,
+        role_policy=_worker_policy(project, work),
+    )
+    launch = RENDERERS[client](NeutralConfig([], frozenset({"bash"})), context)
+    policy_path = control / "executors" / f"{client}-worker" / "policy.json"
+    policy_path.parent.mkdir(parents=True, exist_ok=True)
+    policy_path.write_bytes(launch.files[policy_path])
+    command = _pre_tool_command(launch, project, policy_path, client)
+    env = dict(os.environ)
+    env.update(launch.env)
+    fixture = json.loads(
+        (FIXTURES / client / "synthetic" / "native-tools.json").read_text()
+    )
+    allowed_payloads = [_native_payload(client, fixture["read"], allowed_file)]
+    if client in {"claude", "vibe"}:
+        allowed_payloads.append(_native_payload(client, fixture["write"], work / "new.txt"))
+    allowed_payloads.append({
+        "session_id": f"synthetic-{client}",
+        "cwd": str(project),
+        "hook_event_name": "pre_tool" if client == "vibe" else "PreToolUse",
+        "tool_name": native_tool(client, "compchem-memory", "memory_search"),
+        "tool_input": {"query": "allowed"},
+    })
+
+    for payload in allowed_payloads:
+        result = subprocess.run(
+            ["sh", "-c", command], input=json.dumps(payload), capture_output=True,
+            text=True, timeout=30, env=env,
+        )
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+    denied_payload = _native_payload(client, fixture["read"], denied_file)
+    denied = subprocess.run(
+        ["sh", "-c", command], input=json.dumps(denied_payload), capture_output=True,
+        text=True, timeout=30, env=env,
+    )
+    denial = json.loads(denied.stdout)
+    if client == "vibe":
+        assert denial["decision"] == "deny"
+    else:
+        assert denial["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert denied.returncode == 0
 
 
 @pytest.mark.parametrize("client", ("claude", "codex", "vibe"))
