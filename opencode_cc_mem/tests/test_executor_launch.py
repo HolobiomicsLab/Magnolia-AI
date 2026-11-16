@@ -1441,6 +1441,28 @@ def test_explicit_child_environment_keys_are_protected_from_their_source(
     assert "COMPCHEM_FUTURE_CONTRACT" in launch.protected_env_names
 
 
+def test_conditional_child_environment_keys_share_the_value_source(
+    tmp_path, monkeypatch
+):
+    context = _context(tmp_path, client="codex")
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._explicit_environment
+
+    def with_future_conditional(*args, **kwargs):
+        explicit = original(*args, **kwargs)
+        explicit["COMPCHEM_FUTURE_CONDITIONAL"] = "bound"
+        return explicit
+
+    monkeypatch.setattr(
+        launch_module, "_explicit_environment", with_future_conditional
+    )
+    launch = prepare_launch(context)
+
+    assert launch.env["COMPCHEM_FUTURE_CONDITIONAL"] == "bound"
+    assert "COMPCHEM_FUTURE_CONDITIONAL" in launch.protected_env_names
+
+
 def test_launch_refuses_renamed_policy_environment_name(tmp_path, monkeypatch):
     context = _production_claude_context(tmp_path)
     from campaign_runner import launch as launch_module

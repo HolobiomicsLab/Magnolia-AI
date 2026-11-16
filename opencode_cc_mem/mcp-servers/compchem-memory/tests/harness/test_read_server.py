@@ -46,7 +46,8 @@ def _policy(path: Path, project: Path, *, role: str = "worker") -> Path:
     return path
 
 
-def _server(tmp_path: Path) -> tuple[ReadServer, Path, Path]:
+def _server(tmp_path: Path, *, clock=None) -> tuple[ReadServer, Path, Path]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     project = tmp_path / "project"
     outside = tmp_path / "outside"
     project.mkdir()
@@ -54,7 +55,10 @@ def _server(tmp_path: Path) -> tuple[ReadServer, Path, Path]:
     policy = _policy(tmp_path / "policy.json", project)
     return (
         ReadServer.from_policy_file(
-            policy, cwd=project, control_dir=str(tmp_path / "control")
+            policy,
+            cwd=project,
+            control_dir=str(tmp_path / "control"),
+            clock=clock,
         ),
         project,
         outside,
@@ -69,6 +73,7 @@ def test_read_server_confines_reads_to_policy_roots(tmp_path):
     (project / "alias").symlink_to(outside, target_is_directory=True)
 
     assert server.read_file("notes.txt")["content"] == "allowed\n"
+    assert server.read_file(str(project / "notes.txt"))["content"] == "allowed\n"
     assert server.list_dir(".")["entries"] == ["notes.txt"]
     for path in (
         "../outside/outside.txt",
@@ -87,6 +92,24 @@ def test_read_server_refuses_without_policy(tmp_path):
         ReadServer.from_environment({}, cwd=tmp_path)
     with pytest.raises(ReadRefused, match="invalid"):
         ReadServer.from_policy_file(tmp_path / "missing.json", cwd=tmp_path)
+
+
+def test_read_server_requires_explicit_canonical_cwd(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    policy = _policy(tmp_path / "policy.json", project)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.chdir(fake_home)
+
+    with pytest.raises(ReadRefused, match="canonical cwd"):
+        ReadServer.from_policy_file(policy, control_dir=str(tmp_path / "control"))
+    with pytest.raises(ReadRefused, match="canonical cwd"):
+        ReadServer.from_policy_file(
+            policy,
+            cwd=Path("../project"),
+            control_dir=str(tmp_path / "control"),
+        )
 
 
 def test_read_server_refuses_policy_digest_mismatch(tmp_path):
@@ -176,6 +199,100 @@ def test_read_server_bounds_output(tmp_path, monkeypatch):
         server.search("re:^(line+)+$", "many.txt")
 
 
+def test_read_server_refuses_binary_reads_and_counts_search_skips(tmp_path):
+    server, project, _outside = _server(tmp_path)
+    (project / "clean.txt").write_text("needle clean\n", encoding="utf-8")
+    (project / "binary.bin").write_bytes(b"needle hidden\n\xff\xfe")
+    (project / "late-nul.txt").write_bytes(
+        b"needle hidden\n" + b"text\n" * 20 + b"late\x00nul\n"
+    )
+
+    for name in ("binary.bin", "late-nul.txt"):
+        with pytest.raises(ReadRefused, match="binary"):
+            server.read_file(name, limit=100)
+
+    result = server.search("needle", ".")
+
+    assert result["matches"] == [
+        {"path": "clean.txt", "line": 1, "text": "needle clean"}
+    ]
+    assert result["truncated"] is True
+    assert "binary files skipped: 2" in result["reason"]
+
+
+def test_read_server_proves_file_count_deadline_and_read_byte_caps(
+    tmp_path, monkeypatch
+):
+    class StepClock:
+        def __init__(self):
+            self.value = 0.0
+
+        def __call__(self):
+            current = self.value
+            self.value += 1.0
+            return current
+
+    server, project, _outside = _server(tmp_path)
+    for index in range(4):
+        (project / f"file-{index}.txt").write_text("needle\n", encoding="utf-8")
+    monkeypatch.setattr(server, "MAX_SEARCH_FILES", 2)
+    capped = server.search("needle", ".")
+    assert "file limit exceeded" in capped["reason"]
+
+    clocked, clocked_project, _outside = _server(
+        tmp_path / "clocked", clock=StepClock()
+    )
+    (clocked_project / "one.txt").write_text("needle\n", encoding="utf-8")
+    (clocked_project / "two.txt").write_text("needle\n", encoding="utf-8")
+    deadline = clocked.search("needle", ".")
+    assert "time limit exceeded" in deadline["reason"]
+
+    monkeypatch.setattr(server, "MAX_READ_BYTES", 32)
+    (project / "large.txt").write_text("x" * 100 + "\n", encoding="utf-8")
+    large = server.read_file("large.txt", limit=1)
+    assert large["bytes"] <= 32
+    assert len(large["content"].encode("utf-8")) <= 32
+    assert large["truncated"] is True
+
+
+@pytest.mark.parametrize("role", ("helper", "evaluator"))
+def test_read_server_refuses_non_campaign_read_roles(tmp_path, role):
+    project = tmp_path / role
+    project.mkdir()
+    policy = _policy(tmp_path / f"{role}.json", project, role=role)
+
+    with pytest.raises(ReadRefused, match="worker and reviewer"):
+        ReadServer.from_policy_file(
+            policy, cwd=project, control_dir=str(tmp_path / "control")
+        )
+
+
+def test_dedicated_worker_and_reviewer_servers_cannot_cross_roots(tmp_path):
+    worker_root = tmp_path / "worker"
+    reviewer_root = tmp_path / "reviewer"
+    worker_root.mkdir()
+    reviewer_root.mkdir()
+    (worker_root / "worker.txt").write_text("worker\n", encoding="utf-8")
+    (reviewer_root / "reviewer.txt").write_text("reviewer\n", encoding="utf-8")
+    worker = ReadServer.from_policy_file(
+        _policy(tmp_path / "worker.json", worker_root),
+        cwd=worker_root,
+        control_dir=str(tmp_path / "control"),
+    )
+    reviewer = ReadServer.from_policy_file(
+        _policy(tmp_path / "reviewer.json", reviewer_root, role="reviewer"),
+        cwd=reviewer_root,
+        control_dir=str(tmp_path / "control"),
+    )
+
+    assert worker.read_file(str(worker_root / "worker.txt"))["content"] == "worker\n"
+    assert reviewer.read_file(str(reviewer_root / "reviewer.txt"))["content"] == "reviewer\n"
+    with pytest.raises(ReadRefused, match="policy denied"):
+        worker.read_file(str(reviewer_root / "reviewer.txt"))
+    with pytest.raises(ReadRefused, match="policy denied"):
+        reviewer.read_file(str(worker_root / "worker.txt"))
+
+
 def test_read_server_rechecks_open_descriptor_and_refuses_fifo(tmp_path, monkeypatch):
     server, project, outside = _server(tmp_path)
     race = project / "race.txt"
@@ -240,6 +357,7 @@ async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
                     policy.read_bytes()
                 ).hexdigest(),
                 "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+                "MAGNOLIA_PROJECT_DIR": str(project.resolve()),
             },
         cwd=str(project),
     )
@@ -325,6 +443,7 @@ async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
             "MAGNOLIA_HOOK_POLICY": str(policy),
             "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(policy.read_bytes()).hexdigest(),
             "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+            "MAGNOLIA_PROJECT_DIR": str(project.resolve()),
         },
         cwd=str(project),
     )
@@ -368,6 +487,7 @@ async def test_regex_worker_uses_run_owned_bytecode_cache(tmp_path):
         "MAGNOLIA_HOOK_POLICY": str(policy),
         "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(policy.read_bytes()).hexdigest(),
         "MAGNOLIA_CONTROL_DIR": str(control),
+        "MAGNOLIA_PROJECT_DIR": str(project.resolve()),
     }
 
     async def search() -> dict:

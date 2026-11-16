@@ -8,8 +8,8 @@
       "opencode_cc_mem/docs/harness-probes-2026-11.md",
       "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
       "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
-      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
-      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md"
+      "opencode_cc_mem/docs/evidence/codex/task-codex-livefix-report.md",
+      "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md"
     ]
   },
   "note": "Claude live role gates are accepted and launch-bound to the real client plus normalized project-independent rendered components. Codex and Vibe remain refused.",
@@ -805,7 +805,7 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
@@ -815,12 +815,12 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "6a5923fbb04fbefcf24b7debfad2f9f6b6cd351655e3393c967c12fe16eef19e",
+            "configuration_identity_sha256": "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb",
             "components": {
               "model": "gpt-5.6-luna",
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "a38ef3835c5815a8d00937c78cd7e46fdc383c970b1738016a3a32dce6b8bff2",
-              "native_files": "eae00d1cd21b37621197eb744847ea32e1279db4ebdd8617f044e332ef4ec7e2",
+              "native_files": "c9029176512f058f08bab775d765e9bd85b0c589e62890fbc6a03ed77b16fd12",
               "policy": "184ebe313dec2ff61f8f5a2de1f40d5b9731e2e865f87b3a740426bf160b282b",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
@@ -835,7 +835,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -911,7 +911,7 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
@@ -921,12 +921,12 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "cca3c04408e103ec008bd07315f09c0240a736a69ee120ce68f95b19eec3653e",
+            "configuration_identity_sha256": "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f",
             "components": {
               "model": "gpt-5.6-luna",
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
-              "native_files": "73c726565df452cff38dbd97d9c331d850a3b9dc7770befe1f3446fb99cbf041",
+              "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
               "policy": "f619948085b689cdd9695313c347ef5d7ffae36013a0983b686eb2f006f1551f",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
@@ -941,7 +941,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -1017,7 +1017,7 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
@@ -1047,7 +1047,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -1123,7 +1123,7 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
@@ -1153,7 +1153,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",

@@ -166,6 +166,8 @@ def _validate_cell(cell: Any, label: str, repository_root: Path) -> None:
     artifact_path = Path(artifact)
     if artifact_path.is_absolute() or ".." in artifact_path.parts:
         raise CapabilityTableError(f"{label} artifact must be repo-relative")
+    if artifact_path.parts and artifact_path.parts[0] == ".superpowers":
+        raise CapabilityTableError(f"{label} artifact must be tracked-safe")
     resolved = repository_root / artifact_path
     if not resolved.is_file():
         raise CapabilityTableError(f"{label} artifact does not exist: {artifact}")

@@ -196,8 +196,12 @@ def _prepare_launch(
         policy_body=policy_body,
         invocation_dir=invocation_dir,
     )
+    protected_env_names: set[str] = set()
     env = _effective_environment(
-        context, invocation_dir / "policy.json", policy_digest
+        context,
+        invocation_dir / "policy.json",
+        policy_digest,
+        protected_names=protected_env_names,
     )
     client_sha256 = None
     if "launch_identity" in evidence:
@@ -249,6 +253,7 @@ def _prepare_launch(
             config_digest,
             capability_identity,
             client_sha256,
+            frozenset(protected_env_names),
             {
                 "policy.json": policy_body,
                 "settings.json": settings_body,
@@ -286,6 +291,7 @@ def _prepare_launch(
         config_digest,
         capability_identity,
         client_sha256,
+        frozenset(protected_env_names),
     )
 
 
@@ -1172,6 +1178,7 @@ def _codex_mcp_servers(
             "MAGNOLIA_HOOK_POLICY_REQUIRED",
             "MAGNOLIA_HOOK_POLICY_SHA256",
             "MAGNOLIA_CONTROL_DIR",
+            "MAGNOLIA_PROJECT_DIR",
             "PYTHONPYCACHEPREFIX",
         ],
         "tools": _codex_tool_approvals("magnolia-read", mcp_payload),
@@ -1317,7 +1324,11 @@ def _invocation_dir(context: ExecContext) -> Path:
 
 
 def _effective_environment(
-    context: ExecContext, policy_path: Path, policy_digest: str
+    context: ExecContext,
+    policy_path: Path,
+    policy_digest: str,
+    *,
+    protected_names: set[str] | None = None,
 ) -> dict[str, str]:
     inherited = os.environ if context.environment is None else context.environment
     assert context.route is not None
@@ -1381,16 +1392,47 @@ def _effective_environment(
     ):
         for name in MEMORY_PROVIDER_ENV:
             env.pop(name, None)
+    if protected_names is not None:
+        protected_names.update(
+            str(name) for name in context.renderer_env if str(name) in env
+        )
+        service_names = context.memory_service.get("env_vars", ())
+        if isinstance(service_names, (list, tuple)):
+            protected_names.update(
+                str(name) for name in service_names if str(name) in env
+            )
     assert context.installation_root is not None
     assert context.workspace_root is not None
     assert context.run_dir is not None
     assert context.control_dir is not None
     assert context.work_dir is not None
-    explicit = _base_explicit_environment(
+    explicit = _explicit_environment(
         context,
         policy_path=policy_path,
         policy_digest=policy_digest,
         pycache_prefix=_fresh_pycache_prefix(policy_path.parent),
+        inherited=env,
+    )
+    if protected_names is not None:
+        protected_names.update(explicit)
+    env.update({key: str(value) for key, value in explicit.items()})
+    return env
+
+
+def _explicit_environment(
+    context: ExecContext,
+    *,
+    policy_path: Path,
+    policy_digest: str,
+    pycache_prefix: str,
+    inherited: Mapping[str, str],
+) -> dict[str, str]:
+    """Build every unconditional and conditional child-owned value."""
+    explicit = _base_explicit_environment(
+        context,
+        policy_path=policy_path,
+        policy_digest=policy_digest,
+        pycache_prefix=pycache_prefix,
     )
     memory_model = context.setup.get("memory_model")
     memory_provider = context.setup.get("memory_provider")
@@ -1400,7 +1442,7 @@ def _effective_environment(
         explicit["MAGNOLIA_MEMORY_PROVIDER"] = memory_provider
     if context.route.client == "claude-code" and context.memory_service.get("transport") == "stdio":
         for name in ("MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER"):
-            explicit.setdefault(name, env.get(name, ""))
+            explicit.setdefault(name, inherited.get(name, ""))
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
     service = context.memory_service
@@ -1420,8 +1462,7 @@ def _effective_environment(
     if context.route.client == "vibe":
         # VIBE_DISABLE_TELEMETRY is ignored by Vibe 3.1.2.
         explicit["VIBE_ENABLE_TELEMETRY"] = "false"
-    env.update({key: str(value) for key, value in explicit.items()})
-    return env
+    return explicit
 
 
 def _base_explicit_environment(
@@ -1566,6 +1607,7 @@ def _resume_launch(
     config_digest: str,
     capability_identity: str,
     client_sha256: str | None,
+    protected_env_names: frozenset[str],
     expected_artifacts: Mapping[str, bytes],
 ) -> PreparedLaunch:
     metadata_path = invocation_dir / "launch.json"
@@ -1624,6 +1666,7 @@ def _resume_launch(
         config_digest,
         capability_identity,
         client_sha256,
+        protected_env_names,
     )
 
 
@@ -1701,6 +1744,7 @@ def _prepared(
     config_digest: str,
     capability_identity: str,
     client_sha256: str | None,
+    protected_env_names: frozenset[str],
 ) -> PreparedLaunch:
     return PreparedLaunch(
         discovery_dir=discovery_dir,
@@ -1711,38 +1755,10 @@ def _prepared(
         policy_digest=policy_digest,
         config_digest=config_digest,
         required_capability_identity=capability_identity,
-        protected_env_names=_contract_environment_names(context, env),
+        protected_env_names=protected_env_names & frozenset(env),
         client_sha256=client_sha256,
         memory_service_handle=context.memory_service.get("_handle"),
     )
-
-
-def _contract_environment_names(
-    context: ExecContext, env: Mapping[str, str]
-) -> frozenset[str]:
-    """Return env names Magnolia deliberately sets or forwards by contract."""
-    names = set(_base_explicit_environment(
-        context,
-        policy_path=Path("."),
-        policy_digest="",
-        pycache_prefix="",
-    ))
-    names.update(str(name) for name in context.renderer_env)
-    if context.route is not None and context.route.model:
-        names.add("MAGNOLIA_MODEL")
-    if context.setup.get("memory_model"):
-        names.add("MAGNOLIA_MEMORY_MODEL")
-    if context.setup.get("memory_provider"):
-        names.add("MAGNOLIA_MEMORY_PROVIDER")
-    if context.route is not None and context.route.client == "vibe":
-        names.add("VIBE_ENABLE_TELEMETRY")
-    service_names = context.memory_service.get("env_vars", ())
-    if isinstance(service_names, (list, tuple)):
-        names.update(str(name) for name in service_names)
-    authorization = context.memory_service.get("authorization_env")
-    if isinstance(authorization, str):
-        names.add(authorization)
-    return frozenset(names & set(env))
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
