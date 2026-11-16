@@ -15,6 +15,7 @@ legacy export-everything behavior. Tests exercising the skip path inject
 `session_updates=` or patch the function themselves.
 """
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -48,9 +49,43 @@ def _tree_metadata(root: Path) -> tuple[tuple[str, int], ...]:
     return tuple(rows)
 
 
-_OWNER_STATE_BEFORE = {
-    root: _tree_metadata(root) for root in _OWNER_STATE_ROOTS
-}
+_AUDITED_STATE_PATHS: list[Path] = []
+
+
+def _record_state_path(event, args):
+    """Record path metadata for filesystem mutations, never file contents."""
+    indexes = (0, 1) if event in {"os.rename", "os.replace"} else (0,)
+    if event not in {"os.mkdir", "os.rmdir", "os.remove", "os.rename", "os.replace"}:
+        return
+    for index in indexes:
+        try:
+            raw = args[index]
+            if isinstance(raw, (str, bytes, os.PathLike)):
+                _AUDITED_STATE_PATHS.append(Path(os.fsdecode(raw)).resolve())
+        except (IndexError, OSError, TypeError, ValueError):
+            continue
+
+
+sys.addaudithook(_record_state_path)
+
+
+def _audited_mutation_count(root: Path) -> int:
+    canonical = root.resolve()
+    return sum(
+        path == canonical or path.is_relative_to(canonical)
+        for path in _AUDITED_STATE_PATHS
+    )
+
+
+def _owner_state_metadata(roots):
+    """Snapshot content-free tree and in-process mutation metadata."""
+    return {
+        root: (_tree_metadata(root), _audited_mutation_count(root))
+        for root in roots
+    }
+
+
+_OWNER_STATE_BEFORE = _owner_state_metadata(_OWNER_STATE_ROOTS)
 for _name, _value in _ISOLATED_ENV.items():
     os.environ[_name] = _value
 Path(_ISOLATED_ENV["HOME"]).mkdir(parents=True)
@@ -61,7 +96,7 @@ def _isolate_magnolia_state():
     """Redirect state and fail if the owner trees change during this suite."""
     try:
         yield
-        after = {root: _tree_metadata(root) for root in _OWNER_STATE_ROOTS}
+        after = _owner_state_metadata(_OWNER_STATE_ROOTS)
         assert after == _OWNER_STATE_BEFORE, (
             "tests created or modified owner Magnolia state; "
             "compare listings and mtimes under the guarded roots"
@@ -72,6 +107,12 @@ def _isolate_magnolia_state():
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+
+
+@pytest.fixture
+def owner_state_metadata():
+    """Expose the content-free guard snapshot for its contract test."""
+    return _owner_state_metadata
 
 
 _LLM_ENV_VARS = (

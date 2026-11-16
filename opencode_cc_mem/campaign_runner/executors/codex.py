@@ -41,9 +41,17 @@ FORBIDDEN_FLAGS = frozenset({
     "--auto-approve",
     "--approve-for-me",
     "--full-auto",
+    "--ignore-rules",
+    "--remote",
+    "--search",
     "--trust",
     "--yolo",
+    "-a",
 })
+PROTECTIVE_FEATURES = (
+    "untrusted_as_tool_output",
+    "write_stdin_approval",
+)
 RESTRICTED_FEATURES = (
     "agent_message_board",
     "agent_message_board_mcp",
@@ -108,17 +116,18 @@ RESTRICTED_FEATURES = (
     "reasoning_effort_override",
     "retain_client_tool_outputs",
     "runtime_agent_instances",
+    "remote_plugin",
     "send_message_to_user_async",
     "skill_catalog_deltas",
+    "skill_mcp_dependency_install",
     "standalone_web_search",
     "subagent_default_context_limits",
     "subagent_thread_environments",
     "system_proxy_fallback",
     "unified_image_budget",
-    "untrusted_as_tool_output",
     "use_xaa",
+    "view_image",
     "wake_on_agent_messages",
-    "write_stdin_approval",
 )
 ISOLATION_OVERRIDES = (
     'web_search="disabled"',
@@ -537,6 +546,8 @@ class CodexExecutor:
         if self.role in {"worker", "reviewer"}:
             for feature in RESTRICTED_FEATURES:
                 argv.extend(["--disable", feature])
+            for feature in PROTECTIVE_FEATURES:
+                argv.extend(["--enable", feature])
             argv.extend(["--enable", "skip_host_skill_discovery"])
         else:
             argv.extend(["--disable", "code_mode_host"])
@@ -651,6 +662,7 @@ class CodexExecutor:
                         "MAGNOLIA_HOOK_POLICY_REQUIRED",
                         "MAGNOLIA_HOOK_POLICY_SHA256",
                         "MAGNOLIA_CONTROL_DIR",
+                        "MAGNOLIA_PROJECT_DIR",
                         "PYTHONPYCACHEPREFIX",
                     ]
                 ):
@@ -1036,7 +1048,7 @@ def _relevant_owner_config(
 ) -> dict[str, Any]:
     """Return execution-relevant owner settings with shell values one-way hashed."""
     relevant: dict[str, Any] = {}
-    pinned_features = set(RESTRICTED_FEATURES) | {
+    pinned_features = set((*RESTRICTED_FEATURES, *PROTECTIVE_FEATURES)) | {
         "apps",
         "skip_host_skill_discovery",
     }
@@ -1161,6 +1173,10 @@ def _validate_final_argv(argv: list[str]) -> None:
             _validate_feature_switch(options[index + 1], True, pinned)
         elif value.startswith("--enable="):
             _validate_feature_switch(value.split("=", 1)[1], True, pinned)
+        elif value == "--disable" and index + 1 < len(options):
+            _validate_feature_switch(options[index + 1], False, pinned)
+        elif value.startswith("--disable="):
+            _validate_feature_switch(value.split("=", 1)[1], False, pinned)
 
 
 def _validate_config_override(
@@ -1174,6 +1190,8 @@ def _validate_config_override(
     if any(segment.startswith("dangerously_") for segment in segments):
         raise WorkerError("forbidden Codex launch config bypass")
     if normalized.startswith("shell_environment_policy.") and normalized not in pinned:
+        raise WorkerError(f"forbidden Codex launch pinned override: {normalized}")
+    if normalized == "sandbox_mode" and normalized not in pinned:
         raise WorkerError(f"forbidden Codex launch pinned override: {normalized}")
     if normalized not in pinned:
         return
@@ -1193,6 +1211,7 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
         "approval_policy": "never",
         "features": {
             **{feature: False for feature in (*RESTRICTED_FEATURES, "apps")},
+            **{feature: True for feature in PROTECTIVE_FEATURES},
             "skip_host_skill_discovery": True,
         },
         "notify": [],
@@ -1215,14 +1234,16 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
     }
     for feature in (*RESTRICTED_FEATURES, "apps"):
         pinned[f"features.{feature}"] = False
+    for feature in PROTECTIVE_FEATURES:
+        pinned[f"features.{feature}"] = True
     pinned["features.skip_host_skill_discovery"] = True
     for index, value in enumerate(options):
-        if value in {"-m", "--model"}:
-            if index + 1 < len(options):
-                pinned["model"] = options[index + 1]
-        elif value in {"-s", "--sandbox"}:
-            if index + 1 < len(options):
-                pinned["sandbox_mode"] = options[index + 1]
+        model = _option_value_at(options, index, short="-m", long="--model")
+        if model is not None:
+            pinned["model"] = model
+        sandbox = _option_value_at(options, index, short="-s", long="--sandbox")
+        if sandbox is not None:
+            pinned["sandbox_mode"] = sandbox
         override = _config_override_at(options, index)
         if override is None:
             continue
@@ -1231,6 +1252,22 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
         if separator and normalized == "model_reasoning_effort":
             pinned.setdefault(normalized, _config_value(raw_value))
     return pinned
+
+
+def _option_value_at(
+    options: list[str], index: int, *, short: str, long: str
+) -> str | None:
+    """Return one separated, equals, or glued option value."""
+    value = options[index]
+    if value in {short, long}:
+        return options[index + 1] if index + 1 < len(options) else None
+    if value.startswith(long + "="):
+        return value.split("=", 1)[1]
+    if value.startswith(short + "="):
+        return value.split("=", 1)[1]
+    if value.startswith(short) and not value.startswith("--") and len(value) > len(short):
+        return value[len(short):]
+    return None
 
 
 def _config_override_at(options: list[str], index: int) -> str | None:

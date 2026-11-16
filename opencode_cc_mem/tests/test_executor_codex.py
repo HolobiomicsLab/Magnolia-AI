@@ -327,6 +327,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
                 "MAGNOLIA_HOOK_POLICY_SHA256",
                 "MAGNOLIA_CONTROL_DIR",
+                "MAGNOLIA_PROJECT_DIR",
                 "PYTHONPYCACHEPREFIX",
             ],
             "tools": {
@@ -354,6 +355,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         "MAGNOLIA_HOOK_POLICY_REQUIRED",
         "MAGNOLIA_HOOK_POLICY_SHA256",
         "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_PROJECT_DIR",
         "PYTHONPYCACHEPREFIX",
     ]
     expected_tools = {
@@ -385,6 +387,15 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     pairs = [argv[i:i + 2] for i in range(len(argv) - 1)]
     for feature in (*RESTRICTED_FEATURES, "apps"):
         assert ["--disable", feature] in pairs
+    for feature in (
+        "skill_mcp_dependency_install",
+        "remote_plugin",
+        "view_image",
+    ):
+        assert ["--disable", feature] in pairs
+    for feature in ("untrusted_as_tool_output", "write_stdin_approval"):
+        assert feature not in RESTRICTED_FEATURES
+        assert ["--enable", feature] in pairs
     assert ["--enable", "skip_host_skill_discovery"] in pairs
     overrides = [
         argv[index + 1]
@@ -467,6 +478,7 @@ def test_codex_worker_pins_each_owner_isolation_setting(
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
                 "MAGNOLIA_HOOK_POLICY_SHA256",
                 "MAGNOLIA_CONTROL_DIR",
+                "MAGNOLIA_PROJECT_DIR",
                 "PYTHONPYCACHEPREFIX",
             ],
             "tools": {
@@ -814,6 +826,7 @@ def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
                 "MAGNOLIA_HOOK_POLICY_SHA256",
                 "MAGNOLIA_CONTROL_DIR",
+                "MAGNOLIA_PROJECT_DIR",
                 "PYTHONPYCACHEPREFIX",
             ],
             "tools": {
@@ -1136,6 +1149,11 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["--cyber-access-program", "daybreak_red"],
         ["--cyber-access-program=daybreak_red"],
         ["--yolo"],
+        ["--trust"],
+        ["--search"],
+        ["-a", "on-request"],
+        ["--remote", "http://127.0.0.1:9999"],
+        ["--ignore-rules"],
         ["-p", "owner"],
         ["-powner"],
         ["-p=owner"],
@@ -1159,6 +1177,9 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["-cdangerously_bypass_approvals_and_sandbox=true"],
         ["--enable", "computer_use"],
         ["--enable=computer_use"],
+        ["--disable", "untrusted_as_tool_output"],
+        ["-mother-model", "-c", 'model="gpt-test"'],
+        ["-sread-only", "-c", 'sandbox_mode="danger-full-access"'],
     ),
 )
 def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
@@ -1176,6 +1197,32 @@ def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
     ]
 
     with pytest.raises(WorkerError, match="forbidden Codex launch"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert _calls(state) == []
+
+
+def test_codex_refuses_sandbox_override_without_sandbox_flag(tmp_path):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+    safe_argv = executor._argv("prompt", None)
+    separator = safe_argv.index("--")
+    options = safe_argv[:separator]
+    sandbox_index = options.index("-s")
+    without_sandbox = options[:sandbox_index] + options[sandbox_index + 2:]
+    executor._argv = lambda prompt, session_id: [
+        *without_sandbox,
+        "-c",
+        'sandbox_mode="danger-full-access"',
+        *safe_argv[separator:],
+    ]
+
+    with pytest.raises(WorkerError, match="sandbox_mode"):
         executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
 
     assert _calls(state) == []

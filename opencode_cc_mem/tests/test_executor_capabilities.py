@@ -117,6 +117,20 @@ def test_capability_record_requires_identity_and_evidence(tmp_path):
         validate_capability_table(missing_artifact, repository_root=REPOSITORY_ROOT)
 
 
+def test_current_capability_citations_are_repository_tracked_safe():
+    table = json.loads(TABLE.read_text(encoding="utf-8"))
+    citations = list(table["generated_from"]["sources"])
+    for row in table["rows"]:
+        citations.append(row["gate"].get("artifact"))
+        citations.extend(cell.get("artifact") for cell in row["cells"].values())
+
+    for citation in (value for value in citations if value is not None):
+        relative = Path(citation)
+        assert not relative.is_absolute(), citation
+        assert relative.parts and relative.parts[0] != ".superpowers", citation
+        assert (REPOSITORY_ROOT / relative).exists(), citation
+
+
 def test_capability_record_rejects_unknown_status():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     table["rows"][0]["cells"]["argv"]["status"] = "assumed"

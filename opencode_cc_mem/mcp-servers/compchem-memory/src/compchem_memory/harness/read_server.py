@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import fcntl
 import hashlib
 import hmac
@@ -13,7 +14,7 @@ import stat
 import sys
 import time
 from pathlib import Path
-from typing import BinaryIO, Mapping
+from typing import BinaryIO, Callable, Mapping
 
 from fastmcp import FastMCP
 
@@ -50,6 +51,7 @@ class ReadServer:
         cwd: Path,
         policy_path: Path | None = None,
         policy_digest: str | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if policy.role not in {"worker", "reviewer"}:
             raise ReadRefused("magnolia-read is restricted to worker and reviewer policies")
@@ -57,6 +59,7 @@ class ReadServer:
         self.cwd = cwd.resolve()
         self.policy_path = policy_path
         self.policy_digest = policy_digest
+        self.clock = clock or time.monotonic
 
     @classmethod
     def from_environment(
@@ -85,8 +88,14 @@ class ReadServer:
         cwd: Path | None = None,
         expected_sha256: str | None = None,
         control_dir: str | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> "ReadServer":
         """Load and validate one immutable run policy before serving reads."""
+        if cwd is None:
+            raise ReadRefused("an explicit canonical cwd is required")
+        canonical_cwd = cwd.resolve()
+        if not cwd.is_absolute() or cwd != canonical_cwd:
+            raise ReadRefused("an explicit canonical cwd is required")
         try:
             policy = load_required_policy(
                 path,
@@ -97,9 +106,10 @@ class ReadServer:
             raise ReadRefused(f"invalid MAGNOLIA_HOOK_POLICY: {exc}") from exc
         return cls(
             policy,
-            cwd=cwd or Path.cwd(),
+            cwd=canonical_cwd,
             policy_path=Path(path) if expected_sha256 is not None else None,
             policy_digest=expected_sha256,
+            clock=clock,
         )
 
     def _verify_policy_integrity(self) -> None:
@@ -135,10 +145,11 @@ class ReadServer:
                 )
         except OSError as exc:
             raise ReadRefused(f"cannot read {path!r}: {exc}") from exc
+        content = _decode_text_prefix(body, truncated)
         return {
             "path": path,
             "offset": offset,
-            "content": body.decode("utf-8", errors="replace"),
+            "content": content,
             "bytes": len(body),
             "truncated": truncated,
         }
@@ -174,7 +185,7 @@ class ReadServer:
         """Return time- and size-bounded literal or isolated-regex matches."""
         self._verify_policy_integrity()
         expression, regex = self._expression(pattern)
-        deadline = time.monotonic() + self.MAX_SEARCH_SECONDS
+        deadline = self.clock() + self.MAX_SEARCH_SECONDS
         target = self._path(path, broad=True)
         if not target.exists():
             raise ReadRefused(f"search target does not exist: {path!r}")
@@ -206,31 +217,39 @@ class ReadServer:
         records: list[dict[str, object]] = []
         reasons: list[str] = []
         scanned_bytes = 0
+        scanned_files = 0
+        binary_files = 0
         files = target.rglob("*") if target.is_dir() else (target,)
-        for file_number, candidate in enumerate(files, start=1):
-            if file_number > self.MAX_SEARCH_FILES:
-                reasons.append("file limit exceeded")
-                break
-            if time.monotonic() >= deadline:
+        for candidate in files:
+            if self.clock() >= deadline:
                 reasons.append("time limit exceeded")
                 break
             if candidate.is_dir():
                 continue
+            scanned_files += 1
+            if scanned_files > self.MAX_SEARCH_FILES:
+                reasons.append("file limit exceeded")
+                break
             if not read_target_allowed(str(candidate), self.cwd, self.policy):
                 raise ReadRefused(f"policy denied search descendant: {candidate}")
             with self._open_regular(candidate, str(candidate)) as handle:
-                found, consumed, file_reasons = self._scan_file(
+                found, consumed, file_reasons, is_binary = self._scan_file(
                     candidate,
                     handle,
                     self.MAX_SEARCH_TOTAL_BYTES - scanned_bytes,
                     deadline,
                 )
-            records.extend(found)
+            if is_binary:
+                binary_files += 1
+            else:
+                records.extend(found)
             scanned_bytes += consumed
             reasons.extend(file_reasons)
             if scanned_bytes >= self.MAX_SEARCH_TOTAL_BYTES:
                 reasons.append("total byte limit exceeded")
                 break
+        if binary_files:
+            reasons.append(f"binary files skipped: {binary_files}")
         return records, reasons
 
     def _scan_file(
@@ -239,40 +258,46 @@ class ReadServer:
         handle: BinaryIO,
         byte_budget: int,
         deadline: float,
-    ) -> tuple[list[dict[str, object]], int, list[str]]:
+    ) -> tuple[list[dict[str, object]], int, list[str], bool]:
         records: list[dict[str, object]] = []
         reasons: list[str] = []
         consumed = 0
         line_number = 0
-        while consumed < byte_budget and time.monotonic() < deadline:
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        reached_eof = False
+        while consumed < byte_budget and self.clock() < deadline:
             line_number += 1
             raw = handle.readline(min(self.MAX_SEARCH_LINE_BYTES + 1, byte_budget - consumed))
             if not raw:
+                reached_eof = True
                 break
             consumed += len(raw)
             is_long = len(raw) > self.MAX_SEARCH_LINE_BYTES and not raw.endswith(b"\n")
             prefix = raw[: self.MAX_SEARCH_LINE_BYTES]
-            has_nul = b"\x00" in raw
+            if _is_binary_chunk(raw, decoder):
+                return [], consumed, reasons, True
             while is_long and consumed < byte_budget:
                 chunk = handle.readline(min(self.MAX_SEARCH_LINE_BYTES + 1, byte_budget - consumed))
                 if not chunk:
+                    reached_eof = True
                     break
                 consumed += len(chunk)
-                has_nul = has_nul or b"\x00" in chunk
+                if _is_binary_chunk(chunk, decoder):
+                    return [], consumed, reasons, True
                 if chunk.endswith(b"\n"):
                     break
             if is_long:
                 reasons.append("line length limit exceeded")
-            if has_nul:
-                break
             records.append({
                 "path": _shown_path(path, self.cwd),
                 "line": line_number,
                 "text": prefix.decode("utf-8", errors="replace").rstrip("\r\n"),
             })
-        if time.monotonic() >= deadline:
+        if reached_eof and _is_incomplete_utf8(decoder):
+            return [], consumed, reasons, True
+        if self.clock() >= deadline:
             reasons.append("time limit exceeded")
-        return records, consumed, reasons
+        return records, consumed, reasons, False
 
     def _expression(self, pattern: str) -> tuple[str, bool]:
         if not isinstance(pattern, str) or not pattern or len(pattern) > self.MAX_PATTERN_LENGTH:
@@ -299,7 +324,7 @@ class ReadServer:
     ) -> tuple[list[dict[str, object]], str | None]:
         if not regex:
             return [row for row in records if expression in str(row["text"])], None
-        remaining = deadline - time.monotonic()
+        remaining = deadline - self.clock()
         if remaining <= 0:
             return [], "time limit exceeded"
         indices, reason = _regex_indices(
@@ -447,6 +472,40 @@ def _read_lines(
     return body, len(body) >= max_bytes or bool(handle.read(1))
 
 
+def _decode_text_prefix(body: bytes, truncated: bool) -> str:
+    """Decode a scanned prefix while refusing definite binary content."""
+    if b"\x00" in body:
+        raise ReadRefused("binary content refused: NUL byte in scanned prefix")
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        if truncated and exc.reason == "unexpected end of data" and exc.end == len(body):
+            return body[: exc.start].decode("utf-8")
+        raise ReadRefused(
+            "binary content refused: non-UTF-8 data in scanned prefix"
+        ) from exc
+
+
+def _is_binary_chunk(raw: bytes, decoder) -> bool:
+    """Feed one search chunk into the file-wide binary detector."""
+    if b"\x00" in raw:
+        return True
+    try:
+        decoder.decode(raw, final=False)
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
+def _is_incomplete_utf8(decoder) -> bool:
+    """Return whether an EOF leaves an invalid UTF-8 suffix."""
+    try:
+        decoder.decode(b"", final=True)
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
 def _skip_line(handle: BinaryIO, chunk_bytes: int) -> bool:
     found = False
     while chunk := handle.readline(chunk_bytes + 1):
@@ -505,7 +564,8 @@ async def search(pattern: str, path: str):
 def main() -> None:
     """Load the run policy before starting the stdio MCP transport."""
     global _SERVER
-    _SERVER = ReadServer.from_environment()
+    cwd = os.environ.get("MAGNOLIA_PROJECT_DIR")
+    _SERVER = ReadServer.from_environment(cwd=Path(cwd) if cwd else None)
     mcp.run()
 
 
