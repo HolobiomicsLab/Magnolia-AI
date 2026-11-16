@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 import stat
+import subprocess
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -186,7 +187,12 @@ def _prepare_launch(
     native_bodies = _client_native_artifacts(context, invocation_dir, mcp_payload)
     policy_digest = _digest(policy_body)
     config_digest = _configuration_identity(
-        context, settings_body, mcp_body, native_bodies
+        context,
+        settings_body,
+        mcp_body,
+        native_bodies,
+        policy_body=policy_body,
+        invocation_dir=invocation_dir,
     )
     env = _effective_environment(
         context, invocation_dir / "policy.json", policy_digest
@@ -217,12 +223,14 @@ def _prepare_launch(
             raise ExecutorRefused(
                 "capability configuration identity does not match discovered configuration"
             )
-        if route.client == "claude-code":
+        if route.client in {"claude-code", "codex"}:
             try:
                 executable = _resolved_client_executable(context, env)
             except ExecutorRefused:
                 executable = None
             if executable is not None:
+                if route.client == "codex":
+                    _installed_client_version(executable)
                 client_sha256 = _file_digest(executable)
                 context = replace(context, launch_argv=(str(executable),))
     if context.resume_from is not None:
@@ -277,6 +285,7 @@ def _prepare_launch(
 
 def configuration_identity(context: ExecContext) -> str:
     """Return the digest of configuration this client launch will discover."""
+    _require_context(context)
     if context.route is None:
         raise ExecutorRefused("configuration identity requires a resolved route")
     if context.memory_service.get("transport") == "managed":
@@ -294,8 +303,27 @@ def configuration_identity(context: ExecContext) -> str:
     mcp_payload = _mcp_payload(context, policy)
     mcp = _json_bytes(mcp_payload)
     invocation_name = context.invocation_id or "configuration-identity"
-    native = _client_native_artifacts(context, Path(invocation_name), mcp_payload)
-    return _configuration_identity(context, settings, mcp, native)
+    invocation_dir = _invocation_dir(replace(context, invocation_id=invocation_name))
+    native = _client_native_artifacts(context, invocation_dir, mcp_payload)
+    read_roots = _canonical_read_roots(policy, context, required)
+    edit_roots = _canonical_edit_roots(policy, context)
+    policy_payload = _policy_payload(
+        context,
+        policy,
+        required,
+        read_roots,
+        edit_roots,
+        "{required_capability_identity}",
+    )
+    policy_body = _policy_body(context, invocation_dir, policy_payload)
+    return _configuration_identity(
+        context,
+        settings,
+        mcp,
+        native,
+        policy_body=policy_body,
+        invocation_dir=invocation_dir,
+    )
 
 
 def _acquire_managed_memory_service(
@@ -545,6 +573,21 @@ def _installed_client_version(executable: Path) -> str:
         version, str
     ) and version:
         return version
+    try:
+        completed = subprocess.run(
+            [str(executable), "--version"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            env={"PATH": os.defpath},
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ExecutorRefused("launched client version metadata is unavailable") from exc
+    match = re.fullmatch(r"codex-cli\s+([^\s]+)\s*", completed.stdout)
+    if completed.returncode == 0 and match is not None:
+        return match.group(1)
     raise ExecutorRefused("launched client version metadata is unavailable")
 
 
@@ -1077,7 +1120,6 @@ def _codex_mcp_servers(
             authorization = service.get("authorization_env")
             if isinstance(authorization, str):
                 entry["bearer_token_env_var"] = authorization
-            servers["compchem-memory"] = entry
         else:
             args = service.get("args", ())
             if not isinstance(args, (list, tuple)):
@@ -1089,9 +1131,13 @@ def _codex_mcp_servers(
             env_vars = service.get("env_vars", ())
             if not isinstance(env_vars, (list, tuple)):
                 raise ExecutorRefused("memory stdio route env_vars must be a list")
-            if env_vars:
-                entry["env_vars"] = [str(name) for name in env_vars]
-            servers["compchem-memory"] = entry
+            entry["env_vars"] = list(dict.fromkeys(
+                [*(str(name) for name in env_vars), "PYTHONPYCACHEPREFIX"]
+            ))
+        entry["tools"] = _codex_tool_approvals(
+            "compchem-memory", mcp_payload
+        )
+        servers["compchem-memory"] = entry
     servers["magnolia-read"] = {
         "command": context.python_executable,
         "args": ["-I", str(_hook_runner_path(context)), "--read-server"],
@@ -1101,9 +1147,26 @@ def _codex_mcp_servers(
             "MAGNOLIA_HOOK_POLICY_REQUIRED",
             "MAGNOLIA_HOOK_POLICY_SHA256",
             "MAGNOLIA_CONTROL_DIR",
+            "PYTHONPYCACHEPREFIX",
         ],
+        "tools": _codex_tool_approvals("magnolia-read", mcp_payload),
     }
     return servers
+
+
+def _codex_tool_approvals(
+    server: str, mcp_payload: Mapping[str, Any]
+) -> dict[str, dict[str, str]]:
+    """Approve exactly the role tools represented by one governed server."""
+    allowlist = mcp_payload.get("tool_allowlist", ())
+    if not isinstance(allowlist, (list, tuple)):
+        raise ExecutorRefused("Codex MCP tool allowlist must be a list")
+    prefix = f"mcp:{server}."
+    return {
+        str(tool).removeprefix(prefix): {"approval_mode": "approve"}
+        for tool in allowlist
+        if isinstance(tool, str) and tool.startswith(prefix)
+    }
 
 
 def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -1365,10 +1428,27 @@ def _configuration_identity(
     settings_body: bytes,
     mcp_body: bytes,
     native_bodies: Mapping[str, bytes],
+    *,
+    policy_body: bytes | None = None,
+    invocation_dir: Path | None = None,
 ) -> str:
     assert context.route is not None
     assert context.project_dir is not None
-    if context.route.client in {"claude-code", "codex", "vibe"}:
+    if context.route.client == "codex":
+        if policy_body is None or invocation_dir is None:
+            raise ExecutorRefused("Codex configuration identity requires run-owned policy")
+        replacements = _identity_replacements(context, invocation_dir)
+        bodies = [
+            ("settings.json", _normalize_identity_body(settings_body, replacements)),
+            ("mcp.json", _normalize_identity_body(mcp_body, replacements)),
+            *(
+                (name, _normalize_identity_body(body, replacements))
+                for name, body in sorted(native_bodies.items())
+            ),
+            ("policy.json", _normalize_identity_body(policy_body, replacements)),
+        ]
+        return _digest_named_bodies(bodies)
+    if context.route.client in {"claude-code", "vibe"}:
         bodies = [
             ("settings.json", settings_body),
             ("mcp.json", mcp_body),
@@ -1383,21 +1463,6 @@ def _configuration_identity(
                     raise ExecutorRefused(
                         f"missing discovered client configuration: {relative}"
                     ) from exc
-        if context.route.client == "codex":
-            user_config = Path(
-                str(
-                    context.setup.get(
-                        "codex_user_config_path",
-                        Path.home() / ".codex" / "config.toml",
-                    )
-                )
-            )
-            try:
-                bodies.append(("discovered:user-config.toml", user_config.read_bytes()))
-            except OSError as exc:
-                raise ExecutorRefused(
-                    "missing Codex user configuration used for trust and tool isolation"
-                ) from exc
         return _digest_named_bodies(bodies)
     raise ExecutorRefused(
         f"no discovered configuration identity for {context.route.client}"

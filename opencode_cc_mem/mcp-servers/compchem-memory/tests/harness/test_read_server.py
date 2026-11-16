@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import time
 
 import pytest
@@ -293,3 +294,63 @@ async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
 
     assert {tool.name for tool in tools} == {"read_file", "list_dir", "search"}
     assert not trap.exists()
+
+
+@pytest.mark.asyncio
+async def test_codex_stdio_servers_keep_bytecode_out_of_read_only_source(tmp_path):
+    repository = tmp_path / "readonly-repository" / "opencode_cc_mem"
+    source = repository / "mcp-servers" / "compchem-memory" / "src"
+    shutil.copytree(
+        Path(__file__).parents[2] / "src" / "compchem_memory",
+        source / "compchem_memory",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    policy_path = _policy(tmp_path / "policy.json", project)
+    control = tmp_path / "run" / "control"
+    control.mkdir(parents=True)
+    cache = control / "executors" / "fixture" / "pycache"
+    runner = source / "compchem_memory" / "hook" / "runner.py"
+    common_env = {
+        **os.environ,
+        "PYTHONPYCACHEPREFIX": str(cache),
+        "MAGNOLIA_PROJECT_DIR": str(project),
+    }
+    transports = (
+        StdioTransport(
+            command=os.sys.executable,
+            args=["-I", str(runner), "--memory-server"],
+            env=common_env,
+            cwd=str(project),
+        ),
+        StdioTransport(
+            command=os.sys.executable,
+            args=["-I", str(runner), "--read-server"],
+            env={
+                **common_env,
+                "MAGNOLIA_HOOK_POLICY": str(policy_path),
+                "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(
+                    policy_path.read_bytes()
+                ).hexdigest(),
+                "MAGNOLIA_CONTROL_DIR": str(control),
+            },
+            cwd=str(project),
+        ),
+    )
+    paths = sorted(repository.rglob("*"), reverse=True)
+    try:
+        for path in paths:
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        repository.chmod(0o555)
+        for transport in transports:
+            async with Client(transport) as client:
+                assert await client.list_tools()
+    finally:
+        repository.chmod(0o755)
+        for path in reversed(paths):
+            path.chmod(0o755 if path.is_dir() else 0o644)
+
+    assert not list(repository.rglob("*.pyc"))
+    assert not list(repository.rglob("__pycache__"))
+    assert list(cache.rglob("*.pyc"))

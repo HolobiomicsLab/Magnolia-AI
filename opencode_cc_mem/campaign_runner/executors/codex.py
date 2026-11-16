@@ -33,7 +33,25 @@ if TYPE_CHECKING:
 
 
 FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
-FORBIDDEN_FLAGS = frozenset({"--dangerously-bypass-hook-trust", "--full-auto"})
+FORBIDDEN_FLAGS = frozenset({
+    "--dangerously-bypass-hook-trust",
+    "--dangerously-skip-permissions",
+    "--auto-approve",
+    "--approve-for-me",
+    "--full-auto",
+    "--trust",
+})
+RESTRICTED_FEATURES = (
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "code_mode_host",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "multi_agent",
+    "standalone_web_search",
+)
 BARE_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+")
 PLUGIN_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+(?:@[A-Za-z0-9_-]+)?")
 QuotaDetector = Callable[[Mapping[str, Any]], RunOutcome | None]
@@ -253,6 +271,11 @@ class CodexExecutor:
             raise WorkerError("forbidden Codex child environment")
         if any(value in FORBIDDEN_FLAGS for value in self.prepared.argv):
             raise WorkerError("forbidden Codex launch flag")
+        if (
+            not Path(self.prepared.argv[0]).is_absolute()
+            or not self.prepared.client_sha256
+        ):
+            raise WorkerError("Codex prepared executable is not identity-bound")
         self._native_artifact(".codex/config.toml")
         self._native_artifact(".codex/hooks.json")
         self._verify_project_artifacts()
@@ -320,6 +343,7 @@ class CodexExecutor:
             try:
                 with admission or _NoAdmission():
                     argv = self._argv(current_prompt, session_id)
+                    self._verify_client_bytes()
                     process = run_process(
                         argv,
                         cwd,
@@ -401,7 +425,11 @@ class CodexExecutor:
             argv.extend(["-c", override])
         for override in self._disable_overrides:
             argv.extend(["-c", override])
-        if self.role in {"helper", "evaluator"}:
+        if self.role in {"worker", "reviewer"}:
+            for feature in RESTRICTED_FEATURES:
+                argv.extend(["--disable", feature])
+            argv.extend(["--enable", "skip_host_skill_discovery"])
+        else:
             argv.extend(["--disable", "code_mode_host"])
         argv.extend(["--disable", "apps"])
         argv.extend(([session_id] if session_id else []) + [prompt])
@@ -491,9 +519,23 @@ class CodexExecutor:
                         "MAGNOLIA_HOOK_POLICY_REQUIRED",
                         "MAGNOLIA_HOOK_POLICY_SHA256",
                         "MAGNOLIA_CONTROL_DIR",
+                        "PYTHONPYCACHEPREFIX",
                     ]
                 ):
                     raise ExecutorRefused("Codex magnolia-read server is not run-owned")
+            expected_tools = {
+                "magnolia-read": {"read_file", "list_dir", "search"},
+                "compchem-memory": {
+                    "memory_get_context", "memory_search", "memory_get_run_history",
+                },
+            }
+            for server_name, server in servers.items():
+                tools = server.get("tools") if isinstance(server, Mapping) else None
+                expected_names = expected_tools[server_name]
+                if not isinstance(tools, Mapping) or set(tools) != expected_names or any(
+                    value != {"approval_mode": "approve"} for value in tools.values()
+                ):
+                    raise ExecutorRefused("Codex MCP approvals differ from the role allowlist")
         else:
             payload = json.loads(body)
             hooks = payload.get("hooks") if isinstance(payload, Mapping) else None
@@ -521,6 +563,21 @@ class CodexExecutor:
 
     def _binding_path(self) -> Path:
         return self.prepared.invocation_dir / "codex-session-bindings.json"
+
+    def _verify_client_bytes(self) -> None:
+        """Re-hash the prepared Codex executable immediately before spawn."""
+        executable = Path(self.prepared.argv[0])
+        digest = hashlib.sha256()
+        try:
+            with executable.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            raise ExecutorRefused(
+                "Codex client executable is unavailable before spawn"
+            ) from exc
+        if digest.hexdigest() != self.prepared.client_sha256:
+            raise ExecutorRefused("Codex client executable changed before spawn")
 
     def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
         if session_id is None:
