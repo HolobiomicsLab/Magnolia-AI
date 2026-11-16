@@ -43,15 +43,16 @@
  * DUAL-SHAPE (2026-10-07, probe-verified on 1.18.34 + 2.0.6): plain-object
  * default export; v2 setup(ctx) subscribes to the event stream; v1 server()
  * keeps the original event hook. v1.18.34 also calls setup() with a limited
- * ctx — guarded.
+ * ctx — guarded. v2 has no server-side TUI domain: flagged verdicts degrade
+ * to stderr (the JSONL log is the primary record either way).
  *
- * OpenCode 2.3.0 (probed 2026-11-14): loads. Headless `run` exits before
- * event-started async work completes.
+ * OpenCode 2.3.0 (probed 2026-11-14): loads. Not yet observed acting in the
+ * interactive TUI. Headless `run` exits before event-started async work completes.
  *
  * M2 therefore persists and detaches synchronously at the terminal event;
  * transcript capture, judging, idempotence, and retries belong to Python.
  */
-import { eventTurnID, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
 
@@ -75,7 +76,7 @@ export default {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
           const sid = sessionID(event)
           if (isTurnEnd(event) && sid) {
-            handoffTurnEnd(directory, sid, "critic", { turn_id: eventTurnID(event) })
+            handoffTurnEnd(directory, sid, "critic", eventTurnDetails(event))
           }
         }
       } catch { /* aborted or stream error */ }
@@ -90,7 +91,7 @@ export default {
         const event = input?.event
         const sid = sessionID(event)
         if (isTurnEnd(event) && sid) {
-          handoffTurnEnd(directory, sid, "critic", { turn_id: eventTurnID(event) })
+          handoffTurnEnd(directory, sid, "critic", eventTurnDetails(event))
         }
       },
     }

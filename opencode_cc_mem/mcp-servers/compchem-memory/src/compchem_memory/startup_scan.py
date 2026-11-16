@@ -37,7 +37,12 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     """
     pd = Path(project_dir)
     store = pd / ".magnolia"
-    if is_llm_available() and _has_dialogue_source(store):
+    from compchem_memory.hook.background import drain_opencode_payloads
+
+    has_dialogue = is_llm_available() and _has_dialogue_source(store)
+    if not has_dialogue:
+        drain_opencode_payloads(store)
+    if has_dialogue:
         result = _distill_dialogue(store)
     else:
         result = _distill_tool_events(pd)

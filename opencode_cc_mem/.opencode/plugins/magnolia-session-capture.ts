@@ -31,7 +31,7 @@
  */
 import { appendFileSync, mkdirSync, existsSync, readFileSync } from "node:fs"
 import { join, dirname, basename } from "node:path"
-import { eventTurnID, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
 
 function isProjectRoot(directory: string): boolean {
   return (
@@ -186,7 +186,7 @@ export default {
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           if (turnEnd) {
-            handoffTurnEnd(directory, sidStr, "capture", { turn_id: eventTurnID(ev) })
+            handoffTurnEnd(directory, sidStr, "capture", eventTurnDetails(ev))
           }
         }
       } catch { /* aborted or stream error — never break the session */ }
@@ -212,9 +212,9 @@ export default {
         if (sid) {
           record(sid)
           if (input?.event?.type === "session.idle") {
-            handoffTurnEnd(directory, String(sid), "capture", {
-              turn_id: eventTurnID(input?.event),
-            })
+            handoffTurnEnd(
+              directory, String(sid), "capture", eventTurnDetails(input?.event),
+            )
           }
         }
       },

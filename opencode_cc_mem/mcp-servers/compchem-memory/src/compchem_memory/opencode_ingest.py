@@ -295,7 +295,7 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
             con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             try:
                 rows = con.execute(
-                    "SELECT id, type, data FROM session_message "
+                    "SELECT id, type, seq, data FROM session_message "
                     "WHERE session_id=? ORDER BY seq", (ses_id,)).fetchall()
             finally:
                 con.close()
@@ -306,10 +306,13 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
         msgs = []
         current_turn = None
         turn_boundaries = {}
-        for mid, typ, data in rows:
+        turn_sequences = {}
+        user_sequences = []
+        for mid, typ, seq, data in rows:
             if typ == "idle":
                 if current_turn:
                     turn_boundaries[str(mid)] = current_turn
+                    turn_sequences[str(seq)] = current_turn
                 continue
             if typ in _V2_NON_DIALOGUE_TYPES:
                 continue
@@ -330,10 +333,15 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
                 continue
             if typ == "user":
                 current_turn = str(mid)
+                user_sequences.append({"seq": seq, "turn_id": current_turn})
+            if current_turn is not None:
+                turn_sequences[str(seq)] = current_turn
             msgs.append({"info": {"role": typ, "id": mid}, "parts": parts})
         return {
             "messages": msgs,
             "turn_boundaries": turn_boundaries,
+            "turn_sequences": turn_sequences,
+            "user_sequences": user_sequences,
         } if msgs else None
     return exporter
 

@@ -5,8 +5,10 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState, private_mkdir, safe_component
@@ -37,6 +39,34 @@ SYSTEM = (
     'Respond with strict JSON: {"flag": boolean, "severity": "none|low|high", '
     '"unsupported_claims": [string], "why": string}.'
 )
+
+
+@dataclass(frozen=True)
+class CriticOutcome:
+    """Typed completion state for one critic attempt."""
+
+    kind: Literal["verdict", "skipped", "error"]
+    reason: str | None = None
+
+    @property
+    def status(self) -> Literal["verdict", "skipped", "error"]:
+        """Expose the outcome under the conventional status name."""
+        return self.kind
+
+    @classmethod
+    def verdict(cls) -> "CriticOutcome":
+        """Return a completed verdict outcome."""
+        return cls("verdict")
+
+    @classmethod
+    def skipped(cls, reason: str) -> "CriticOutcome":
+        """Return a deliberate no-judge outcome."""
+        return cls("skipped", reason)
+
+    @classmethod
+    def error(cls, reason: str) -> "CriticOutcome":
+        """Return a retryable critic failure."""
+        return cls("error", reason)
 
 
 def _matches_agent(row: dict, agent_id: str | None) -> bool:
@@ -485,27 +515,30 @@ def run_critic(
     session_id: str,
     agent_id: str | None,
     turn_id: str | None = None,
-) -> None:
-    """Run the enabled critic and persist its verdict without raising."""
+) -> CriticOutcome:
+    """Run one critic attempt and return its durable completion class."""
     try:
         if not os.environ.get("MAGNOLIA_CRITIC"):
-            return
+            return CriticOutcome.skipped("critic disabled")
         path = transcript_path(paths.store, harness, session_id)
         if not path.exists():
-            return
+            return CriticOutcome.error("transcript unavailable")
         report, trace_text, n_tools = _trace(
             read_turns(path), agent_id, turn_id, harness=harness,
         )
-        if len(report) < MIN_REPORT_CHARS or (route := resolve_route("critic")) is None:
-            return
+        if len(report) < MIN_REPORT_CHARS:
+            return CriticOutcome.skipped("short reply")
+        route = resolve_route("critic")
+        if route is None:
+            return CriticOutcome.skipped("no route")
         out_dir = paths.store / "claim-critic"
         verdict_path = out_dir / f"{safe_component(session_id)}.jsonl"
         if _has_verdict(verdict_path, harness, turn_id):
-            return
+            return CriticOutcome.verdict()
         result = _judge(route, report, trace_text)
         if result.error or not result.text:
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, result))
-            return
+            return CriticOutcome.error(result.error or "judge returned no text")
         try:
             verdict = _parse_verdict(result.text)
         except Exception as error:  # noqa: BLE001 - malformed judge output is logged
@@ -514,7 +547,7 @@ def run_critic(
                 result.upstream_provider, result.usage, result.quality_floor_dropped,
             )
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, malformed))
-            return
+            return CriticOutcome.error(str(error))
         row = _verdict_row(
             harness, session_id, agent_id, route, verdict, report, n_tools,
             result.upstream_provider,
@@ -524,5 +557,6 @@ def run_critic(
         )
         _append_jsonl(verdict_path, row)
         _save_notice(paths, harness, session_id, row)
-    except Exception:  # noqa: BLE001 - a hook failure must never break the client
-        return
+        return CriticOutcome.verdict()
+    except Exception as error:  # noqa: BLE001 - a hook failure must never break the client
+        return CriticOutcome.error(str(error))
