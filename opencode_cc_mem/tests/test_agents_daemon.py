@@ -294,6 +294,7 @@ def test_helper_recipe_final_answer_continuation_and_stale_recovery(tmp_path, mo
     def fake_subprocess_run(argv, **kwargs):
         captured["argv"] = argv
         captured["env"] = kwargs["env"]
+        captured["timeout_seconds"] = kwargs["timeout"]
         return Out()
 
     monkeypatch.setattr(d.subprocess, "run", fake_subprocess_run)
@@ -307,6 +308,8 @@ def test_helper_recipe_final_answer_continuation_and_stale_recovery(tmp_path, mo
     observed = {
         "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in captured["argv"]],
         "environment_keys": sorted(captured["env"]),
+        "step_cap_config": captured["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "timeout_seconds": captured["timeout_seconds"],
         "agent_file_bytes": None,
     }
     assert observed == snapshot

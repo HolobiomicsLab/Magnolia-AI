@@ -8,7 +8,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from campaign_runner import workers as workers_module  # noqa: E402
+from campaign_runner.process import ProcessOutcome  # noqa: E402
 from campaign_runner.reviewers import (  # noqa: E402
+    REVIEW_FORMAT_NOTE,
     ReviewError,
     Reviewer,
     _extract_json,
@@ -16,7 +19,7 @@ from campaign_runner.reviewers import (  # noqa: E402
     model_family,
     validate_review,
 )
-from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
+from campaign_runner.workers import empty_usage  # noqa: E402
 
 
 FAKE = r'''#!/usr/bin/env python3
@@ -265,68 +268,82 @@ def test_mistral_models_share_one_family():
     ) == "zai-coding-plan/glm-5.3"
 
 
-def _review_worker_result(text, session_id="ses_review", usage=None):
-    return WorkerResult(
-        returncode=0,
-        timed_out=False,
-        duration_seconds=0.1,
-        session_id=session_id,
-        final_text=text,
-        all_text=text,
-        tool_calls=0,
-        usage=usage or empty_usage(),
-        attempts=1,
-        stdout_paths=[],
-        stderr_paths=[],
+def _review_process(kwargs, text, usage=None):
+    events = [
+        {
+            "sessionID": "ses_review",
+            "part": {"type": "text", "messageID": "m1", "text": text},
+        }
+    ]
+    if usage is not None:
+        events.append(
+            {
+                "sessionID": "ses_review",
+                "part": {
+                    "type": "step-finish",
+                    "cost": usage["cost_usd"],
+                    "tokens": {
+                        "input": usage["input_tokens"],
+                        "output": usage["output_tokens"],
+                    },
+                },
+            }
+        )
+    kwargs["stdout_path"].write_text(
+        "\n".join(json.dumps(event) for event in events) + "\n"
+    )
+    kwargs["stderr_path"].write_text("")
+    return ProcessOutcome(
+        0, False, 0.1, kwargs["stdout_path"], kwargs["stderr_path"]
     )
 
 
 def test_reviewer_configured_repairs_no_executor_empty_retry(tmp_path, monkeypatch):
-    created = []
     calls = []
 
-    class FakeExecutor:
-        def run(self, prompt, cwd, attempt_dir, **kwargs):
-            calls.append((prompt, kwargs))
-            if len(calls) < 3:
-                return _review_worker_result("not json")
-            return _review_worker_result('{"issues":[],"followups":[]}')
+    def fake_run_process(**kwargs):
+        calls.append(kwargs)
+        text = "" if len(calls) < 3 else '{"issues":[],"followups":[]}'
+        return _review_process(kwargs, text)
 
-    def fake_executor_for(route, role, context):
-        created.append(context)
-        return FakeExecutor()
-
-    monkeypatch.setattr("campaign_runner.reviewers.executor_for", fake_executor_for)
-    monkeypatch.setattr("campaign_runner.reviewers.OpenCodeExecutor", FakeExecutor)
-    result = Reviewer(binary="opencode", max_retries=2).run(
+    monkeypatch.setattr(workers_module, "run_process", fake_run_process)
+    result = Reviewer(binary="opencode", max_retries=2, max_steps=8).run(
         "provider/model", "REVIEW", tmp_path, tmp_path / "attempt", tmp_path
     )
 
-    assert created[0].role == "reviewer"
     assert result.attempts == 3
-    assert [call[1]["retries"] for call in calls] == [0, 0, 0]
-    assert [call[1]["stem"] for call in calls] == [
-        "reviewer",
-        "reviewer_retry_1",
-        "reviewer_retry_2",
+    assert [call["argv"][-1] for call in calls] == [
+        "REVIEW",
+        REVIEW_FORMAT_NOTE,
+        REVIEW_FORMAT_NOTE,
     ]
-    assert calls[1][1]["resume_session"] == "ses_review"
+    assert "--session" not in calls[0]["argv"]
+    assert all(
+        call["argv"][call["argv"].index("--session") + 1] == "ses_review"
+        for call in calls[1:]
+    )
+    assert all("campaign-reviewer" in call["argv"] for call in calls)
+    assert all(call["timeout_seconds"] == 600 for call in calls)
+    assert all(
+        json.loads(call["env"]["OPENCODE_CONFIG_CONTENT"])["agents"]
+        ["campaign-reviewer"]["steps"] == 8
+        for call in calls
+    )
 
 
 def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
     fallback = empty_usage()
     fallback.update(input_tokens=11.0, output_tokens=3.0, cost_usd=0.25)
 
-    class FakeExecutor:
-        def run(self, *args, **kwargs):
-            return _review_worker_result(
-                '{"issues":[],"followups":[]}', usage=fallback
-            )
+    calls = []
 
-    monkeypatch.setattr(
-        "campaign_runner.reviewers.executor_for", lambda *args: FakeExecutor()
-    )
-    monkeypatch.setattr("campaign_runner.reviewers.OpenCodeExecutor", FakeExecutor)
+    def fake_run_process(**kwargs):
+        calls.append(kwargs)
+        return _review_process(
+            kwargs, '{"issues":[],"followups":[]}', usage=fallback
+        )
+
+    monkeypatch.setattr(workers_module, "run_process", fake_run_process)
     monkeypatch.setattr(
         "campaign_runner.reviewers.read_session_usage", lambda *args: empty_usage()
     )
@@ -334,3 +351,7 @@ def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
         "provider/model", "REVIEW", tmp_path, tmp_path / "attempt", tmp_path
     )
     assert result.usage == fallback
+    assert len(calls) == 1
+    assert calls[0]["argv"][3:7] == [
+        "provider/model", "--agent", "campaign-reviewer", "--format"
+    ]

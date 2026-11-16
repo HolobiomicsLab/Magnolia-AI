@@ -283,6 +283,8 @@ def test_opencode_campaign_argv_env_and_agent_bytes(tmp_path, monkeypatch):
     observed = {
         "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in captured["argv"]],
         "environment_keys": sorted(captured["env"]),
+        "step_cap_config": captured["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "timeout_seconds": captured["timeout_seconds"],
         "agent_file_bytes": (
             ROOT / ".opencode" / "agents" / "campaign-worker.md"
         ).read_bytes().decode("utf-8"),

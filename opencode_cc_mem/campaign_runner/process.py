@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
-import select
+import selectors
 import shutil
 import signal
 import subprocess
@@ -135,6 +135,7 @@ class ProcessOutcome:
     stderr_path: Path
     stopped_reason: str | None = None
     outcome: RunOutcome | None = None
+    client_started: bool = True
 
 
 def run_process(
@@ -175,6 +176,7 @@ def run_process(
                     stderr_path=stderr_path,
                     stopped_reason=interrupted.stopped_reason,
                     outcome=interrupted.outcome,
+                    client_started=False,
                 )
         else:
             process = subprocess.Popen(
@@ -418,7 +420,9 @@ def _write_all(
             written = os.write(fd, remaining)
         except BlockingIOError:
             wait_seconds = min(control.poll_interval, max(deadline - now, 0.0))
-            select.select([], [fd], [], wait_seconds)
+            with selectors.DefaultSelector() as selector:
+                selector.register(fd, selectors.EVENT_WRITE)
+                selector.select(wait_seconds)
             continue
         except InterruptedError:
             continue

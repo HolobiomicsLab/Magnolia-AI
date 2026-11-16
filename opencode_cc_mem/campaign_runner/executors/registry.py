@@ -53,7 +53,7 @@ def _effective_cap(context: ExecContext, default: int | None = None) -> int | No
     return min(caps) if caps else None
 
 
-def _managed_service_caps(context: ExecContext) -> Mapping[str, Any] | None:
+def _managed_service_record(context: ExecContext) -> Mapping[str, Any] | None:
     if context.project_dir is None or not context.opencode_server:
         return None
     record = read_service(context.project_dir)
@@ -65,8 +65,7 @@ def _managed_service_caps(context: ExecContext) -> Mapping[str, Any] | None:
         f"http://localhost:{port}",
     }:
         return None
-    caps = record.get("agent_steps")
-    return caps if isinstance(caps, Mapping) else None
+    return record
 
 
 def _service_cap_checker(
@@ -76,8 +75,16 @@ def _service_cap_checker(
         return None
 
     def verify(required_cap: int) -> None:
-        caps = _managed_service_caps(context)
-        if caps is None:
+        managed = _managed_service_record(context)
+        if managed is not None:
+            recorded = managed.get("agent_steps")
+            if not isinstance(recorded, Mapping):
+                raise ExecutorRefused(
+                    "managed OpenCode service started without recorded caps — "
+                    "restart it when idle"
+                )
+            caps: Mapping[str, Any] | None = recorded
+        else:
             supplied = context.setup.get("opencode_service_caps")
             caps = supplied if isinstance(supplied, Mapping) else None
         shown = caps.get(agent) if caps is not None else None

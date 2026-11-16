@@ -292,6 +292,8 @@ class OpenCodeExecutor:
                         if admission is not None:
                             admission._cancel_before_client_exec()
                         raise
+                    if admission is not None and not outcome.client_started:
+                        admission._cancel_before_client_exec()
                     parsed = parse_run_events(
                         stdout_path.read_text(encoding="utf-8", errors="replace")
                     )
@@ -300,7 +302,7 @@ class OpenCodeExecutor:
                         usage_baseline,
                         admission,
                     )
-                    if admission is not None:
+                    if admission is not None and outcome.client_started:
                         admission.release(usage=usage_record, outcome=outcome.outcome)
             except OSError as exc:
                 raise WorkerError(f"cannot start worker: {exc}") from exc

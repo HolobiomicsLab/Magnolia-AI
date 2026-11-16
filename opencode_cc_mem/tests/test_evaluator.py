@@ -322,7 +322,7 @@ def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
             self.stdout = stdout
 
     def fake_run(argv, **kwargs):
-        calls.append((argv, kwargs["env"]))
+        calls.append((argv, kwargs))
         if "/api/model" in argv:
             return Out('{"data":[{"id":"jev-1.13-free"}]}')
         return Out(
@@ -346,7 +346,10 @@ def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
     observed = {
         "run_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[0][0]],
         "catalog_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[1][0]],
-        "environment_keys": sorted(calls[0][1]),
+        "environment_keys": sorted(calls[0][1]["env"]),
+        "step_cap_config": calls[0][1]["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "run_timeout_seconds": calls[0][1]["timeout"],
+        "catalog_timeout_seconds": calls[1][1]["timeout"],
         "agent_file_bytes": None,
     }
     assert observed == snapshot

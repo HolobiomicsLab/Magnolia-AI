@@ -294,6 +294,7 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
         str(tmp_path / "opencode.db"),
         config_content=config,
         required_agents=required_agents,
+        timeout_seconds=30,
     )
     snapshot = json.loads(
         (ROOT / "tests" / "snapshots" / "opencode" / "service.json").read_text()
@@ -306,6 +307,7 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
             name: value["steps"]
             for name, value in json.loads(config)["agents"].items()
         },
+        "timeout_seconds": 30,
         "agent_file_bytes": {
             name: (ROOT / ".opencode" / "agents" / name).read_bytes().decode("utf-8")
             for name in ("campaign-worker.md", "campaign-reviewer.md")
