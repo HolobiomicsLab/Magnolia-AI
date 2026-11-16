@@ -24,7 +24,7 @@ def _git(store: Path, *args: str) -> subprocess.CompletedProcess:
     # caller via is_repo()/exit codes rather than raising mid-operation.
     return subprocess.run(
         ["git", "-C", str(store), *args],
-        capture_output=True, text=True,
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
 
 

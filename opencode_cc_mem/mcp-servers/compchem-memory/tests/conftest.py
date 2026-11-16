@@ -110,5 +110,10 @@ def _hermetic_magnolia_flags(monkeypatch):
         "MAGNOLIA_CONSOLIDATION_FLOOR",
         "MAGNOLIA_ADMISSION_GATE",
         "MAGNOLIA_DISTILL_SECOND_PASS",
+        # OpenCode v2 pointers: project_magnolia-exp runs the suite from a
+        # v2 session, so these would otherwise leak in and change exporter /
+        # handover behavior. Tests that exercise v2 mode set them explicitly.
+        "OPENCODE_DB",
+        "MAGNOLIA_OPENCODE_V2",
     ):
         monkeypatch.delenv(var, raising=False)

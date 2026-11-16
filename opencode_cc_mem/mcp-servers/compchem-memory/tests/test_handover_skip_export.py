@@ -134,7 +134,7 @@ class _Proc:
 def test_list_session_updates_runs_cli_and_parses(monkeypatch):
     seen = {}
 
-    def fake_run(cmd, stdout=None, stderr=None, timeout=None):
+    def fake_run(cmd, stdout=None, stderr=None, timeout=None, stdin=None):
         seen["cmd"] = cmd
         seen["timeout"] = timeout
         stdout.write(json.dumps([{"id": "ses_a", "updated": 42}]))
@@ -156,7 +156,7 @@ def test_list_session_updates_nonzero_returncode_returns_none(monkeypatch):
 
 
 def test_list_session_updates_garbage_output_returns_none(monkeypatch):
-    def fake_run(cmd, stdout=None, stderr=None, timeout=None):
+    def fake_run(cmd, stdout=None, stderr=None, timeout=None, stdin=None):
         stdout.write("not json")
         return _Proc(0)
 
@@ -378,6 +378,24 @@ def test_skip_uses_live_probe_by_default(store, monkeypatch):
     exporter, calls = _counting_exporter(exports)
     hv.generate_handover(str(store.parent), exporter=exporter, llm=_merge_echo)
     assert calls == ["ses_b"]
+
+
+def test_v2_mode_does_not_shell_out_to_session_list(store, monkeypatch):
+    """The v1 `session list` CLI is useless against the v2 DB and was part of
+    the 2026-11-16 handover failure. v2 mode must skip it entirely."""
+    _write_mapping(store, ["ses_a"])
+    monkeypatch.setenv("OPENCODE_DB", str(store.parent / "v2.db"))
+    called = {"n": 0}
+
+    def fake_list():
+        called["n"] += 1
+        return {"ses_a": 1}
+
+    monkeypatch.setattr(hv, "_list_session_updates", fake_list)
+    exporter, calls = _counting_exporter({"ses_a": _export("work")})
+    hv.generate_handover(str(store.parent), exporter=exporter, llm=_merge_echo)
+    assert called["n"] == 0
+    assert calls == ["ses_a"]
 
 
 # ---- ordering + telemetry ----------------------------------------------------

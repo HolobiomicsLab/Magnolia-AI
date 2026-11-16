@@ -459,6 +459,7 @@ def _list_session_updates() -> dict[str, int] | None:
                     ["opencode", "session", "list", "--format", "json",
                      "-n", str(HANDOVER_SESSION_LIST_LIMIT)],
                     stdout=out, stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
                     timeout=HANDOVER_SESSION_LIST_TIMEOUT,
                 )
             if proc.returncode != 0:
@@ -887,11 +888,12 @@ def generate_handover(
     """
     from compchem_memory.opencode_ingest import (
         plugin_dump_exporter, reconstruct_transcript, scrub_secrets,
-        _read_mapping_ids, _messages_after_cursor, _last_message_id,
+        _read_mapping_ids, _messages_after_cursor, _last_message_id, v2_mode,
     )
     from compchem_memory.llm import call_llm
 
     llm = llm or call_llm
+    v2 = v2_mode()
 
     store = Path(project_dir) / ".magnolia"
     mapping = store / "opencode-sessions.jsonl"
@@ -900,9 +902,9 @@ def generate_handover(
 
     # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
     # resolved from PATH is v1.18.35 in the memory-server process, so
-    # `opencode export` cannot read v2 sessions and the handover silently
-    # merged nothing after the v2 switch. plugin_dump_exporter falls back to
-    # the CLI for v1 sessions, so this is backward-compatible.
+    # `opencode export` cannot read v2 sessions. In v2 mode the exporter never
+    # falls back to that CLI (2026-11-16: it could take down the MCP connection);
+    # v1-only setups still use the CLI as before.
     exporter = exporter or plugin_dump_exporter(str(store))
 
     _migrate_legacy_cursor(store)
@@ -918,13 +920,14 @@ def generate_handover(
     # scope change), yields None -> export every session (the legacy behavior).
     if session_updates is not None:
         updates = session_updates()
-    elif _skip_export_enabled():
+    elif _skip_export_enabled() and not v2:
         updates = _list_session_updates()
     else:
         updates = None
     if updates is not None and latest_sid not in updates:
         updates = None
-    if updates is None and session_updates is None and _skip_export_enabled():
+    if (updates is None and session_updates is None and _skip_export_enabled()
+            and not v2):
         print(f"[handover] session list unavailable or untrusted — exporting "
               f"all {len(sids)} sessions", file=sys.stderr)
 
@@ -960,15 +963,25 @@ def generate_handover(
             skipped += 1
             continue
         t0_ms = _now_ms()                # seal timestamp: captured BEFORE the export
-        export = exporter(sid)
+        try:
+            export = exporter(sid)
+        except Exception as e:  # noqa: BLE001 - one bad session must not stop the sweep
+            print(f"[handover] export {sid} failed: {type(e).__name__}: {e}",
+                  file=sys.stderr)
+            continue
         if not export:
             continue                     # export failed — retry this session next boot
-        new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
-        if not new_msgs:
-            if sid != latest_sid:
-                _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+        try:
+            new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
+            if not new_msgs:
+                if sid != latest_sid:
+                    _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+                continue
+            transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
+        except Exception as e:  # noqa: BLE001 - malformed transcript is a skip, not a crash
+            print(f"[handover] transcript {sid} failed: {type(e).__name__}: {e}",
+                  file=sys.stderr)
             continue
-        transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
         if not transcript.strip():
             if sid != latest_sid:
                 _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)

@@ -197,8 +197,10 @@ def export_session(ses_id: str) -> Optional[dict]:
             os.close(fd)
             try:
                 with open(tmp, "w") as out:
-                    proc = subprocess.run(cmd, stdout=out,
-                                          stderr=subprocess.DEVNULL, timeout=120)
+                    proc = subprocess.run(
+                        cmd, stdout=out, stderr=subprocess.DEVNULL,
+                        stdin=subprocess.DEVNULL, timeout=120,
+                    )
                 if proc.returncode != 0:
                     return None
                 data = Path(tmp).read_text()
@@ -270,18 +272,32 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
         msgs = []
         for mid, typ, data in rows:
             try:
-                d = json.loads(data) if isinstance(data, str) else (data or {})
-            except json.JSONDecodeError:
+                d = json.loads(data) if isinstance(data, (str, bytes, bytearray)) else (data or {})
+            except Exception:  # noqa: BLE001 - one bad row must not kill the export
                 continue
-            if typ == "assistant":
-                parts = [_normalize_v2_part(p) for p in (d.get("content") or [])
-                         if isinstance(p, dict)]
-            else:
-                text = d.get("text")
-                parts = [{"type": "text", "text": text}] if text else []
+            if not isinstance(d, dict):
+                continue
+            try:
+                if typ == "assistant":
+                    parts = [_normalize_v2_part(p) for p in (d.get("content") or [])
+                             if isinstance(p, dict)]
+                else:
+                    text = d.get("text")
+                    parts = [{"type": "text", "text": text}] if text else []
+            except Exception:  # noqa: BLE001 - malformed part, skip the row
+                continue
             msgs.append({"info": {"role": typ, "id": mid}, "parts": parts})
         return {"messages": msgs} if msgs else None
     return exporter
+
+
+def v2_mode() -> bool:
+    """True when the process is talking to OpenCode v2 rather than v1.
+
+    The v1 export CLI is not just useless in this mode — it opens the v2 DB,
+    fails with "has no session table", and has taken down the stdio MCP
+    connection when spawned from the boot handover (2026-11-16)."""
+    return bool(os.environ.get("OPENCODE_DB")) or os.environ.get("MAGNOLIA_OPENCODE_V2") == "1"
 
 
 def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
@@ -291,7 +307,11 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
     (full content: assistant reasoning + tool parts); (2) the capture plugin's
     ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat,
     user text + system — a fallback, NOT a content source); (3) the export CLI
-    (v1 form first, then v2 `session export`) for v1 sessions."""
+    (v1 form first, then v2 `session export`) for v1 sessions.
+
+    In v2 mode (OPENCODE_DB or MAGNOLIA_OPENCODE_V2) the CLI fallback is
+    deliberately skipped: the v1 binary cannot read the v2 DB, and invoking it
+    from the stdio MCP server can kill the connection."""
     store = Path(store_dir)
 
     def exporter(ses_id: str) -> Optional[dict]:
@@ -306,8 +326,14 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
                 d = json.loads(dump.read_text())
                 if isinstance(d, dict) and d.get("messages") is not None:
                     return d
-            except (OSError, json.JSONDecodeError):
-                pass  # corrupt dump — fall through to the CLI
+            except (OSError, ValueError, TypeError):
+                pass  # corrupt dump — fall through
+        if v2_mode():
+            # v2 mode: the v1 `opencode export` CLI cannot read the v2 DB and
+            # spawning it from the stdio MCP server has taken down the MCP
+            # connection. A missing session is retried next boot after the v2
+            # DB/transcript dump appears; never shell out to the wrong CLI.
+            return None
         return export_session(ses_id)
 
     return exporter
