@@ -59,9 +59,17 @@ def xtb_optimize(
             result["energy_hartree"] = energy
             result["energy_ev"] = energy * 27.2114 if energy else None
 
-            opt_xyz = work_dir / "xtbopt.xyz"
-            if opt_xyz.exists():
-                result["optimized_structure"] = str(opt_xyz)
+            # xTB writes the optimised geometry in the INPUT format
+            # (xtbopt.sdf for SDF, .xyz for XYZ, ...), not always .xyz.
+            opt = work_dir / f"xtbopt{inp.suffix.lower()}"
+            if not opt.exists():
+                candidates = sorted(
+                    p for p in work_dir.glob("xtbopt.*")
+                    if p.suffix.lower() != ".log"
+                )
+                opt = candidates[0] if candidates else None
+            if opt is not None and opt.exists():
+                result["optimized_structure"] = str(opt)
 
         else:
             result["error"] = proc.stderr[-500:] if proc.stderr else "xTB optimization failed"

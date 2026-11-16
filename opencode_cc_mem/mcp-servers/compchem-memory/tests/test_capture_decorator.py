@@ -187,3 +187,58 @@ def test_decorator_without_project_dir_uses_pinned_env(tmp_path, monkeypatch):
     assert not (pd / ".magnolia" / ".distill-notices").exists()  # queue drained
     assert list((pd / ".magnolia" / "sessions").glob("*.jsonl"))  # events logged there
     assert not (tmp_path / ".magnolia").exists()  # nothing stray at cwd
+
+
+def test_decorator_records_json_string_failure_as_tool_error(project_dir):
+    """Issue #20: compchem-tools wrappers report failure as a RETURNED
+    `{"success": false}` payload, not an exception. That must journal as
+    tool_error, otherwise error-resolution and audit never see it."""
+    @captured(source="compchem-tools")
+    def toolkit_wrapper(project_dir: str | None = None) -> str:
+        return json.dumps({"success": False, "error": "Input file not found: x.xyz"})
+
+    toolkit_wrapper(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[-1]["event_type"] == "tool_error"
+    assert events[-1]["tool"] == "toolkit_wrapper"
+    assert "Input file not found: x.xyz" in events[-1]["error"]
+    assert not any(e["event_type"] == "tool_success" for e in events)
+
+
+def test_decorator_records_dict_failure_as_tool_error(project_dir):
+    """Same contract for a tool returning a dict (not a JSON string)."""
+    @captured(source="compchem-tools")
+    def toolkit_wrapper(project_dir: str | None = None) -> dict:
+        return {"success": False, "error": "grompp failed"}
+
+    toolkit_wrapper(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[-1]["event_type"] == "tool_error"
+    assert "grompp failed" in events[-1]["error"]
+
+
+def test_decorator_success_payload_still_records_tool_success(project_dir):
+    """A `success: true` JSON payload is a normal success."""
+    @captured(source="compchem-tools")
+    def toolkit_wrapper(project_dir: str | None = None) -> str:
+        return json.dumps({"success": True, "energy_hartree": -42.0})
+
+    toolkit_wrapper(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[-1]["event_type"] == "tool_success"
+
+
+def test_decorator_plain_string_is_still_success(project_dir):
+    """Non-JSON string results must not be mistaken for failure payloads."""
+    @captured(source="compchem-memory")
+    def memory_dummy(project_dir: str | None = None) -> str:
+        return "not json at all"
+
+    memory_dummy(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[-1]["event_type"] == "tool_success"
+

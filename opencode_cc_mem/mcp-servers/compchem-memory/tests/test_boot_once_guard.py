@@ -71,3 +71,27 @@ def test_boot_and_timer_each_spawn(patched_server, no_threads):
     patched_server._run_startup_scan_background()
     patched_server._run_distill_timer_background()
     assert len(no_threads) == 2
+
+
+def test_boot_timing_never_writes_to_stdout(patched_server, monkeypatch, capsys):
+    """Issue #21: in stdio mode stdout is the JSON-RPC channel. The boot worker
+    must write [boot-timing] lines to stderr only, otherwise they corrupt the
+    MCP stream (clients log 'Invalid JSON')."""
+    monkeypatch.setattr(
+        patched_server, "_build_boot_steps", lambda project_dir: [("noop", lambda: None)]
+    )
+
+    class _SyncThread:
+        def __init__(self, target=None, **kwargs):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(threading, "Thread", _SyncThread)
+
+    patched_server._run_startup_scan_background()
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "[boot-timing]" in captured.err

@@ -14,12 +14,16 @@ def gromacs_setup(
     box_type: str = "dodecahedron",
     box_distance: float = 1.0,
     output_dir: str | None = None,
+    ignh: bool = False,
 ) -> dict[str, Any]:
     """Set up a GROMACS MD simulation: generate topology, define box, solvate,
     and add ions. Returns paths to .tpr and other setup files."""
     struct = Path(structure)
     if not struct.exists():
         return {"success": False, "error": f"Structure file not found: {structure}"}
+    # Subprocesses run with cwd=output_dir, so a relative input path must be
+    # resolved against the caller's cwd first.
+    struct = struct.resolve()
 
     out = Path(output_dir) if output_dir else struct.parent / "gromacs_setup"
     out.mkdir(parents=True, exist_ok=True)
@@ -43,7 +47,9 @@ def gromacs_setup(
             "-water", water,
         ]
         if topology:
-            cmd_pdb2gmx.extend(["-i", str(topology)])
+            cmd_pdb2gmx.extend(["-i", str(Path(topology).resolve())])
+        if ignh:
+            cmd_pdb2gmx.append("-ignh")
 
         proc = subprocess.run(
             cmd_pdb2gmx,
@@ -105,7 +111,7 @@ def gromacs_setup(
         ions_tpr = out / "ions.tpr"
         ions_mdp = out / "ions.mdp"
         ions_mdp.write_text(
-            "integrator = minimization\n"
+            "integrator = steep\n"
             "nsteps = 0\n"
             "emtol = 1000\n"
             "rcoulomb = 1.0\n"
@@ -266,7 +272,7 @@ def _parse_energy(edr_file: Path) -> dict[str, Any]:
             cwd=str(edr_file.parent),
             capture_output=True,
             text=True,
-            input="Potential Kinetic-En. Total-Energy Temperature Pressure\n",
+            input="Potential\nKinetic-En.\nTotal-Energy\nTemperature\nPressure\n\n",
             timeout=60,
         )
         if proc.returncode != 0:
@@ -290,13 +296,12 @@ def _parse_xvg(xvg_path: Path) -> dict[str, Any]:
         header = None
         data_rows = []
         for line in lines:
-            if line.startswith("@") and "s legend" in line:
-                # Parse legend: @ s0 legend "Potential"
-                parts = line.split('"')
-                if len(parts) >= 2:
-                    if header is None:
-                        header = ["time"]
-                    header.append(parts[1])
+            legend = re.match(r'@\s*s\d+\s+legend\s+"(.*)"', line)
+            if legend:
+                # GROMACS writes `@ s0 legend "Potential"`.
+                if header is None:
+                    header = ["time"]
+                header.append(legend.group(1))
             elif line.startswith("#") or line.startswith("@"):
                 continue
             else:
