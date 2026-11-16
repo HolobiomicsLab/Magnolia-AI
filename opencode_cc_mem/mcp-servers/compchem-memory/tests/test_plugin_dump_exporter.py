@@ -97,6 +97,24 @@ def test_live_exporter_never_reads_worker_dump(tmp_path, monkeypatch):
     assert exported["messages"][0]["info"]["id"] == "live"
 
 
+def test_live_exporter_never_calls_cli_after_v2_database_failure(tmp_path, monkeypatch):
+    db = tmp_path / "v2.db"
+    db.touch()
+    monkeypatch.setenv("OPENCODE_DB", str(db))
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.v2_db_exporter",
+        lambda _db: lambda _sid: None,
+    )
+    cli_calls = []
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.export_session",
+        lambda sid: cli_calls.append(sid),
+    )
+
+    assert live_session_exporter()("ses_v2") is None
+    assert cli_calls == []
+
+
 def test_ingest_startup_path_drains_pending_turn_payloads(tmp_path, monkeypatch):
     store = _store(tmp_path)
     calls = []

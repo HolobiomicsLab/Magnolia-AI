@@ -351,9 +351,8 @@ def live_session_exporter() -> Callable[[str], Optional[dict]]:
     def exporter(ses_id: str) -> Optional[dict]:
         db = os.environ.get("OPENCODE_DB")
         if db and Path(db).exists():
-            exported = v2_db_exporter(db)(ses_id)
-            if exported is not None:
-                return exported
+            # Never point an unqualified CLI fallback at the live v2 database.
+            return v2_db_exporter(db)(ses_id)
         return export_session(ses_id)
 
     return exporter
@@ -387,10 +386,12 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
 
     def exporter(ses_id: str) -> Optional[dict]:
         db = os.environ.get("OPENCODE_DB")
+        database_failed = False
         if db and Path(db).exists():
             out = v2_db_exporter(db)(ses_id)
             if out is not None:
                 return out
+            database_failed = True
         dump = store / "opencode-transcripts" / f"{ses_id}.json"
         if dump.exists():
             try:
@@ -401,14 +402,15 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
                 pass  # corrupt dump — fall through
         from compchem_memory import opencode_cli
 
-        if v2_mode() and not opencode_cli.is_v2():
-            # v2 mode without the declared v2 runtime: the bare `opencode`
-            # from PATH may be the v1 CLI, which cannot read the v2 DB, and
-            # spawning it from the stdio MCP server has taken down the MCP
-            # connection. A missing session is retried next boot after the v2
-            # DB/transcript dump appears; never shell out to the wrong CLI.
-            # With MAGNOLIA_OPENCODE_V2 set, export_session uses the v2 binary
-            # with --standalone (see opencode_cli).
+        if database_failed or (v2_mode() and not opencode_cli.is_v2()):
+            # A live v2 database that could not export is never retried through
+            # a CLI. Likewise v2 mode without the declared v2 runtime: the bare
+            # `opencode` from PATH may be the v1 CLI, which cannot read the v2
+            # DB, and spawning it from the stdio MCP server has taken down the
+            # MCP connection. A missing session is retried next boot after the
+            # v2 DB/transcript dump appears. With MAGNOLIA_OPENCODE_V2 set,
+            # export_session uses the v2 binary with --standalone (see
+            # opencode_cli).
             return None
         return export_session(ses_id)
 
