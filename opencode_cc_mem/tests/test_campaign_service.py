@@ -272,6 +272,11 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
         seen["env"] = kwargs["env"]
         return _FakeProcess()
 
+    def fake_wait_for_agents(port, password, names, timeout_seconds, interval=0.5):
+        seen["required_agents"] = list(names)
+        seen["timeout_seconds"] = timeout_seconds
+        return True
+
     protocol = SimpleNamespace(
         worker=SimpleNamespace(max_steps=30),
         reviewer=SimpleNamespace(enabled=True, max_steps=8),
@@ -280,11 +285,11 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
     monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
     monkeypatch.setattr(service_module, "_healthy", lambda *args: True)
+    monkeypatch.setattr(service_module.time, "monotonic", lambda: 100.0)
     monkeypatch.setattr(
         service_module,
         "_wait_for_agents",
-        lambda port, password, names, timeout_seconds, interval=0.5:
-            seen.setdefault("required_agents", list(names)) is not None,
+        fake_wait_for_agents,
     )
     monkeypatch.setattr(service_module, "redact_file", lambda path: None)
     config, required_agents = _service_settings(protocol)
@@ -294,7 +299,6 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
         str(tmp_path / "opencode.db"),
         config_content=config,
         required_agents=required_agents,
-        timeout_seconds=30,
     )
     snapshot = json.loads(
         (ROOT / "tests" / "snapshots" / "opencode" / "service.json").read_text()
@@ -307,7 +311,7 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
             name: value["steps"]
             for name, value in json.loads(config)["agents"].items()
         },
-        "timeout_seconds": 30,
+        "timeout_seconds": seen["timeout_seconds"],
         "agent_file_bytes": {
             name: (ROOT / ".opencode" / "agents" / name).read_bytes().decode("utf-8")
             for name in ("campaign-worker.md", "campaign-reviewer.md")
