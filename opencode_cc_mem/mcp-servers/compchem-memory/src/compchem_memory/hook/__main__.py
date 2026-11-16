@@ -465,38 +465,24 @@ def main() -> None:
         from compchem_memory.hook.dispatch import handle
 
         handled = handle(event, os.environ, deadline)
-    except Exception as error:  # noqa: BLE001 - policy denial survives dispatch failure
+    except Exception as error:  # noqa: BLE001 - optional hook work fails open
         _log_error(error, harness, event_name, event, os.environ)
-        if policy_response.block is None:
-            _release_unsettled(handled, event)
-            os._exit(0)
-        try:
-            rendered = adapter.render(policy_response, event)
-        except Exception as render_error:  # noqa: BLE001 - no client denial can be emitted
-            _log_error(render_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled, event)
-            os._exit(0)
-        try:
-            _write_rendered(rendered, handled, event, os.environ)
-        except Exception as write_error:  # noqa: BLE001 - a rendered shell denial stays closed
-            _log_error(write_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled, event)
-        os._exit(rendered.exit_code)
+        _release_unsettled(handled, event)
+        os._exit(0)
 
     handled.response = policy_response.merge(handled.response)
     try:
         rendered = _render_handled(adapter, handled, event)
-    except Exception as render_error:  # noqa: BLE001 - adapter could not produce a denial
+    except Exception as render_error:  # noqa: BLE001 - adapter rendering fails open
         _log_error(render_error, harness, event_name, event, os.environ)
         _release_unsettled(handled, event)
         os._exit(0)
     try:
         _write_rendered(rendered, handled, event, os.environ)
-    except Exception as write_error:  # noqa: BLE001 - only shell policy remains fail-closed
+    except Exception as write_error:  # noqa: BLE001 - optional response delivery fails open
         _log_error(write_error, harness, event_name, event, os.environ)
         _release_unsettled(handled, event)
-        if policy_response.block is None:
-            os._exit(0)
+        os._exit(0)
     os._exit(rendered.exit_code)
 
 

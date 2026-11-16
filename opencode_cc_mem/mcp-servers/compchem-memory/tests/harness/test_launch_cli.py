@@ -349,6 +349,31 @@ def test_launch_prints_one_warning_per_merge_conflict_and_exits_zero(
     )
 
 
+def test_write_failure_after_conflict_prints_only_the_error(
+    tmp_path, monkeypatch, capsysbinary
+):
+    root = _root(tmp_path)
+    class Renderer(FakeRenderer):
+        def __call__(self, _neutral, context):
+            return Launch(
+                argv=["fake-client"], env={},
+                files={context.project_dir / "broken": b"content"},
+                conflicts=["configuration conflict: hooks.old (member entry preserved)"],
+            )
+
+    monkeypatch.setitem(RENDERERS, "claude", Renderer())
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    monkeypatch.setattr(
+        launch_cli, "atomic_write",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("write failed")),
+    )
+
+    assert launch_cli.main(_args(root)) == 1
+    captured = capsysbinary.readouterr()
+    assert captured.out == b""
+    assert captured.err == b"write failed\n"
+
+
 def test_launch_without_client_model_passes_none(tmp_path, monkeypatch, capsysbinary):
     root = _root(tmp_path)
     (root / ".magnolia").mkdir()

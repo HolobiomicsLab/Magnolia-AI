@@ -23,11 +23,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         _validate(launch)
         project_dir = args.root.resolve() / "projects" / args.project
         validate_project_paths(launch.files, project_dir)
-        for conflict in launch.conflicts:
-            print(f"warning: {str(conflict).splitlines()[0]}", file=sys.stderr)
         for path, content in launch.files.items():
             atomic_write(path, content)
         _link(launch.links, project_dir)
+        for conflict in launch.conflicts:
+            print(f"warning: {str(conflict).splitlines()[0]}", file=sys.stderr)
         _emit(launch)
         return 0
     except MissingBinary as error:

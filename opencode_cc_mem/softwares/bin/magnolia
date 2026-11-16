@@ -511,15 +511,41 @@ print("on" if mem_on else "off")
 PY
 }
 
+setup_nonce() {
+    local nonce
+    nonce="$(printf '%s' "${MAGNOLIA_SETUP_NONCE:-magnolia-${RANDOM}-${RANDOM}}" \
+        | LC_ALL=C tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')"
+    case "$nonce" in
+        *[a-z]*) printf '%s' "$nonce" ;;
+        *) printf 'magnolia-%s' "$nonce" ;;
+    esac
+}
+
+uppercase_ascii() {
+    LC_ALL=C tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+}
+
+reply_has_exact_line() {
+    local reply="$1" expected="$2" line
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ "$line" = "$expected" ] && return 0
+    done <<EOF2
+$reply
+EOF2
+    return 1
+}
+
 # One real call_llm round-trip against a candidate (model, provider).
 # Fresh subprocess — the running MCP server's stale env can't mask a bad
-# config. Exit 0 + "MEMORY_OK" only on a genuinely working combination.
+# config. Exit 0 only when the model returns the nonce transformation.
 probe_memory() {
     local model="$1" provider="${2:-}"
     MAGNOLIA_MEMORY_MODEL="$model" MAGNOLIA_MEMORY_PROVIDER="$provider" \
     MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
     "$PYTHON_CMD" - <<'PY'
-import os, sys
+import os, secrets, sys
 sys.path.insert(0, os.environ["MEM_SRC"])
 from compchem_memory.llm import call_llm, _resolve_call
 provider, model = _resolve_call()
@@ -528,9 +554,16 @@ if not provider:
           "ANTHROPIC_API_KEY / OPENAI_API_KEY / KIMI_API_KEY)", file=sys.stderr)
     sys.exit(1)
 sys.stderr.write(f"probe: provider={provider} model={model}\n")
-out = call_llm("You are a connectivity probe. Reply with exactly: MEMORY_OK",
-               "ping", max_tokens=200, temperature=0, disable_thinking=True)
-sys.exit(0 if (out and "MEMORY_OK" in out) else 1)
+nonce = (os.environ.get("MAGNOLIA_SETUP_NONCE") or f"magnolia-{secrets.token_hex(8)}").lower()
+if not any("a" <= character <= "z" for character in nonce):
+    nonce = f"magnolia-{nonce}"
+expected = nonce.upper()
+out = call_llm(
+    "You are a connectivity probe. Follow the user's transformation exactly.",
+    f"Uppercase this token and reply with only the result: {nonce}",
+    max_tokens=200, temperature=0, disable_thinking=True,
+)
+sys.exit(0 if out and out.strip() == expected else 1)
 PY
 }
 
@@ -624,8 +657,17 @@ except Exception:
     local ans
     ans="$(_read_from_tty "  main model: " || true)"
     if [ -n "$ans" ]; then
+        local nonce expected prompt reply rc=0
+        nonce="$(setup_nonce)"
+        expected="$(printf '%s' "$nonce" | uppercase_ascii)"
+        prompt="Uppercase this token and reply with only the result: $nonce"
         echo "  verifying with one real round-trip (may take ~1 min)…"
-        if timeout 180 opencode run -m "$ans" 'Reply with exactly: MAIN_MODEL_OK' 2>&1 | grep -q MAIN_MODEL_OK; then
+        if command -v timeout >/dev/null 2>&1; then
+            reply="$(timeout 180 opencode run -m "$ans" "$prompt" 2>&1)" || rc=$?
+        else
+            reply="$(opencode run -m "$ans" "$prompt" 2>&1)" || rc=$?
+        fi
+        if [ "$rc" -eq 0 ] && reply_has_exact_line "$reply" "$expected"; then
             setup_set "main_model=$ans"
             echo "  OK — main model verified."
         else
@@ -669,7 +711,10 @@ except Exception:
 # login), then `harness` and `models.<H>` are recorded. Nothing is written
 # unless the client answered.
 setup_run_harness() {
-    local harness="$1" model="$2" reply="" rc=0 prompt='Reply with exactly: MAIN_MODEL_OK'
+    local harness="$1" model="$2" reply="" rc=0 nonce expected prompt
+    nonce="$(setup_nonce)"
+    expected="$(printf '%s' "$nonce" | uppercase_ascii)"
+    prompt="Uppercase this token and reply with only the result: $nonce"
     local -a cmd
     case "$harness" in
         claude) cmd=(claude -p "$prompt") ;;
@@ -688,19 +733,8 @@ setup_run_harness() {
     fi
     echo "verifying $harness with one real call (may take ~1 min)…" >&2
     reply="$("${cmd[@]}" 2>/dev/null </dev/null)" || rc=$?
-    # Success = exit 0 AND a stdout line that is exactly MAIN_MODEL_OK. A
-    # client that merely echoes the prompt ("Reply with exactly: …") fails.
-    local line ok=0
-    if [ "$rc" -eq 0 ]; then
-        while IFS= read -r line || [ -n "$line" ]; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            line="${line%"${line##*[![:space:]]}"}"
-            if [ "$line" = "MAIN_MODEL_OK" ]; then ok=1; fi
-        done <<EOF2
-$reply
-EOF2
-    fi
-    if [ "$ok" != "1" ]; then
+    # The transformed answer never appears in the prompt, so echoing cannot pass.
+    if [ "$rc" -ne 0 ] || ! reply_has_exact_line "$reply" "$expected"; then
         echo "error: $harness did not pass the check${model:+ with model '$model'} (exit $rc); log in to $harness yourself and check the model id." >&2
         return 1
     fi

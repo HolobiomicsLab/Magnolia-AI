@@ -372,7 +372,7 @@ def test_setup_harness_writes_after_check_passes(tmp_path):
     ws = make_workspace(tmp_path)
     path = write_setup(ws, {"main_model": "a/b"})
     proc = run_raw(ws, ["setup", "--harness", "claude", "--model", "sonnet", PROJECT],
-                   env={"STUB_SAY": "MAIN_MODEL_OK"})
+                   env={"MAGNOLIA_SETUP_NONCE": "magnolia-test", "STUB_SAY": "MAGNOLIA-TEST"})
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.count("\n") == 1 and "claude" in proc.stdout and "OpenCode" not in proc.stdout
     data = json.loads(path.read_text())
@@ -380,7 +380,7 @@ def test_setup_harness_writes_after_check_passes(tmp_path):
     assert data["main_model"] == "a/b"
     calls = [json.loads(line) for line in (tmp_path / "stub.log").read_text().splitlines()]
     assert calls == [{"name": "claude",
-                      "argv": ["-p", "Reply with exactly: MAIN_MODEL_OK", "--model", "sonnet"]}]
+                      "argv": ["-p", "Uppercase this token and reply with only the result: magnolia-test", "--model", "sonnet"]}]
 
 
 def test_setup_harness_failure_writes_nothing(tmp_path):
@@ -396,11 +396,13 @@ def test_setup_harness_failure_writes_nothing(tmp_path):
 
 def test_setup_harness_call_shapes(tmp_path):
     ws = make_workspace(tmp_path)
-    run_raw(ws, ["setup", "--harness", "codex", "--model", "gpt-x", PROJECT], env={"STUB_SAY": "MAIN_MODEL_OK"})
-    run_raw(ws, ["setup", "--harness", "vibe", PROJECT], env={"STUB_SAY": "MAIN_MODEL_OK"})
+    env = {"MAGNOLIA_SETUP_NONCE": "magnolia-test", "STUB_SAY": "MAGNOLIA-TEST"}
+    run_raw(ws, ["setup", "--harness", "codex", "--model", "gpt-x", PROJECT], env=env)
+    run_raw(ws, ["setup", "--harness", "vibe", PROJECT], env=env)
     calls = [json.loads(line) for line in (tmp_path / "stub.log").read_text().splitlines()]
-    assert calls[0] == {"name": "codex", "argv": ["exec", "-m", "gpt-x", "Reply with exactly: MAIN_MODEL_OK"]}
-    assert calls[1] == {"name": "vibe", "argv": ["-p", "Reply with exactly: MAIN_MODEL_OK"]}
+    prompt = "Uppercase this token and reply with only the result: magnolia-test"
+    assert calls[0] == {"name": "codex", "argv": ["exec", "-m", "gpt-x", prompt]}
+    assert calls[1] == {"name": "vibe", "argv": ["-p", prompt]}
 
 
 def test_setup_check_needs_exit_zero_and_exact_line(tmp_path):
@@ -408,15 +410,34 @@ def test_setup_check_needs_exit_zero_and_exact_line(tmp_path):
     path = write_setup(ws, {"main_model": "a/b"})
     cases = [
         ({}, 1),  # the stub echoes the prompt as JSON: must fail
-        ({"STUB_SAY": "Reply with exactly: MAIN_MODEL_OK"}, 1),
-        ({"STUB_SAY": "MAIN_MODEL_OK", "STUB_EXIT": "3"}, 1),  # token but nonzero exit
-        ({"STUB_SAY": "  MAIN_MODEL_OK  "}, 0),
+        ({"STUB_SAY": "Uppercase this token and reply with only the result: magnolia-test"}, 1),
+        ({"STUB_SAY": "MAGNOLIA-TEST", "STUB_EXIT": "3"}, 1),
+        ({"STUB_SAY": "  MAGNOLIA-TEST  "}, 0),
     ]
     for env, code in cases:
+        env = {"MAGNOLIA_SETUP_NONCE": "magnolia-test", **env}
         proc = run_raw(ws, ["setup", "--harness", "claude", "--model", "m", PROJECT], env=env)
         assert proc.returncode == code, (env, proc.stderr)
         if code:
             assert json.loads(path.read_text()) == {"main_model": "a/b"}
+
+
+def test_tools_daemon_uses_portable_session_and_date_primitives():
+    daemon = OPENCODE_DIR / "softwares" / "bin" / "compchem-tools-daemon.sh"
+    text = daemon.read_text(encoding="utf-8")
+
+    assert "setsid bash" not in text
+    assert "date -Is" not in text
+    assert "os.setsid()" in text
+    assert "date -u '+%Y-%m-%dT%H:%M:%SZ'" in text
+
+
+def test_every_setup_probe_requires_a_transformed_nonce():
+    text = LAUNCHER.read_text(encoding="utf-8")
+
+    assert "MAIN_MODEL_OK" not in text
+    assert "MEMORY_OK" not in text
+    assert text.count("Uppercase this token and reply with only the result:") == 3
 
 
 def test_model_flag_is_an_error_for_opencode(tmp_path):

@@ -124,22 +124,30 @@ function processText(
   directory: string, sourceProject: string, text: string,
   mentionRe: RegExp, checkRe: RegExp,
 ): { text: string; sent: string[] } {
+  if (!checkRe.test(text)) return { text, sent: [] }
+  const requests = new Map<string, string[]>()
+  const labels = new Map<string, string>()
+  for (const match of text.matchAll(new RegExp(mentionRe.source, mentionRe.flags))) {
+    const agent = match[1]
+    const request = (match[2] || "").trim()
+    if (!request) continue
+    const target = agent.toLowerCase()
+    requests.set(target, [...(requests.get(target) ?? []), request])
+    if (!labels.has(target)) labels.set(target, agent)
+  }
+  const delivered = new Set<string>()
   const sent: string[] = []
-  if (!checkRe.test(text)) return { text, sent }
-  const newText = text.replace(
-    mentionRe,
-    (match: string, agent: string, request: string, _offset: number) => {
-      const req = (request || "").trim()
-      if (!req) return match // a bare @mention with no ask: leave it
-      try {
-        deliver(directory, sourceProject, agent.toLowerCase(), req)
-        sent.push(`@${agent}`)
-        return `[→ sent to @${agent}; the agents daemon will run it]`
-      } catch {
-        return match // delivery failed: leave the text untouched
-      }
-    },
-  )
+  for (const [target, targetRequests] of requests) {
+    try {
+      deliver(directory, sourceProject, target, targetRequests.join("\n\n"))
+      delivered.add(target)
+      sent.push(`@${labels.get(target)}`)
+    } catch { /* leave this target's mentions untouched */ }
+  }
+  const newText = text.replace(mentionRe, (match: string, agent: string, request: string) => {
+    if (!(request || "").trim() || !delivered.has(agent.toLowerCase())) return match
+    return `[→ sent to @${agent}; the agents daemon will run it]`
+  })
   return { text: sent.length > 0 ? newText : text, sent }
 }
 
