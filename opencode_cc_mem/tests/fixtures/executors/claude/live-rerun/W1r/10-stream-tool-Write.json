@@ -1,0 +1,22 @@
+{
+  "is_error": false,
+  "result_head": "File created successfully at: <G>/project/run/work/w1r.txt (file state is current in your context \u2014 no need to Read it back)",
+  "tool_result_meta": [
+    {
+      "id": "toolu_017UnKej1vWnLaSv2hfy1Pb3",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_017UnKej1vWnLaSv2hfy1Pb3",
+    "input": {
+      "content": "W1R-OK",
+      "file_path": "<G>/project/run/work/w1r.txt"
+    },
+    "name": "Write"
+  }
+}

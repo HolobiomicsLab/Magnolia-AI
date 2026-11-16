@@ -1,0 +1,48 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1309
+    },
+    {
+      "kind": "prompt",
+      "text_chars": 238
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "denied"
+    },
+    {
+      "kind": "assistant",
+      "text_chars": 199
+    },
+    {
+      "kind": "session-end"
+    }
+  ]
+}

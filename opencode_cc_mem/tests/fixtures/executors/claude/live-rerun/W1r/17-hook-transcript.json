@@ -1,0 +1,166 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 765
+    },
+    {
+      "kind": "prompt",
+      "text_chars": 824
+    },
+    {
+      "input": {
+        "task_description": "permission gate"
+      },
+      "kind": "tool",
+      "name": "memory_get_context",
+      "phase": "pre",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "task_description": "permission gate"
+      },
+      "kind": "tool",
+      "name": "memory_get_context",
+      "phase": "post",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/run/work/draft.txt",
+        "new_string": "draft-v2",
+        "old_string": "draft-v1",
+        "replace_all": false
+      },
+      "kind": "tool",
+      "name": "edit",
+      "phase": "pre"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/run/work/draft.txt",
+        "new_string": "draft-v2",
+        "old_string": "draft-v1",
+        "replace_all": false
+      },
+      "kind": "tool",
+      "name": "edit",
+      "phase": "post"
+    },
+    {
+      "input": {
+        "content": "W1R-OK",
+        "file_path": "<G>/project/run/work/w1r.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "phase": "pre"
+    },
+    {
+      "input": {
+        "content": "W1R-OK",
+        "file_path": "<G>/project/run/work/w1r.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "phase": "post"
+    },
+    {
+      "input": {
+        "keyword": "gate"
+      },
+      "kind": "tool",
+      "name": "memory_search",
+      "phase": "pre",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "keyword": "gate"
+      },
+      "kind": "tool",
+      "name": "memory_search",
+      "phase": "post",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/secret/.env"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "denied"
+    },
+    {
+      "input": {
+        "file_path": "<G>/project/alias-env"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "denied"
+    },
+    {
+      "input": {
+        "content": "x",
+        "file_path": "<G>/project/README-planted.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "phase": "denied"
+    },
+    {
+      "input": {
+        "command": "touch run/work/bash-marker",
+        "description": "Create bash-marker file in run/work"
+      },
+      "kind": "tool",
+      "name": "bash",
+      "phase": "denied"
+    },
+    {
+      "kind": "assistant",
+      "text_chars": 676
+    },
+    {
+      "kind": "session-end"
+    }
+  ]
+}

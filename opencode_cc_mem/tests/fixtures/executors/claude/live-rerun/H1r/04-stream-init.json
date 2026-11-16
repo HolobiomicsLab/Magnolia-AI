@@ -1,0 +1,12 @@
+{
+  "claude_code_version": "2.1.325",
+  "mcp_servers": [],
+  "model": "claude-haiku-5-5",
+  "permissionMode": "default",
+  "session_id": "ses-fixture-1",
+  "subtype": "init",
+  "tools": [
+    "Read"
+  ],
+  "type": "system"
+}
