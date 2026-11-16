@@ -47,17 +47,38 @@ def _join(first: str | None, second: str) -> str:
 
 
 def _decode_policy_targets(event: HookEvent) -> None:
-    """Decode only synthetic-only Codex shapes recorded for Task 6."""
+    """Decode fixture-backed Codex native and Magnolia read-server targets."""
     tool = event.tool
     if tool is None:
         return
     server, name = canonical_tool(tool.raw_name)
     if server is not None:
         tool.policy_action = "mcp"
+        if server == "magnolia-read" and name in {"read_file", "list_dir", "search"}:
+            path = tool.input.get("path")
+            if isinstance(path, str) and path:
+                broad = name == "search"
+                tool.targets = (
+                    ToolTarget(path, "search" if broad else "read", broad=broad),
+                )
         return
-    if name != "read":
+    if name == "read":
+        path = tool.input.get("file_path")
+        if isinstance(path, str) and path:
+            tool.policy_action = "native_read"
+            tool.targets = (ToolTarget(path, "read"),)
         return
-    path = tool.input.get("file_path")
-    if isinstance(path, str) and path:
-        tool.policy_action = "native_read"
-        tool.targets = (ToolTarget(path, "read"),)
+    if name == "apply_patch":
+        patch = tool.input.get("patch")
+        if not isinstance(patch, str):
+            return
+        prefixes = ("*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ")
+        paths = [
+            line.removeprefix(prefix)
+            for line in patch.splitlines()
+            for prefix in prefixes
+            if line.startswith(prefix) and line.removeprefix(prefix)
+        ]
+        if paths:
+            tool.policy_action = "native_edit"
+            tool.targets = tuple(ToolTarget(value, "edit") for value in paths)

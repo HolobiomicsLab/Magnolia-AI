@@ -33,6 +33,7 @@ BROAD_SEARCH_MAX_SECONDS = 1.0
 class RequiredPolicy:
     """Validated fields consumed by the required decision path."""
 
+    role: str
     read_roots: tuple[Path, ...]
     deny_patterns: tuple[str, ...]
     edit_roots: tuple[Path, ...]
@@ -73,7 +74,7 @@ def _read_required(path: str | None) -> RequiredPolicy:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("schema_version") != REQUIRED_SCHEMA:
         raise ValueError("required hook policy schema mismatch")
-    _required_text(payload, "role")
+    role = _required_text(payload, "role")
     _required_text(payload, "policy_role")
     _required_text(payload, "required_capability_identity")
     if payload.get("deny_path_forms") != ["requested", "resolved"]:
@@ -90,6 +91,7 @@ def _read_required(path: str | None) -> RequiredPolicy:
     read_roots = _required_roots(payload, "canonical_read_roots")
     edit_roots = _required_roots(payload, "edit_roots")
     return RequiredPolicy(
+        role=role,
         read_roots=read_roots,
         deny_patterns=_required_strings(payload, "read_deny_patterns"),
         edit_roots=edit_roots,
@@ -139,6 +141,17 @@ def _required_decision(event: HookEvent, policy: RequiredPolicy) -> Block | None
         mcp_name = f"mcp:{server}.{name}"
         if policy.deny_shell and _is_shell(name):
             return Block(REQUIRED_REASON)
+        if server == "magnolia-read":
+            allowed_names = {"read_file", "list_dir", "search"}
+            if (
+                policy.role not in {"worker", "reviewer"}
+                or name not in allowed_names
+                or mcp_name not in policy.mcp_tools
+            ):
+                return Block(REQUIRED_REASON)
+            if not event.tool.targets or not _targets_allowed(event, policy):
+                return Block(REQUIRED_REASON)
+            return None
         return None if mcp_name in policy.mcp_tools else Block(REQUIRED_REASON)
     if policy.deny_shell and _is_shell(name):
         return Block(REQUIRED_REASON)
@@ -196,6 +209,27 @@ def _path_forms_allowed(
     lexical_roots = tuple(Path(os.path.abspath(str(root))) for root in roots)
     resolved_roots = tuple(root.resolve(strict=False) for root in roots)
     return _within_any(requested, lexical_roots) and _within_any(resolved, resolved_roots)
+
+
+def load_required_policy(path: str | Path) -> RequiredPolicy:
+    """Load the same fail-closed role policy used by the required hook."""
+    return _read_required(str(path))
+
+
+def read_target_allowed(
+    path: str,
+    cwd: str | Path,
+    policy: RequiredPolicy,
+    *,
+    broad: bool = False,
+) -> bool:
+    """Apply the hook's neutral read/search target checks outside a hook event."""
+    target = ToolTarget(path, "search" if broad else "read", broad=broad)
+    if not _path_forms_allowed(path, str(cwd), policy.read_roots, policy):
+        return False
+    return not broad or _broad_search_allowed(
+        target, str(cwd), policy.read_roots, policy
+    )
 
 
 def _within_any(path: Path, roots: tuple[Path, ...]) -> bool:

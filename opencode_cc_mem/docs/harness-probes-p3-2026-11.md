@@ -62,3 +62,16 @@ Use Claude `-p --output-format stream-json --verbose`, Codex `exec --json`, and 
 Tasks 6–8 must bind the rows to the implemented policy, renderer, and executor digests, then repeat only changed observations inside the same cap before enabling a role. D3's project-bound HTTP memory service remains required for Vibe-memory acceptance; it does not block no-tools helper/evaluator proof.
 
 The table's `discovery_dir` evidence is composed with runtime project discovery by Tasks 6–8; the static table value is never fed directly to launch.
+
+## Task 8b offline gate — confined Codex reads
+
+Task 8b adds a run-owned `magnolia-read` stdio server for Codex worker and reviewer launches. It does not change `agents/*.yaml` or `executors/capabilities-p3.json`: both Codex campaign rows therefore remain **refused (D2)** until new accepted capability evidence is recorded. Offline tests establish that the server and required hook independently apply the same requested/resolved path rules, recursive case-insensitive deny patterns and bounded descendant scan. The Codex adapter's `apply_patch` target decoding is synthetic-only until observed live.
+
+The following Codex worker/reviewer checks are still owed; this task ran no client:
+
+1. Through `magnolia-read`, allow named reads and reject traversal, case-variant denied paths, denied descendants and escaping symlinks. Exercise each denial once through the hook and once directly against the server to prove both layers.
+2. Confirm the x10–x12 result still holds for the accepted launch identity: the outer code-mode `exec` has no file, process or network access, and every effectful inner `tools.*` call reaches `PreToolUse`.
+3. Confirm direct `apply_patch` reaches `PreToolUse`, permits worker edits only under the run's canonical `work/`, and denies reviewer edits plus worker traversal, symlink, move and multi-target escapes.
+4. Confirm `--disable apps` removes connected-app tools, user MCP servers/plugins are disabled, the selected model is explicit on launch and resume, and the supervising cap stops the process at its effective bound.
+
+Only after those observations match the immutable policy/config identity may the capability projection mark a Codex worker or reviewer row accepted and release D2 for that role.

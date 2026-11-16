@@ -175,6 +175,21 @@ def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
     assert launch.env["OPENROUTER_API_KEY"] == "OPENROUTER-KEY-SENTINEL"
 
 
+def test_claude_vibe_opencode_launch_unchanged(tmp_path):
+    for client in ("claude-code", "vibe"):
+        client_root = tmp_path / client
+        client_root.mkdir()
+        launch = prepare_launch(
+            _context(client_root, client=client, invocation=client)
+        )
+        assert "magnolia-read" not in _artifact_text(launch)
+
+    launcher = (ROOT / "softwares" / "bin" / "magnolia").read_text(
+        encoding="utf-8"
+    )
+    assert "magnolia-read" not in launcher
+
+
 def test_parallel_roles_and_interactive_render_do_not_cross_contaminate(tmp_path):
     first = prepare_launch(
         _context(tmp_path, invocation="helper-1", model="helper-model")

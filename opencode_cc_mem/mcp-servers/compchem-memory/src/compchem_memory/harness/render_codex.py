@@ -107,9 +107,8 @@ def native_artifacts(
 ) -> dict[str, bytes]:
     """Render an immutable, client-native Codex project configuration.
 
-    Governed Codex helper/evaluator runs deliberately receive no MCP servers;
-    the optional argument exists so callers cannot accidentally confuse the
-    native shape with Magnolia's neutral launch payload.
+    Helper/evaluator runs receive no MCP servers. Governed worker/reviewer runs
+    receive only the immutable run-owned servers supplied by launch preparation.
     """
     config: dict[str, Any] = {"mcp_servers": dict(mcp_servers or {})}
     if context.model:

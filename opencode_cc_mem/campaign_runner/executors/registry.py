@@ -116,13 +116,16 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
     if role not in {"worker", "reviewer", "service", "helper", "evaluator"}:
         raise ExecutorRefused(f"executor registry does not provide the {role} role")
     if route.client != "opencode":
+        if (
+            route.client == "codex"
+            and role in {"worker", "reviewer"}
+            and not _capable(context, route.client, role)
+        ):
+            raise ExecutorRefused(
+                f"D2: Codex {role} lacks accepted capability projection evidence"
+            )
         if not _capable(context, route.client, role):
             raise ExecutorRefused(f"{route.client} lacks accepted {role} role capability")
-        if route.client == "codex" and role in {"worker", "reviewer"}:
-            raise ExecutorRefused(
-                "D2: Codex worker/reviewer refused because the full read, shell, "
-                "code-mode and confined-edit gate failed"
-            )
         if route.client == "vibe" and role == "worker":
             raise ExecutorRefused(
                 "D4: Vibe worker refused because resume, hook-crash and the full "
@@ -159,11 +162,9 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
 
             from .codex import CodexExecutor, require_codex_trust
 
-            if role not in {"helper", "evaluator"}:
-                raise ExecutorRefused("D2: Codex campaign roles remain refused")
             if not route.model:
                 raise ExecutorRefused("Codex requires an explicit selected model")
-            if context.required_capabilities:
+            if role in {"helper", "evaluator"} and context.required_capabilities:
                 raise ExecutorRefused("Codex helper/evaluator contract is no-tools")
             if context.project_dir is None:
                 raise ExecutorRefused("Codex requires a canonical project directory")

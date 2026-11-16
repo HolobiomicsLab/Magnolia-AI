@@ -41,7 +41,12 @@ EVENTS = (
 
 # Servers whose OpenCode tool names are ``<server>_<tool>``. A bare underscore
 # is not enough evidence of a server: an unknown prefix stays a built-in name.
-_KNOWN_SERVERS = ("compchem-tools", "compchem-memory", "perspicacite")
+_KNOWN_SERVERS = (
+    "compchem-tools",
+    "compchem-memory",
+    "magnolia-read",
+    "perspicacite",
+)
 _MCP_PREFIX = "mcp__"
 _VIBE_MCP_PREFIX = "mcp_"
 
