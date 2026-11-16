@@ -22,6 +22,7 @@ from campaign_runner.governor import (
     QuotaWaiting,
 )
 from campaign_runner.routing import ResolvedRoute
+from compchem_memory import process_identity
 
 
 class FakeClock:
@@ -336,11 +337,11 @@ def test_macos_start_token_uses_absolute_ps_and_pinned_environment(monkeypatch):
         )
 
     monkeypatch.setattr(
-        governor_module.Path,
+        process_identity.Path,
         "read_bytes",
         lambda *_a, **_k: (_ for _ in ()).throw(FileNotFoundError()),
     )
-    monkeypatch.setattr(governor_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(process_identity.subprocess, "run", fake_run)
 
     token = governor_module._verified_process_start_token(123)
 
@@ -353,12 +354,12 @@ def test_macos_start_token_uses_absolute_ps_and_pinned_environment(monkeypatch):
 
 def test_unparsable_start_token_is_unknown(monkeypatch):
     monkeypatch.setattr(
-        governor_module.Path,
+        process_identity.Path,
         "read_bytes",
         lambda *_a, **_k: (_ for _ in ()).throw(FileNotFoundError()),
     )
     monkeypatch.setattr(
-        governor_module.subprocess,
+        process_identity.subprocess,
         "run",
         lambda argv, **kwargs: subprocess.CompletedProcess(
             argv, 0, stdout="not a timestamp\n", stderr=""
@@ -370,14 +371,14 @@ def test_unparsable_start_token_is_unknown(monkeypatch):
 def test_proc_start_token_parses_bytes_after_last_parenthesis(monkeypatch):
     fields = [b"S", b"1", b"4242", *([b"1"] * 16), b"987654"]
     body = b"4242 (invalid-\xff) comm ) " + b" ".join(fields) + b"\n"
-    monkeypatch.setattr(governor_module.Path, "read_bytes", lambda *_a, **_k: body)
+    monkeypatch.setattr(process_identity.Path, "read_bytes", lambda *_a, **_k: body)
 
     assert governor_module._verified_process_start_token(4242) == "proc:4242:987654"
 
 
 def test_unparsable_proc_state_is_unknown_and_therefore_alive(monkeypatch):
     monkeypatch.setattr(
-        governor_module.Path,
+        process_identity.Path,
         "read_bytes",
         lambda *_a, **_k: b"malformed proc stat without a closing delimiter",
     )
