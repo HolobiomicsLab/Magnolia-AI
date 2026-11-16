@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from campaign_runner.governor import (
     Admission,
@@ -26,6 +26,7 @@ from campaign_runner.workers import (
 )
 
 from .contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
+from .registry import ExecutorRefused
 
 if TYPE_CHECKING:
     from campaign_runner.launch import PreparedLaunch
@@ -46,7 +47,20 @@ NATIVE_TOOLS = {
     "native_grep": "Grep",
     "native_edit": ("Edit", "Write"),
 }
-SYNTHETIC_QUOTA_SOURCE = "synthetic Claude fixture; not live-certified"
+CLAUDE_HOOK_EVENTS = frozenset(
+    {
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStart",
+        "SubagentStop",
+        "SessionEnd",
+    }
+)
+QuotaDetector = Callable[[Mapping[str, Any]], RunOutcome | None]
 
 
 @dataclass
@@ -70,7 +84,12 @@ class ParsedClaudeRun:
     outcome: RunOutcome | None = None
 
 
-def parse_claude_stream(text: str) -> ParsedClaudeRun:
+def parse_claude_stream(
+    text: str,
+    *,
+    resumed: bool = False,
+    quota_detector: QuotaDetector | None = None,
+) -> ParsedClaudeRun:
     """Parse Claude stream-json without discarding partial output on damage."""
     parsed = ParsedClaudeRun()
     assistant_messages: list[str] = []
@@ -90,8 +109,6 @@ def parse_claude_stream(text: str) -> ParsedClaudeRun:
         if not isinstance(event, Mapping):
             parsed.diagnostics.append({"kind": "non_object", "line": line_number})
             continue
-        if event.get("synthetic") is True and isinstance(event.get("event"), Mapping):
-            event = {**event["event"], "synthetic": True}
         _parse_identity(event, parsed)
         event_type = event.get("type")
         if event_type == "assistant":
@@ -114,10 +131,12 @@ def parse_claude_stream(text: str) -> ParsedClaudeRun:
                 if isinstance(event.get("modelUsage"), Mapping)
                 else {}
             )
-            if parsed.reported_model is None and len(parsed.model_usage) == 1:
-                parsed.reported_model = next(iter(parsed.model_usage))
+            recent_usage = event.get("model_usage_since_last_result")
+            model_source = recent_usage if isinstance(recent_usage, Mapping) else parsed.model_usage
+            if parsed.reported_model is None and len(model_source) == 1:
+                parsed.reported_model = next(iter(model_source))
             result_text = event.get("result") if isinstance(event.get("result"), str) else None
-            parsed.outcome = _synthetic_quota(event)
+            parsed.outcome = quota_detector(event) if quota_detector else None
     parsed.all_text = "\n".join(assistant_messages)
     parsed.final_text = result_text if result_text is not None else (
         assistant_messages[-1] if assistant_messages else ""
@@ -125,7 +144,7 @@ def parse_claude_stream(text: str) -> ParsedClaudeRun:
     if not parsed.all_text and result_text:
         parsed.all_text = result_text
     if result_event is not None:
-        parsed.usage = _usage_record(result_event, parsed)
+        parsed.usage = _usage_record(result_event, parsed, resumed=resumed)
     return parsed
 
 
@@ -169,7 +188,9 @@ def _tool_result_count(event: Mapping[str, Any]) -> int:
     )
 
 
-def _usage_record(event: Mapping[str, Any], parsed: ParsedClaudeRun) -> UsageRecord:
+def _usage_record(
+    event: Mapping[str, Any], parsed: ParsedClaudeRun, *, resumed: bool
+) -> UsageRecord:
     usage = event.get("usage") if isinstance(event.get("usage"), Mapping) else {}
     details = usage.get("output_tokens_details")
     cache = {
@@ -186,9 +207,12 @@ def _usage_record(event: Mapping[str, Any], parsed: ParsedClaudeRun) -> UsageRec
             else None,
             "cache": cache,
         },
-        "cost": event.get("total_cost_usd"),
+        "cost": _invocation_cost(event, resumed=resumed),
         "usage": usage,
         "modelUsage": parsed.model_usage,
+        "model_usage_since_last_result": event.get(
+            "model_usage_since_last_result"
+        ),
     }
     return UsageRecord.from_raw(
         raw,
@@ -197,29 +221,18 @@ def _usage_record(event: Mapping[str, Any], parsed: ParsedClaudeRun) -> UsageRec
     )
 
 
-def _synthetic_quota(event: Mapping[str, Any]) -> RunOutcome | None:
-    if event.get("synthetic") is not True:
-        return None
-    if event.get("type") != "result" or event.get("subtype") != "error":
-        return None
-    body = event.get("result")
-    if not isinstance(body, str):
-        return None
-    reset_at = _reset_time(event.get("reset_at"))
-    return RunOutcome(
-        "quota",
-        LimitInfo("synthetic Claude session limit", reset_at, SYNTHETIC_QUOTA_SOURCE),
-    )
-
-
-def _reset_time(value: Any) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None and parsed.utcoffset() is not None else None
+def _invocation_cost(event: Mapping[str, Any], *, resumed: bool) -> float | int | None:
+    recent = event.get("model_usage_since_last_result")
+    if isinstance(recent, Mapping):
+        costs = [
+            value.get("costUSD")
+            for value in recent.values()
+            if isinstance(value, Mapping)
+        ]
+        numeric = [value for value in costs if _number(value) is not None]
+        if numeric:
+            return sum(numeric)
+    return None if resumed else _number(event.get("total_cost_usd"))
 
 
 @dataclass
@@ -233,6 +246,7 @@ class ClaudeCodeExecutor:
     timeout_seconds: int = 1800
     governance: InvocationGovernance | None = None
     resume_permitted: bool = False
+    quota_detector: QuotaDetector | None = None
 
     def __post_init__(self) -> None:
         if not self.prepared.argv:
@@ -244,9 +258,19 @@ class ClaudeCodeExecutor:
         if FORBIDDEN_ENV & set(self.prepared.env):
             names = ", ".join(sorted(FORBIDDEN_ENV & set(self.prepared.env)))
             raise WorkerError(f"forbidden Claude child environment: {names}")
-        forbidden = FORBIDDEN_FLAGS & set(self.prepared.argv)
+        forbidden = next(
+            (
+                flag
+                for value in self.prepared.argv
+                for flag in FORBIDDEN_FLAGS
+                if value == flag or value.startswith(flag + "=")
+            ),
+            None,
+        )
         if forbidden:
-            raise WorkerError(f"forbidden Claude launch flag: {sorted(forbidden)[0]}")
+            raise WorkerError(f"forbidden Claude launch flag: {forbidden}")
+        if len(self.prepared.argv) != 1:
+            raise WorkerError("Claude prepared argv must contain exactly one executable")
 
     def run(
         self,
@@ -262,7 +286,11 @@ class ClaudeCodeExecutor:
         if retries not in (None, 0, 1):
             raise WorkerError("Claude permits at most one empty-output retry")
         if resume_session is not None and not self.resume_permitted:
-            raise WorkerError("Claude resume requires the same prepared configuration identity")
+            raise ExecutorRefused(
+                "Claude resume requires the same prepared configuration identity"
+            )
+        if resume_session is not None:
+            self._require_bound_session(resume_session)
         retry_limit = 1 if retries is None else retries
         attempt_dir.mkdir(parents=True, exist_ok=True)
         session_id = resume_session
@@ -282,6 +310,8 @@ class ClaudeCodeExecutor:
         tool_calls = 0
         identity = self._identity(resume_session)
         for attempt_index in range(retry_limit + 1):
+            if session_id is not None:
+                self._require_bound_session(session_id)
             admission = self._admit(attempt_index, stem, identity, control)
             if isinstance(admission, QuotaWaiting):
                 outcome, stopped_reason = self._waiting_outcome(admission, control)
@@ -291,13 +321,13 @@ class ClaudeCodeExecutor:
                 if admission is not None and admission.effective_cap is not None
                 else self.max_turns
             )
-            argv = self._argv(current_prompt, session_id, effective_cap)
             stdout_path = attempt_dir / f"{stem}_{attempt_index + 1}.jsonl"
             stderr_path = attempt_dir / f"{stem}_{attempt_index + 1}.err.log"
-            attempts += 1
-            invocation_control = self._control(control, admission)
             try:
                 with admission or _NoAdmission():
+                    argv = self._argv(current_prompt, session_id, effective_cap)
+                    invocation_control = self._control(control, admission)
+                    was_resumed = session_id is not None
                     process = run_process(
                         argv,
                         cwd,
@@ -309,8 +339,12 @@ class ClaudeCodeExecutor:
                     )
                     if admission is not None and not process.client_started:
                         admission._cancel_before_client_exec()
+                    if process.client_started:
+                        attempts += 1
                     parsed = parse_claude_stream(
-                        stdout_path.read_text(encoding="utf-8", errors="replace")
+                        stdout_path.read_text(encoding="utf-8", errors="replace"),
+                        resumed=was_resumed,
+                        quota_detector=self.quota_detector,
                     )
                     outcome = self._outcome(process, parsed)
                     if (
@@ -327,6 +361,11 @@ class ClaudeCodeExecutor:
                             }
                         )
                         outcome = RunOutcome("refused")
+                    if parsed.session_id is not None and outcome.kind != "refused":
+                        if session_id is None:
+                            self._bind_session(parsed.session_id)
+                        else:
+                            self._require_bound_session(parsed.session_id)
                     identity = self._identity(parsed.session_id or session_id)
                     usage = self._usage(
                         parsed.usage,
@@ -384,8 +423,8 @@ class ClaudeCodeExecutor:
         )
 
     def _argv(self, prompt: str, session_id: str | None, max_turns: int) -> list[str]:
-        settings = self.prepared.invocation_dir / "settings.json"
-        mcp = self.prepared.invocation_dir / "mcp.json"
+        settings = self._native_artifact("claude-settings.json", "hooks")
+        mcp = self._native_artifact("claude-mcp.json", "mcpServers")
         argv = [
             self.prepared.argv[0],
             "-p",
@@ -409,7 +448,7 @@ class ClaudeCodeExecutor:
             argv.extend(["--resume", session_id])
         native, mcp_tools = self._allowed_tools()
         if self.role in {"helper", "evaluator"}:
-            argv.extend(["--tools", native[0] if len(native) == 1 else ""])
+            argv.extend(["--tools", ",".join(native)])
         if native or mcp_tools:
             argv.extend(["--allowedTools", *native, *mcp_tools])
         return argv
@@ -431,6 +470,101 @@ class ClaudeCodeExecutor:
             if isinstance(item, str)
         ]
         return native, mcp_tools
+
+    def _native_artifact(self, name: str, required_key: str) -> Path:
+        path = self.prepared.invocation_dir / name
+        expected = self.prepared.files.get(path)
+        try:
+            artifact_stat = path.lstat()
+            body = path.read_bytes()
+            payload = json.loads(body)
+        except (OSError, ValueError, TypeError) as exc:
+            raise ExecutorRefused(
+                f"missing or invalid Claude-native launch artifact: {name}"
+            ) from exc
+        if (
+            expected is None
+            or not stat.S_ISREG(artifact_stat.st_mode)
+            or artifact_stat.st_mode & 0o222
+            or body != expected
+            or not isinstance(payload, Mapping)
+            or not isinstance(payload.get(required_key), Mapping)
+        ):
+            raise ExecutorRefused(
+                f"missing or invalid Claude-native launch artifact: {name}"
+            )
+        if name == "claude-settings.json" and not CLAUDE_HOOK_EVENTS.issubset(
+            payload[required_key]
+        ):
+            raise ExecutorRefused(
+                f"missing or invalid Claude-native launch artifact: {name}"
+            )
+        return path
+
+    def _binding_identity(self) -> dict[str, str]:
+        project = self.prepared.env.get("MAGNOLIA_PROJECT_IDENTITY")
+        if not project:
+            raise ExecutorRefused("Claude launch is missing its project identity")
+        digest = hashlib.sha256(
+            (
+                self.prepared.policy_digest
+                + "\0"
+                + self.prepared.config_digest
+            ).encode()
+        ).hexdigest()
+        return {
+            "configuration_identity_digest": digest,
+            "role": self.role,
+            "project_identity": project,
+        }
+
+    def _binding_path(self) -> Path:
+        return self.prepared.invocation_dir / "session-bindings.json"
+
+    def _load_bindings(self) -> dict[str, Any]:
+        path = self._binding_path()
+        if not path.exists():
+            return {
+                "schema_version": "magnolia-claude-session-bindings-v1",
+                "sessions": {},
+            }
+        try:
+            binding_stat = path.lstat()
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError) as exc:
+            raise ExecutorRefused("invalid Claude session binding state") from exc
+        if (
+            not stat.S_ISREG(binding_stat.st_mode)
+            or not isinstance(payload, dict)
+            or not isinstance(payload.get("sessions"), dict)
+        ):
+            raise ExecutorRefused("invalid Claude session binding state")
+        return payload
+
+    def _bind_session(self, session_id: str) -> None:
+        payload = self._load_bindings()
+        expected = self._binding_identity()
+        current = payload["sessions"].get(session_id)
+        if current is not None and current != expected:
+            raise ExecutorRefused("Claude session has a different bound identity")
+        if current == expected:
+            return
+        payload["sessions"][session_id] = expected
+        path = self._binding_path()
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        temporary.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        temporary.chmod(0o600)
+        temporary.replace(path)
+
+    def _require_bound_session(self, session_id: str) -> None:
+        current = self._load_bindings()["sessions"].get(session_id)
+        if current is None:
+            raise ExecutorRefused(f"unknown Claude session: {session_id}")
+        if current != self._binding_identity():
+            raise ExecutorRefused("Claude session has a different bound identity")
 
     def _identity(self, session_id: str | None) -> SessionIdentity | None:
         if session_id is None:
@@ -502,7 +636,8 @@ class ClaudeCodeExecutor:
 
         def observe(stdout: Path, stderr: Path) -> RunOutcome | None:
             parsed = parse_claude_stream(
-                stdout.read_text(encoding="utf-8", errors="replace")
+                stdout.read_text(encoding="utf-8", errors="replace"),
+                quota_detector=self.quota_detector,
             )
             if parsed.outcome is not None:
                 return parsed.outcome
@@ -594,6 +729,10 @@ def _text(value: Any) -> str | None:
 
 def _integer(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _number(value: Any) -> float | int | None:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 class _NoAdmission:

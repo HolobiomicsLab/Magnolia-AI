@@ -15,6 +15,9 @@ from typing import Any, Mapping
 
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
+from compchem_memory.harness.render_claude import (
+    native_artifacts as render_claude_native_artifacts,
+)
 from compchem_memory.harness.render_common import policy_files
 
 from .executors.contracts import ExecContext
@@ -41,7 +44,6 @@ ROLE_CONFIG_NAMES = {
     "helper": "helper",
     "evaluator": "evaluator",
 }
-ARTIFACT_NAMES = ("policy.json", "settings.json", "mcp.json")
 CLIENT_CONFIG_FILES = {
     "codex": (".codex/config.toml", ".codex/hooks.json"),
     "vibe": (".vibe/config.toml", ".vibe/hooks.toml"),
@@ -83,9 +85,13 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
     )
     policy_body = _policy_body(context, invocation_dir, policy_payload)
     settings_body = _json_bytes(_settings_payload(context, policy, required))
-    mcp_body = _json_bytes(_mcp_payload(context, policy))
+    mcp_payload = _mcp_payload(context, policy)
+    mcp_body = _json_bytes(mcp_payload)
+    native_bodies = _client_native_artifacts(context, invocation_dir, mcp_payload)
     policy_digest = _digest(policy_body)
-    config_digest = _configuration_identity(context, settings_body, mcp_body)
+    config_digest = _configuration_identity(
+        context, settings_body, mcp_body, native_bodies
+    )
     if evidence["identity"] != config_digest:
         raise ExecutorRefused(
             "capability configuration identity does not match discovered configuration"
@@ -104,6 +110,7 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
                 "policy.json": policy_body,
                 "settings.json": settings_body,
                 "mcp.json": mcp_body,
+                **native_bodies,
             },
         )
     if invocation_dir.exists():
@@ -112,6 +119,7 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
         invocation_dir / "policy.json": policy_body,
         invocation_dir / "settings.json": settings_body,
         invocation_dir / "mcp.json": mcp_body,
+        **{invocation_dir / name: body for name, body in native_bodies.items()},
     }
     metadata = _launch_metadata(
         context,
@@ -144,8 +152,11 @@ def configuration_identity(context: ExecContext) -> str:
     policy = load_role(ROLE_CONFIG_NAMES[context.role])
     required = _required_capabilities(policy, context)
     settings = _json_bytes(_settings_payload(context, policy, required))
-    mcp = _json_bytes(_mcp_payload(context, policy))
-    return _configuration_identity(context, settings, mcp)
+    mcp_payload = _mcp_payload(context, policy)
+    mcp = _json_bytes(mcp_payload)
+    invocation_name = context.invocation_id or "configuration-identity"
+    native = _client_native_artifacts(context, Path(invocation_name), mcp_payload)
+    return _configuration_identity(context, settings, mcp, native)
 
 
 def _require_context(context: ExecContext) -> None:
@@ -428,6 +439,64 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
     }
 
 
+def _client_native_artifacts(
+    context: ExecContext,
+    invocation_dir: Path,
+    mcp_payload: Mapping[str, Any],
+) -> dict[str, bytes]:
+    """Render client syntax while retaining neutral identity payloads."""
+    assert context.route is not None
+    if context.route.client != "claude-code":
+        return {}
+    assert context.installation_root is not None
+    assert context.project_dir is not None
+    assert context.control_dir is not None
+    launch_context = LaunchContext(
+        root=context.installation_root,
+        project=context.project_identity or "",
+        project_dir=context.project_dir,
+        python=context.python_executable or "",
+        tools_port=context.tools_port or 0,
+        model=context.route.model,
+        setup=dict(context.setup),
+        run_dir=context.run_dir,
+        control_dir=context.control_dir,
+        work_dir=context.work_dir,
+        role=context.role,
+        invocation_id=invocation_dir.name,
+        noninteractive=True,
+    )
+    return render_claude_native_artifacts(
+        launch_context, _claude_mcp_servers(mcp_payload)
+    )
+
+
+def _claude_mcp_servers(
+    mcp_payload: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    service = mcp_payload.get("memory_service")
+    if not isinstance(service, Mapping):
+        return {}
+    if service.get("transport") == "http":
+        entry: dict[str, Any] = {"type": "http", "url": service["url"]}
+        authorization = service.get("authorization_env")
+        if isinstance(authorization, str):
+            entry["headers"] = {
+                "Authorization": f"Bearer ${{{authorization}}}"
+            }
+        return {"compchem-memory": entry}
+    args = service.get("args", ())
+    if not isinstance(args, (list, tuple)):
+        raise ExecutorRefused("memory stdio route args must be a list")
+    entry = {"command": service["command"], "args": [str(arg) for arg in args]}
+    env_vars = service.get("env_vars", ())
+    if not isinstance(env_vars, (list, tuple)):
+        raise ExecutorRefused("memory stdio route env_vars must be a list")
+    if env_vars:
+        entry["env"] = {str(name): f"${{{name}}}" for name in env_vars}
+    return {"compchem-memory": entry}
+
+
 def _validate_memory_service(service: Mapping[str, Any]) -> None:
     transport = service.get("transport")
     dependencies = []
@@ -522,13 +591,20 @@ def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str,
 
 
 def _configuration_identity(
-    context: ExecContext, settings_body: bytes, mcp_body: bytes
+    context: ExecContext,
+    settings_body: bytes,
+    mcp_body: bytes,
+    native_bodies: Mapping[str, bytes],
 ) -> str:
     assert context.route is not None
     assert context.project_dir is not None
     if context.route.client == "claude-code":
         return _digest_named_bodies(
-            (("settings.json", settings_body), ("mcp.json", mcp_body))
+            (
+                ("settings.json", settings_body),
+                ("mcp.json", mcp_body),
+                *sorted(native_bodies.items()),
+            )
         )
     relative_paths = CLIENT_CONFIG_FILES.get(context.route.client)
     if relative_paths is None:
@@ -617,7 +693,7 @@ def _resume_launch(
     recorded = metadata.get("artifacts")
     if not isinstance(recorded, Mapping):
         raise ExecutorRefused("invalid resume artifact manifest")
-    for name in (*ARTIFACT_NAMES, "launch.json"):
+    for name in (*expected_artifacts, "launch.json"):
         path = invocation_dir / name
         try:
             artifact_stat = path.lstat()

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import Launch, LaunchContext
@@ -63,6 +65,16 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
 
 
 render.binary = "claude"
+
+
+def native_artifacts(
+    context: LaunchContext, mcp_servers: Mapping[str, Mapping[str, Any]]
+) -> dict[str, bytes]:
+    """Render immutable Claude-native files for one noninteractive run."""
+    return {
+        "claude-settings.json": _json({"hooks": _hooks(context)}),
+        "claude-mcp.json": _json({"mcpServers": dict(mcp_servers)}),
+    }
 
 
 def _hooks(context: LaunchContext) -> dict:
