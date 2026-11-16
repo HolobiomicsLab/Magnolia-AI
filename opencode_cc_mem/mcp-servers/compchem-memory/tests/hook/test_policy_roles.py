@@ -297,6 +297,31 @@ def test_campaign_mcp_shell_member_tool_delegation_and_inner_call_denied(tmp_pat
         assert decide(_event(project, None, raw_name=raw_name), env) is not None
 
 
+@pytest.mark.parametrize(
+    "raw_name",
+    (
+        "exec",
+        "web__run",
+        "image_gen__imagegen",
+        "multi_agent_v1__spawn_agent",
+        "multi_agent_v1__send_input",
+        "multi_agent_v1__resume_agent",
+        "multi_agent_v1__close_agent",
+        "multi_agent_v1__wait_agent",
+        "create_goal",
+        "get_goal",
+        "update_goal",
+    ),
+)
+def test_required_roles_deny_codex_optional_surfaces_by_name(tmp_path, raw_name):
+    project = tmp_path / "project"
+    work = project / "run" / "work"
+    work.mkdir(parents=True)
+    env = _write_policy(tmp_path / "policy.json", project, work)
+
+    assert decide(_event(project, None, raw_name=raw_name), env) is not None
+
+
 def test_hook_allows_read_server_tools_only_for_worker_reviewer(tmp_path):
     project = tmp_path / "project"
     work = project / "run" / "work"

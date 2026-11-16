@@ -15,6 +15,7 @@ import pytest
 from campaign_runner.cli import _memory_route
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.capabilities import load_role_capabilities
+from campaign_runner.executors.codex import CodexExecutor
 from campaign_runner.launch import (
     _hook_source_digest,
     configuration_identity,
@@ -71,6 +72,19 @@ WORKER_CAPABILITIES = (
 )
 
 
+def _fake_codex_client(tmp_path):
+    binary = tmp_path / "codex"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--version\" ]; then\n"
+        "  printf '%s\\n' 'codex-cli 0.154.0'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    return binary
+
+
 def _context(
     tmp_path,
     *,
@@ -90,6 +104,8 @@ def _context(
         config_dir.mkdir(exist_ok=True)
         (config_dir / "config.toml").write_text("model_provider = \"subscription\"\n")
         (config_dir / "hooks.json").write_text('{"hooks": {}}\n')
+        codex_user_config = tmp_path / "codex-user.toml"
+        codex_user_config.write_text("", encoding="utf-8")
     if client == "vibe":
         config_dir = project / ".vibe"
         config_dir.mkdir(exist_ok=True)
@@ -125,7 +141,13 @@ def _context(
         "work_dir": run / "work",
         "python_executable": "/venv/bin/python",
         "tools_port": 8123,
-        "setup": {"memory_enabled": True},
+        "setup": {
+            "memory_enabled": True,
+            **(
+                {"codex_user_config_path": str(codex_user_config)}
+                if client == "codex" else {}
+            ),
+        },
         "memory_service": {
             "transport": "stdio",
             "command": "/venv/bin/python",
@@ -133,7 +155,10 @@ def _context(
             "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         "invocation_id": invocation,
-        "launch_argv": (f"stub-{client}", "--headless"),
+        "launch_argv": (
+            (str(_fake_codex_client(tmp_path)),)
+            if client == "codex" else (f"stub-{client}", "--headless")
+        ),
         "role_capabilities": {client: {role: evidence}},
         "environment": (
             {
@@ -290,6 +315,104 @@ def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
 
     assert "OPENROUTER_API_KEY" in _artifact_text(launch)
     assert launch.env["OPENROUTER_API_KEY"] == "OPENROUTER-KEY-SENTINEL"
+
+
+def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+    launch = prepare_launch(context)
+
+    assert launch.argv == (str(binary.resolve()),)
+    assert launch.client_sha256 == hashlib.sha256(binary.read_bytes()).hexdigest()
+
+    for path, body in launch.files.items():
+        if path.name in {"config.toml", "hooks.json"}:
+            target = context.project_dir / path.relative_to(launch.invocation_dir)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    executor = CodexExecutor(
+        launch, "selected-model", "worker", 30,
+        user_config_path=Path(context.setup["codex_user_config_path"]),
+    )
+    binary.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    with pytest.raises(ExecutorRefused, match="changed before spawn"):
+        executor._verify_client_bytes()
+
+
+def test_codex_configuration_identity_ignores_owner_config(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    owner = tmp_path / "owner.toml"
+    owner.write_text('[mcp_servers.owner]\ncommand = "first"\n', encoding="utf-8")
+    context = _context(
+        tmp_path,
+        client="codex",
+        launch_argv=(str(binary),),
+        setup={"codex_user_config_path": str(owner)},
+    )
+    before = configuration_identity(context)
+    owner.write_text('[mcp_servers.owner]\ncommand = "second"\n', encoding="utf-8")
+
+    assert configuration_identity(context) == before
+
+
+def test_codex_identity_is_path_independent_across_checkouts(tmp_path):
+    from campaign_runner import launch as module
+
+    identities = []
+    for name in ("checkout-a", "checkout-b"):
+        root = tmp_path / name
+        root.mkdir()
+        installation = root / "opencode_cc_mem"
+        shutil.copytree(
+            ROOT,
+            installation,
+            ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
+        )
+        python = root / ".venv" / "bin" / "python3"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        (python.parents[1] / "pyvenv.cfg").write_text(
+            f"home = {Path(sys.executable).resolve().parent}\n",
+            encoding="utf-8",
+        )
+        binary = _fake_codex_client(root)
+        route = ResolvedRoute(
+            "codex", "selected-model", "family", "codex", "worker", "test"
+        )
+        context = _context(
+            root,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            launch_argv=(str(binary),),
+            installation_root=installation,
+            python_executable=str(python),
+            memory_service=_memory_route(route, str(python), installation),
+        )
+        launch = prepare_launch(context)
+        native = {
+            str(path.relative_to(launch.invocation_dir)): body
+            for path, body in launch.files.items()
+            if str(path.relative_to(launch.invocation_dir)).startswith(".codex/")
+        }
+        normalized = module._normalized_launch_identity(
+            context,
+            launch.invocation_dir,
+            launch.env,
+            launch.files[launch.invocation_dir / "settings.json"],
+            launch.files[launch.invocation_dir / "mcp.json"],
+            native,
+            launch.files[launch.invocation_dir / "policy.json"],
+        )
+        identities.append((configuration_identity(context), normalized["components"]))
+
+    assert identities[0] == identities[1]
 
 
 def test_codex_read_server_identity_is_stable_across_invocations(tmp_path):
@@ -1574,13 +1697,13 @@ def test_resume_rechecks_identity(tmp_path):
         )
 
 
-def test_project_configuration_change_invalidates_evidence(tmp_path):
+def test_codex_configuration_identity_uses_rendered_run_files_not_project_copy(tmp_path):
     context = _context(tmp_path, client="codex")
+    identity = configuration_identity(context)
     hooks = tmp_path / "project" / ".codex" / "hooks.json"
     hooks.write_text('{"hooks": {"changed": true}}\n', encoding="utf-8")
 
-    with pytest.raises(ExecutorRefused, match="configuration identity"):
-        prepare_launch(context)
+    assert configuration_identity(context) == identity
 
 
 def test_selected_model_requires_isolation_evidence(tmp_path):

@@ -105,6 +105,9 @@ def _stub(
     binary.write_text(
         """#!/usr/bin/env python3
 import json, os, pathlib, sys, time
+if sys.argv[1:] == ["--version"]:
+    print("codex-cli 0.154.0")
+    raise SystemExit(0)
 config = json.loads(pathlib.Path(os.environ["CODEX_STUB_CONFIG"]).read_text())
 state = pathlib.Path(config["state"])
 index = len(list(state.glob("call-*.json")))
@@ -148,6 +151,16 @@ def _context(
     (project / ".codex").mkdir(parents=True)
     (run / "control").mkdir(parents=True)
     (run / "work").mkdir()
+    if binary is None:
+        binary = tmp_path / "codex-client"
+        binary.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"--version\" ]; then\n"
+            "  printf '%s\\n' 'codex-cli 0.154.0'\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        binary.chmod(0o755)
     launch_context = LaunchContext(
         root=ROOT, project="project-fixture", project_dir=project,
         python="/venv/bin/python", tools_port=8123, model=model, setup={},
@@ -216,7 +229,7 @@ def _context(
         control_dir=run / "control", work_dir=run / "work",
         installation_root=ROOT, workspace_root=tmp_path,
         project_identity="project-fixture", python_executable="/venv/bin/python",
-        tools_port=8123, launch_argv=(str(binary or "codex-stub"),),
+        tools_port=8123, launch_argv=(str(binary),),
         memory_service={
             "transport": "stdio",
             "command": "/venv/bin/python",
@@ -295,7 +308,12 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         servers["compchem-memory"] = {
             "command": "/venv/bin/python",
             "args": ISOLATED_MEMORY_ARGS,
-            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
+            "tools": {
+                name: {"approval_mode": "approve"} for name in (
+                    "memory_get_context", "memory_search", "memory_get_run_history",
+                )
+            },
         }
     servers["magnolia-read"] = {
             "command": "/venv/bin/python",
@@ -306,7 +324,13 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
                 "MAGNOLIA_HOOK_POLICY_SHA256",
                 "MAGNOLIA_CONTROL_DIR",
+                "PYTHONPYCACHEPREFIX",
             ],
+            "tools": {
+                name: {"approval_mode": "approve"} for name in (
+                    "read_file", "list_dir", "search",
+                )
+            },
         }
     for relative, body in native_artifacts(expected_context, servers).items():
         (context.project_dir / relative).write_bytes(body)
@@ -327,7 +351,27 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         "MAGNOLIA_HOOK_POLICY_REQUIRED",
         "MAGNOLIA_HOOK_POLICY_SHA256",
         "MAGNOLIA_CONTROL_DIR",
+        "PYTHONPYCACHEPREFIX",
     ]
+    expected_tools = {
+        "magnolia-read": {name: {"approval_mode": "approve"} for name in (
+            "read_file", "list_dir", "search",
+        )},
+    }
+    if role == "worker":
+        expected_tools["compchem-memory"] = {
+            name: {"approval_mode": "approve"} for name in (
+                "memory_get_context", "memory_search", "memory_get_run_history",
+            )
+        }
+        assert config["mcp_servers"]["compchem-memory"]["env_vars"] == [
+            "MAGNOLIA_PROJECT_DIR",
+            "PYTHONPYCACHEPREFIX",
+        ]
+    assert {
+        server: value["tools"]
+        for server, value in config["mcp_servers"].items()
+    } == expected_tools
     assert executor.prepared.env["MAGNOLIA_HOOK_POLICY"] == str(
         invocation / "policy.json"
     )
@@ -335,8 +379,15 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     assert argv[argv.index("-s") + 1] == (
         "workspace-write" if role == "worker" else "read-only"
     )
-    assert ["--disable", "apps"] in [argv[i:i + 2] for i in range(len(argv) - 1)]
-    assert "code_mode_host" not in argv
+    pairs = [argv[i:i + 2] for i in range(len(argv) - 1)]
+    for feature in (
+        "apps", "browser_use", "browser_use_external",
+        "browser_use_full_cdp_access", "code_mode_host", "goals",
+        "image_generation", "in_app_browser", "multi_agent",
+        "standalone_web_search",
+    ):
+        assert ["--disable", feature] in pairs
+    assert ["--enable", "skip_host_skill_discovery"] in pairs
     assert "mcp_servers.magnolia-read.enabled=false" not in argv
 
 
@@ -418,7 +469,13 @@ def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
                 "MAGNOLIA_HOOK_POLICY_REQUIRED",
                 "MAGNOLIA_HOOK_POLICY_SHA256",
                 "MAGNOLIA_CONTROL_DIR",
+                "PYTHONPYCACHEPREFIX",
             ],
+            "tools": {
+                "read_file": {"approval_mode": "approve"},
+                "list_dir": {"approval_mode": "approve"},
+                "search": {"approval_mode": "approve"},
+            },
         }
     }
     launch_context = LaunchContext(
@@ -842,15 +899,18 @@ def test_codex_required_hook_trust_matches_each_handler_key(tmp_path):
         require_codex_trust(context.project_dir, context.setup)
 
 
-def test_codex_user_config_change_invalidates_capability_identity(tmp_path):
+def test_codex_user_config_change_is_disabled_without_changing_run_identity(tmp_path):
     context = _context(tmp_path)
     trust = Path(context.setup["codex_user_config_path"])
+    identity = configuration_identity(context)
     trust.write_text(
         trust.read_text() + '\n[mcp_servers.late_server]\ncommand = "late"\n'
     )
 
-    with pytest.raises(ExecutorRefused, match="configuration identity"):
-        executor_for(context.route, "helper", context)
+    executor = executor_for(context.route, "helper", context)
+
+    assert configuration_identity(context) == identity
+    assert "mcp_servers.late_server.enabled=false" in executor._argv("prompt", None)
 
 
 def test_client_nonquota_errors_stay_failures():

@@ -7,7 +7,8 @@
       "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
       "opencode_cc_mem/docs/harness-probes-2026-11.md",
       "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
-      "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/"
+      "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
+      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md"
     ]
   },
   "note": "Claude live role gates are accepted and launch-bound to the real client plus normalized project-independent rendered components. Codex and Vibe remain refused.",
@@ -803,7 +804,30 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "6a5923fbb04fbefcf24b7debfad2f9f6b6cd351655e3393c967c12fe16eef19e",
+            "components": {
+              "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
+              "mcp": "a38ef3835c5815a8d00937c78cd7e46fdc383c970b1738016a3a32dce6b8bff2",
+              "native_files": "eae00d1cd21b37621197eb744847ea32e1279db4ebdd8617f044e332ef4ec7e2",
+              "policy": "184ebe313dec2ff61f8f5a2de1f40d5b9731e2e865f87b3a740426bf160b282b",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "020210105933299a0fa0765bd44d084eb860eb4a9b0f21f48e3bd712dad9efeb",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
         "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
       },
       "cells": {
@@ -885,7 +909,30 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "cca3c04408e103ec008bd07315f09c0240a736a69ee120ce68f95b19eec3653e",
+            "components": {
+              "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
+              "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+              "native_files": "73c726565df452cff38dbd97d9c331d850a3b9dc7770befe1f3446fb99cbf041",
+              "policy": "f619948085b689cdd9695313c347ef5d7ffae36013a0983b686eb2f006f1551f",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "020210105933299a0fa0765bd44d084eb860eb4a9b0f21f48e3bd712dad9efeb",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
         "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
       },
       "cells": {
@@ -967,7 +1014,30 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "c38546a4b203f21061cabb3614d585fcc47af6c221741818e122fc689a055e61",
+            "components": {
+              "settings": "2b9d3fbc2bc45ab24440c9fd9dc9286969735748ac4b3d696c96680c92d24498",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "020210105933299a0fa0765bd44d084eb860eb4a9b0f21f48e3bd712dad9efeb",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
         "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
       },
       "cells": {
@@ -1049,7 +1119,30 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.154.0",
+            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "aa29a9f118f6152b6278a5bb14d7974ec0778c5027e40fceb08dc5aa88264fe3",
+            "components": {
+              "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "3b50e1c928aab12e50f9255e25fd6c6f47f586714802c578a59759cbc7e5d0be",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "020210105933299a0fa0765bd44d084eb860eb4a9b0f21f48e3bd712dad9efeb",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
         "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
       },
       "cells": {
