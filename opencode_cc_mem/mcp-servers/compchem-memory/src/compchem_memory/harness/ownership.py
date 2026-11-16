@@ -13,7 +13,7 @@ from compchem_memory.harness.render_common import (
 
 MAGNOLIA_SERVERS = frozenset({"compchem-tools", "compchem-memory", "perspicacite"})
 _CLIENTS = ("claude", "codex", "vibe")
-_PYTHON = re.compile(r"(?:python(?:\d+(?:\.\d+)*)?|py)")
+_PYTHON = re.compile(r"(?:python(?:[0-9]+(?:\.[0-9]+)*)?|py)")
 # Any well-formed event name, so entries for events no longer rendered are still ours to remove.
 _EVENT_TOKEN = re.compile(r"[a-z][a-z0-9-]{0,40}")
 _RUNNER_PARTS = (

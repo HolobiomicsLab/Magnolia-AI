@@ -7,6 +7,10 @@ import os
 import sys
 
 
+MEMORY_SERVER_MODE = "--memory-server"
+BACKGROUND_MODE = "--background"
+
+
 def _repository_source() -> str:
     runner = os.path.abspath(__file__)
     relative = os.path.join(
@@ -37,7 +41,7 @@ def _load_repository_package(source: str) -> None:
 
 
 def main() -> None:
-    """Pin imports and bytecode to the repository-owned hook runtime."""
+    """Pin imports and run one repository-owned hook process."""
     source = _repository_source()
     prefix = os.environ.get("PYTHONPYCACHEPREFIX")
     if prefix:
@@ -45,6 +49,18 @@ def main() -> None:
     repository = os.path.realpath(source)
     sys.path[:] = [path for path in sys.path if os.path.realpath(path) != repository]
     _load_repository_package(source)
+    if sys.argv[1:2] == [MEMORY_SERVER_MODE]:
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from compchem_memory.server import mcp
+
+        mcp.run()
+        return
+    if sys.argv[1:2] == [BACKGROUND_MODE]:
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from compchem_memory.hook.background import main as background_main
+
+        background_main()
+        return
     from compchem_memory.hook.__main__ import main as hook_main
 
     hook_main()

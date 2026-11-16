@@ -170,7 +170,7 @@ def test_session_end_recovers_sixteen_and_one_worker_drains_main_then_newest_chi
     spawned = []
     monkeypatch.setattr(
         dispatch.subprocess, "Popen",
-        lambda argv, **kwargs: spawned.append(Path(argv[-1])) or object(),
+        lambda argv, **kwargs: spawned.append((argv, kwargs)) or object(),
     )
 
     handle(HookEvent(harness, "session-end", "s1", str(project)),
@@ -179,6 +179,10 @@ def test_session_end_recovers_sixteen_and_one_worker_drains_main_then_newest_chi
     expected = [(None, "mt"), *[(f"c{index}", f"ct{index}") for index in range(29, 14, -1)]]
     assert recovered == expected
     assert len(spawned) == 1
+    argv, _kwargs = spawned[0]
+    assert argv[1] == "-I"
+    assert argv[2].endswith("/compchem_memory/hook/runner.py")
+    assert argv[3] == "--background"
     with SessionState.open(store, harness, "s1") as state:
         still_pending = state.data["catchup_pending"]
         assert len(still_pending) == 31
@@ -199,7 +203,7 @@ def test_session_end_recovers_sixteen_and_one_worker_drains_main_then_newest_chi
         ),
     )
 
-    background.run_job(spawned[0])
+    background.run_job(Path(argv[-1]))
 
     assert judged[::2] == [("probe", turn_id) for _, turn_id in expected]
     assert judged[1::2] == [("critic", turn_id) for _, turn_id in expected]

@@ -27,6 +27,14 @@ from compchem_memory.harness.render_codex import native_artifacts
 
 
 ROOT = Path(__file__).parents[1]
+ISOLATED_MEMORY_ARGS = [
+    "-I",
+    str(
+        ROOT / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    ),
+    "--memory-server",
+]
 FIXTURES = ROOT / "tests" / "fixtures" / "executors" / "codex" / "live-p3"
 STRIPPED_ENV = {
     "CLAUDE_CONFIG_DIR": "forbidden-claude-config",
@@ -211,7 +219,7 @@ def _context(
         memory_service={
             "transport": "stdio",
             "command": "/venv/bin/python",
-            "args": ["-m", "compchem_memory.server"],
+            "args": ISOLATED_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         role_capabilities={"codex": {role: evidence}},
@@ -285,7 +293,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     if role == "worker":
         servers["compchem-memory"] = {
             "command": "/venv/bin/python",
-            "args": ["-m", "compchem_memory.server"],
+            "args": ISOLATED_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         }
     servers["magnolia-read"] = {

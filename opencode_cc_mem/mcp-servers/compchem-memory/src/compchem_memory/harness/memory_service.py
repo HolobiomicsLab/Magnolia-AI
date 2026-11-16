@@ -334,16 +334,21 @@ def _require_provider_key(context: Any, environment: Mapping[str, str]) -> None:
 
 
 @contextmanager
-def _state_lock(state: Path) -> Iterator[None]:
+def _state_lock(state: Path, *, blocking: bool = True) -> Iterator[None]:
+    """Hold the private service lock, optionally refusing contention immediately."""
     _ensure_private_state_dir(state)
     path = state / "service.lock"
     descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    acquired = False
     try:
         os.chmod(path, 0o600)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        operation = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        fcntl.flock(descriptor, operation)
+        acquired = True
         yield
     finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        if acquired:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
         os.close(descriptor)
 
 

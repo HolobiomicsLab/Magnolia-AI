@@ -52,6 +52,14 @@ PASSTHROUGH_CLIENT_ENV = {
 }
 PARENT_CLIENT_ENV = {**STRIPPED_CLIENT_ENV, **PASSTHROUGH_CLIENT_ENV}
 ROOT = Path(__file__).parents[1]
+ISOLATED_MEMORY_ARGS = [
+    "-I",
+    str(
+        ROOT / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    ),
+    "--memory-server",
+]
 WORKER_CAPABILITIES = (
     "native_read",
     "native_glob",
@@ -121,7 +129,7 @@ def _context(
         "memory_service": {
             "transport": "stdio",
             "command": "/venv/bin/python",
-            "args": ["-m", "compchem_memory.server"],
+            "args": ISOLATED_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         "invocation_id": invocation,
@@ -213,7 +221,7 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         "python_executable": str(python),
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
-        "memory_service": _memory_route(route, str(python)),
+        "memory_service": _memory_route(route, str(python), installation),
         "invocation_id": f"{role}-{project_name}",
         "launch_argv": (str(binary),),
         "role_capabilities": capabilities,
@@ -274,6 +282,7 @@ def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
             memory_service={
                 "transport": "stdio",
                 "command": "/venv/bin/python",
+                "args": ISOLATED_MEMORY_ARGS,
                 "env_vars": ["OPENROUTER_API_KEY"],
             },
         )
@@ -802,6 +811,23 @@ def test_memory_role_without_route_is_refused(tmp_path):
         )
 
 
+def test_memory_stdio_route_refuses_nonisolated_module_launch(tmp_path):
+    with pytest.raises(ExecutorRefused, match="isolated repository runner"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={
+                    "transport": "stdio",
+                    "command": "/venv/bin/python",
+                    "args": ["-m", "compchem_memory.server"],
+                    "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+                },
+            )
+        )
+
+
 @pytest.mark.parametrize(
     "api_key_name",
     ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MISTRAL_API_KEY"),
@@ -842,8 +868,8 @@ def test_codex_rendered_config_refuses_stripped_key_value(tmp_path):
                 ),
                 memory_service={
                     "transport": "stdio",
-                    "command": "/venv/bin/python",
-                    "args": ["--api-key", "OPENAI-KEY-SENTINEL"],
+                    "command": "/venv/bin/OPENAI-KEY-SENTINEL",
+                    "args": ISOLATED_MEMORY_ARGS,
                 },
             )
         )
@@ -1008,7 +1034,9 @@ def test_launch_accepts_claude_rows_in_any_project(tmp_path, role):
 @pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
 def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, role):
     context = _production_claude_context(tmp_path, role=role)
-    route = _memory_route(context.route, context.python_executable)
+    route = _memory_route(
+        context.route, context.python_executable, context.installation_root
+    )
 
     prepare_launch(replace(context, memory_service=route))
 
@@ -1122,7 +1150,9 @@ def test_claude_refuses_memory_route_with_one_environment_name_changed(
     tmp_path, change
 ):
     context = _production_claude_context(tmp_path, role="worker")
-    route = _memory_route(context.route, context.python_executable)
+    route = _memory_route(
+        context.route, context.python_executable, context.installation_root
+    )
     if change == "missing":
         route["env_vars"] = route["env_vars"][:-1]
     else:
@@ -1262,7 +1292,12 @@ def test_hook_interpreter_accepts_exact_explicit_override(tmp_path, kind):
         tmp_path, role="worker", python_executable=str(interpreter),
         environment={"MAGNOLIA_PYTHON": str(interpreter)},
     )
-    context = replace(context, memory_service=_memory_route(context.route, str(interpreter)))
+    context = replace(
+        context,
+        memory_service=_memory_route(
+            context.route, str(interpreter), context.installation_root
+        ),
+    )
 
     launch = prepare_launch(context)
 

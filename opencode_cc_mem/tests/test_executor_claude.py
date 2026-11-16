@@ -25,6 +25,14 @@ from campaign_runner.workers import InvocationGovernance, WorkerError
 
 
 ROOT = Path(__file__).parents[1]
+ISOLATED_MEMORY_ARGS = [
+    "-I",
+    str(
+        ROOT / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    ),
+    "--memory-server",
+]
 LIVE = ROOT / "tests/fixtures/executors/claude/live-p3"
 SYNTHETIC = ROOT / "tests/fixtures/executors/claude/synthetic"
 STRIPPED_ENV = {
@@ -186,7 +194,7 @@ def _context(
         "memory_service": {
             "transport": "stdio",
             "command": os.environ.get("PYTHON", "/usr/bin/python3"),
-            "args": ["-m", "compchem_memory.server"],
+            "args": ISOLATED_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         "invocation_id": invocation,
@@ -310,7 +318,7 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
         "mcpServers": {
             "compchem-memory": {
                 "command": context.python_executable,
-                "args": ["-m", "compchem_memory.server"],
+                "args": ISOLATED_MEMORY_ARGS,
                 "env": {"MAGNOLIA_PROJECT_DIR": "${MAGNOLIA_PROJECT_DIR}"},
             }
         }
