@@ -10,6 +10,7 @@ import pytest
 from campaign_runner.helper_admission import (
     AdmissionRefused,
     admit_letter,
+    consume_generation_receipt,
     write_generation_receipt,
 )
 
@@ -119,3 +120,24 @@ def test_scheduled_letter_requires_generation_receipt(tmp_path):
     letter.write_text(letter.read_text() + "changed\n", encoding="utf-8")
     with pytest.raises(AdmissionRefused, match="digest"):
         admit_letter(tmp_path, "literature", letter)
+
+
+def test_scheduled_receipt_ignores_daemon_status_and_records_consumption(tmp_path):
+    lane = _project(tmp_path, "literature", lane=True)
+    inbox = lane / "inbox"
+    inbox.mkdir()
+    letter = inbox / "2026-11-16_literature-scheduled-sweep.task.md"
+    letter.write_text(
+        "# Scheduled sweep\n- from: agents-daemon\n- status: open\n\nRun it.\n",
+        encoding="utf-8",
+    )
+    write_generation_receipt(tmp_path, "literature", letter)
+
+    admitted = admit_letter(tmp_path, "literature", letter)
+    admitted.write_text(admitted.read_text().replace("status: open", "status: done"))
+    consume_generation_receipt(admitted)
+    admitted.close()
+
+    replay = admit_letter(tmp_path, "literature", letter)
+    assert replay.generation_consumed is True
+    replay.close()

@@ -5,6 +5,7 @@ All runner calls are stubbed — no LLM, no opencode, no network."""
 import importlib.util
 import os
 import json
+import stat
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -606,7 +607,7 @@ def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
     calls = []
 
     def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log,
-                      binary="opencode"):
+                      binary="opencode", **kwargs):
         calls.append(list(extra_args))
         if "--session" in extra_args:
             return {"rc": 1, "session_id": None, "final_text": "",
@@ -635,6 +636,149 @@ def test_scheduled_sweep_letter_written_once(tmp_path):
     assert d.scheduled_sweep_letters(root, lanes) == 0
 
 
+def test_answered_scheduled_sweep_is_not_readmitted_or_overwritten(tmp_path):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True, "schedule_days": 1,
+                               "schedule_task": "Run the sweep."})
+    lanes = d.discover_lanes(root)
+    assert d.scheduled_sweep_letters(root, lanes) == 1
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    letter = next(inbox.glob("*scheduled-sweep.task.md"))
+    generated = letter.read_text(encoding="utf-8")
+    calls = []
+
+    def runner(*args, **kwargs):
+        calls.append(1)
+        return "FINAL ANSWER: durable answer"
+
+    assert d.scan_once(root, runner=runner, lanes=lanes) == ["literature:done"]
+    reply = next(inbox.glob("*_reply.md"))
+    first = reply.read_text(encoding="utf-8")
+
+    assert d.scan_once(root, runner=runner, lanes=lanes) == []
+    assert reply.read_text(encoding="utf-8") == first
+    assert calls == [1]
+
+    letter.write_text(generated, encoding="utf-8")
+    assert d.scan_once(root, runner=runner, lanes=lanes) == []
+    assert reply.read_text(encoding="utf-8") == first
+    assert calls == [1]
+
+
+def test_symlinked_root_is_canonicalized_before_scanning(tmp_path, monkeypatch):
+    root = Path(_root(tmp_path))
+    alias = tmp_path / "root-alias"
+    alias.symlink_to(root, target_is_directory=True)
+    seen = []
+    monkeypatch.setattr(d, "acquire_lock", lambda value: seen.append(value) or 3)
+    monkeypatch.setattr(d, "scheduled_sweep_letters", lambda *args: 0)
+    monkeypatch.setattr(d, "deliver_wait_for", lambda *args: 0)
+    monkeypatch.setattr(d, "scan_once", lambda value, **kwargs: seen.append(value) or [])
+
+    assert d.main(["--root", str(alias), "--once"]) == 0
+    assert seen == [str(root.resolve()), str(root.resolve())]
+
+
+def test_configured_lane_without_agent_json_is_logged(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _lane(root, "configured-but-unregistered")
+    config = tmp_path / "config" / "magnolia"
+    config.mkdir(parents=True)
+    (config / "agents-daemon-lanes.txt").write_text(
+        "configured-but-unregistered\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    d.discover_lanes(root)
+
+    assert "has no enabled agent.json" in (
+        d.state_dir(root) / "daemon.log"
+    ).read_text(encoding="utf-8")
+
+
+def test_done_legacy_letter_never_overwrites_historic_reply(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    letter = inbox / "20260901_old.task.md"
+    letter.write_text(
+        "# Task\n- from: xiulian\n- status: done\n\nOld.\n", encoding="utf-8"
+    )
+    reply = inbox / "20260901_old_reply.md"
+    reply.write_text("HISTORIC ANSWER\n", encoding="utf-8")
+
+    assert d.scan_once(root, runner=lambda *args: "FINAL ANSWER: new") == []
+    assert reply.read_text(encoding="utf-8") == "HISTORIC ANSWER\n"
+
+
+def test_reply_symlink_swaps_never_write_outside_checkout(tmp_path):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    outside = tmp_path / "outside.txt"
+    outside.write_text("PRECIOUS\n", encoding="utf-8")
+
+    accepted = _task(inbox, "accepted.task.md")
+    accepted.with_name("accepted_reply.md").symlink_to(outside)
+    d.handle_task(
+        accepted, "literature", root,
+        runner=lambda *args: "FINAL ANSWER: answer",
+    )
+    assert outside.read_text(encoding="utf-8") == "PRECIOUS\n"
+
+    refused = _task(inbox / "from-ghost", "refused.task.md")
+    refused.write_text(refused.read_text().replace("from: xiulian", "from: ghost"))
+    refused.with_name("refused_reply.md").symlink_to(outside)
+    assert d.handle_task(refused, "literature", root) == "refused"
+    assert outside.read_text(encoding="utf-8") == "PRECIOUS\n"
+
+
+def test_letter_symlink_swap_after_admission_is_not_read_or_written(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    letter = _task(inbox, "swap.task.md", body="SAFE REQUEST")
+    outside = tmp_path / "outside-letter.txt"
+    outside.write_text("- status: open\nSECRET OUTSIDE CONTENT\n", encoding="utf-8")
+    real_admit = d.admit_letter
+    prompts = []
+
+    def swapping_admit(*args, **kwargs):
+        admitted = real_admit(*args, **kwargs)
+        letter.unlink()
+        letter.symlink_to(outside)
+        return admitted
+
+    monkeypatch.setattr(d, "admit_letter", swapping_admit)
+    d.handle_task(
+        letter,
+        "literature",
+        root,
+        runner=lambda *args: prompts.append(args[3]) or "FINAL ANSWER: answer",
+    )
+
+    assert prompts and "SAFE REQUEST" in prompts[0]
+    assert "SECRET OUTSIDE CONTENT" not in prompts[0]
+    assert outside.read_text(encoding="utf-8") == (
+        "- status: open\nSECRET OUTSIDE CONTENT\n"
+    )
+
+
+def test_scheduled_sweep_dangling_symlink_never_creates_outside_file(tmp_path):
+    root = _root(tmp_path)
+    _lane(root, "literature", {"enabled": True, "schedule_days": 1,
+                               "schedule_task": "Run the sweep."})
+    lanes = d.discover_lanes(root)
+    now = d.datetime.now(d.timezone.utc)
+    inbox = Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    letter = inbox / f"{now:%Y-%m-%d}_literature-scheduled-sweep.task.md"
+    outside = tmp_path / "created-outside.txt"
+    letter.symlink_to(outside)
+
+    d.scheduled_sweep_letters(root, lanes)
+
+    assert not outside.exists()
+    assert not letter.is_symlink()
+    assert stat.S_ISREG(letter.stat().st_mode)
+
+
 def test_lane_session_persisted_after_run(tmp_path, monkeypatch):
     """After a run the lane's session id is stored in state["lanes"][agent]
     so the next letter queues into the SAME session (v2 inbox model)."""
@@ -642,7 +786,8 @@ def test_lane_session_persisted_after_run(tmp_path, monkeypatch):
     _lane(root, "literature", {"enabled": True})
     calls = []
 
-    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log, binary="opencode"):
+    def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log,
+                      binary="opencode", **kwargs):
         calls.append(list(extra_args))
         return {"session_id": "ses_lane1", "final_text": "FINAL ANSWER: ok",
                 "all_text": "x", "n_tools": 0, "rc": 0, "stderr_tail": ""}
@@ -688,7 +833,7 @@ def test_thread_sessions_are_independent_and_legacy_is_unchanged(tmp_path, monke
     serial = iter(range(1, 10))
 
     def fake_run_once(model, project_dir, env, timeout_s, extra_args, run_log,
-                      binary="opencode"):
+                      binary="opencode", **kwargs):
         calls.append(list(extra_args))
         sid = f"ses_{next(serial)}"
         return {"session_id": sid, "final_text": "FINAL ANSWER: ok",
@@ -941,6 +1086,58 @@ def test_daemon_wait_survives_restart(tmp_path):
     assert d.discover_tasks(root, d.discover_lanes(root)) == [task]
 
 
+def test_resume_quota_reaches_running_daemon_via_durable_request(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(root)
+
+    def quota(*args, **kwargs):
+        raise d.HelperQuotaWaiting("claude-code", "hold-1", None, "quota")
+
+    assert d.handle_task(task, "literature", root, runner=quota) == "waiting_quota"
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: None)
+
+    assert d.main(["--root", root, "--resume-quota", "literature", "--once"]) == 0
+    assert d.load_state(root)["quota_waits"]
+    assert d.apply_quota_resume_requests(root) == 1
+    assert d.load_state(root)["quota_waits"] == {}
+
+
+def test_governed_opencode_text_quota_is_typed_and_held(tmp_path, monkeypatch):
+    from campaign_runner.governor import Governor
+    from campaign_runner.workers import InvocationGovernance
+
+    root = _root(tmp_path)
+    project = Path(root) / "opencode_cc_mem" / "projects" / "literature"
+    binary = tmp_path / "opencode-quota"
+    binary.write_text(
+        "#!/bin/sh\nprintf '%s\\n' 'rate limit exceeded' >&2\nexit 1\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    route = d._resolve_helper_route(root, str(project), "deepseek/deepseek-flash")
+    governor = Governor()
+    governance = InvocationGovernance(
+        governor, route, "helper:quota-test", d._project_digest(project), role_cap=40
+    )
+
+    result = d._run_once(
+        route.model,
+        str(project),
+        {"MAGNOLIA_ROOT": root},
+        10,
+        ["hello"],
+        d.runs_dir(root) / "quota.jsonl",
+        binary=str(binary),
+        governance=governance,
+    )
+
+    assert result["rc"] == 1
+    assert result["outcome"].kind == "quota"
+    state = json.loads(governor.state_path.read_text(encoding="utf-8"))
+    assert state["cooldowns"][route.subscription_key]["reason"] == "client quota"
+
+
 def test_sender_refusal_starts_no_client_and_acquires_no_slot(tmp_path, monkeypatch):
     root = _root(tmp_path)
     lane = Path(root) / "opencode_cc_mem" / "projects" / "literature"
@@ -956,38 +1153,40 @@ def test_sender_refusal_starts_no_client_and_acquires_no_slot(tmp_path, monkeypa
 
     assert d.handle_task(task, "literature", root, runner=d.default_runner) == "refused"
     assert calls == []
-    assert "did not launch" in task.with_name("20260924_ask_reply.md").read_text()
+    assert not task.with_name("20260924_ask_reply.md").exists()
+    assert "did not launch" not in task.read_text(encoding="utf-8")
+    assert "sender project is unknown" in (
+        d.state_dir(root) / "daemon.log"
+    ).read_text(encoding="utf-8")
 
 
 def test_daemon_no_tools_helper_reports_capability_limit(tmp_path, monkeypatch):
     root = _root(tmp_path)
-    task, _ = _registered_letter(root, capabilities=[])
-    starts = []
-
-    def refuse(route, context):
-        starts.append("registry")
-        raise ExecutorRefused("helper no-tools capability row is unavailable")
-
-    monkeypatch.setattr(d, "_helper_executor", refuse)
-    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    task, _ = _registered_letter(root, model="vibe/devstral-x", capabilities=[])
+    monkeypatch.setattr(
+        d,
+        "_role_capabilities",
+        lambda: {"vibe": {"helper": {"accepted": False}}},
+    )
+    monkeypatch.setattr(d, "_tools_port", lambda *args: 8101)
     result = d.handle_task(task, "literature", root, runner=d.default_runner)
 
     assert result == "refused"
-    assert starts == ["registry"]
     assert "capability" in task.with_name("20260924_ask_reply.md").read_text()
 
 
 def test_daemon_required_capability_unavailable_refuses(tmp_path, monkeypatch):
     root = _root(tmp_path)
-    task, _ = _registered_letter(root, capabilities=["browser"])
+    task, _ = _registered_letter(
+        root, model="codex/gpt-5.6-sol", capabilities=["browser"]
+    )
     launched = []
-
-    def refuse(route, context):
-        assert context.required_capabilities == ("browser",)
-        raise ExecutorRefused("unsupported required capabilities: browser")
-
-    monkeypatch.setattr(d, "_helper_executor", refuse)
-    monkeypatch.setattr(d, "_role_capabilities", lambda: {})
+    monkeypatch.setattr(
+        d,
+        "_role_capabilities",
+        lambda: {"codex": {"helper": {"accepted": True}}},
+    )
+    monkeypatch.setattr(d, "_tools_port", lambda *args: 8101)
     monkeypatch.setattr(d, "_run_once", lambda *a, **k: launched.append(True))
 
     assert d.handle_task(task, "literature", root, runner=d.default_runner) == "refused"
