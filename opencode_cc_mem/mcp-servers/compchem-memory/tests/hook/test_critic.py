@@ -594,16 +594,17 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
 
 
-def test_opencode_flag_uses_polled_toast_queue(tmp_path):
+def test_opencode_flag_stays_in_its_session_and_out_of_job_queue(tmp_path):
     paths = _paths(tmp_path)
     critic._save_notice(paths, "opencode", "s1", {
         "flag": True, "severity": "high", "why": "no ranking tool output",
     })
 
-    row = json.loads((paths.store / ".job-notices.jsonl").read_text())
-    assert row["run_id"] == "s1"
-    assert row["category"] == "warning"
-    assert row["tool"] == "claim-audit: no ranking tool output"
+    assert not (paths.store / ".job-notices.jsonl").exists()
+    with SessionState.open(paths.store, "opencode", "s1") as state:
+        assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
+    with SessionState.open(paths.store, "opencode", "s2") as state:
+        assert state.data.get("unshown_notices") is None
 
 
 def test_run_critic_is_idempotent_for_one_turn(tmp_path, monkeypatch):

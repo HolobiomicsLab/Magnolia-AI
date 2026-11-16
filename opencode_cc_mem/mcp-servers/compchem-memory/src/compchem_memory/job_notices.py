@@ -161,12 +161,18 @@ def drain_job_notices(project_dir: str, limit: int = 20) -> list[dict]:
         return []
 
 
+def _settle_on_stdin() -> bool:
+    """Wait for the plugin's answer: only ``commit`` consumes; ``release`` or
+    EOF (the plugin died) leaves everything queued."""
+    import sys
+
+    return sys.stdin.readline().strip() == "commit"
+
+
 def _claim(project_dir: str, limit: int) -> int:
     """Peek under the shared lock, print the rows, and hold the lock until the
     caller answers on stdin: ``commit`` consumes the peeked lines, anything
-    else (``release``, EOF when the caller dies) leaves the queue untouched."""
-    import sys
-
+    else leaves the queue untouched."""
     from compchem_memory.hook.notices import _peek_jobs, _without
 
     rows, consumed, lock = _peek_jobs(project_dir, limit)
@@ -174,7 +180,7 @@ def _claim(project_dir: str, limit: int) -> int:
         print(json.dumps(rows, ensure_ascii=False), flush=True)
         if lock is None:
             return 0
-        if sys.stdin.readline().strip() == "commit":
+        if _settle_on_stdin():
             path = _notices_path(project_dir)
             try:
                 lines = path.read_text(encoding="utf-8").splitlines()
@@ -191,6 +197,21 @@ def _claim(project_dir: str, limit: int) -> int:
             lock.release()
 
 
+def _critic_claim(store: str, session_id: str, limit: int) -> int:
+    """Peek one OpenCode session's critic warnings for its TUI; ``commit`` on
+    stdin removes exactly those lines, anything else leaves them queued."""
+    from compchem_memory.hook.notices import (
+        claim_opencode_critic_toast,
+        settle_opencode_critic_toast,
+    )
+
+    notices = claim_opencode_critic_toast(store, session_id, limit)
+    print(json.dumps([] if notices is None else notices.critic, ensure_ascii=False), flush=True)
+    if notices is not None:
+        settle_opencode_critic_toast(store, session_id, notices, _settle_on_stdin())
+    return 0
+
+
 def _main() -> int:
     """Let the TypeScript plugin use this exact locked implementation."""
     import argparse
@@ -199,10 +220,14 @@ def _main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--drain", metavar="PROJECT_DIR")
     mode.add_argument("--claim", metavar="PROJECT_DIR")
+    mode.add_argument("--critic-claim", metavar="STORE")
+    parser.add_argument("--session", default="")
     parser.add_argument("--limit", type=int, default=20)
     args = parser.parse_args()
     if args.claim:
         return _claim(args.claim, args.limit)
+    if args.critic_claim:
+        return _critic_claim(args.critic_claim, args.session, args.limit)
     print(json.dumps(drain_job_notices(args.drain, args.limit), ensure_ascii=False))
     return 0
 

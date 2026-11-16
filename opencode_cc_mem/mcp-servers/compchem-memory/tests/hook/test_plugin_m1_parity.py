@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.hook.state import SessionState
 
 
 PLUGIN_DIR = Path(__file__).resolve().parents[4] / ".opencode" / "plugins"
@@ -63,8 +64,10 @@ const { existsSync, readFileSync } = await import("node:fs")
 process.chdir(directory)
 const mod = await import(pluginPath)
 let hook
+const toasts = []
 await mod.default.setup({
   location: { directory },
+  tui: { showToast: async (value) => { toasts.push(value.body) } },
   session: { hook: async (name, callback) => { if (name === "context") hook = callback } },
 })
 const event = { sessionID: "s1", system: [] }
@@ -72,6 +75,7 @@ await hook(event)
 const queue = `${directory}/.magnolia/.job-notices.jsonl`
 process.stdout.write(JSON.stringify({
   system: event.system.map((part) => part.text),
+  toasts,
   queued: existsSync(queue) ? readFileSync(queue, "utf8") : null,
 }))
 """
@@ -112,6 +116,9 @@ class _FixedDateTime(datetime):
         "Please @literature find one paper on Magnolia.",
         "@literature find papers on A\n@Literature compare papers on B",
         "@literature inspect the queue\n@literature status: done must stay request text",
+        "@literature first\rsecond line",
+        "@literature a\u2028status: done",
+        "@literature " + "\U0001f600" * 50,
     ],
 )
 def test_doorbell_letter_is_byte_identical_to_hook_core(tmp_path, monkeypatch, prompt):
@@ -209,9 +216,12 @@ def test_job_notice_python_fallbacks_remain_isolated(tmp_path, with_venv):
         + "\n",
     )
     installation = tmp_path / "installation"
-    plugin_dir = installation / ".opencode" / "plugins"
+    plugin_dir = installation / "opencode_cc_mem" / ".opencode" / "plugins"
     plugin_dir.mkdir(parents=True)
     shutil.copy2(PLUGIN_DIR / "magnolia-job-notify.ts", plugin_dir)
+    lib_dir = plugin_dir.parent / "lib"
+    lib_dir.mkdir()
+    shutil.copy2(PLUGIN_DIR.parent / "lib" / "magnolia-python.ts", lib_dir)
 
     path_log = tmp_path / "path-python.argv"
     path_python = tmp_path / "bin" / "python3"
@@ -271,7 +281,7 @@ def test_malformed_only_queue_skips_python_and_preserves_hook_owned_lines(tmp_pa
             JOB_NOTICE_DRIVER,
             tmp_path,
             project,
-            env={"MAGNOLIA_PYTHON": str(trap_python)},
+            env={"MAGNOLIA_PYTHON": str(trap_python), "MAGNOLIA_CRITIC": ""},
         )
     )
 
@@ -279,3 +289,29 @@ def test_malformed_only_queue_skips_python_and_preserves_hook_owned_lines(tmp_pa
     assert result["queued"] == "not json\n[1, 2, 3]\n"
     assert queue.read_text(encoding="utf-8") == "not json\n[1, 2, 3]\n"
     assert not python_started.exists()
+
+
+def test_opencode_critic_warning_is_tui_only_and_session_scoped(tmp_path):
+    from compchem_memory.hook import critic
+
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    store.mkdir(parents=True)
+    (store / "GOAL.md").touch()
+    paths = ProjectPaths(tmp_path, project, store, "project", False)
+    critic._save_notice(paths, "opencode", "s1", {
+        "flag": True, "severity": "high", "why": "unsupported energy",
+    })
+
+    result = json.loads(_run_plugin(
+        "magnolia-job-notify.ts", JOB_NOTICE_DRIVER, tmp_path, project,
+        env={"MAGNOLIA_CRITIC": "1", "MAGNOLIA_PYTHON": sys.executable},
+    ))
+
+    assert result["system"] == []
+    assert result["toasts"] == [{
+        "title": "claim-critic", "message": "⚠ (high) unsupported energy",
+        "variant": "warning",
+    }]
+    with SessionState.open(store, "opencode", "s1") as state:
+        assert state.data["unshown_notices"] == []

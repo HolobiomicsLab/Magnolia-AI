@@ -463,14 +463,6 @@ def _save_notice(paths: ProjectPaths, harness: str, session_id: str, row: dict) 
     if not row["flag"]:
         return
     notice = f"⚠ ({row['severity']}) {str(row['why'])[:140]}"
-    if harness == "opencode":
-        from compchem_memory.job_notices import push_job_notice
-
-        push_job_notice(
-            str(paths.project_dir), run_id=session_id,
-            tool=f"claim-audit: {str(row['why'])[:80]}",
-            state=str(row["severity"]), category="warning",
-        )
     with SessionState.open(paths.store, harness, session_id) as state:
         notices = state.data.get("unshown_notices")
         if not isinstance(notices, list):

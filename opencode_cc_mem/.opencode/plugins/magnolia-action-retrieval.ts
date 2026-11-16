@@ -47,10 +47,12 @@
  */
 import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
-import { join, dirname, resolve, basename } from "node:path"
+import { join, dirname, basename } from "node:path"
 import { promisify } from "node:util"
-import { fileURLToPath } from "node:url"
-import { handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import { eventTurnID, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import {
+  isolatedModuleArgs, PACKAGE_ROOT, resolveMagnoliaPython,
+} from "../lib/magnolia-python.ts"
 
 const execFileP = promisify(execFile)
 
@@ -58,11 +60,6 @@ const DISABLED = ["0", "off", "false", "no"].includes(
   String(process.env.MAGNOLIA_ACTION_RETRIEVE ?? "").toLowerCase(),
 )
 
-// Self-locate the repo venv (<repo>/.opencode/plugins/ → repo root → .venv);
-// no machine-specific absolute paths in the repo. MAGNOLIA_PYTHON overrides.
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
-const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
-const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
 const QUERY_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 120_000
 const MAX_HITS = 4
@@ -165,7 +162,6 @@ function makeCore(directory: string) {
     ...process.env,
     MAGNOLIA_ROOT: root,
     MAGNOLIA_PROJECT_DIR: projectAbs,
-    PYTHONPATH: join(root, "mcp-servers/compchem-memory/src"),
   }
 
   const logFile = rootMode
@@ -221,9 +217,9 @@ function makeCore(directory: string) {
     const t0 = Date.now()
     try {
       const { stdout } = await execFileP(
-        PYTHON,
-        ["-m", "compchem_memory.quick_search", query, "--k", String(MAX_HITS)],
-        { cwd: directory, env: childEnv, timeout: QUERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+        resolveMagnoliaPython(),
+        isolatedModuleArgs("compchem_memory.quick_search", [query, "--k", String(MAX_HITS)]),
+        { cwd: PACKAGE_ROOT, env: childEnv, timeout: QUERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
       )
       const lines = stdout.split("\n").filter((l) => l.startsWith("{"))
       if (hit) cache.delete(query) // stale entry replace below
@@ -430,7 +426,11 @@ export default {
           const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID
           if (turnEnd && sid) {
             const items = core.takeProbeItems(String(sid))
-            if (items.length) handoffTurnEnd(directory, String(sid), "probe", { items })
+            if (items.length) {
+              handoffTurnEnd(directory, String(sid), "probe", {
+                items, turn_id: eventTurnID(ev),
+              })
+            }
           }
         }
       } catch { /* aborted or stream error */ }
@@ -450,7 +450,11 @@ export default {
             const sid = input?.event?.properties?.sessionID
             if (sid) {
               const items = core.takeProbeItems(String(sid))
-              if (items.length) handoffTurnEnd(directory, String(sid), "probe", { items })
+              if (items.length) {
+                handoffTurnEnd(directory, String(sid), "probe", {
+                  items, turn_id: eventTurnID(input?.event),
+                })
+              }
             }
           }
         } catch { /* never throw into opencode */ }

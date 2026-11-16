@@ -10,6 +10,7 @@ from pathlib import Path
 from compchem_memory.opencode_ingest import (
     export_session,
     ingest_opencode_sessions,
+    live_session_exporter,
     plugin_dump_exporter,
 )
 
@@ -76,6 +77,37 @@ def test_v2_mode_skips_cli_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr("compchem_memory.opencode_ingest.export_session", fake_cli)
     assert plugin_dump_exporter(str(store))("ses_missing") is None
     assert called["cli"] == 0
+
+
+def test_live_exporter_never_reads_worker_dump(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    dump_dir = store / "opencode-transcripts"
+    dump_dir.mkdir()
+    (dump_dir / "ses_live.json").write_text(json.dumps({
+        "messages": [{"info": {"role": "user", "id": "old"}, "parts": []}],
+    }))
+    monkeypatch.delenv("OPENCODE_DB", raising=False)
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.export_session",
+        lambda _sid: {"messages": [{"info": {"role": "user", "id": "live"}, "parts": []}]},
+    )
+
+    exported = live_session_exporter()("ses_live")
+
+    assert exported["messages"][0]["info"]["id"] == "live"
+
+
+def test_ingest_startup_path_drains_pending_turn_payloads(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "compchem_memory.hook.background.drain_opencode_payloads",
+        lambda path: calls.append(Path(path)),
+    )
+
+    ingest_opencode_sessions(str(store), distiller=lambda _text: [])
+
+    assert calls == [store]
 
 
 def test_export_session_tries_v2_form_after_v1(tmp_path, monkeypatch):

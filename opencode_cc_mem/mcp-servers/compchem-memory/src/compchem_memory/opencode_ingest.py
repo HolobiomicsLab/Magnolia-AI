@@ -304,7 +304,13 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
         if not rows:
             return None
         msgs = []
+        current_turn = None
+        turn_boundaries = {}
         for mid, typ, data in rows:
+            if typ == "idle":
+                if current_turn:
+                    turn_boundaries[str(mid)] = current_turn
+                continue
             if typ in _V2_NON_DIALOGUE_TYPES:
                 continue
             try:
@@ -322,8 +328,26 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
                     parts = [{"type": "text", "text": text}] if text else []
             except Exception:  # noqa: BLE001 - malformed part, skip the row
                 continue
+            if typ == "user":
+                current_turn = str(mid)
             msgs.append({"info": {"role": typ, "id": mid}, "parts": parts})
-        return {"messages": msgs} if msgs else None
+        return {
+            "messages": msgs,
+            "turn_boundaries": turn_boundaries,
+        } if msgs else None
+    return exporter
+
+
+def live_session_exporter() -> Callable[[str], Optional[dict]]:
+    """Export the live OpenCode source without consulting a worker-written dump."""
+    def exporter(ses_id: str) -> Optional[dict]:
+        db = os.environ.get("OPENCODE_DB")
+        if db and Path(db).exists():
+            exported = v2_db_exporter(db)(ses_id)
+            if exported is not None:
+                return exported
+        return export_session(ses_id)
+
     return exporter
 
 
@@ -635,6 +659,9 @@ def ingest_opencode_sessions(
     )
 
     store = Path(store_dir)
+    from compchem_memory.hook.background import drain_opencode_payloads
+
+    drain_opencode_payloads(store)
     legacy_exporter = exporter or plugin_dump_exporter(store_dir)
     export_session_ref = _session_exporter(store_dir, legacy_exporter)
     markers = store / "opencode-distilled"

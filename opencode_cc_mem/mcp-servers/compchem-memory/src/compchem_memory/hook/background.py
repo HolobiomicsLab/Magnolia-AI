@@ -15,6 +15,7 @@ from compchem_memory.hook.state import SessionState, private_mkdir, safe_compone
 _ATTEMPT_LIMIT = 3
 _OPENCODE_LEASE_SECONDS = 300
 _OPENCODE_DUMP_LIMIT = 4_000_000
+_OPENCODE_PAYLOAD_MAX_AGE_SECONDS = 86_400
 
 
 def _mark(store: Path, harness: str, session_id: str, key: str, status: str) -> None:
@@ -171,15 +172,6 @@ def _message_parts(message: dict) -> list[dict]:
     return [part for part in parts if isinstance(part, dict)] if isinstance(parts, list) else []
 
 
-def _turn_id(messages: list[dict]) -> str | None:
-    """Use the last user message as the stable turn identity."""
-    turns = [
-        _message_id(message, index) for index, message in enumerate(messages)
-        if _message_role(message) == "user"
-    ]
-    return turns[-1] if turns else None
-
-
 def _reply_text(messages: list[dict], turn_id: str | None) -> str:
     """Collect assistant text after the selected user boundary."""
     active = turn_id is None
@@ -248,7 +240,7 @@ def _neutral_rows(messages: list[dict]) -> list[dict]:
 
 def _finalize_opencode_capture(
     paths: ProjectPaths, session_id: str, exported: dict,
-) -> tuple[list[dict], str | None]:
+) -> list[dict]:
     """Atomically persist the legacy dump and hook-core transcript."""
     from compchem_memory.atomic_io import atomic_write_text
     from compchem_memory.hook.transcript import transcript_path
@@ -278,12 +270,29 @@ def _finalize_opencode_capture(
     rows = _neutral_rows(messages)
     body = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     atomic_write_text(transcript_path(paths.store, "opencode", session_id), body)
-    return messages, _turn_id(messages)
+    return messages
+
+
+def _payload_turn_id(payload: dict, exported: dict, messages: list[dict]) -> str | None:
+    """Resolve only the terminal event's own turn; never guess the newest turn."""
+    identity = payload.get("turn_id")
+    if not isinstance(identity, str) or not identity:
+        return None
+    user_ids = {
+        _message_id(message, index) for index, message in enumerate(messages)
+        if _message_role(message) == "user"
+    }
+    if identity in user_ids:
+        return identity
+    boundaries = exported.get("turn_boundaries")
+    if isinstance(boundaries, dict) and boundaries.get(identity) in user_ids:
+        return str(boundaries[identity])
+    return None
 
 
 def _claim_opencode_operation(
     paths: ProjectPaths, session_id: str, operation: str, turn_id: str, owner: str,
-) -> bool:
+) -> str:
     """Reserve one operation/turn, allowing its crashed owner to retry."""
     with SessionState.open(paths.store, "opencode", session_id) as state:
         ledger = state.data.get("opencode_turns")
@@ -292,18 +301,18 @@ def _claim_opencode_operation(
         row = ledger.get(key)
         row = row if isinstance(row, dict) else {}
         if row.get("status") == "done":
-            return False
+            return "done"
         is_live = row.get("status") == "running" and (
             time.time() - float(row.get("started", 0)) < _OPENCODE_LEASE_SECONDS
         )
         if is_live and row.get("owner") != owner:
-            return False
+            return "busy"
         ledger[key] = {
             **row, "status": "running", "owner": owner, "started": time.time(),
             "attempts": int(row.get("attempts", 0)) + 1,
         }
         state.data["opencode_turns"] = ledger
-        return True
+        return "claimed"
 
 
 def _finish_opencode_operation(
@@ -325,21 +334,29 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
 
     paths = _opencode_paths(payload)
     session_id = str(payload["session_id"])
-    exported = opencode_ingest.plugin_dump_exporter(str(paths.store))(session_id)
+    exported = opencode_ingest.live_session_exporter()(session_id)
     if not isinstance(exported, dict):
         return False
-    messages, turn_id = _finalize_opencode_capture(paths, session_id, exported)
+    messages = _finalize_opencode_capture(paths, session_id, exported)
+    turn_id = _payload_turn_id(payload, exported, messages)
     operation = str(payload["operation"])
     if turn_id is None:
         return False
     owner = job_path.name
-    if not _claim_opencode_operation(paths, session_id, operation, turn_id, owner):
+    claim = _claim_opencode_operation(paths, session_id, operation, turn_id, owner)
+    if claim == "done":
         return True
+    if claim == "busy":
+        return False
     try:
         if operation == "critic":
-            from compchem_memory.hook.critic import run_critic
+            from compchem_memory.hook.critic import _has_verdict, run_critic
 
             run_critic(paths, "opencode", session_id, None, turn_id)
+            verdict_path = paths.store / "claim-critic" / f"{safe_component(session_id)}.jsonl"
+            if not _has_verdict(verdict_path, "opencode", turn_id):
+                _finish_opencode_operation(paths, session_id, operation, turn_id, "failed")
+                return False
         elif operation == "probe":
             from compchem_memory.hook.action_retrieval import probe_items
 
@@ -352,39 +369,104 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
                 raise OSError("application telemetry could not be logged")
         elif operation != "capture":
             raise ValueError(f"unknown OpenCode operation: {operation}")
-    except Exception:
+    except Exception as error:  # noqa: BLE001 - one payload must not abort the drain
+        from compchem_memory.hook.errors import log_error
+
         _finish_opencode_operation(paths, session_id, operation, turn_id, "failed")
+        log_error(error, "opencode", "background", paths.store, {}, "opencode-turn")
         return False
     _finish_opencode_operation(paths, session_id, operation, turn_id, "done")
     return True
 
 
+def _payload_age(path: Path, payload: dict) -> float:
+    """Return payload age from its durable stamp or filesystem metadata."""
+    stamp = payload.get("queued_at")
+    if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):
+        stamp = path.stat().st_mtime
+    return max(0.0, time.time() - float(stamp))
+
+
+def _move_payload(path: Path, reason: str, category: str) -> None:
+    """Move an unusable payload aside and append its explicit disposition."""
+    destination_dir = path.parent / category
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / path.name
+    if destination.exists():
+        destination = destination.with_name(f"{destination.stem}-{time.time_ns()}.json")
+    os.replace(path, destination)
+    log_path = path.parent / "opencode-turn-errors.jsonl"
+    with log_path.open("a", encoding="utf-8") as log:
+        fcntl.flock(log.fileno(), fcntl.LOCK_EX)
+        log.write(json.dumps({
+            "ts": time.time(), "payload": destination.name, "reason": reason,
+        }, ensure_ascii=False) + "\n")
+
+
+def _read_opencode_payload(path: Path, store: Path) -> dict:
+    """Load and validate one payload as belonging to this project store."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("payload is not an object")
+    required = ("store", "session_id", "operation", "root", "project_dir", "name")
+    if any(not payload.get(field) for field in required):
+        raise ValueError("payload is missing required fields")
+    if Path(str(payload["store"])).resolve() != store.resolve():
+        raise ValueError("payload belongs to another project store")
+    return payload
+
+
+def drain_opencode_payloads(store: Path) -> None:
+    """Drain every pending OpenCode payload for a project, isolated by session."""
+    store = Path(store)
+    worker_dir = store / "hook-workers"
+    if not worker_dir.exists():
+        return
+    for candidate in sorted(worker_dir.glob("opencode-turn-*.json")):
+        try:
+            payload = _read_opencode_payload(candidate, store)
+        except Exception as error:  # noqa: BLE001 - reject one and continue
+            if candidate.exists():
+                try:
+                    _move_payload(candidate, f"invalid payload: {error}", "rejected")
+                except Exception:
+                    pass
+            continue
+        try:
+            if _payload_age(candidate, payload) > _OPENCODE_PAYLOAD_MAX_AGE_SECONDS:
+                _move_payload(candidate, "payload exceeded 86400 second retry bound", "expired")
+                continue
+            session_id = str(payload["session_id"])
+            lock_path = _worker_lock(store, "opencode", session_id)
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            with lock_path.open("a+") as lock:
+                try:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                if _run_opencode_payload(candidate, payload):
+                    candidate.unlink(missing_ok=True)
+        except Exception as error:  # noqa: BLE001 - leave retryable and continue
+            try:
+                paths = _opencode_paths(payload)
+                from compchem_memory.hook.errors import log_error
+
+                log_error(error, "opencode", "background", paths.store, {}, "opencode-drain")
+            except Exception:
+                pass
+
+
 def run_opencode_job(job_path: Path) -> None:
-    """Drain this session's persisted OpenCode handoffs under one worker lock."""
+    """Use one handoff to drain every pending OpenCode payload for its project."""
     job_path = Path(job_path)
+    store = job_path.parent.parent
     try:
         payload = json.loads(job_path.read_text(encoding="utf-8"))
-        paths = _opencode_paths(payload)
-        session_id = str(payload["session_id"])
-    except (KeyError, OSError, ValueError, TypeError):
-        job_path.unlink(missing_ok=True)
-        return
-    lock_path = _worker_lock(paths.store, "opencode", session_id)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        candidates = sorted(job_path.parent.glob("opencode-turn-*.json"))
-        if job_path not in candidates:
-            candidates.append(job_path)
-        for candidate in candidates:
-            try:
-                candidate_payload = json.loads(candidate.read_text(encoding="utf-8"))
-                if str(candidate_payload.get("session_id")) != session_id:
-                    continue
-                if _run_opencode_payload(candidate, candidate_payload):
-                    candidate.unlink(missing_ok=True)
-            except (OSError, ValueError, TypeError, KeyError):
-                continue
+        if isinstance(payload, dict) and payload.get("store"):
+            store = Path(str(payload["store"]))
+    except (OSError, ValueError, TypeError):
+        pass
+    drain_opencode_payloads(store)
 
 
 def main() -> None:
