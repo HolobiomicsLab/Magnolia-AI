@@ -37,6 +37,13 @@ EVENTS = (
     ("session_end", "session-end"),
 )
 _TOOL_NAMES = {"bash": "file_system.bash"}
+READ_ONLY_DISABLED_TOOLS = (
+    "file_system.bash",
+    "file_system.edit",
+    "file_system.write_file",
+    "process.start",
+    "process.write",
+)
 
 
 def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
@@ -75,9 +82,14 @@ def native_artifacts(
     mcp_servers: list[Mapping[str, Any]],
 ) -> dict[str, bytes]:
     """Render immutable Vibe project files for one governed invocation."""
+    disabled_tools = (
+        READ_ONLY_DISABLED_TOOLS
+        if context.role in {"reviewer", "helper", "evaluator"}
+        else ("file_system.bash",)
+    )
     config: dict[str, Any] = {
         "active_model": context.model or "",
-        "disabled_tools": ["file_system.bash"],
+        "disabled_tools": list(disabled_tools),
         "mcp_servers": [dict(server) for server in mcp_servers],
     }
     return {

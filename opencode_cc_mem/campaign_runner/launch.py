@@ -653,6 +653,21 @@ def _configuration_identity(
                     raise ExecutorRefused(
                         f"missing discovered client configuration: {relative}"
                     ) from exc
+        if context.route.client == "codex":
+            user_config = Path(
+                str(
+                    context.setup.get(
+                        "codex_user_config_path",
+                        Path.home() / ".codex" / "config.toml",
+                    )
+                )
+            )
+            try:
+                bodies.append(("discovered:user-config.toml", user_config.read_bytes()))
+            except OSError as exc:
+                raise ExecutorRefused(
+                    "missing Codex user configuration used for trust and tool isolation"
+                ) from exc
         return _digest_named_bodies(bodies)
     raise ExecutorRefused(
         f"no discovered configuration identity for {context.route.client}"
