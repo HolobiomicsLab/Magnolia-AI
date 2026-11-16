@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ globalThis.__MAGNOLIA_TEST_SPAWN = (command, argv, options) => {
     command, argv,
     options: {
       cwd: options.cwd, detached: options.detached, stdio: options.stdio,
+      envKeys: Object.keys(options.env),
       env: {
         PYTHONPATH: options.env.PYTHONPATH,
         MAGNOLIA_ROOT: options.env.MAGNOLIA_ROOT,
@@ -32,7 +34,9 @@ globalThis.__MAGNOLIA_TEST_SPAWN = (command, argv, options) => {
 }
 const mod = await import(pluginPath)
 let resumed = false
-const event = { type: "session.execution.succeeded", durable: { aggregateID: "s1" } }
+const event = {
+  id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
+}
 if (mode === "v2") {
   const ctx = {
     location: { directory },
@@ -49,11 +53,13 @@ if (mode === "v2") {
   }
 } else {
   const hooks = await mod.default.server({ directory })
-  hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+  hooks.event({
+    event: { id: "evt_u1", type: "session.idle", properties: { sessionID: "s1" } },
+  })
   resumed = calls.length === 1
 }
 const payload = calls.length
-  ? JSON.parse((await import("node:fs")).readFileSync(calls[0].argv[3], "utf8"))
+  ? JSON.parse((await import("node:fs")).readFileSync(calls[0].argv.at(-1), "utf8"))
   : null
 process.stdout.write(JSON.stringify({ calls, payload, resumed }))
 """
@@ -78,7 +84,9 @@ const ctx = {
   },
   event: { subscribe: () => (async function* () {
     await gate
-    yield { type: "session.execution.succeeded", durable: { aggregateID: "s1" } }
+    yield {
+      id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
+    }
     resumed = true
     if (calls.length !== 1) throw new Error("capture handoff was not synchronous")
   })() },
@@ -87,7 +95,7 @@ await mod.default.setup(ctx)
 await promptHook({ sessionID: "s1" })
 release()
 for (let index = 0; index < 20 && !resumed; index += 1) await new Promise((r) => setImmediate(r))
-const payload = JSON.parse((await import("node:fs")).readFileSync(calls[0].argv[3], "utf8"))
+const payload = JSON.parse((await import("node:fs")).readFileSync(calls[0].argv.at(-1), "utf8"))
 process.stdout.write(JSON.stringify({ calls, payload, resumed }))
 """
 
@@ -108,7 +116,9 @@ const ctx = {
   tool: { hook: async (name, callback) => { hooks[name] = callback } },
   event: { subscribe: () => (async function* () {
     await gate
-    yield { type: "session.execution.succeeded", durable: { aggregateID: "s1" } }
+    yield {
+      id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
+    }
     resumed = true
     if (calls.length !== 1) throw new Error("probe handoff was not synchronous")
   })() },
@@ -120,14 +130,14 @@ await hooks["execute.after"]({
 })
 release()
 for (let index = 0; index < 20 && !resumed; index += 1) await new Promise((r) => setImmediate(r))
-const payload = JSON.parse((await import("node:fs")).readFileSync(calls[0].argv[3], "utf8"))
+const payload = JSON.parse((await import("node:fs")).readFileSync(calls[0].argv.at(-1), "utf8"))
 process.stdout.write(JSON.stringify({ calls, payload, resumed }))
 """
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 
-def _run_handoff(tmp_path: Path, mode: str) -> dict:
+def _run_handoff(tmp_path: Path, mode: str, python: str = "/test/python") -> dict:
     project = tmp_path / "project"
     (project / ".magnolia").mkdir(parents=True)
     (project / ".magnolia" / "GOAL.md").write_text("goal\n", encoding="utf-8")
@@ -135,7 +145,7 @@ def _run_handoff(tmp_path: Path, mode: str) -> dict:
     driver.write_text(DRIVER, encoding="utf-8")
     proc = subprocess.run(
         [NODE, str(driver), PLUGIN.as_uri(), str(project), mode],
-        env={**os.environ, "MAGNOLIA_CRITIC": "1", "MAGNOLIA_PYTHON": "/test/python"},
+        env={**os.environ, "MAGNOLIA_CRITIC": "1", "MAGNOLIA_PYTHON": python},
         capture_output=True, text=True, timeout=60,
     )
     if proc.returncode != 0 and "ERR_UNKNOWN_FILE_EXTENSION" in proc.stderr:
@@ -151,15 +161,18 @@ def test_turn_end_synchronously_spawns_detached_python_worker(tmp_path, mode):
     assert result["resumed"] is True
     call = result["calls"][0]
     assert call["command"] == "/test/python"
-    assert call["argv"][:3] == ["-m", "compchem_memory.hook.background", "--opencode-turn"]
+    assert call["argv"][0] == "-I"
+    assert "compchem_memory.hook.background" in call["argv"]
+    assert call["argv"][-2] == "--opencode-turn"
     assert call["options"]["detached"] is True
     assert call["options"]["stdio"][0] == "ignore"
     assert call["options"]["stdio"][1] == call["options"]["stdio"][2]
     assert call["options"]["env"]["MAGNOLIA_PROJECT_DIR"].endswith("/project")
-    assert "compchem-memory/src" in call["options"]["env"]["PYTHONPATH"]
+    assert "PYTHONPATH" not in call["options"]["env"]
     assert call["unref"] is True
     assert result["payload"]["operation"] == "critic"
     assert result["payload"]["session_id"] == "s1"
+    assert result["payload"]["turn_id"] == "msg_u1"
 
 
 def _run_driver(tmp_path: Path, plugin: Path, source: str, env: dict | None = None) -> dict:
@@ -183,6 +196,7 @@ def test_capture_turn_end_spawns_before_reading_session_context(tmp_path):
     assert result["resumed"] is True
     assert result["calls"][0]["detached"] is True
     assert result["payload"]["operation"] == "capture"
+    assert result["payload"]["turn_id"] == "msg_u1"
 
 
 def test_action_probe_turn_end_hands_injected_items_to_worker(tmp_path):
@@ -202,3 +216,39 @@ def test_action_probe_turn_end_hands_injected_items_to_worker(tmp_path):
     assert result["calls"][0]["detached"] is True
     assert result["payload"]["operation"] == "probe"
     assert result["payload"]["items"][0]["callID"] == "call-1"
+    assert result["payload"]["turn_id"] == "msg_u1"
+
+
+def test_turn_end_worker_environment_is_an_allowlist(tmp_path):
+    result = _run_handoff(tmp_path, "v1")
+
+    options = result["calls"][0]["options"]
+    env = options["env"]
+    assert env["MAGNOLIA_ROOT"]
+    assert env["MAGNOLIA_PROJECT_DIR"].endswith("/project")
+    assert "PYTHONPATH" not in options["envKeys"]
+    assert "OPENCODE_SERVER_PASSWORD" not in options["envKeys"]
+
+
+def test_turn_end_isolated_worker_cannot_import_project_json(tmp_path):
+    result = _run_handoff(tmp_path, "v1", sys.executable)
+    project = tmp_path / "project"
+    marker = tmp_path / "project-json-imported"
+    (project / "json.py").write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).touch()\n",
+        encoding="utf-8",
+    )
+    job_path = Path(result["calls"][0]["argv"][-1])
+    job_path.unlink()
+    missing = project / ".magnolia" / "hook-workers" / "missing.json"
+    command = result["calls"][0]["command"]
+    argv = [*result["calls"][0]["argv"][:-1], str(missing)]
+
+    completed = subprocess.run(
+        [command, *argv], cwd=result["calls"][0]["options"]["cwd"],
+        env={"HOME": os.environ["HOME"], "PATH": os.environ["PATH"]},
+        capture_output=True, text=True, timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not marker.exists()

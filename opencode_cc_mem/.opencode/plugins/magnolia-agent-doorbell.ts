@@ -105,7 +105,7 @@ function deliver(directory: string, sourceProject: string, agent: string, reques
   // Same single safe line as the hook core's _title: control characters become spaces.
   const title = request.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, " ").trim()
   const letter = [
-    `# Task: ${title.slice(0, 80)}`,
+    `# Task: ${Array.from(title).slice(0, 80).join("")}`,
     ``,
     `- from: ${sourceProject}`,
     `- date: ${new Date().toISOString()}`,

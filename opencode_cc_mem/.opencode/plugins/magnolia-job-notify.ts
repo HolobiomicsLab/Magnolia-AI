@@ -8,34 +8,29 @@
  * job-notice lock (the one the hook core uses) from peek until this plugin
  * writes "commit" or "release" to its stdin, so hook clients and OpenCode
  * cannot drain the same project notice concurrently. If this process dies the
- * child sees EOF and releases without consuming.
+ * child sees EOF and releases without consuming. Critic warnings of one
+ * OpenCode session (MAGNOLIA_CRITIC) use the same protocol on that session's
+ * state and reach the TUI only.
  *
- * The bridge runs Magnolia's configured Python with -I (isolated import
- * paths), and a queue holding only malformed lines never starts Python: those
- * rows belong to the hook core's cleanup path.
- *
- * Python resolution follows the other Magnolia plugins: configured
- * MAGNOLIA_PYTHON, the installation venv, then PATH's python3. No-op when
- * MAGNOLIA_JOB_NOTIFY=0, the queue is absent, no delivery channel exists, or
- * the resolved Python cannot take the shared lock. Failures never break a
- * session.
+ * The bridge runs the shared Python resolver's interpreter with -I (isolated
+ * import paths), and a queue holding only malformed lines never starts Python:
+ * those rows belong to the hook core's cleanup path. Python resolution follows
+ * the other Magnolia plugins: configured MAGNOLIA_PYTHON, the repository venv,
+ * then PATH's python3. No-op when MAGNOLIA_JOB_NOTIFY=0 and the critic is off,
+ * the queue is absent, no delivery channel exists, or the resolved Python
+ * cannot take the shared lock. Failures never break a session.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+import { PACKAGE_SRC, resolveMagnoliaPython } from "../lib/magnolia-python.ts"
 
-const ENABLED = process.env.MAGNOLIA_JOB_NOTIFY !== "0"
+const JOB_NOTICES_ENABLED = process.env.MAGNOLIA_JOB_NOTIFY !== "0"
+const CRITIC_ENABLED = !!process.env.MAGNOLIA_CRITIC
 const POLL_INTERVAL_MS = 30_000
 const MAX_PER_DELIVERY = 10
 const CLAIM_TIMEOUT_MS = 5_000
 
-// Self-locate the installation and its venv. MAGNOLIA_PYTHON is the portable
-// override for tests and nonstandard installations.
-const INSTALLATION_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
-const VENV_PY = join(INSTALLATION_ROOT, ".venv", "bin", "python3")
-const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
-const SOURCE_DIR = join(INSTALLATION_ROOT, "mcp-servers", "compchem-memory", "src")
 // -I ignores PYTHONPATH and the working directory, so a project file cannot
 // shadow a standard module; the Magnolia source dir is added explicitly, and
 // any PYTHONPATH of the launching environment (a relocated installation) is
@@ -49,19 +44,23 @@ const BRIDGE = [
 ].join("; ")
 
 type Notice = Record<string, unknown>
-type Claim = { child: ChildProcessWithoutNullStreams; rows: Notice[]; closed: Promise<void> }
+type Claim = { child: ChildProcessWithoutNullStreams; rows: unknown[]; closed: Promise<void> }
 type Toast = (title: string, message: string, variant?: string) => void | Promise<void>
 
-function claimNotices(noticesPath: string, limit: number): Promise<Claim | null> {
-  // Malformed rows belong to the hook core's cleanup path; never start Python for them.
-  if (!existsSync(noticesPath) || !hasValidNotice(noticesPath)) return Promise.resolve(null)
-  const projectDir = dirname(dirname(noticesPath))
+/** Start the bridge in a claim mode and wait for the peeked rows on stdout. */
+function claimRows(args: string[]): Promise<Claim | null> {
   return new Promise((resolveClaim) => {
-    const child = spawn(
-      PYTHON,
-      ["-I", "-c", BRIDGE, SOURCE_DIR, "--claim", projectDir, "--limit", String(limit)],
-      { env: process.env },
-    )
+    let child: ChildProcessWithoutNullStreams
+    try {
+      child = spawn(
+        resolveMagnoliaPython(),
+        ["-I", "-c", BRIDGE, PACKAGE_SRC, ...args],
+        { env: process.env },
+      )
+    } catch {
+      resolveClaim(null)
+      return
+    }
     let buffer = ""
     let answered = false
     const closed = new Promise<void>((done) => child.on("close", () => done()))
@@ -92,6 +91,12 @@ function claimNotices(noticesPath: string, limit: number): Promise<Claim | null>
   })
 }
 
+function claimNotices(noticesPath: string, limit: number): Promise<Claim | null> {
+  // Malformed rows belong to the hook core's cleanup path; never start Python for them.
+  if (!existsSync(noticesPath) || !hasValidNotice(noticesPath)) return Promise.resolve(null)
+  return claimRows(["--claim", dirname(dirname(noticesPath)), "--limit", String(limit)])
+}
+
 function hasValidNotice(noticesPath: string): boolean {
   try {
     return readFileSync(noticesPath, "utf8").split(/\r?\n/).some((line) => {
@@ -115,6 +120,28 @@ async function settleClaim(claim: Claim, delivered: boolean): Promise<void> {
     claim.child.kill()
   }
   await claim.closed
+}
+
+async function deliverCriticToasts(
+  store: string, sessionID: string, toast: Toast,
+): Promise<void> {
+  const claim = await claimRows([
+    "--critic-claim", store, "--session", sessionID, "--limit", String(MAX_PER_DELIVERY),
+  ])
+  if (!claim) return
+  try {
+    for (const row of claim.rows) await toast("claim-critic", String(row), "warning")
+    await settleClaim(claim, true)
+  } catch {
+    await settleClaim(claim, false)
+  }
+}
+
+function scheduleCriticToasts(store: string, sessionID: string, toast: Toast): void {
+  for (const delay of [250, 1_000, 3_000]) {
+    const timer = setTimeout(() => void deliverCriticToasts(store, sessionID, toast), delay)
+    ;(timer as any)?.unref?.()
+  }
 }
 
 function noticeLine(rec: Notice): string {
@@ -145,7 +172,7 @@ export function startPolling(
       for (let count = 0; count < MAX_PER_DELIVERY; count += 1) {
         const claim = await claimNotices(noticesPath, 1)
         if (!claim) break
-        const rec = claim.rows[0]
+        const rec = claim.rows[0] as Notice
         try {
           await toast(
             "job-finished",
@@ -190,31 +217,77 @@ export default {
 
   /** OpenCode v2: deliver into model context, including headless runs. */
   async setup(ctx: any) {
-    if (!ENABLED || !ctx?.session?.hook) return
+    if ((!JOB_NOTICES_ENABLED && !CRITIC_ENABLED) || !ctx?.session?.hook) return
     const path = noticesFile(ctx.location?.directory ?? process.cwd())
+    const store = dirname(path)
+    const showToast = ctx?.tui?.showToast
+    const toast: Toast | null = typeof showToast === "function"
+      ? async (title, message, variant) => {
+        await showToast.call(ctx.tui, {
+          body: variant ? { title, message, variant } : { title, message },
+        })
+      }
+      : null
+    const knownSessions = new Set<string>()
     await ctx.session.hook("context", async (event: any) => {
+      const sessionID = String(event?.sessionID ?? "")
+      if (sessionID) knownSessions.add(sessionID)
+      if (CRITIC_ENABLED && toast && sessionID) {
+        await deliverCriticToasts(store, sessionID, toast)
+      }
+      if (!JOB_NOTICES_ENABLED) return
       if (!Array.isArray(event?.system)) return
       const claim = await claimNotices(path, MAX_PER_DELIVERY)
       if (!claim) return
       try {
-        const text = `[Magnolia job notices]\n${claim.rows.map(noticeLine).join("\n")}`
+        const text = `[Magnolia job notices]\n${(claim.rows as Notice[]).map(noticeLine).join("\n")}`
         event.system.push({ type: "text", text })
         await settleClaim(claim, true)
       } catch {
         await settleClaim(claim, false)
       }
     })
+    if (CRITIC_ENABLED && toast && ctx?.event?.subscribe) {
+      const controller = new AbortController()
+      void (async () => {
+        try {
+          for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+            const terminal = event?.type === "session.idle" ||
+              event?.type === "session.execution.succeeded"
+            const sessionID = String(
+              event?.durable?.aggregateID ?? event?.properties?.sessionID ?? event?.sessionID ?? "",
+            )
+            if (terminal && knownSessions.has(sessionID)) {
+              scheduleCriticToasts(store, sessionID, toast)
+            }
+          }
+        } catch { /* aborted or stream error */ }
+      })()
+      return () => controller.abort()
+    }
   },
 
   /** OpenCode v1: retain toast polling, committing each accepted toast. */
   async server({ client, directory }: any) {
-    if (!ENABLED || typeof client?.tui?.showToast !== "function") return {}
+    if ((!JOB_NOTICES_ENABLED && !CRITIC_ENABLED) ||
+        typeof client?.tui?.showToast !== "function") return {}
     const toast: Toast = async (title, message, variant) => {
       await client.tui.showToast({
         body: variant ? { title, message, variant } : { title, message },
       })
     }
-    startPolling(noticesFile(directory), toast)
-    return {}
+    const path = noticesFile(directory)
+    if (JOB_NOTICES_ENABLED) startPolling(path, toast)
+    return CRITIC_ENABLED ? {
+      event: (input: any) => {
+        const event = input?.event
+        const terminal = event?.type === "session.idle" ||
+          event?.type === "session.execution.succeeded"
+        const sessionID = String(
+          event?.properties?.sessionID ?? event?.sessionID ?? "",
+        )
+        if (terminal && sessionID) scheduleCriticToasts(dirname(path), sessionID, toast)
+      },
+    } : {}
   },
 }

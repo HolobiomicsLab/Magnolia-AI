@@ -132,6 +132,35 @@ def peek_notices(paths: ProjectPaths, state: SessionState) -> Notices | None:
         return None
 
 
+def claim_opencode_critic_toast(
+    store: str, session_id: str, limit: int = JOB_LIMIT,
+) -> Notices | None:
+    """Peek one OpenCode session's queued critic warnings for its TUI only.
+
+    Like the critic lines of ``peek_notices``, nothing is removed until
+    ``settle_opencode_critic_toast`` reports delivery, and a line queued since
+    the peek is kept.
+    """
+    with SessionState.open(store, "opencode", session_id) as state:
+        queued = state.data.get("unshown_notices")
+        critic = [str(notice) for notice in queued[:limit]] if isinstance(queued, list) else []
+    if not critic:
+        return None
+    return Notices("\n".join(critic), [], critic)
+
+
+def settle_opencode_critic_toast(
+    store: str, session_id: str, notices: Notices, delivered: bool,
+) -> None:
+    """Consume a delivered critic toast; an undelivered one stays queued."""
+    if not delivered or not notices.critic:
+        return
+    with SessionState.open(store, "opencode", session_id) as state:
+        queued = state.data.get("unshown_notices")
+        queued = [str(notice) for notice in queued] if isinstance(queued, list) else []
+        state.data["unshown_notices"] = _without(queued, notices.critic)
+
+
 def _without(items: list[str], taken: list[str]) -> list[str]:
     """Remove one occurrence of each taken item, keeping everything added since."""
     remaining = list(items)
