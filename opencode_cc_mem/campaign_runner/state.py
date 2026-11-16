@@ -128,6 +128,7 @@ QUOTA_WAIT_KEYS = {
     "result_ref",
     "retry_cursor",
     "resume_artifact",
+    "resume_from",
 }
 SESSION_IDENTITY_KEYS = {
     "client",
@@ -246,6 +247,7 @@ class QuotaWait:
     result_ref: str | None = None
     retry_cursor: int | None = None
     resume_artifact: ResumeArtifact | None = None
+    resume_from: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("reason", "subscription_key", "hold_id", "stage"):
@@ -275,6 +277,12 @@ class QuotaWait:
             self.resume_artifact, ResumeArtifact
         ):
             raise StateError("quota resume_artifact must be a ResumeArtifact")
+        if self.resume_from is not None:
+            object.__setattr__(
+                self, "resume_from", _required_text(self.resume_from, "resume_from")
+            )
+        if self.resume_from is not None and self.resume_artifact is None:
+            raise StateError("quota resume_from requires a resume_artifact")
 
     @classmethod
     def from_dict(cls, value: Any) -> "QuotaWait":
@@ -282,7 +290,9 @@ class QuotaWait:
         if not isinstance(value, dict):
             raise StateError("quota_wait must be an object")
         unknown = sorted(set(value) - QUOTA_WAIT_KEYS)
-        missing = sorted((QUOTA_WAIT_KEYS - {"resume_artifact"}) - set(value))
+        missing = sorted(
+            (QUOTA_WAIT_KEYS - {"resume_artifact", "resume_from"}) - set(value)
+        )
         if unknown:
             raise StateError(f"quota_wait has unknown fields: {', '.join(unknown)}")
         if missing:
@@ -311,6 +321,7 @@ class QuotaWait:
                 if value.get("resume_artifact") is not None
                 else None
             ),
+            resume_from=value.get("resume_from"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -341,6 +352,7 @@ class QuotaWait:
                 if self.resume_artifact is not None
                 else None
             ),
+            "resume_from": self.resume_from,
         }
 
 

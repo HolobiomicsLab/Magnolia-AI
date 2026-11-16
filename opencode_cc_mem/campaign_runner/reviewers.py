@@ -64,6 +64,7 @@ class ReviewResult:
     outcome: RunOutcome | None = None
     session_identity: SessionIdentity | None = None
     resume_artifact: ResumeArtifact | None = None
+    resume_from: Path | None = None
 
 
 def model_family(model: str) -> str:
@@ -212,6 +213,25 @@ def validate_review(value: Any, run_dir: Path) -> tuple[list[dict[str, Any]], li
     return issues, followups
 
 
+def _bound_invocation_dir(
+    executor: Any,
+    artifact: ResumeArtifact | None,
+    control_dir: Path | None,
+) -> Path | None:
+    """Return the private invocation directory that wrote a resume artifact."""
+    if artifact is None:
+        return None
+    prepared = getattr(executor, "prepared", None)
+    invocation = getattr(prepared, "invocation_dir", None)
+    if invocation is None or control_dir is None:
+        raise ReviewError("resumable reviewer did not expose its invocation directory")
+    path = Path(invocation).resolve()
+    private_root = (Path(control_dir).resolve() / "executors").resolve()
+    if not path.is_relative_to(private_root):
+        raise ReviewError("reviewer resume invocation is outside private run state")
+    return path
+
+
 @dataclass
 class Reviewer:
     binary: str
@@ -234,6 +254,7 @@ class Reviewer:
         run_dir: Path,
         control: ProcessControl | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> ReviewResult:
         route = resolve_route("reviewer", {"reviewer": {"model": model}})
         context = (
@@ -255,7 +276,11 @@ class Reviewer:
             )
         )
         if resume_artifact is not None:
-            context = replace(context, resume_artifact=resume_artifact)
+            context = replace(
+                context,
+                resume_artifact=resume_artifact,
+                resume_from=resume_from,
+            )
         executor = executor_for(route, "reviewer", context)
         usage = empty_usage()
         session_id: str | None = None
@@ -277,6 +302,10 @@ class Reviewer:
             if result.session_id:
                 session_id = result.session_id
             session_identity = getattr(result, "session_identity", None)
+            result_artifact = getattr(result, "resume_artifact", None)
+            result_resume_from = _bound_invocation_dir(
+                executor, result_artifact, context.control_dir
+            )
             if result.outcome is not None and result.outcome.overrides_repair:
                 return ReviewResult(
                     issues=[],
@@ -289,7 +318,8 @@ class Reviewer:
                     stopped_reason=result.stopped_reason,
                     outcome=result.outcome,
                     session_identity=session_identity,
-                    resume_artifact=getattr(result, "resume_artifact", None),
+                    resume_artifact=result_artifact,
+                    resume_from=result_resume_from,
                 )
             if result.stopped_reason:
                 return ReviewResult(
@@ -303,7 +333,8 @@ class Reviewer:
                     stopped_reason=result.stopped_reason,
                     outcome=result.outcome,
                     session_identity=session_identity,
-                    resume_artifact=getattr(result, "resume_artifact", None),
+                    resume_artifact=result_artifact,
+                    resume_from=result_resume_from,
                 )
             try:
                 issues, followups = validate_review(_extract_json(result.final_text), run_dir)
@@ -322,7 +353,8 @@ class Reviewer:
                 attempts=attempts,
                 model=model,
                 session_identity=session_identity,
-                resume_artifact=getattr(result, "resume_artifact", None),
+                resume_artifact=result_artifact,
+                resume_from=result_resume_from,
             )
         raise ReviewError("; ".join(errors) if errors else "review failed")
 

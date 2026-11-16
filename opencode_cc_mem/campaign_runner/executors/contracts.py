@@ -166,6 +166,21 @@ class ResumeArtifact:
             raise ValueError("resume artifact fields must be non-empty")
 
 
+def binding_identity_matches(
+    stored: Mapping[str, Any], expected: Mapping[str, str]
+) -> bool:
+    """Match current bindings and pre-3250939 bindings lacking only ``client``.
+
+    A legacy record is attributed to the executor reading its private binding
+    store only when every other recorded field matches that executor's identity.
+    """
+    if dict(stored) == dict(expected):
+        return True
+    legacy_expected = dict(expected)
+    legacy_expected.pop("client", None)
+    return "client" not in stored and dict(stored) == legacy_expected
+
+
 def _number(value: Any) -> float | int | None:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 

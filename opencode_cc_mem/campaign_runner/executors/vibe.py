@@ -24,6 +24,7 @@ from .contracts import (
     RunOutcome,
     SessionIdentity,
     UsageRecord,
+    binding_identity_matches,
 )
 from .registry import ExecutorRefused
 
@@ -438,9 +439,9 @@ class VibeExecutor:
         payload = self._load_bindings()
         expected = self._binding_identity()
         current = payload["sessions"].get(session_id)
-        if current is not None and current != expected:
+        if current is not None and not binding_identity_matches(current, expected):
             raise ExecutorRefused("Vibe session has a different bound identity")
-        if current == expected:
+        if current is not None:
             return
         payload["sessions"][session_id] = expected
         temporary = self._binding_path().with_name(
@@ -457,7 +458,7 @@ class VibeExecutor:
         current = self._load_bindings()["sessions"].get(session_id)
         if current is None:
             raise ExecutorRefused(f"unknown Vibe session: {session_id}")
-        if current != self._binding_identity():
+        if not binding_identity_matches(current, self._binding_identity()):
             raise ExecutorRefused("Vibe session has a different bound identity")
 
     def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
