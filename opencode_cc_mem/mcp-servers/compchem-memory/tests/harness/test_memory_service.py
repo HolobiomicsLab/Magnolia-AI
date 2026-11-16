@@ -110,6 +110,8 @@ def test_service_environment_preserves_server_runtime_knobs_and_proxy_variants()
             "MAGNOLIA_CONSOLIDATION_FLOOR": "0.7",
             "MAGNOLIA_OPENROUTER_STICKY": "0",
             "MAGNOLIA_CRITIC_PROVIDER": "openrouter",
+            "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.25",
+            "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "3",
             "MAGNOLIA_CRITIC_API_KEY": "different-secret",
             "http_proxy": "http://proxy.test",
             "ALL_PROXY": "socks5://proxy.test",
@@ -125,6 +127,8 @@ def test_service_environment_preserves_server_runtime_knobs_and_proxy_variants()
     assert environment["MAGNOLIA_CONSOLIDATION_FLOOR"] == "0.7"
     assert environment["MAGNOLIA_OPENROUTER_STICKY"] == "0"
     assert environment["MAGNOLIA_CRITIC_PROVIDER"] == "openrouter"
+    assert environment["MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S"] == "0.25"
+    assert environment["MAGNOLIA_MEMORY_SERVICE_GRACE_S"] == "3"
     assert environment["http_proxy"] == "http://proxy.test"
     assert environment["ALL_PROXY"] == "socks5://proxy.test"
     assert "MAGNOLIA_CRITIC_API_KEY" not in environment
@@ -235,6 +239,10 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert first.url == second.url
     assert first.process_identity == second.process_identity
     assert len(started) == 1
+    assert started[0][1]["MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID"] == str(os.getpid())
+    assert started[0][1]["MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY"] == (
+        f"ps:{os.getpid()}:test-launcher"
+    )
     assert memory_service.release_memory_service(first) is False
     assert memory_service.release_memory_service(second) is True
     assert stopped == [(4101, "ps:4101:start")]
@@ -1469,6 +1477,149 @@ def test_second_signal_during_startup_cleanup_cannot_leave_state(tmp_path, monke
     assert not (state / "bearer-token").exists()
     assert memory_service.STARTUP_SIGNALS <= masks[0]
     assert signal.pthread_sigmask(signal.SIG_BLOCK, []) == previous_mask
+
+
+def test_service_exits_when_acquirer_sigkilled_during_readiness(tmp_path):
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 0))
+        except OSError as exc:
+            pytest.skip(f"loopback bind unavailable: {exc}")
+    if not memory_service._process_identity(os.getpid()):
+        pytest.skip("OS process start identity is unavailable")
+    project = tmp_path / "reexec watchdog project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    marker = tmp_path / "readiness-held"
+    wrapper = tmp_path / "reexec-python"
+    wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} "$@"\n')
+    wrapper.chmod(0o700)
+    environment = {
+        "HOME": str(Path.home()),
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        "OPENAI_API_KEY": "loopback-sentinel",
+        "OPENAI_BASE_URL": "http://127.0.0.1:9",
+        "HTTP_PROXY": "http://127.0.0.1:9",
+        "HTTPS_PROXY": "http://127.0.0.1:9",
+        "NO_PROXY": "127.0.0.1",
+        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.05",
+        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "0.2",
+    }
+    code = f"""
+import os, time
+from pathlib import Path
+from types import SimpleNamespace
+from compchem_memory.harness import memory_service as ms
+wait_ready = ms._wait_ready
+def hold_readiness(*args):
+    assert wait_ready(*args) is not None
+    Path({str(marker)!r}).write_text('ready')
+    time.sleep(60)
+ms._wait_ready = hold_readiness
+ms.ensure_memory_service(SimpleNamespace(
+    project_dir=Path({str(project)!r}), python={str(wrapper)!r}, holder_pid={os.getpid()},
+    setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
+    environment={environment!r},
+))
+"""
+    acquirer = subprocess.Popen(
+        [sys.executable, "-c", code],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    service_pid = None
+    try:
+        deadline = time.monotonic() + 20
+        while not marker.exists() and acquirer.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists(), acquirer.communicate(timeout=1)
+        service_pid = json.loads((state / "service.json").read_text())["pid"]
+        acquirer.kill()
+        acquirer.wait(timeout=5)
+
+        deadline = time.monotonic() + 5
+        while memory_service._process_identity(service_pid) and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+        assert memory_service._process_identity(service_pid) is None
+    finally:
+        if acquirer.poll() is None:
+            acquirer.kill()
+        acquirer.communicate(timeout=5)
+        if service_pid is not None and memory_service._process_identity(service_pid):
+            os.kill(service_pid, signal.SIGKILL)
+
+
+def test_service_exits_after_double_signal_during_startup(tmp_path):
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 0))
+        except OSError as exc:
+            pytest.skip(f"loopback bind unavailable: {exc}")
+    if not memory_service._process_identity(os.getpid()):
+        pytest.skip("OS process start identity is unavailable")
+    project = tmp_path / "double signal watchdog project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    marker = tmp_path / "service-pid"
+    environment = {
+        "HOME": str(Path.home()),
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        "OPENAI_API_KEY": "loopback-sentinel",
+        "OPENAI_BASE_URL": "http://127.0.0.1:9",
+        "HTTP_PROXY": "http://127.0.0.1:9",
+        "HTTPS_PROXY": "http://127.0.0.1:9",
+        "NO_PROXY": "127.0.0.1",
+        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.05",
+        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "0.2",
+    }
+    code = f"""
+import json, os, signal
+from pathlib import Path
+from types import SimpleNamespace
+from compchem_memory.harness import memory_service as ms
+def interrupt(*args):
+    record = json.loads((ms.private_state_dir(Path({str(project)!r})) / 'service.json').read_text())
+    Path({str(marker)!r}).write_text(str(record['pid']))
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, {{signal.SIGHUP, signal.SIGTERM}})
+    os.kill(os.getpid(), signal.SIGHUP)
+    os.kill(os.getpid(), signal.SIGTERM)
+    signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+ms._wait_ready = interrupt
+ms.ensure_memory_service(SimpleNamespace(
+    project_dir=Path({str(project)!r}), python={sys.executable!r}, holder_pid={os.getpid()},
+    setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
+    environment={environment!r},
+))
+"""
+    acquirer = subprocess.Popen(
+        [sys.executable, "-c", code],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    service_pid = None
+    try:
+        acquirer.communicate(timeout=20)
+        assert marker.exists()
+        service_pid = int(marker.read_text())
+
+        deadline = time.monotonic() + 5
+        while memory_service._process_identity(service_pid) and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+        assert memory_service._process_identity(service_pid) is None
+    finally:
+        if acquirer.poll() is None:
+            acquirer.kill()
+        acquirer.communicate(timeout=5)
+        if service_pid is None and (state / "service.json").exists():
+            service_pid = json.loads((state / "service.json").read_text())["pid"]
+        if service_pid is not None and memory_service._process_identity(service_pid):
+            os.kill(service_pid, signal.SIGKILL)
 
 
 @pytest.mark.parametrize("command", ["run", "daemon"])

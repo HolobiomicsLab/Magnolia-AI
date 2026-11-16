@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import math
 import os
+import signal
+import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -16,11 +21,134 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from compchem_memory.harness import memory_service as service_state
 from compchem_memory.harness.memory_service import (
     TOKEN_ENV,
     _process_identity,
     project_digest,
 )
+
+
+WATCHDOG_ENV = "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S"
+GRACE_ENV = "MAGNOLIA_MEMORY_SERVICE_GRACE_S"
+ACQUIRER_PID_ENV = "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID"
+ACQUIRER_IDENTITY_ENV = "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY"
+DEFAULT_WATCHDOG_SECONDS = 2.0
+DEFAULT_GRACE_SECONDS = 10.0
+
+
+@dataclass
+class ServiceWatchdog:
+    """Decide when this service no longer has a valid owning record or holder."""
+
+    project_dir: Path
+    service_identity: str
+    process_pid: int
+    process_identity: str
+    acquirer_pid: int
+    acquirer_identity: str
+    grace_seconds: float = DEFAULT_GRACE_SECONDS
+    now: Callable[[], float] = time.monotonic
+    started_at: float = field(init=False)
+    last_holder_at: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.project_dir = self.project_dir.expanduser().resolve()
+        self.started_at = self.now()
+        self.last_holder_at = self.started_at
+
+    def should_exit(self) -> bool:
+        """Return true once the record or verified-holder contract is lost."""
+        state = service_state.private_state_dir(self.project_dir)
+        with service_state._state_lock(state):
+            record = service_state._read_record(state)
+            if record is None or not self._record_names_self(record):
+                return True
+            self._refresh_provisional_record(state, record)
+            return self._ownership_expired(record)
+
+    def _record_names_self(self, record: dict[str, Any]) -> bool:
+        try:
+            recorded_project = Path(str(record["project_dir"])).expanduser().resolve()
+            recorded_pid = int(record["pid"])
+        except (KeyError, TypeError, ValueError, OSError):
+            return False
+        return bool(
+            recorded_project == self.project_dir
+            and record.get("project_digest") == project_digest(self.project_dir)
+            and recorded_pid == self.process_pid
+            and record.get("process_identity") == self.process_identity
+            and record.get("service_identity") == self.service_identity
+            and _process_identity(self.process_pid) == self.process_identity
+        )
+
+    def _refresh_provisional_record(
+        self, state: Path, record: dict[str, Any]
+    ) -> None:
+        if record.get("provisional") is not True:
+            return
+        live_command = service_state._process_command(self.process_pid)
+        recorded_command = record.get("observed_command")
+        if isinstance(live_command, tuple) and isinstance(recorded_command, list):
+            recorded_command = tuple(recorded_command)
+        if live_command is None or recorded_command == live_command:
+            return
+        record["pid"] = self.process_pid
+        record["process_identity"] = self.process_identity
+        record["observed_command"] = live_command
+        service_state._write_record(state, record)
+
+    def _ownership_expired(self, record: dict[str, Any]) -> bool:
+        checked_at = self.now()
+        if self._has_live_holder(record.get("holders")):
+            self.last_holder_at = checked_at
+        elif checked_at - self.last_holder_at >= self.grace_seconds:
+            return True
+        provisional_expired = (
+            record.get("provisional") is True
+            and checked_at - self.started_at >= self.grace_seconds
+        )
+        return provisional_expired and not self._acquirer_is_live()
+
+    def _has_live_holder(self, holders: Any) -> bool:
+        if not isinstance(holders, list):
+            return False
+        return any(
+            isinstance(holder, dict)
+            and isinstance(holder.get("pid"), int)
+            and bool(holder.get("process_identity"))
+            and _process_identity(holder["pid"]) == holder["process_identity"]
+            for holder in holders
+        )
+
+    def _acquirer_is_live(self) -> bool:
+        return bool(
+            self.acquirer_pid > 0
+            and self.acquirer_identity
+            and _process_identity(self.acquirer_pid) == self.acquirer_identity
+        )
+
+
+def _watchdog_loop(
+    watchdog: ServiceWatchdog, interval: float, stop_event: threading.Event
+) -> None:
+    """Poll ownership and ask this process to stop without targeting another PID."""
+    while not stop_event.wait(interval):
+        if watchdog.should_exit():
+            signal.raise_signal(signal.SIGTERM)
+            return
+
+
+def _seconds_from_env(name: str, default: float, *, allow_zero: bool = False) -> float:
+    """Read a finite non-negative service timing value."""
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a number") from exc
+    minimum = 0.0 if allow_zero else 0.001
+    if not math.isfinite(value) or value < minimum:
+        raise RuntimeError(f"{name} must be at least {minimum}")
+    return value
 
 
 def _request_project_headers() -> tuple[str, ...]:
@@ -136,9 +264,43 @@ def main(argv: list[str] | None = None) -> None:
     port = int(os.environ.get("MAGNOLIA_MEMORY_SERVICE_PORT", "0"))
     if port <= 0:
         raise RuntimeError("memory HTTP service requires a configured port")
-    build_server(token).run(
-        transport="streamable-http", host="127.0.0.1", port=port, show_banner=False
+    process_identity = _process_identity(os.getpid())
+    if not process_identity:
+        raise RuntimeError("memory HTTP service process identity is unavailable")
+    service_identity = os.environ.get("MAGNOLIA_MEMORY_SERVICE_IDENTITY", "")
+    acquirer_identity = os.environ.get(ACQUIRER_IDENTITY_ENV, "")
+    try:
+        acquirer_pid = int(os.environ.get(ACQUIRER_PID_ENV, "0"))
+    except ValueError as exc:
+        raise RuntimeError("memory HTTP service acquirer pid is invalid") from exc
+    if not service_identity or acquirer_pid <= 0 or not acquirer_identity:
+        raise RuntimeError("memory HTTP service supervision identity is incomplete")
+    interval = _seconds_from_env(WATCHDOG_ENV, DEFAULT_WATCHDOG_SECONDS)
+    grace = _seconds_from_env(GRACE_ENV, DEFAULT_GRACE_SECONDS, allow_zero=True)
+    watchdog = ServiceWatchdog(
+        bound,
+        service_identity=service_identity,
+        process_pid=os.getpid(),
+        process_identity=process_identity,
+        acquirer_pid=acquirer_pid,
+        acquirer_identity=acquirer_identity,
+        grace_seconds=grace,
     )
+    stop_event = threading.Event()
+    watcher = threading.Thread(
+        target=_watchdog_loop,
+        args=(watchdog, interval, stop_event),
+        name="magnolia-memory-watchdog",
+        daemon=True,
+    )
+    watcher.start()
+    try:
+        build_server(token).run(
+            transport="streamable-http", host="127.0.0.1", port=port, show_banner=False
+        )
+    finally:
+        stop_event.set()
+        watcher.join(timeout=max(1.0, interval * 2))
 
 
 if __name__ == "__main__":
