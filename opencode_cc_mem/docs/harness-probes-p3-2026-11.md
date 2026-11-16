@@ -75,3 +75,50 @@ The following Codex worker/reviewer checks are still owed; this task ran no clie
 4. Confirm `--disable apps` removes connected-app tools, user MCP servers/plugins are disabled, the selected model is explicit on launch and resume, and the supervising cap stops the process at its effective bound.
 
 Only after those observations match the immutable policy/config identity may the capability projection mark a Codex worker or reviewer row accepted and release D2 for that role.
+
+## Task CF — Claude live evidence folded into the table
+
+The live record `docs/harness-probes-p3-live-2026-11.md`, section **Claude live role gate
+(production code, 02b5f43)**, now supplies every prerequisite cell for the four Claude rows.
+Task 0 run `claude/live-p3/c4/01-run.json` supplies the observed resume mechanism. Quota evidence
+remains `none observed` and is not a prerequisite.
+
+| Role | Live decision | Principal artifacts | Caveat |
+|---|---|---|---|
+| worker | accepted by owner ruling | `claude/live-gate/W1/`, `W2/`, `W3/`; Task 0 `c4/` | MCP allowlist is enforced by the required fail-closed hook; all 26 server tools remain visible |
+| reviewer | passed outright | `claude/live-gate/R1/`; Task 0 `c4/` | cap 8 is tight because boot context consumes turns |
+| helper | passed outright | `claude/live-gate/H1/`; Task 0 `c4/` | boot context is injected despite no memory tools |
+| evaluator | passed outright | `claude/live-gate/E1/`; Task 0 `c4/` | boot context is injected despite a no-tools role |
+
+The machine table records those gates as accepted, with no blocking cells. They remain marked
+**launch-stale** because the current launch consumer cannot yet represent the accepted identity
+semantics below; this is distinct from a failed live gate. Codex and Vibe rows are unchanged and
+remain refused.
+
+### Identity decision and outstanding launch transition
+
+Evidence is portable across projects only when it binds to (1) the Claude binary version and
+SHA-256 and (2) a normalized role template/policy shape. The normalized shape covers rendered
+settings/MCP files, the required-policy body/schema, hook command and required environment-variable
+names; it replaces project/run paths with semantic slots. The observed `discovery_dir` therefore
+means *the launching project*, not the gate's temporary project.
+
+`launch.py` currently does the opposite: it converts `evidence["discovery_dir"]` to a concrete path
+and compares it to `context.project_dir`, then compares `evidence["identity"]` to a digest of
+run-specific rendered bytes. A static table value can neither equal every production project path
+nor every path-bearing digest. The owning Task 9 stream must make this narrow transition before the
+four stale flags can be cleared:
+
+1. accept only discovery evidence with scope `launch-project`, and derive the concrete
+   `discovery_dir` from `context.project_dir`;
+2. compute the same normalized role-shape digest used by the table, including the launched client
+   binary identity, renderer output, policy schema, hook command and required environment names;
+3. compare that digest to the table's configuration binding before materialization and resume;
+4. retain concrete project/run paths only in the invocation's capability/session identity, so
+   resume remains project-bound without making the capability evidence project-specific.
+
+The offline four-role probe rendered `02b5f43` and HEAD `ce681e7` with identical canonical inputs.
+For every role, `settings.json`, `mcp.json`, `claude-settings.json`, `claude-mcp.json`,
+`policy.json`, hook commands, caps and tool surfaces were byte-identical. The worker retained the
+same stdio memory route. The only difference was the expected added environment name
+`MAGNOLIA_HOOK_POLICY_SHA256`, accepted as Task 8b's policy-digest strengthening. No client was run.

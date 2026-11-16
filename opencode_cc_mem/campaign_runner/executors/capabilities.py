@@ -79,20 +79,29 @@ def project_role_capabilities(table: Mapping[str, Any]) -> dict[str, Any]:
             name for name in PREREQUISITE_CELLS if cells[name]["status"] != "observed"
         ]
         gate = row["gate"]
-        accepted = not blocking and gate["status"] == "observed"
+        gate_accepted = not blocking and gate["status"] == "observed"
+        stale = _row_is_stale(row)
         model_delivery = _observed_value(cells["model_delivery"], {})
+        allowed_actions = _observed_value(cells["allowed_actions"], [])
+        if isinstance(allowed_actions, Mapping):
+            allowed_actions = allowed_actions.get("capabilities", [])
         projected[row["client"]][row["role"]] = {
-            "accepted": accepted,
-            "stale": row.get("stale") is not False,
+            "accepted": gate_accepted and not stale,
+            "gate_accepted": gate_accepted,
+            "stale": stale,
             "trusted": _observed_value(cells["trust"], False) is True,
             "identity": _observed_value(cells["hook_policy_digest"]),
             "discovery_dir": _observed_value(cells["discovery_dir"]),
-            "capabilities": _observed_value(cells["allowed_actions"], []),
+            "capabilities": allowed_actions,
             "model_isolation": model_delivery
             if isinstance(model_delivery, Mapping)
             else {"accepted": False},
             "blocking_cells": blocking,
-            "reasons": [gate["reason"], *[f"{name}: {cells[name]['status']}" for name in blocking]],
+            "reasons": [
+                gate["reason"],
+                *(["accepted live evidence is stale for launch"] if stale else []),
+                *[f"{name}: {cells[name]['status']}" for name in blocking],
+            ],
         }
     return projected
 
@@ -193,3 +202,16 @@ def _contains_synthetic_marker(value: Any) -> bool:
 
 def _observed_value(cell: Mapping[str, Any], default: Any = None) -> Any:
     return cell.get("value", default) if cell["status"] == "observed" else default
+
+
+def _row_is_stale(row: Mapping[str, Any]) -> bool:
+    """Treat an explicit stale mark or changed bound client identity as stale."""
+    if row.get("stale") is not False:
+        return True
+    gate_value = row["gate"].get("value")
+    if not isinstance(gate_value, Mapping):
+        return False
+    bound_identity = gate_value.get("client_identity")
+    if bound_identity is None:
+        return False
+    return bound_identity != row["cells"]["identity"].get("value")

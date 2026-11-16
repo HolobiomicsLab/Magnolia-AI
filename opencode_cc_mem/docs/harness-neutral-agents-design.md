@@ -416,6 +416,25 @@ Each phase ends with Tao's review on its own branch.
 - D4: Vibe worker edits may be guarded under its own work tree only after the full path gate;
   until then the worker is refused.
 
+### Accepted corrections from the Plan 3 live gates
+
+- Claude worker MCP visibility is accepted with **hook-only allowlist enforcement**. Claude Code
+  exposes all tools registered by the memory server, while Magnolia's required PreToolUse hook
+  denies every non-allowlisted call. The owner accepted that enforcement boundary after its
+  production fail-closed fallback and denial path were observed live. Server-side tool filtering
+  remains a context/turn-efficiency follow-up, not an executor gate. Claude reviewer, helper and
+  evaluator passed their live role gates outright.
+- Capability evidence binds to the client binary identity and a normalized rendered
+  template/policy shape, not to the disposable probe project path or its run-specific digest.
+  Runtime discovery must resolve to the launching project. A changed client version/SHA-256,
+  renderer output shape, hook command or required-policy schema makes the evidence stale. The
+  four-role HEAD comparison accepted the sole Task 8b delta, the added
+  `MAGNOLIA_HOOK_POLICY_SHA256` environment name; all rendered files, policy bodies, hook commands
+  and Claude worker stdio memory routing stayed byte-identical to the `02b5f43` evidence.
+- SessionStart currently injects boot context into every Claude role. The reviewer cap of eight is
+  consequently tight (two turns were spent looking for unavailable memory tools). Role-selective
+  boot injection is a follow-up, not a blocker.
+
 ## 11. Interfaces seen by others
 
 `HookEvent`, the hook entry point and the Magnolia transcript are internal to Magnolia
