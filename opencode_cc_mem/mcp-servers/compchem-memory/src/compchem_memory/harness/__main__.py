@@ -53,7 +53,7 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     launch.add_argument("--project", required=True)
     launch.add_argument("--python", required=True)
     launch.add_argument("--tools-port", required=True, type=int)
-    launch.add_argument("--holder-pid", type=int)
+    launch.add_argument("--holder-pid", required=True, type=int)
     launch.add_argument("--model")
     return parser.parse_args(argv)
 

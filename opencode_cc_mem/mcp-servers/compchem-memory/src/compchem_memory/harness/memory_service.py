@@ -67,6 +67,57 @@ SAFE_BASE_ENV = frozenset(
         "HTTP_PROXY",
         "HTTPS_PROXY",
         "NO_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "all_proxy",
+        "ANTHROPIC_BASE_URL",
+        "DEEPSEEK_BASE_URL",
+        "OPENAI_BASE_URL",
+        "KIMI_BASE_URL",
+        "OPENROUTER_BASE_URL",
+        "MISTRAL_BASE_URL",
+        "ZAI_BASE_URL",
+        "OPENROUTER_REFERER",
+        "OPENROUTER_TITLE",
+        "OPENCODE_DB",
+    }
+)
+SERVER_RUNTIME_ENV = frozenset(
+    {
+        "MAGNOLIA_ADMISSION_GATE",
+        "MAGNOLIA_AUTO_CONFIRM",
+        "MAGNOLIA_CONSOLIDATION_AUTO",
+        "MAGNOLIA_CONSOLIDATION_AUTO_MAX",
+        "MAGNOLIA_CONSOLIDATION_FLOOR",
+        "MAGNOLIA_CONSOLIDATION_SEED",
+        "MAGNOLIA_CONSOLIDATION_SIBLING",
+        "MAGNOLIA_CRITIC",
+        "MAGNOLIA_CRITIC_BASE_URL",
+        "MAGNOLIA_CRITIC_MODEL",
+        "MAGNOLIA_CRITIC_PROVIDER",
+        "MAGNOLIA_DISABLE_INLINE_EXTRACT",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DISTILL_SECOND_PASS",
+        "MAGNOLIA_DREAMING_JUDGE",
+        "MAGNOLIA_HANDOVER_SKIP_EXPORT",
+        "MAGNOLIA_LLM_MODEL",
+        "MAGNOLIA_LLM_PROVIDER",
+        "MAGNOLIA_OFFPEAK_DISABLE",
+        "MAGNOLIA_OPENCODE_DIR",
+        "MAGNOLIA_OPENCODE_V2",
+        "MAGNOLIA_OPENCODE_V2_BIN",
+        "MAGNOLIA_OPENROUTER_PROVIDER",
+        "MAGNOLIA_OPENROUTER_STICKY",
+        "MAGNOLIA_PROSE_NUMBERS",
+        "MAGNOLIA_RETIREMENT",
+        "MAGNOLIA_RETIREMENT_MIN_OPPORTUNITIES",
+        "MAGNOLIA_RETIREMENT_PROPOSAL_GRACE_DAYS",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_SESSION_IDLE_CLOSE_HOURS",
+        "MAGNOLIA_SMOKE_INTERVAL_H",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
     }
 )
 PROVIDER_KEYS = {
@@ -151,6 +202,7 @@ def private_state_dir(project_dir: Path) -> Path:
 
 def ensure_memory_service(context: Any) -> ServiceHandle:
     """Acquire a ready, authenticated service bound to ``context.project_dir``."""
+    holder = _new_holder(_holder_pid(context))
     project = _context_project(context)
     environment = _server_environment(context)
     _require_provider_key(context, environment)
@@ -159,11 +211,11 @@ def ensure_memory_service(context: Any) -> ServiceHandle:
     with _state_lock(state):
         record = _read_record(state)
         if record is not None:
-            handle = _reuse(record, state, project, context)
+            handle = _reuse(record, state, project, holder)
             if handle is not None:
                 return handle
             _discard_record(record, state, project_digest(project))
-        return _start_service(context, project, state, environment)
+        return _start_service(context, project, state, environment, holder)
 
 
 def release_memory_service(handle: ServiceHandle) -> bool:
@@ -183,10 +235,8 @@ def release_memory_service(handle: ServiceHandle) -> bool:
             _write_record(state, record)
             return False
         stopped = False
-        if _service_process_matches(record):
-            stopped = _terminate_owned(
-                int(record["pid"]), str(record["process_identity"])
-            )
+        if _service_signal_safe(record):
+            stopped = _terminate_owned(int(record["pid"]), str(record["process_identity"]))
         if stopped:
             _remove_state_files(state)
         return stopped
@@ -228,7 +278,7 @@ def _server_environment(context: Any) -> dict[str, str]:
     provider = str(
         setup.get("memory_provider") or base.get("MAGNOLIA_MEMORY_PROVIDER") or ""
     ).strip().lower()
-    allowed = set(SAFE_BASE_ENV)
+    allowed = set(SAFE_BASE_ENV | SERVER_RUNTIME_ENV)
     allowed.update(PROVIDER_KEYS.get(provider, ()))
     environment = {
         str(key): str(value)
@@ -304,7 +354,10 @@ def _write_record(state: Path, record: Mapping[str, Any]) -> None:
 
 
 def _reuse(
-    record: dict[str, Any], state: Path, project: Path, context: Any
+    record: dict[str, Any],
+    state: Path,
+    project: Path,
+    holder: dict[str, Any],
 ) -> ServiceHandle | None:
     expected_digest = project_digest(project)
     try:
@@ -344,13 +397,8 @@ def _reuse(
         "service_identity": service_identity,
     }:
         return None
-    try:
-        holder = _new_holder(_holder_pid(context))
-    except Exception:
-        if _is_memory_service_command(_process_command(process.pid)):
-            _terminate_owned(process.pid, identity)
-        _remove_state_files(state)
-        raise
+    if not _holder_is_live(holder):
+        raise ExecutorRefused("memory service holder identity is no longer live")
     record["holders"] = [*live_holders, holder]
     _write_record(state, record)
     return _handle(record, project, holder["id"])
@@ -361,6 +409,7 @@ def _start_service(
     project: Path,
     state: Path,
     environment: dict[str, str],
+    holder: dict[str, Any],
 ) -> ServiceHandle:
     setup = getattr(context, "setup", {}) or {}
     requested_port = setup.get("memory_service_port")
@@ -385,50 +434,56 @@ def _start_service(
             "MAGNOLIA_PROJECT_BOUND": "1",
             "MAGNOLIA_MEMORY_SERVICE_PORT": str(port),
             "MAGNOLIA_MEMORY_SERVICE_IDENTITY": service_identity,
+            "MAGNOLIA_SERVER_STARTED_AT": str(time.time()),
             TOKEN_ENV: token,
         }
     )
-    command = [python, "-m", SERVICE_MODULE]
+    command = [python, "-m", SERVICE_MODULE, "--project-dir", str(project)]
     process = _start_process(
         command,
         project,
         child_environment,
         log_path,
     )
-    identity = _process_identity(process.pid)
-    if not identity:
-        _remove_state_files(state)
-        raise ExecutorRefused("memory service process identity could not be verified")
-    digest = project_digest(project)
-    url = f"http://127.0.0.1:{port}/mcp"
-    timeout = float(setup.get("memory_service_timeout", DEFAULT_READY_TIMEOUT_SECONDS))
-    health = _wait_ready(process, url, token, timeout)
-    expected = {
-        "project_digest": digest,
-        "process_identity": identity,
-        "service_identity": service_identity,
-    }
-    if health != expected:
-        if _is_memory_service_command(_process_command(process.pid)):
-            _terminate_owned(process.pid, identity)
-        _remove_state_files(state)
-        raise ExecutorRefused(
-            "memory service did not become ready with the bound project identity; "
-            f"inspect {log_path}"
+    try:
+        identity = _process_identity(process.pid)
+        if not identity:
+            raise ExecutorRefused("memory service process identity could not be verified")
+        digest = project_digest(project)
+        url = f"http://127.0.0.1:{port}/mcp"
+        timeout = float(
+            setup.get("memory_service_timeout", DEFAULT_READY_TIMEOUT_SECONDS)
         )
-    holder = _new_holder(_holder_pid(context))
-    record = {
-        "pid": process.pid,
-        "port": port,
-        "project_digest": digest,
-        "process_identity": identity,
-        "service_identity": service_identity,
-        "token_file": str(token_file),
-        "command": command,
-        "holders": [holder],
-    }
-    _write_record(state, record)
-    return _handle(record, project, holder["id"])
+        health = _wait_ready(process, url, token, timeout)
+        expected = {
+            "project_digest": digest,
+            "process_identity": identity,
+            "service_identity": service_identity,
+        }
+        if health != expected:
+            raise ExecutorRefused(
+                "memory service did not become ready with the bound project identity; "
+                f"inspect {log_path}"
+            )
+        if not _holder_is_live(holder):
+            raise ExecutorRefused("memory service holder identity is no longer live")
+        record = {
+            "pid": process.pid,
+            "port": port,
+            "project_digest": digest,
+            "project_dir": str(project),
+            "process_identity": identity,
+            "service_identity": service_identity,
+            "token_file": str(token_file),
+            "command": command,
+            "holders": [holder],
+        }
+        _write_record(state, record)
+        return _handle(record, project, holder["id"])
+    except Exception:
+        _stop_started_process(process)
+        _remove_state_files(state)
+        raise
 
 
 def _wait_ready(
@@ -476,8 +531,18 @@ def _holder_pid(context: Any) -> int:
 def _new_holder(pid: int) -> dict[str, Any]:
     identity = _process_identity(pid)
     if not identity:
-        raise ExecutorRefused("memory service launcher identity could not be verified")
+        raise ExecutorRefused(
+            "memory service holder process identity could not be verified; "
+            "pass a live long-lived launcher pid"
+        )
     return {"id": uuid.uuid4().hex, "pid": pid, "process_identity": identity}
+
+
+def _holder_is_live(holder: Mapping[str, Any]) -> bool:
+    """Return whether a previously verified holder still has the same start token."""
+    pid = holder.get("pid")
+    identity = holder.get("process_identity")
+    return isinstance(pid, int) and bool(identity) and _process_identity(pid) == identity
 
 
 def _live_holders(value: Any) -> list[dict[str, Any]]:
@@ -516,7 +581,7 @@ def _discard_record(
         record.get("project_digest") == expected_project_digest
         and pid > 0
         and expected
-        and _service_process_matches(record)
+        and _service_signal_safe(record)
     ):
         _terminate_owned(pid, expected)
     _remove_state_files(state)
@@ -533,7 +598,8 @@ def _remove_state_files(state: Path) -> None:
 def _ensure_private_state_dir(state: Path) -> None:
     root = Path.home() / ".magnolia"
     services = root / "services"
-    for directory in (root, services, state):
+    root.mkdir(parents=True, exist_ok=True)
+    for directory in (services, state):
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(directory, 0o700)
 
@@ -603,8 +669,9 @@ def _process_command(pid: int) -> tuple[str, ...] | None:
 def _is_memory_service_command(command: tuple[str, ...] | None) -> bool:
     return bool(
         command
-        and len(command) == 3
-        and command[1:] == ("-m", SERVICE_MODULE)
+        and len(command) in {3, 5}
+        and command[1:3] == ("-m", SERVICE_MODULE)
+        and (len(command) == 3 or command[3] == "--project-dir")
         and Path(command[0]).name.startswith("python")
     )
 
@@ -615,7 +682,28 @@ def _service_commands_match(
     if not _is_memory_service_command(recorded) or not _is_memory_service_command(actual):
         return False
     assert actual is not None
-    return Path(recorded[0]).expanduser().resolve() == Path(actual[0]).expanduser().resolve()
+    return (
+        len(recorded) == len(actual)
+        and recorded[1:] == actual[1:]
+        and Path(recorded[0]).expanduser().resolve()
+        == Path(actual[0]).expanduser().resolve()
+    )
+
+
+def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
+    """Verify the exact service command and its project argument."""
+    try:
+        pid = int(record["pid"])
+        project = Path(str(record["project_dir"])).expanduser().resolve()
+        digest = str(record["project_digest"])
+        recorded = tuple(str(value) for value in record["command"])
+    except (KeyError, TypeError, ValueError, OSError):
+        return False
+    if project_digest(project) != digest or len(recorded) != 5:
+        return False
+    if recorded[3:] != ("--project-dir", str(project)):
+        return False
+    return _service_commands_match(recorded, _process_command(pid))
 
 
 def _service_process_matches(record: Mapping[str, Any]) -> bool:
@@ -627,8 +715,55 @@ def _service_process_matches(record: Mapping[str, Any]) -> bool:
         return False
     return bool(
         _process_identity(pid) == expected_identity
-        and _service_commands_match(recorded_command, _process_command(pid))
+        and _is_memory_service_command(recorded_command)
+        and _is_memory_service_command(_process_command(pid))
     )
+
+
+def _service_signal_safe(record: Mapping[str, Any]) -> bool:
+    """Verify project ownership before signalling a recorded process."""
+    try:
+        pid = int(record["pid"])
+        identity = str(record["process_identity"])
+        port = int(record["port"])
+        digest = str(record["project_digest"])
+        service_identity = str(record["service_identity"])
+        token_path = Path(str(record["token_file"])).resolve()
+    except (KeyError, TypeError, ValueError, OSError):
+        return False
+    if _process_identity(pid) != identity:
+        return False
+    if _private_owned(token_path, 0o600):
+        try:
+            token = token_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+        if token:
+            health = _health(
+                f"http://127.0.0.1:{port}/mcp", token, HEALTH_TIMEOUT_SECONDS
+            )
+            if health == {
+                "project_digest": digest,
+                "process_identity": identity,
+                "service_identity": service_identity,
+            }:
+                return True
+    return _full_service_command_matches(record)
+
+
+def _stop_started_process(process: Any) -> None:
+    """Stop a process object created by this acquisition, even without a start token."""
+    try:
+        process.terminate()
+        process.wait(timeout=2)
+        return
+    except (AttributeError, OSError, subprocess.TimeoutExpired):
+        pass
+    try:
+        process.kill()
+        process.wait(timeout=2)
+    except (AttributeError, OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def _terminate_owned(pid: int, expected_identity: str) -> bool:

@@ -121,6 +121,8 @@ def effective_project_dir(explicit: str | None = None) -> str:
         if hint != _STARTUP_ENV:
             log.warning("project pin from request hint: %s (env was %s)", hint, _STARTUP_ENV)
         return hint
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1":
+        return _STARTUP_ENV
     active = _active_project_hint(_STARTUP_ENV)
     if active and active != _STARTUP_ENV:
         # Only trust .active-project when the file was written after this

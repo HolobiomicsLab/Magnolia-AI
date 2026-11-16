@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -56,6 +57,7 @@ def _args(root: Path) -> list[str]:
     return [
         "launch", "--harness", "claude", "--root", str(root),
         "--project", "demo", "--python", "/venv/bin/python", "--tools-port", "8123",
+        "--holder-pid", str(os.getpid()),
     ]
 
 

@@ -11,6 +11,7 @@ import pytest
 
 from campaign_runner.executors.registry import ExecutorRefused
 from compchem_memory.harness import memory_service
+from compchem_memory.harness import __main__ as harness_main
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +91,74 @@ def test_service_environment_is_provider_specific_allowlist():
     assert "UNRELATED_SECRET" not in environment
 
 
+def test_service_environment_preserves_server_runtime_knobs_and_proxy_variants():
+    context = SimpleNamespace(
+        setup={"memory_provider": "openai", "memory_model": "model"},
+        environment={
+            "OPENAI_API_KEY": "selected",
+            "DEEPSEEK_API_KEY": "other-provider",
+            "MAGNOLIA_RULES_DIR": "/rules",
+            "MAGNOLIA_DISTILL_INTERVAL_MIN": "17",
+            "MAGNOLIA_LLM_PROVIDER": "openai",
+            "MAGNOLIA_LLM_MODEL": "legacy-model",
+            "MAGNOLIA_CONSOLIDATION_FLOOR": "0.7",
+            "MAGNOLIA_OPENROUTER_STICKY": "0",
+            "MAGNOLIA_CRITIC_PROVIDER": "openrouter",
+            "MAGNOLIA_CRITIC_API_KEY": "different-secret",
+            "http_proxy": "http://proxy.test",
+            "ALL_PROXY": "socks5://proxy.test",
+        },
+    )
+
+    environment = memory_service._server_environment(context)
+
+    assert environment["MAGNOLIA_RULES_DIR"] == "/rules"
+    assert environment["MAGNOLIA_DISTILL_INTERVAL_MIN"] == "17"
+    assert environment["MAGNOLIA_LLM_PROVIDER"] == "openai"
+    assert environment["MAGNOLIA_LLM_MODEL"] == "legacy-model"
+    assert environment["MAGNOLIA_CONSOLIDATION_FLOOR"] == "0.7"
+    assert environment["MAGNOLIA_OPENROUTER_STICKY"] == "0"
+    assert environment["MAGNOLIA_CRITIC_PROVIDER"] == "openrouter"
+    assert environment["http_proxy"] == "http://proxy.test"
+    assert environment["ALL_PROXY"] == "socks5://proxy.test"
+    assert "MAGNOLIA_CRITIC_API_KEY" not in environment
+    assert "DEEPSEEK_API_KEY" not in environment
+
+
+def test_preexisting_magnolia_directory_mode_is_unchanged(tmp_path):
+    root = Path.home() / ".magnolia"
+    root.mkdir(mode=0o755)
+    root.chmod(0o755)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    state = memory_service.private_state_dir(project)
+    memory_service._ensure_private_state_dir(state)
+
+    assert root.stat().st_mode & 0o777 == 0o755
+    assert (root / "services").stat().st_mode & 0o777 == 0o700
+    assert state.stat().st_mode & 0o777 == 0o700
+
+
+def test_harness_launch_cli_requires_holder_pid():
+    with pytest.raises(ValueError, match="holder-pid"):
+        harness_main._parse(
+            [
+                "launch",
+                "--harness",
+                "vibe",
+                "--root",
+                "/install",
+                "--project",
+                "project",
+                "--python",
+                "/python",
+                "--tools-port",
+                "8123",
+            ]
+        )
+
+
 def _stub_runtime(monkeypatch, identities: dict[int, str] | None = None):
     identities = identities or {4101: "ps:4101:start"}
     identities.setdefault(os.getpid(), f"ps:{os.getpid()}:test-launcher")
@@ -162,6 +231,26 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert memory_service.release_memory_service(first) is False
     assert memory_service.release_memory_service(second) is True
     assert stopped == [(4101, "ps:4101:start")]
+
+
+def test_unverifiable_holder_is_refused_before_state_or_start(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    context = _context(project)
+    context.holder_pid = 5999
+    starts = []
+    monkeypatch.setattr(memory_service, "_process_identity", lambda pid: None)
+    monkeypatch.setattr(
+        memory_service,
+        "_start_process",
+        lambda *args: starts.append(args) or FakeProcess(4101),
+    )
+
+    with pytest.raises(ExecutorRefused, match="holder.*could not be verified"):
+        memory_service.ensure_memory_service(context)
+
+    assert starts == []
+    assert not memory_service.private_state_dir(project).exists()
 
 
 def test_memory_service_wrong_port_or_stale_pid_not_reused(tmp_path, monkeypatch):
@@ -262,6 +351,125 @@ def test_forged_identity_correct_record_never_signals_unrelated_process(
     memory_service.ensure_memory_service(_context(project))
 
     assert (victim_pid, victim_identity) not in stopped
+
+
+def test_forged_record_naming_other_project_service_is_not_signalled(
+    tmp_path, monkeypatch
+):
+    project_c = tmp_path / "project-c"
+    project_d = tmp_path / "project-d"
+    project_c.mkdir()
+    project_d.mkdir()
+    state = memory_service.private_state_dir(project_c)
+    memory_service._ensure_private_state_dir(state)
+    token_path = state / "bearer-token"
+    token_path.write_text("service-token\n", encoding="utf-8")
+    token_path.chmod(0o600)
+    service_pid = 4200
+    replacement_pid = 4300
+    identities = {
+        os.getpid(): f"ps:{os.getpid()}:holder",
+        service_pid: "ps:4200:project-d-service",
+        replacement_pid: "ps:4300:project-c-service",
+    }
+    forged = {
+        "pid": service_pid,
+        "port": 44200,
+        "project_digest": memory_service.project_digest(project_c),
+        "project_dir": str(project_c.resolve()),
+        "process_identity": identities[service_pid],
+        "service_identity": "project-d-identity",
+        "token_file": str(token_path),
+        "command": ["/test/python", "-m", memory_service.SERVICE_MODULE],
+        "holders": [],
+    }
+    memory_service._write_record(state, forged)
+    stopped = []
+    started_environment = []
+    monkeypatch.setattr(memory_service, "_process_identity", identities.get)
+    monkeypatch.setattr(
+        memory_service,
+        "_process_command",
+        lambda pid: tuple(forged["command"])
+        if pid == service_pid
+        else (
+            "/test/python",
+            "-m",
+            memory_service.SERVICE_MODULE,
+            "--project-dir",
+            str(project_c.resolve()),
+        ),
+    )
+    monkeypatch.setattr(
+        memory_service,
+        "_terminate_owned",
+        lambda pid, identity: stopped.append((pid, identity)) or True,
+    )
+    monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 44300)
+
+    def start(argv, cwd, environment, log_path):
+        started_environment.append(environment)
+        return FakeProcess(replacement_pid)
+
+    monkeypatch.setattr(memory_service, "_start_process", start)
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda url, token, timeout=2.0: (
+            {
+                "project_digest": memory_service.project_digest(project_c),
+                "process_identity": identities[replacement_pid],
+                "service_identity": started_environment[-1][
+                    "MAGNOLIA_MEMORY_SERVICE_IDENTITY"
+                ],
+            }
+            if "44300" in url
+            else {
+                "project_digest": memory_service.project_digest(project_d),
+                "process_identity": identities[service_pid],
+                "service_identity": "project-d-identity",
+            }
+        ),
+    )
+
+    memory_service.ensure_memory_service(_context(project_c))
+
+    assert (service_pid, identities[service_pid]) not in stopped
+
+
+def test_signal_safety_accepts_exact_project_command_without_health_token(
+    tmp_path, monkeypatch
+):
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    pid = 4250
+    identity = "ps:4250:service"
+    command = [
+        "/test/python",
+        "-m",
+        memory_service.SERVICE_MODULE,
+        "--project-dir",
+        str(project),
+    ]
+    record = {
+        "pid": pid,
+        "port": 44250,
+        "project_digest": memory_service.project_digest(project),
+        "project_dir": str(project),
+        "process_identity": identity,
+        "service_identity": "service-identity",
+        "token_file": str(tmp_path / "missing-token"),
+        "command": command,
+    }
+    monkeypatch.setattr(memory_service, "_process_identity", lambda value: identity)
+    monkeypatch.setattr(memory_service, "_process_command", lambda value: tuple(command))
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda *args: pytest.fail("health must not run without a private token"),
+    )
+
+    assert memory_service._service_signal_safe(record) is True
 
 
 def test_real_forged_record_does_not_kill_unrelated_process(tmp_path, monkeypatch):
@@ -381,13 +589,17 @@ def test_missing_key_or_unavailable_service_refuses(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()
     context = _context(project, key="")
+    monkeypatch.setattr(
+        memory_service,
+        "_process_identity",
+        lambda pid: f"ps:{pid}:holder" if pid == os.getpid() else "ps:4101:start",
+    )
 
     with pytest.raises(ExecutorRefused, match="provider API key"):
         memory_service.ensure_memory_service(context)
 
     monkeypatch.setattr(memory_service, "_start_process", lambda *args: FakeProcess(4101))
     monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 43101)
-    monkeypatch.setattr(memory_service, "_process_identity", lambda pid: "ps:4101:start")
     monkeypatch.setattr(memory_service, "_health", lambda url, token, timeout=2.0: None)
     with pytest.raises(ExecutorRefused, match="did not become ready"):
         memory_service.ensure_memory_service(_context(project))

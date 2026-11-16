@@ -15,6 +15,9 @@ from compchem_memory.harness.memory_service import (
     token_for_handle,
 )
 from fastmcp.server.middleware import MiddlewareContext
+from fastmcp.exceptions import ToolError
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from mcp import types as mt
 from types import SimpleNamespace
 
@@ -96,7 +99,7 @@ def test_project_binding_middleware_refuses_every_tool_before_dispatch(
                 ),
                 method="tools/call",
             )
-            with pytest.raises(server.ProjectBindingError):
+            with pytest.raises(ToolError, match="bound to project"):
                 await middleware.on_call_tool(context, call_next)
 
     asyncio.run(exercise())
@@ -115,7 +118,9 @@ def test_project_binding_middleware_refuses_header_and_resource_before_dispatch(
     bound.mkdir()
     other.mkdir()
     middleware = memory_http.ProjectBindingMiddleware(bound)
-    monkeypatch.setattr(memory_http, "_request_project_header", lambda: str(other))
+    monkeypatch.setattr(
+        memory_http, "_request_project_headers", lambda: (str(other),)
+    )
     dispatched = []
 
     async def call_next(context):
@@ -131,13 +136,59 @@ def test_project_binding_middleware_refuses_header_and_resource_before_dispatch(
             message=mt.ReadResourceRequestParams(uri="magnolia://goal"),
             method="resources/read",
         )
-        with pytest.raises(server.ProjectBindingError):
+        with pytest.raises(ToolError, match="bound to project"):
             await middleware.on_request(request, call_next)
-        with pytest.raises(server.ProjectBindingError):
+        with pytest.raises(ToolError, match="bound to project"):
             await middleware.on_read_resource(resource, call_next)
 
     asyncio.run(exercise())
     assert dispatched == []
+
+
+def test_project_binding_middleware_validates_every_honoured_header(
+    tmp_path, monkeypatch
+):
+    bound = tmp_path / "bound"
+    other = tmp_path / "other"
+    bound.mkdir()
+    other.mkdir()
+    middleware = memory_http.ProjectBindingMiddleware(bound)
+    monkeypatch.setattr(
+        memory_http,
+        "_request_project_headers",
+        lambda: (str(bound), str(other)),
+    )
+    dispatched = []
+
+    async def call_next(context):
+        dispatched.append(context.method)
+
+    context = MiddlewareContext(
+        message=mt.ListToolsRequest(),
+        method="tools/list",
+    )
+    with pytest.raises(ToolError, match=str(bound.resolve())):
+        asyncio.run(middleware.on_request(context, call_next))
+    assert dispatched == []
+
+
+def test_strict_http_binding_ignores_active_project_marker(tmp_path, monkeypatch):
+    bound = tmp_path / "bound"
+    other = tmp_path / "other"
+    marker = bound / ".magnolia" / ".active-project"
+    marker.parent.mkdir(parents=True)
+    other.mkdir()
+    marker.write_text(str(other), encoding="utf-8")
+    monkeypatch.setattr(server.project_context, "_STARTUP_ENV", str(bound))
+    monkeypatch.setattr(server.project_context, "_request_hint", lambda: None)
+    monkeypatch.setattr(
+        server.project_context, "_active_project_hint", lambda startup: str(other)
+    )
+    monkeypatch.setattr(server.project_context, "_process_start_time", lambda: -1.0)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_DIR", str(bound))
+
+    assert server.project_context.effective_project_dir() == str(bound)
 
 
 def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
@@ -150,8 +201,10 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
         probe.close()
     home = tmp_path / "home"
     project = tmp_path / "project"
+    other = tmp_path / "other"
     home.mkdir()
     project.mkdir()
+    other.mkdir()
     monkeypatch.setenv("HOME", str(home))
     environment = dict(os.environ)
     environment["DEEPSEEK_API_KEY"] = "loopback-test-sentinel"
@@ -172,5 +225,28 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
             payload = json.loads(response.read().decode("utf-8"))
         assert payload["project_digest"] == handle.project_digest
         assert payload["service_identity"] == handle.service_identity
+
+        async def cross_project_call():
+            transport = StreamableHttpTransport(
+                handle.url,
+                headers={
+                    "Authorization": f"Bearer {token_for_handle(handle)}",
+                },
+            )
+            async with Client(transport) as client:
+                return await client.call_tool(
+                    "memory_get_goal",
+                    {"project_dir": str(other)},
+                    raise_on_error=False,
+                )
+
+        refused = asyncio.run(cross_project_call())
+        message = " ".join(
+            getattr(item, "text", "") for item in refused.content
+        )
+        assert refused.is_error is True
+        assert "bound to project" in message
+        assert str(project.resolve()) in message
+        assert str(other.resolve()) not in message
     finally:
         assert release_memory_service(handle) is True

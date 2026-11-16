@@ -381,6 +381,70 @@ def test_vibe_client_stripping_does_not_strip_shared_daemon_environment(tmp_path
     }
 
 
+def test_vibe_bearer_is_never_in_spawned_argv(tmp_path):
+    ws = make_workspace(tmp_path)
+    fake_src = (
+        ws
+        / "opencode_cc_mem"
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    harness = fake_src / "harness"
+    harness.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("")
+    (harness / "__init__.py").write_text("")
+    (harness / "__main__.py").write_text(
+        "import json, os, sys\n"
+        "(open(os.environ['SENTINEL_DIR'] + '/render-argv.json', 'w')"
+        ".write(json.dumps(sys.argv)))\n"
+        "sys.stdout.buffer.write("
+        "b'vibe\\0\\0MAGNOLIA_MEMORY_SERVICE_TOKEN=service-bearer\\0'"
+        "+ b'MAGNOLIA_MEMORY_SERVICE_HANDLE=fake-handle\\0')\n"
+    )
+    (harness / "memory_service.py").write_text(
+        "import json, os, sys\n"
+        "open(os.environ['SENTINEL_DIR'] + '/release-argv.json', 'w')"
+        ".write(json.dumps(sys.argv))\n"
+    )
+    vibe = tmp_path / "stubbin" / "vibe"
+    vibe.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "open(os.environ['SENTINEL_DIR'] + '/client-argv.json', 'w')"
+        ".write(json.dumps(sys.argv))\n"
+    )
+    vibe.chmod(0o755)
+    env_stub = tmp_path / "stubbin" / "env"
+    env_stub.write_text(
+        "#!/usr/bin/python3\n"
+        "import json, os, sys\n"
+        "path = os.path.join(os.environ['SENTINEL_DIR'], 'env-argv.jsonl')\n"
+        "with open(path, 'a') as stream:\n"
+        "    stream.write(json.dumps(sys.argv) + '\\n')\n"
+        "os.execv('/usr/bin/env', ['/usr/bin/env', *sys.argv[1:]])\n"
+    )
+    env_stub.chmod(0o755)
+
+    proc = run_raw(ws, ["--harness", "vibe", PROJECT], dry=False)
+
+    assert proc.returncode == 0, proc.stderr
+    argv_files = (
+        "render-argv.json",
+        "client-argv.json",
+        "release-argv.json",
+        "env-argv.jsonl",
+    )
+    for name in argv_files:
+        deadline = time.time() + 3
+        path = tmp_path / name
+        while time.time() < deadline and not path.exists():
+            time.sleep(0.05)
+        if path.exists():
+            assert "service-bearer" not in path.read_text(encoding="utf-8")
+
+
 def test_setup_set_json_keeps_other_keys(tmp_path):
     ws = make_workspace(tmp_path)
     path = write_setup(ws, {"main_model": "a/b", "models": {"codex": "gpt"}, "memory_enabled": True})
