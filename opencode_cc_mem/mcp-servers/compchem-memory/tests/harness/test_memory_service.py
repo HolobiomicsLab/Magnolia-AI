@@ -187,7 +187,7 @@ def test_service_and_governor_share_linux_process_identity_implementation(
     )
 
     child = subprocess.run(
-        [sys.executable, "-I", str(probe)],
+        [sys.executable, "-B", "-I", str(probe)],
         check=True,
         capture_output=True,
         text=True,

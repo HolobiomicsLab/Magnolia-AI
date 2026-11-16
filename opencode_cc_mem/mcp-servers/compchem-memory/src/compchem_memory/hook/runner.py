@@ -48,12 +48,17 @@ def _load_repository_package(source: str) -> None:
         raise
 
 
-def main() -> None:
-    """Pin imports and run one repository-owned hook process."""
-    source = _repository_source()
+def _apply_run_owned_pycache() -> None:
+    """Redirect bytecode before importing the repository package."""
     prefix = os.environ.get("PYTHONPYCACHEPREFIX")
     if prefix:
         sys.pycache_prefix = prefix
+
+
+def main() -> None:
+    """Pin imports and run one repository-owned hook process."""
+    _apply_run_owned_pycache()
+    source = _repository_source()
     repository = os.path.realpath(source)
     sys.path[:] = [path for path in sys.path if os.path.realpath(path) != repository]
     _load_repository_package(source)
@@ -90,6 +95,7 @@ def main() -> None:
 
 
 if __name__ == "__mp_main__":
+    _apply_run_owned_pycache()
     _load_repository_package(_repository_source())
 elif __name__ == "__main__":
     main()
