@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import inspect
 import json
 import os
 import subprocess
@@ -17,6 +18,12 @@ from compchem_memory.hook.adapters import claude, codex, vibe
 
 
 FIXTURES = Path(__file__).parents[4] / "tests" / "fixtures" / "executors"
+
+
+def test_main_does_not_recheck_policy_block_after_early_denial():
+    from compchem_memory.hook import __main__ as cli
+
+    assert inspect.getsource(cli.main).count("policy_response.block") == 1
 
 
 def _policy(path: Path, project: Path) -> Path:

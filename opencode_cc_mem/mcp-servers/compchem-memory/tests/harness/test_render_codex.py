@@ -225,6 +225,23 @@ def test_codex_reconciles_owned_server_transport_sets_and_is_idempotent(make_ren
     assert path.read_bytes() == before
 
 
+def test_codex_removes_stale_env_when_owned_stdio_server_env_becomes_empty(make_render):
+    neutral, context = make_render()
+    memory = next(server for server in neutral.servers if server.name == "compchem-memory")
+    memory.env = {}
+    folder = _dir(context)
+    folder.mkdir(parents=True)
+    path = folder / "config.toml"
+    path.write_text(
+        '[mcp_servers.compchem-memory]\ncommand = "old"\nenv = { OLD = "stale" }\n',
+        encoding="utf-8",
+    )
+
+    config = tomllib.loads(render(neutral, context).files[path].decode())
+
+    assert "env" not in config["mcp_servers"]["compchem-memory"]
+
+
 def test_codex_reports_conflicts_and_toml_comment_backup(make_render):
     neutral, context = make_render()
     folder = _dir(context)

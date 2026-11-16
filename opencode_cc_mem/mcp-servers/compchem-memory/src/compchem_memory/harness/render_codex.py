@@ -138,7 +138,9 @@ def _reconcile_transport_fields(current: dict, rendered: dict) -> dict:
         entry = servers.get(name)
         if not isinstance(entry, dict) or not owned("server", name, entry):
             continue
-        obsolete = _STDIO_FIELDS if "url" in replacement else _HTTP_FIELDS
+        obsolete = _STDIO_FIELDS if "url" in replacement else _HTTP_FIELDS | {
+            field for field in ("env", "env_vars") if field not in replacement
+        }
         servers[name] = {key: value for key, value in entry.items() if key not in obsolete}
     return {**current, "mcp_servers": servers}
 

@@ -34,7 +34,7 @@ def owned(kind: str, name: str | None, entry: dict) -> bool:
 
 
 def strip_owned_hooks(current: dict) -> dict:
-    """Remove Magnolia's inner hooks from matcher groups that also hold member hooks."""
+    """Remove Magnolia hooks, including groups under obsolete event keys."""
     hooks = current.get("hooks")
     if not isinstance(hooks, dict):
         return current
@@ -43,7 +43,13 @@ def strip_owned_hooks(current: dict) -> dict:
         if not isinstance(groups, list):
             cleaned[event] = groups
             continue
-        cleaned[event] = [_strip_group(group) for group in groups]
+        kept = [
+            _strip_group(group)
+            for group in groups
+            if not (isinstance(group, dict) and owned("hook", None, group))
+        ]
+        if kept:
+            cleaned[event] = kept
     return {**current, "hooks": cleaned}
 
 
