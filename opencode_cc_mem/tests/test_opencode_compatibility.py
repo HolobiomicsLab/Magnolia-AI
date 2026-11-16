@@ -526,8 +526,15 @@ def test_pre_exec_interruption_releases_reservation_without_receipt(
         ledger_path=ledger,
     )
 
+    launcher_started = False
+
     def stop_launcher(pid, _pgid):
+        nonlocal launcher_started
         os.kill(pid, signal.SIGSTOP)
+        launcher_started = True
+
+    def stop_after_launcher_started():
+        return stop_reason if launcher_started else None
 
     executor = OpenCodeExecutor(
         binary=str(binary),
@@ -548,11 +555,13 @@ def test_pre_exec_interruption_releases_reservation_without_receipt(
         tmp_path / "attempt",
         control=ProcessControl(
             on_start=stop_launcher,
-            should_stop=lambda: stop_reason,
+            should_stop=stop_after_launcher_started,
             poll_interval=0.01,
         ),
     )
 
+    assert launcher_started
+    assert result.attempts == 1
     assert result.outcome is not None
     assert result.outcome.kind == expected_kind
     assert result.timed_out is expected_timeout
@@ -630,5 +639,34 @@ def test_legacy_managed_service_without_caps_requests_idle_restart(
     with pytest.raises(
         ExecutorRefused,
         match="service started without recorded caps — restart it when idle",
+    ):
+        executor_for(route, "worker", context)
+
+
+def test_managed_service_with_excess_caps_requests_idle_restart(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "campaign_runner.executors.registry.read_service",
+        lambda project: {
+            "port": 4111,
+            "running": True,
+            "agent_steps": {"campaign-worker": 30},
+        },
+    )
+    route = _route("worker")
+    context = ExecContext(
+        route=route,
+        role="worker",
+        project_dir=tmp_path,
+        role_cap=30,
+        governor_cap=6,
+        opencode_server="http://127.0.0.1:4111",
+        agent="campaign-worker",
+    )
+
+    with pytest.raises(
+        ExecutorRefused,
+        match="managed OpenCode service caps exceed the governor cap — restart it when idle",
     ):
         executor_for(route, "worker", context)

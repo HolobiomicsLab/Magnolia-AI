@@ -88,6 +88,16 @@ def _service_cap_checker(
             supplied = context.setup.get("opencode_service_caps")
             caps = supplied if isinstance(supplied, Mapping) else None
         shown = caps.get(agent) if caps is not None else None
+        if (
+            managed is not None
+            and isinstance(shown, int)
+            and not isinstance(shown, bool)
+            and shown > required_cap
+        ):
+            raise ExecutorRefused(
+                "managed OpenCode service caps exceed the governor cap — "
+                "restart it when idle"
+            )
         if isinstance(shown, bool) or not isinstance(shown, int) or shown > required_cap:
             raise ExecutorRefused(
                 "externally supplied OpenCode service must prove a compatible "
