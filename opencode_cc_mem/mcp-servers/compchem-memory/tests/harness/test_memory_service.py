@@ -150,6 +150,102 @@ def test_preexisting_magnolia_directory_mode_is_unchanged(tmp_path):
     assert state.stat().st_mode & 0o777 == 0o700
 
 
+@pytest.mark.parametrize("home_kind", ["explicit_symlink", "macos_tmp_alias"])
+def test_symlinked_home_acquire_reuse_release_uses_canonical_state(
+    tmp_path, monkeypatch, home_kind
+):
+    real_home = tmp_path / f"real-home-{home_kind}"
+    real_home.mkdir()
+    if home_kind == "explicit_symlink":
+        home = tmp_path / "linked-home"
+        home.symlink_to(real_home, target_is_directory=True)
+    else:
+        private_tmp = Path("/private/tmp")
+        tmp_alias = Path("/tmp")
+        try:
+            relative = real_home.relative_to(private_tmp)
+        except ValueError:
+            pytest.skip("pytest temp directory is not under /private/tmp")
+        if tmp_alias.resolve() != private_tmp:
+            pytest.skip("/tmp is not the macOS /private/tmp alias on this platform")
+        home = tmp_alias / relative
+    monkeypatch.setenv("HOME", str(home))
+    project = tmp_path / f"project-{home_kind}"
+    project.mkdir()
+    started, stopped = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+
+    first = memory_service.ensure_memory_service(_context(project))
+    second = memory_service.ensure_memory_service(_context(project))
+
+    expected_state = (
+        real_home
+        / ".magnolia"
+        / "services"
+        / memory_service.project_digest(project)
+    ).resolve()
+    state_flag = started[0][0].index("--state-dir")
+    assert Path(started[0][0][state_flag + 1]) == expected_state
+    record = json.loads((expected_state / "service.json").read_text())
+    assert Path(record["state_dir"]) == expected_state
+    assert Path(record["token_file"]).parent == expected_state
+    assert memory_service.release_memory_service(first) is False
+    assert memory_service.release_memory_service(second) is True
+    assert stopped == [(4101, "ps:4101:start")]
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr", "expected"),
+    [
+        (1, "", "", False),
+        (-9, "", "", None),
+        (1, "", "ps: sysctl: Cannot allocate memory\n", None),
+        (2, "", "ps: internal error\n", None),
+    ],
+)
+def test_process_exists_treats_only_clear_ps_not_found_as_dead(
+    monkeypatch, returncode, stdout, stderr, expected
+):
+    monkeypatch.setattr(memory_service.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        memory_service.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], returncode, stdout, stderr
+        ),
+    )
+
+    assert memory_service._process_exists(987654) is expected
+
+
+def test_process_exists_uses_process_lookup_error_as_linux_not_found(monkeypatch):
+    monkeypatch.setattr(memory_service.sys, "platform", "linux")
+
+    def missing(_pid, _signal):
+        raise ProcessLookupError
+
+    monkeypatch.setattr(memory_service.os, "kill", missing)
+
+    assert memory_service._process_exists(os.getpid()) is False
+
+
+def test_write_record_removes_temporary_file_after_failure(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    memory_service._ensure_private_state_dir(state)
+    monkeypatch.setattr(
+        memory_service.os,
+        "fsync",
+        lambda _descriptor: (_ for _ in ()).throw(OSError(28, "disk full")),
+    )
+
+    with pytest.raises(OSError, match="disk full"):
+        memory_service._write_record(state, {"pid": 1})
+
+    assert list(state.glob(".service.json.*.tmp")) == []
+
+
 def test_harness_launch_cli_requires_holder_pid():
     with pytest.raises(ValueError, match="holder-pid"):
         harness_main._parse(
@@ -1317,6 +1413,59 @@ def test_real_service_reexec_and_spaced_project_release_without_duplicates(tmp_p
             if process.poll() is None:
                 process.kill()
             process.wait(timeout=5)
+
+
+def test_real_service_symlinked_home_acquire_reuse_release(tmp_path, monkeypatch):
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", 0))
+        except OSError as exc:
+            pytest.skip(f"loopback bind unavailable: {exc}")
+    if not memory_service._process_identity(os.getpid()):
+        pytest.skip("OS process start identity is unavailable")
+    real_home = tmp_path / "real-home"
+    linked_home = tmp_path / "linked-home"
+    real_home.mkdir()
+    linked_home.symlink_to(real_home, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(linked_home))
+    project = tmp_path / "symlinked home project"
+    project.mkdir()
+    context = _context(project, key="loopback-sentinel")
+    context.python = sys.executable
+    context.setup["memory_service_timeout"] = 15
+    context.environment.update(
+        {
+            "HOME": str(linked_home),
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "OPENAI_BASE_URL": "http://127.0.0.1:9",
+            "HTTP_PROXY": "http://127.0.0.1:9",
+            "HTTPS_PROXY": "http://127.0.0.1:9",
+            "NO_PROXY": "127.0.0.1",
+        }
+    )
+    expected_state = (
+        real_home
+        / ".magnolia"
+        / "services"
+        / memory_service.project_digest(project)
+    ).resolve()
+    first = memory_service.ensure_memory_service(context)
+    try:
+        second = memory_service.ensure_memory_service(context)
+        record = json.loads((expected_state / "service.json").read_text())
+        assert Path(record["state_dir"]) == expected_state
+        assert Path(record["token_file"]).parent == expected_state
+        assert memory_service.release_memory_service(first) is False
+        assert memory_service.release_memory_service(second) is True
+    finally:
+        record_path = expected_state / "service.json"
+        if record_path.exists():
+            record = json.loads(record_path.read_text())
+            try:
+                os.kill(int(record["pid"]), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.parametrize("raw_ps", [False, True])

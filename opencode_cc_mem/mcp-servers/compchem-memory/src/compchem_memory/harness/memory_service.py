@@ -210,7 +210,7 @@ def project_digest(project_dir: Path) -> str:
 def private_state_dir(project_dir: Path) -> Path:
     """Return the non-work-tree state directory for this project's service."""
     digest = project_digest(project_dir)
-    return Path.home() / ".magnolia" / "services" / digest
+    return (Path.home() / ".magnolia" / "services" / digest).resolve()
 
 
 def ensure_memory_service(context: Any) -> ServiceHandle:
@@ -377,17 +377,24 @@ def _read_record(state: Path) -> dict[str, Any] | None:
 def _write_record(state: Path, record: Mapping[str, Any]) -> None:
     path = state / "service.json"
     temporary = state / f".{path.name}.{os.getpid()}.tmp"
-    with temporary.open("w", encoding="utf-8") as stream:
-        os.fchmod(stream.fileno(), 0o600)
-        stream.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
-    descriptor = os.open(state, os.O_RDONLY)
     try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+        with temporary.open("w", encoding="utf-8") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        descriptor = os.open(state, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _reuse(
@@ -477,6 +484,7 @@ def _start_service(
     child_environment = dict(environment)
     child_environment.update(
         {
+            "HOME": str(Path.home()),
             "MAGNOLIA_PROJECT_DIR": str(project),
             "MAGNOLIA_PROJECT_BOUND": "1",
             "MAGNOLIA_MEMORY_SERVICE_PORT": str(port),
@@ -654,9 +662,11 @@ def _process_exists(pid: int) -> bool | None:
     """Return process existence, or ``None`` when the OS probe itself failed."""
     if sys.platform == "linux":
         try:
-            Path(f"/proc/{pid}").stat()
-        except FileNotFoundError:
+            os.kill(pid, 0)
+        except ProcessLookupError:
             return False
+        except PermissionError:
+            return True
         except OSError:
             return None
         return True
@@ -671,9 +681,15 @@ def _process_exists(pid: int) -> bool | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if result.returncode != 0 or not result.stdout.strip():
+    if (
+        result.returncode == 1
+        and not result.stdout.strip()
+        and not result.stderr.strip()
+    ):
         return False
-    return True
+    if result.returncode == 0 and result.stdout.strip():
+        return True
+    return None
 
 
 def _holder_liveness(
