@@ -52,3 +52,25 @@ def test_default_claude_capability_projection_refuses_every_role(role):
 
     with pytest.raises(ExecutorRefused, match="lacks accepted"):
         executor_for(route, role, context)
+
+
+@pytest.mark.parametrize("client", ("codex", "vibe"))
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_default_codex_and_vibe_projection_refuses_every_role(client, role):
+    route = resolve_route(
+        role,
+        {
+            "harness": client,
+            "models": {client: f"{client}/fixture-model"},
+            "routes": {role: f"{client}/fixture-model"},
+            "model": f"{client}/fixture-model",
+        },
+    )
+    context = ExecContext(
+        route=route,
+        role=role,
+        role_capabilities=load_role_capabilities(),
+    )
+
+    with pytest.raises(ExecutorRefused, match="lacks accepted"):
+        executor_for(route, role, context)

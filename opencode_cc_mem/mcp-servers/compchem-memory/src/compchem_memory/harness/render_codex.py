@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+from collections.abc import Mapping
+from typing import Any
 
 from compchem_memory.harness.files import (
     merged_json,
     merged_toml,
+    toml_bytes,
     validate_project_paths,
 )
 from compchem_memory.harness.neutral import NeutralConfig
@@ -95,6 +99,28 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
 
 
 render.binary = "codex"
+
+
+def native_artifacts(
+    context: LaunchContext,
+    mcp_servers: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, bytes]:
+    """Render an immutable, client-native Codex project configuration.
+
+    Governed Codex helper/evaluator runs deliberately receive no MCP servers;
+    the optional argument exists so callers cannot accidentally confuse the
+    native shape with Magnolia's neutral launch payload.
+    """
+    config: dict[str, Any] = {"mcp_servers": dict(mcp_servers or {})}
+    if context.model:
+        config["model"] = context.model
+    return {
+        ".codex/config.toml": toml_bytes(config),
+        ".codex/hooks.json": (
+            json.dumps({"hooks": _hooks(context)}, indent=2, ensure_ascii=False)
+            + "\n"
+        ).encode("utf-8"),
+    }
 
 
 def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -> None:

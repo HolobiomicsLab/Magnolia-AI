@@ -33,14 +33,31 @@ class RunOutcome:
     limit: LimitInfo | None = None
 
     def __post_init__(self) -> None:
-        if self.kind not in {"success", "failure", "timeout", "cancelled", "quota", "refused"}:
+        if self.kind not in {
+            "success",
+            "failure",
+            "timeout",
+            "cancelled",
+            "quota",
+            "refused",
+            "cap_reached",
+            "turn_limit",
+            "price_limit",
+            "model_mismatch",
+        }:
             raise ValueError(f"unknown run outcome: {self.kind}")
         if self.kind == "quota" and self.limit is None:
             self.limit = LimitInfo("quota or rate limit", None, "unspecified")
 
     @property
     def overrides_repair(self) -> bool:
-        return self.kind == "quota"
+        return self.kind in {
+            "quota",
+            "cap_reached",
+            "turn_limit",
+            "price_limit",
+            "model_mismatch",
+        }
 
 
 @dataclass(frozen=True)

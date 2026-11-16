@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from collections.abc import Mapping
+from typing import Any
 
-from compchem_memory.harness.files import merged_toml, validate_project_paths
+from compchem_memory.harness.files import merged_toml, toml_bytes, validate_project_paths
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.ownership import owned
 from compchem_memory.harness.protocol import Launch, LaunchContext
@@ -66,6 +68,22 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
 
 
 render.binary = "vibe"
+
+
+def native_artifacts(
+    context: LaunchContext,
+    mcp_servers: list[Mapping[str, Any]],
+) -> dict[str, bytes]:
+    """Render immutable Vibe project files for one governed invocation."""
+    config: dict[str, Any] = {
+        "active_model": context.model or "",
+        "disabled_tools": ["file_system.bash"],
+        "mcp_servers": [dict(server) for server in mcp_servers],
+    }
+    return {
+        ".vibe/config.toml": toml_bytes(config),
+        ".vibe/hooks.toml": toml_bytes({"hooks": _hooks(context)}),
+    }
 
 
 def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -> None:

@@ -18,6 +18,12 @@ from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_claude import (
     native_artifacts as render_claude_native_artifacts,
 )
+from compchem_memory.harness.render_codex import (
+    native_artifacts as render_codex_native_artifacts,
+)
+from compchem_memory.harness.render_vibe import (
+    native_artifacts as render_vibe_native_artifacts,
+)
 from compchem_memory.harness.render_common import policy_files
 
 from .executors.contracts import ExecContext
@@ -446,8 +452,6 @@ def _client_native_artifacts(
 ) -> dict[str, bytes]:
     """Render client syntax while retaining neutral identity payloads."""
     assert context.route is not None
-    if context.route.client != "claude-code":
-        return {}
     assert context.installation_root is not None
     assert context.project_dir is not None
     assert context.control_dir is not None
@@ -466,9 +470,42 @@ def _client_native_artifacts(
         invocation_id=invocation_dir.name,
         noninteractive=True,
     )
-    return render_claude_native_artifacts(
-        launch_context, _claude_mcp_servers(mcp_payload)
-    )
+    if context.route.client == "claude-code":
+        return render_claude_native_artifacts(
+            launch_context, _claude_mcp_servers(mcp_payload)
+        )
+    if context.route.client == "codex":
+        # The accepted Codex helper/evaluator contract is intentionally no-tools.
+        return render_codex_native_artifacts(launch_context, {})
+    if context.route.client == "vibe":
+        return render_vibe_native_artifacts(
+            launch_context, _vibe_mcp_servers(mcp_payload)
+        )
+    return {}
+
+
+def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    service = mcp_payload.get("memory_service")
+    if not isinstance(service, Mapping):
+        return []
+    if service.get("transport") == "http":
+        entry: dict[str, Any] = {
+            "name": "compchem-memory",
+            "transport": "http",
+            "url": service["url"],
+        }
+    else:
+        args = service.get("args", ())
+        if not isinstance(args, (list, tuple)):
+            raise ExecutorRefused("memory stdio route args must be a list")
+        entry = {
+            "name": "compchem-memory",
+            "transport": "stdio",
+            "command": service["command"],
+        }
+        if args:
+            entry["args"] = [str(arg) for arg in args]
+    return [entry]
 
 
 def _claude_mcp_servers(
@@ -586,6 +623,9 @@ def _effective_environment(context: ExecContext, policy_path: Path) -> dict[str,
     }
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
+    if context.route.client == "vibe":
+        # VIBE_DISABLE_TELEMETRY is ignored by Vibe 3.1.2.
+        explicit["VIBE_ENABLE_TELEMETRY"] = "false"
     env.update({key: str(value) for key, value in explicit.items()})
     return env
 
@@ -598,29 +638,25 @@ def _configuration_identity(
 ) -> str:
     assert context.route is not None
     assert context.project_dir is not None
-    if context.route.client == "claude-code":
-        return _digest_named_bodies(
-            (
-                ("settings.json", settings_body),
-                ("mcp.json", mcp_body),
-                *sorted(native_bodies.items()),
-            )
-        )
-    relative_paths = CLIENT_CONFIG_FILES.get(context.route.client)
-    if relative_paths is None:
-        raise ExecutorRefused(
-            f"no discovered configuration identity for {context.route.client}"
-        )
-    bodies = []
-    for relative in relative_paths:
-        path = context.project_dir / relative
-        try:
-            bodies.append((relative, path.read_bytes()))
-        except OSError as exc:
-            raise ExecutorRefused(
-                f"missing discovered client configuration: {relative}"
-            ) from exc
-    return _digest_named_bodies(bodies)
+    if context.route.client in {"claude-code", "codex", "vibe"}:
+        bodies = [
+            ("settings.json", settings_body),
+            ("mcp.json", mcp_body),
+            *sorted(native_bodies.items()),
+        ]
+        if context.route.client in CLIENT_CONFIG_FILES:
+            for relative in CLIENT_CONFIG_FILES[context.route.client]:
+                path = context.project_dir / relative
+                try:
+                    bodies.append((f"discovered:{relative}", path.read_bytes()))
+                except OSError as exc:
+                    raise ExecutorRefused(
+                        f"missing discovered client configuration: {relative}"
+                    ) from exc
+        return _digest_named_bodies(bodies)
+    raise ExecutorRefused(
+        f"no discovered configuration identity for {context.route.client}"
+    )
 
 
 def _digest_named_bodies(bodies: Any) -> str:
@@ -657,7 +693,8 @@ def _launch_metadata(
         "config_digest": config_digest,
         "required_capability_identity": capability_identity,
         "artifacts": {
-            path.name: _digest(body) for path, body in sorted(artifacts.items())
+            path.relative_to(invocation_dir).as_posix(): _digest(body)
+            for path, body in sorted(artifacts.items())
         },
     }
 
@@ -739,6 +776,7 @@ def _materialize(invocation_dir: Path, artifacts: Mapping[Path, bytes]) -> None:
             f"launch invocation already exists: {invocation_dir}"
         ) from exc
     for path, body in artifacts.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(body)
         path.chmod(0o444)
 
