@@ -430,7 +430,8 @@ class CodexExecutor:
                 if not isinstance(entries, Mapping):
                     continue
                 for name in sorted(str(value) for value in entries):
-                    if section == "mcp_servers" and name in governed:
+                    governed_name = name.casefold().replace("_", "-")
+                    if section == "mcp_servers" and governed_name in governed:
                         if project_config:
                             continue
                         raise ExecutorRefused(
@@ -478,8 +479,9 @@ class CodexExecutor:
                     or read_server.get("command") != self.prepared.env.get("MAGNOLIA_PYTHON")
                     or read_server.get("args")
                     != ["-m", "compchem_memory.harness.read_server"]
-                    or read_server.get("env", {}).get("MAGNOLIA_HOOK_POLICY")
-                    != self.prepared.env.get("MAGNOLIA_HOOK_POLICY")
+                    or read_server.get("cwd") != str(self.prepared.discovery_dir)
+                    or read_server.get("env_vars")
+                    != ["MAGNOLIA_HOOK_POLICY", "MAGNOLIA_HOOK_POLICY_REQUIRED"]
                 ):
                     raise ExecutorRefused("Codex magnolia-read server is not run-owned")
         else:

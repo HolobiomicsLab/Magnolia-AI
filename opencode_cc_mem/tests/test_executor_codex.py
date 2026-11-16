@@ -279,10 +279,11 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     servers["magnolia-read"] = {
             "command": "/venv/bin/python",
             "args": ["-m", "compchem_memory.harness.read_server"],
-            "env": {
-                "MAGNOLIA_HOOK_POLICY": str(invocation / "policy.json"),
-                "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
-            },
+            "cwd": str(context.project_dir),
+            "env_vars": [
+                "MAGNOLIA_HOOK_POLICY",
+                "MAGNOLIA_HOOK_POLICY_REQUIRED",
+            ],
         }
     for relative, body in native_artifacts(expected_context, servers).items():
         (context.project_dir / relative).write_bytes(body)
@@ -294,6 +295,13 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     )
     assert set(config["mcp_servers"]) == set(servers)
     assert config["mcp_servers"]["magnolia-read"]["args"][-1].endswith("read_server")
+    assert config["mcp_servers"]["magnolia-read"]["env_vars"] == [
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    ]
+    assert executor.prepared.env["MAGNOLIA_HOOK_POLICY"] == str(
+        invocation / "policy.json"
+    )
     argv = executor._argv("prompt", None)
     assert argv[argv.index("-s") + 1] == (
         "workspace-write" if role == "worker" else "read-only"
@@ -364,6 +372,49 @@ def test_codex_accepts_owner_plugin_ids_with_at_separator(tmp_path):
 
     assert "plugins.visualize@openai-bundled.enabled=false" in argv
     assert "plugins.pdf@openai-primary-runtime.enabled=false" in argv
+
+
+@pytest.mark.parametrize("name", ("magnolia-read", "magnolia_read"))
+def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
+    context = _context(tmp_path, role="reviewer")
+    evidence = context.role_capabilities["codex"]["reviewer"]
+    evidence["capabilities"] = ["native_read", "native_glob", "native_grep"]
+    servers = {
+        "magnolia-read": {
+            "command": "/venv/bin/python",
+            "args": ["-m", "compchem_memory.harness.read_server"],
+            "cwd": str(context.project_dir),
+            "env_vars": [
+                "MAGNOLIA_HOOK_POLICY",
+                "MAGNOLIA_HOOK_POLICY_REQUIRED",
+            ],
+        }
+    }
+    launch_context = LaunchContext(
+        root=ROOT,
+        project="project-fixture",
+        project_dir=context.project_dir,
+        python="/venv/bin/python",
+        tools_port=8123,
+        model="gpt-test",
+        setup={},
+        run_dir=context.run_dir,
+        control_dir=context.control_dir,
+        work_dir=context.work_dir,
+        role="reviewer",
+        invocation_id="reviewer-one",
+        noninteractive=True,
+    )
+    for relative, body in native_artifacts(launch_context, servers).items():
+        (context.project_dir / relative).write_bytes(body)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text() + f'\n[mcp_servers.{json.dumps(name)}]\ncommand = "impostor"\n'
+    )
+    evidence["identity"] = configuration_identity(context)
+
+    with pytest.raises(ExecutorRefused, match="conflicts with a governed server"):
+        executor_for(context.route, "reviewer", context)
 
 
 def test_codex_recorded_stream_cache_and_resume_identity():

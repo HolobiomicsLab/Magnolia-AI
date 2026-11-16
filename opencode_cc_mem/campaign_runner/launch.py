@@ -511,6 +511,7 @@ def _codex_mcp_servers(
     if context.role not in {"worker", "reviewer"}:
         return {}
     assert context.python_executable is not None
+    assert context.project_dir is not None
     servers: dict[str, dict[str, Any]] = {}
     service = mcp_payload.get("memory_service")
     if isinstance(service, Mapping):
@@ -533,12 +534,11 @@ def _codex_mcp_servers(
     servers["magnolia-read"] = {
         "command": context.python_executable,
         "args": ["-m", "compchem_memory.harness.read_server"],
-        "env": {
-            "MAGNOLIA_HOOK_POLICY": str(
-                (_invocation_dir(context) / "policy.json").resolve()
-            ),
-            "MAGNOLIA_HOOK_POLICY_REQUIRED": "1",
-        },
+        "cwd": str(context.project_dir.resolve()),
+        "env_vars": [
+            "MAGNOLIA_HOOK_POLICY",
+            "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        ],
     }
     return servers
 

@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -173,6 +174,20 @@ def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
 
     assert "OPENROUTER_API_KEY" in _artifact_text(launch)
     assert launch.env["OPENROUTER_API_KEY"] == "OPENROUTER-KEY-SENTINEL"
+
+
+def test_codex_read_server_identity_is_stable_across_invocations(tmp_path):
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        invocation="inv-a",
+    )
+    first = configuration_identity(context)
+    second = configuration_identity(replace(context, invocation_id="inv-b"))
+
+    assert first == second
 
 
 def test_claude_vibe_opencode_launch_unchanged(tmp_path):

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import fcntl
+import multiprocessing
 import os
 import re
-from collections.abc import Callable
+import stat
+import sys
+import time
 from pathlib import Path
 from typing import BinaryIO, Mapping
 
@@ -32,6 +37,8 @@ class ReadServer:
     MAX_SEARCH_RESULTS = 200
     MAX_SEARCH_FILES = 10_000
     MAX_SEARCH_LINE_BYTES = 8 * 1024
+    MAX_SEARCH_TOTAL_BYTES = 4 * 1024 * 1024
+    MAX_SEARCH_SECONDS = 2.0
     MAX_PATTERN_LENGTH = 256
 
     def __init__(self, policy: RequiredPolicy, *, cwd: Path) -> None:
@@ -77,10 +84,8 @@ class ReadServer:
         _bounded_int("offset", offset, minimum=0, maximum=self.MAX_READ_OFFSET)
         _bounded_int("limit", limit, minimum=1, maximum=self.MAX_READ_LINES)
         target = self._path(path)
-        if not target.is_file():
-            raise ReadRefused(f"read target is not a regular file: {path!r}")
         try:
-            with target.open("rb") as handle:
+            with self._open_regular(target, path) as handle:
                 body, truncated = _read_lines(
                     handle, offset, limit, self.MAX_READ_BYTES
                 )
@@ -97,94 +102,269 @@ class ReadServer:
     def list_dir(self, path: str) -> dict[str, object]:
         """List allowed direct children without exposing denied entries."""
         target = self._path(path)
-        if not target.is_dir():
-            raise ReadRefused(f"list target is not a directory: {path!r}")
         entries: list[str] = []
+        descriptor = self._open_directory(target, path)
         try:
-            children = sorted(target.iterdir(), key=lambda item: item.name.casefold())
-            if len(children) > self.MAX_LIST_ENTRIES:
+            names = sorted(os.listdir(descriptor), key=str.casefold)
+            if len(names) > self.MAX_LIST_ENTRIES:
                 raise ReadRefused("directory exceeds the bounded listing limit")
-            for child in children:
+            for name in names:
+                child = target / name
                 if read_target_allowed(str(child), self.cwd, self.policy):
-                    entries.append(child.name + ("/" if child.is_dir() else ""))
+                    mode = os.stat(
+                        name,
+                        dir_fd=descriptor,
+                        follow_symlinks=False,
+                    ).st_mode
+                    entries.append(name + ("/" if stat.S_ISDIR(mode) else ""))
         except ReadRefused:
             raise
         except OSError as exc:
             raise ReadRefused(f"cannot list {path!r}: {exc}") from exc
+        finally:
+            os.close(descriptor)
         return {"path": path, "entries": entries, "truncated": False}
 
     def search(self, pattern: str, path: str) -> dict[str, object]:
-        """Return bounded literal or conservative-regex matches under a root."""
-        matcher, regex = self._matcher(pattern)
+        """Return time- and size-bounded literal or isolated-regex matches."""
+        expression, regex = self._expression(pattern)
+        deadline = time.monotonic() + self.MAX_SEARCH_SECONDS
         target = self._path(path, broad=True)
         if not target.exists():
             raise ReadRefused(f"search target does not exist: {path!r}")
-        files = [target] if target.is_file() else sorted(target.rglob("*"))
-        if len(files) > self.MAX_SEARCH_FILES:
-            raise ReadRefused("search exceeds the bounded file limit")
         try:
-            matches, truncated = self._search_files(files, matcher)
+            records, reasons = self._search_files(target, deadline)
         except ReadRefused:
             raise
         except (OSError, RuntimeError) as exc:
             raise ReadRefused(f"cannot search {path!r}: {exc}") from exc
+        matches, match_reason = self._match_records(
+            records, expression, regex, deadline
+        )
+        if match_reason:
+            reasons.append(match_reason)
+        if len(matches) > self.MAX_SEARCH_RESULTS:
+            matches = matches[: self.MAX_SEARCH_RESULTS]
+            reasons.append("result limit exceeded")
         return {
             "pattern": pattern,
             "regex": regex,
             "matches": matches,
-            "truncated": truncated,
+            "truncated": bool(reasons),
+            "reason": "; ".join(dict.fromkeys(reasons)) or None,
         }
 
     def _search_files(
-        self, files: list[Path], matcher: Callable[[str], object]
-    ) -> tuple[list[dict[str, object]], bool]:
-        matches: list[dict[str, object]] = []
-        for candidate in files:
-            if not candidate.is_file() or candidate.is_symlink():
+        self, target: Path, deadline: float
+    ) -> tuple[list[dict[str, object]], list[str]]:
+        records: list[dict[str, object]] = []
+        reasons: list[str] = []
+        scanned_bytes = 0
+        files = target.rglob("*") if target.is_dir() else (target,)
+        for file_number, candidate in enumerate(files, start=1):
+            if file_number > self.MAX_SEARCH_FILES:
+                reasons.append("file limit exceeded")
+                break
+            if time.monotonic() >= deadline:
+                reasons.append("time limit exceeded")
+                break
+            if candidate.is_dir():
                 continue
             if not read_target_allowed(str(candidate), self.cwd, self.policy):
                 raise ReadRefused(f"policy denied search descendant: {candidate}")
-            matches.extend(self._search_file(candidate, matcher))
-            if len(matches) >= self.MAX_SEARCH_RESULTS:
-                return matches[: self.MAX_SEARCH_RESULTS], True
-        return matches, False
+            with self._open_regular(candidate, str(candidate)) as handle:
+                found, consumed, file_reasons = self._scan_file(
+                    candidate,
+                    handle,
+                    self.MAX_SEARCH_TOTAL_BYTES - scanned_bytes,
+                    deadline,
+                )
+            records.extend(found)
+            scanned_bytes += consumed
+            reasons.extend(file_reasons)
+            if scanned_bytes >= self.MAX_SEARCH_TOTAL_BYTES:
+                reasons.append("total byte limit exceeded")
+                break
+        return records, reasons
 
-    def _search_file(
-        self, path: Path, matcher: Callable[[str], object]
-    ) -> list[dict[str, object]]:
-        matches: list[dict[str, object]] = []
-        with path.open("rb") as handle:
-            for line_number, raw in enumerate(handle, start=1):
-                if b"\x00" in raw:
+    def _scan_file(
+        self,
+        path: Path,
+        handle: BinaryIO,
+        byte_budget: int,
+        deadline: float,
+    ) -> tuple[list[dict[str, object]], int, list[str]]:
+        records: list[dict[str, object]] = []
+        reasons: list[str] = []
+        consumed = 0
+        line_number = 0
+        while consumed < byte_budget and time.monotonic() < deadline:
+            line_number += 1
+            raw = handle.readline(min(self.MAX_SEARCH_LINE_BYTES + 1, byte_budget - consumed))
+            if not raw:
+                break
+            consumed += len(raw)
+            is_long = len(raw) > self.MAX_SEARCH_LINE_BYTES and not raw.endswith(b"\n")
+            prefix = raw[: self.MAX_SEARCH_LINE_BYTES]
+            has_nul = b"\x00" in raw
+            while is_long and consumed < byte_budget:
+                chunk = handle.readline(min(self.MAX_SEARCH_LINE_BYTES + 1, byte_budget - consumed))
+                if not chunk:
                     break
-                text = raw[: self.MAX_SEARCH_LINE_BYTES].decode(
-                    "utf-8", errors="replace"
-                ).rstrip("\r\n")
-                if matcher(text):
-                    matches.append({
-                        "path": _shown_path(path, self.cwd),
-                        "line": line_number,
-                        "text": text,
-                    })
-                if len(matches) >= self.MAX_SEARCH_RESULTS:
+                consumed += len(chunk)
+                has_nul = has_nul or b"\x00" in chunk
+                if chunk.endswith(b"\n"):
                     break
-        return matches
+            if is_long:
+                reasons.append("line length limit exceeded")
+            if has_nul:
+                break
+            records.append({
+                "path": _shown_path(path, self.cwd),
+                "line": line_number,
+                "text": prefix.decode("utf-8", errors="replace").rstrip("\r\n"),
+            })
+        if time.monotonic() >= deadline:
+            reasons.append("time limit exceeded")
+        return records, consumed, reasons
 
-    def _matcher(self, pattern: str) -> tuple[Callable[[str], object], bool]:
+    def _expression(self, pattern: str) -> tuple[str, bool]:
         if not isinstance(pattern, str) or not pattern or len(pattern) > self.MAX_PATTERN_LENGTH:
             raise ReadRefused("search pattern must be non-empty and bounded")
         regex = pattern.startswith("re:")
-        expression = pattern[3:] if regex else re.escape(pattern)
+        expression = pattern[3:] if regex else pattern
         if regex and (
             any(marker in expression for marker in ("(", ")", "{", "}"))
             or re.search(r"\\[1-9]", expression)
         ):
             raise ReadRefused("search regex uses unsupported complex constructs")
         try:
-            compiled = re.compile(expression)
+            re.compile(expression)
         except re.error as exc:
             raise ReadRefused(f"invalid search regex: {exc}") from exc
-        return compiled.search, regex
+        return expression, regex
+
+    def _match_records(
+        self,
+        records: list[dict[str, object]],
+        expression: str,
+        regex: bool,
+        deadline: float,
+    ) -> tuple[list[dict[str, object]], str | None]:
+        if not regex:
+            return [row for row in records if expression in str(row["text"])], None
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return [], "time limit exceeded"
+        indices, reason = _regex_indices(
+            expression,
+            [str(row["text"]) for row in records],
+            min(remaining, self.MAX_SEARCH_SECONDS),
+            self.MAX_SEARCH_RESULTS + 1,
+        )
+        return [records[index] for index in indices], reason
+
+    def _open_regular(self, path: Path, shown: str) -> BinaryIO:
+        flags = os.O_RDONLY | os.O_NONBLOCK
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            raise ReadRefused(f"cannot read {shown!r}: {exc}") from exc
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ReadRefused(f"read target is not a regular file: {shown!r}")
+            opened_path = _descriptor_path(descriptor)
+            if not read_target_allowed(opened_path, self.cwd, self.policy):
+                raise ReadRefused(f"policy denied opened file: {shown!r}")
+            return os.fdopen(descriptor, "rb", closefd=True)
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+    def _open_directory(self, path: Path, shown: str) -> int:
+        flags = os.O_RDONLY | os.O_NONBLOCK
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        flags |= getattr(os, "O_DIRECTORY", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            raise ReadRefused(f"cannot list {shown!r}: {exc}") from exc
+        try:
+            if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                raise ReadRefused(f"list target is not a directory: {shown!r}")
+            opened_path = _descriptor_path(descriptor)
+            if not read_target_allowed(opened_path, self.cwd, self.policy):
+                raise ReadRefused(f"policy denied opened directory: {shown!r}")
+            return descriptor
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+
+def _descriptor_path(descriptor: int) -> str:
+    """Return the path of the opened descriptor on macOS or Linux."""
+    if sys.platform == "darwin":
+        size = 1024
+        try:
+            value = fcntl.fcntl(descriptor, 50, b"\0" * size)
+        except (OSError, ValueError) as exc:
+            raise ReadRefused("cannot verify opened file path") from exc
+        path = value.split(b"\0", 1)[0].decode(errors="surrogateescape")
+    else:
+        try:
+            path = os.readlink(f"/proc/self/fd/{descriptor}")
+        except OSError as exc:
+            raise ReadRefused("cannot verify opened file path") from exc
+    if not path or path.endswith(" (deleted)"):
+        raise ReadRefused("cannot verify opened file path")
+    return str(Path(path).resolve(strict=True))
+
+
+def _regex_worker(connection, expression: str, lines: list[str], limit: int) -> None:
+    """Evaluate bounded regex input outside the stdio server process."""
+    try:
+        matcher = re.compile(expression).search
+        matches: list[int] = []
+        for index, line in enumerate(lines):
+            if matcher(line):
+                matches.append(index)
+                if len(matches) >= limit:
+                    break
+        connection.send(matches)
+    except BaseException as exc:
+        connection.send(exc)
+    finally:
+        connection.close()
+
+
+def _regex_indices(
+    expression: str, lines: list[str], timeout: float, limit: int
+) -> tuple[list[int], str | None]:
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_regex_worker,
+        args=(sender, expression, lines, limit),
+        daemon=True,
+    )
+    process.start()
+    sender.close()
+    try:
+        if not receiver.poll(timeout):
+            process.terminate()
+            process.join(timeout=1)
+            return [], "regex time limit exceeded"
+        result = receiver.recv()
+        process.join(timeout=1)
+    finally:
+        receiver.close()
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1)
+    if isinstance(result, BaseException):
+        raise ReadRefused(f"regex search failed: {result}")
+    return result, None
 
 
 def _read_lines(
@@ -244,21 +424,23 @@ def _active() -> ReadServer:
 
 
 @mcp.tool()
-def read_file(path: str, offset: int = 0, limit: int = ReadServer.DEFAULT_READ_LIMIT):
+async def read_file(
+    path: str, offset: int = 0, limit: int = ReadServer.DEFAULT_READ_LIMIT
+):
     """Read bounded lines from one policy-allowed file."""
-    return _active().read_file(path, offset, limit)
+    return await asyncio.to_thread(_active().read_file, path, offset, limit)
 
 
 @mcp.tool()
-def list_dir(path: str):
+async def list_dir(path: str):
     """List one policy-allowed directory with bounded output."""
-    return _active().list_dir(path)
+    return await asyncio.to_thread(_active().list_dir, path)
 
 
 @mcp.tool()
-def search(pattern: str, path: str):
+async def search(pattern: str, path: str):
     """Search literal text, or a conservative ``re:`` regex, under one root."""
-    return _active().search(pattern, path)
+    return await asyncio.to_thread(_active().search, pattern, path)
 
 
 def main() -> None:
