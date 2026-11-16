@@ -89,5 +89,7 @@ def main() -> None:
     hook_main()
 
 
-if __name__ == "__main__":
+if __name__ == "__mp_main__":
+    _load_repository_package(_repository_source())
+elif __name__ == "__main__":
     main()

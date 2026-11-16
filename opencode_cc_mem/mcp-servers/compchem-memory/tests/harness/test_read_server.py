@@ -8,7 +8,10 @@ import json
 import os
 from pathlib import Path
 import shutil
+import site
+import subprocess
 import time
+import venv
 
 import pytest
 from fastmcp import Client
@@ -256,6 +259,41 @@ async def test_pathological_search_does_not_block_parallel_stdio_read(tmp_path):
 
 @pytest.mark.asyncio
 async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
+    repository = tmp_path / "copied-repository" / "opencode_cc_mem"
+    source = repository / "mcp-servers" / "compchem-memory" / "src"
+    package_source = Path(__file__).parents[2] / "src" / "compchem_memory"
+    shutil.copytree(package_source, source / "compchem_memory")
+    foreign_source = tmp_path / "foreign-checkout" / "src"
+    shutil.copytree(package_source, foreign_source / "compchem_memory")
+    foreign_trap = tmp_path / "foreign-imported"
+    foreign_read_server = (
+        foreign_source / "compchem_memory" / "harness" / "read_server.py"
+    )
+    foreign_body = foreign_read_server.read_text(encoding="utf-8")
+    future = "from __future__ import annotations\n"
+    foreign_read_server.write_text(
+        foreign_body.replace(
+            future,
+            future
+            + "from pathlib import Path\n"
+            + f"Path({str(foreign_trap)!r}).write_text('foreign')\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    isolated_venv = tmp_path / "venv"
+    venv.EnvBuilder(with_pip=False).create(isolated_venv)
+    isolated_python = isolated_venv / "bin" / "python"
+    purelib = subprocess.run(
+        [str(isolated_python), "-I", "-c", "import site; print(site.getsitepackages()[0])"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    Path(purelib, "foreign-checkout.pth").write_text(
+        f"{foreign_source}\n{site.getsitepackages()[0]}\n",
+        encoding="utf-8",
+    )
     project = tmp_path / "project"
     project.mkdir()
     trap = tmp_path / "shadow-imported"
@@ -274,10 +312,11 @@ async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
         f"import pathlib; pathlib.Path({str(trap)!r}).write_text('pth')\n",
         encoding="utf-8",
     )
+    (project / "notes.txt").write_text("alpha\nneedle-123\nomega\n", encoding="utf-8")
     policy = _policy(tmp_path / "policy.json", project, role="reviewer")
-    runner = Path(__file__).resolve().parents[2] / "src/compchem_memory/hook/runner.py"
+    runner = source / "compchem_memory" / "hook" / "runner.py"
     transport = StdioTransport(
-        command=os.sys.executable,
+        command=str(isolated_python),
         args=["-I", str(runner), "--read-server"],
         env={
             "HOME": str(tmp_path),
@@ -291,9 +330,17 @@ async def test_isolated_read_server_ignores_project_shadow_modules(tmp_path):
 
     async with Client(transport) as client:
         tools = await client.list_tools()
+        result = await client.call_tool(
+            "search",
+            {"pattern": "re:needle-[0-9]+", "path": "notes.txt"},
+            raise_on_error=False,
+        )
 
     assert {tool.name for tool in tools} == {"read_file", "list_dir", "search"}
+    assert result.is_error is False
+    assert "needle-123" in result.content[0].text
     assert not trap.exists()
+    assert not foreign_trap.exists()
 
 
 @pytest.mark.asyncio

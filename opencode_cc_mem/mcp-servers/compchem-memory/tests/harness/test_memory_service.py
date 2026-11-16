@@ -7,6 +7,7 @@ import signal
 import socket
 import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from campaign_runner.executors.registry import ExecutorRefused
+from campaign_runner import governor as governor_module
 from compchem_memory.harness import memory_service
 from compchem_memory.harness import __main__ as harness_main
 
@@ -147,6 +149,54 @@ def test_service_environment_preserves_server_runtime_knobs_and_proxy_variants()
     assert environment["ALL_PROXY"] == "socks5://proxy.test"
     assert "MAGNOLIA_CRITIC_API_KEY" not in environment
     assert "DEEPSEEK_API_KEY" not in environment
+
+
+def test_service_and_governor_share_linux_process_identity_implementation(
+    tmp_path, monkeypatch
+):
+    pid = 4242
+    fields = [b"S", b"1", b"4242", *([b"1"] * 16), b"987654"]
+    proc_body = b"4242 (worker) " + b" ".join(fields) + b"\n"
+    parent_token = governor_module._verified_process_start_token
+    monkeypatch.setattr(
+        parent_token.__globals__["Path"], "read_bytes", lambda *_a, **_k: proc_body
+    )
+    parent_value = parent_token(pid)
+    runner = Path(memory_service.repository_runner_path())
+    probe = tmp_path / "identity_probe.py"
+    probe.write_text(
+        textwrap.dedent(
+            f"""
+            import importlib.util
+            import json
+
+            runner_path = {str(runner)!r}
+            spec = importlib.util.spec_from_file_location("magnolia_runner", runner_path)
+            runner = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(runner)
+            runner._load_repository_package(runner._repository_source())
+            from compchem_memory.harness import memory_service
+
+            token = memory_service._verified_process_start_token
+            proc_body = {proc_body!r}
+            token.__globals__["Path"].read_bytes = lambda *_a, **_k: proc_body
+            print(json.dumps({{"module": token.__module__, "value": token({pid})}}))
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    child = subprocess.run(
+        [sys.executable, "-I", str(probe)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    child_result = json.loads(child.stdout)
+
+    assert parent_token.__module__ == "compchem_memory.process_identity"
+    assert child_result["module"] == parent_token.__module__
+    assert child_result["value"] == parent_value == "proc:4242:987654"
 
 
 def test_preexisting_magnolia_directory_mode_is_unchanged(tmp_path):

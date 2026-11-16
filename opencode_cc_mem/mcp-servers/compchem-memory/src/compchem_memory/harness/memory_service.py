@@ -25,31 +25,15 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from compchem_memory.hook.runner import repository_runner_path
+from compchem_memory.process_identity import (
+    verified_process_start_token as _verified_process_start_token,
+)
 
 try:
     from campaign_runner.executors.registry import ExecutorRefused
 except ImportError:  # Standalone memory-server installation.
     class ExecutorRefused(RuntimeError):
         """Raised when a safe memory-service launch cannot be prepared."""
-
-try:
-    from campaign_runner.governor import _verified_process_start_token
-except ImportError:  # Standalone memory-server installation.
-    def _verified_process_start_token(pid: int) -> str | None:
-        try:
-            result = subprocess.run(
-                ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=1,
-                env={"LC_ALL": "C", "TZ": "UTC"},
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        started = " ".join(result.stdout.split())
-        return f"ps:{pid}:{started}" if result.returncode == 0 and started else None
-
 
 TOKEN_ENV = "MAGNOLIA_MEMORY_SERVICE_TOKEN"
 DEFAULT_READY_TIMEOUT_SECONDS = 10.0

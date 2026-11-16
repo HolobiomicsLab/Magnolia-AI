@@ -384,7 +384,7 @@ def _regex_worker(connection, expression: str, lines: list[str], limit: int) -> 
                 matches.append(index)
                 if len(matches) >= limit:
                     break
-        connection.send(matches)
+        connection.send((matches, os.path.realpath(__file__)))
     except BaseException as exc:
         connection.send(exc)
     finally:
@@ -417,7 +417,13 @@ def _regex_indices(
             process.join(timeout=1)
     if isinstance(result, BaseException):
         raise ReadRefused(f"regex search failed: {result}")
-    return result, None
+    if (
+        not isinstance(result, tuple)
+        or len(result) != 2
+        or result[1] != os.path.realpath(__file__)
+    ):
+        raise ReadRefused("regex worker did not load this repository source")
+    return result[0], None
 
 
 def _read_lines(
