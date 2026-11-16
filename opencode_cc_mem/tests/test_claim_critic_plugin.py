@@ -233,6 +233,9 @@ def test_turn_end_worker_environment_is_an_allowlist(tmp_path, monkeypatch):
     }
     for key in expected_network:
         monkeypatch.setenv(key, f"test-{key}")
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2", "1")
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2_BIN", "/test/opencode-v2")
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_BIN", "/test/opencode")
     result = _run_handoff(tmp_path, "v1")
 
     options = result["calls"][0]["options"]
@@ -242,6 +245,9 @@ def test_turn_end_worker_environment_is_an_allowlist(tmp_path, monkeypatch):
     assert "PYTHONPATH" not in options["envKeys"]
     assert "OPENCODE_SERVER_PASSWORD" not in options["envKeys"]
     assert expected_network <= set(options["envKeys"])
+    assert {
+        "MAGNOLIA_OPENCODE_V2", "MAGNOLIA_OPENCODE_V2_BIN", "MAGNOLIA_OPENCODE_BIN",
+    } <= set(options["envKeys"])
 
 
 def test_turn_end_isolated_worker_cannot_import_project_json(tmp_path):

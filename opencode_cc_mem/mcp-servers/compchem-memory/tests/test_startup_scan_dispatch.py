@@ -68,7 +68,7 @@ def test_falls_back_to_tool_events_when_no_llm(project_dir, monkeypatch):
     drained = []
     monkeypatch.setattr(
         "compchem_memory.hook.background.drain_opencode_payloads",
-        lambda store: drained.append(Path(store)),
+        lambda store, **kwargs: drained.append((Path(store), kwargs)),
     )
 
     result = startup_scan.scan_and_distill(str(project_dir))
@@ -76,7 +76,7 @@ def test_falls_back_to_tool_events_when_no_llm(project_dir, monkeypatch):
     assert called["ingest"] == 0
     assert called["commit"] == 1
     assert result["mode"] == "tool_event"
-    assert drained == [project_dir / ".magnolia"]
+    assert drained == [(project_dir / ".magnolia", {"critic_skip_reason": "no route"})]
 
 
 def test_falls_back_when_no_opencode_binary(project_dir, monkeypatch):

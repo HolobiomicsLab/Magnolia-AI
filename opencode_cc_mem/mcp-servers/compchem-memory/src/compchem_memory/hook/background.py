@@ -305,48 +305,43 @@ def _message_created(message: dict) -> float | None:
     return None
 
 
-def _payload_turn_id(payload: dict, exported: dict, messages: list[dict]) -> str | None:
-    """Resolve a real message id, sequence boundary, or v1 queue-time boundary."""
-    identity = payload.get("turn_id")
-    user_ids = {
-        _message_id(message, index) for index, message in enumerate(messages)
-        if _message_role(message) == "user"
-    }
-    if isinstance(identity, str) and identity in user_ids:
-        return identity
-    boundaries = exported.get("turn_boundaries")
-    if isinstance(identity, str) and isinstance(boundaries, dict) \
-            and boundaries.get(identity) in user_ids:
-        return str(boundaries[identity])
-    event_id = payload.get("event_id")
-    if isinstance(event_id, str) and isinstance(boundaries, dict) \
-            and boundaries.get(event_id) in user_ids:
-        return str(boundaries[event_id])
+def _sequence_turn_id(payload: dict, exported: dict, user_ids: set[str]) -> str | None:
+    """Resolve the v2 durable sequence boundary when its evidence is available."""
     durable_seq = payload.get("durable_seq")
-    if isinstance(durable_seq, (str, int, float)) and not isinstance(durable_seq, bool):
-        sequences = exported.get("turn_sequences")
-        if isinstance(sequences, dict) and sequences.get(str(durable_seq)) in user_ids:
-            return str(sequences[str(durable_seq)])
-        users = exported.get("user_sequences")
-        if isinstance(users, list):
-            try:
-                sequence_value = float(durable_seq)
-            except (TypeError, ValueError):
-                return None
-            eligible = [
-                row for row in users if isinstance(row, dict)
-                and isinstance(row.get("seq"), (int, float))
-                and float(row["seq"]) <= sequence_value
-                and row.get("turn_id") in user_ids
-            ]
-            if eligible:
-                return str(max(eligible, key=lambda row: float(row["seq"]))["turn_id"])
+    if not isinstance(durable_seq, (str, int, float)) or isinstance(durable_seq, bool):
         return None
-    if any(
-        payload.get(field) is not None and payload.get(field) != ""
-        for field in ("turn_id", "event_id")
-    ):
+    sequences = exported.get("turn_sequences")
+    if isinstance(sequences, dict) and sequences.get(str(durable_seq)) in user_ids:
+        return str(sequences[str(durable_seq)])
+    users = exported.get("user_sequences")
+    try:
+        sequence_value = float(durable_seq)
+    except (TypeError, ValueError):
         return None
+    eligible = [
+        row for row in users if isinstance(row, dict)
+        and isinstance(row.get("seq"), (int, float))
+        and float(row["seq"]) <= sequence_value
+        and row.get("turn_id") in user_ids
+    ] if isinstance(users, list) else []
+    return str(max(eligible, key=lambda row: float(row["seq"]))["turn_id"]) \
+        if eligible else None
+
+
+def _message_turn_id(payload: dict, exported: dict, user_ids: set[str]) -> str | None:
+    """Resolve an emitted message or event id to a real user boundary."""
+    boundaries = exported.get("turn_boundaries")
+    for identity in (payload.get("turn_id"), payload.get("event_id")):
+        if isinstance(identity, str) and identity in user_ids:
+            return identity
+        if isinstance(identity, str) and isinstance(boundaries, dict) \
+                and boundaries.get(identity) in user_ids:
+            return str(boundaries[identity])
+    return None
+
+
+def _queued_turn_id(payload: dict, messages: list[dict]) -> str | None:
+    """Resolve the last user message at the payload's queue-time boundary."""
     queued_at = payload.get("queued_at")
     if not isinstance(queued_at, (int, float)) or isinstance(queued_at, bool):
         return None
@@ -360,6 +355,19 @@ def _payload_turn_id(payload: dict, exported: dict, messages: list[dict]) -> str
     if eligible_messages:
         return max(eligible_messages, key=lambda row: row[0])[1]
     return None
+
+
+def _payload_turn_id(payload: dict, exported: dict, messages: list[dict]) -> str | None:
+    """Resolve durable sequence, message id, then queue-time boundary in order."""
+    user_ids = {
+        _message_id(message, index) for index, message in enumerate(messages)
+        if _message_role(message) == "user"
+    }
+    return (
+        _sequence_turn_id(payload, exported, user_ids)
+        or _message_turn_id(payload, exported, user_ids)
+        or _queued_turn_id(payload, messages)
+    )
 
 
 def _claim_opencode_operation(
@@ -408,6 +416,8 @@ def _record_payload_error(job_path: Path, payload: dict, reason: str) -> None:
     """Persist one retryable failure with its payload across worker processes."""
     from compchem_memory.atomic_io import atomic_write_text
 
+    if not job_path.exists():
+        return
     payload["attempts"] = int(payload.get("attempts", 0)) + 1
     payload["last_error"] = reason
     atomic_write_text(job_path, json.dumps(payload, ensure_ascii=False))
@@ -415,7 +425,9 @@ def _record_payload_error(job_path: Path, payload: dict, reason: str) -> None:
         raise _ExpirePayload(reason)
 
 
-def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
+def _run_opencode_payload(
+    job_path: Path, payload: dict, critic_skip_reason: str | None = None,
+) -> bool:
     """Finalize one payload; return whether its durable work is complete."""
     from compchem_memory import opencode_ingest
 
@@ -426,8 +438,10 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
         _record_payload_error(job_path, payload, "session export unavailable")
         return False
     messages = _finalize_opencode_capture(paths, session_id, exported)
-    turn_id = _payload_turn_id(payload, exported, messages)
     operation = str(payload["operation"])
+    if operation == "capture":
+        return True
+    turn_id = _payload_turn_id(payload, exported, messages)
     if turn_id is None:
         raise _RejectPayload("unresolvable turn identity")
     owner = job_path.name
@@ -440,7 +454,8 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
         if operation == "critic":
             from compchem_memory.hook.critic import CriticOutcome, _has_verdict, run_critic
 
-            outcome = run_critic(paths, "opencode", session_id, None, turn_id)
+            outcome = CriticOutcome.skipped(critic_skip_reason) if critic_skip_reason else \
+                run_critic(paths, "opencode", session_id, None, turn_id)
             verdict_path = paths.store / "claim-critic" / f"{safe_component(session_id)}.jsonl"
             if not isinstance(outcome, CriticOutcome):
                 outcome = (
@@ -529,7 +544,19 @@ def _read_opencode_payload(path: Path, store: Path) -> dict:
     return payload
 
 
-def drain_opencode_payloads(store: Path) -> None:
+def _peek_opencode_session_id(path: Path, store: Path) -> str:
+    """Read only the routing envelope needed to select the session lock."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not payload.get("session_id"):
+        raise ValueError("payload is missing session id")
+    if Path(str(payload.get("store", ""))).resolve() != store.resolve():
+        raise ValueError("payload belongs to another project store")
+    return str(payload["session_id"])
+
+
+def drain_opencode_payloads(
+    store: Path, *, critic_skip_reason: str | None = None,
+) -> None:
     """Drain every pending OpenCode payload for a project, isolated by session."""
     store = Path(store)
     worker_dir = store / "hook-workers"
@@ -538,11 +565,13 @@ def drain_opencode_payloads(store: Path) -> None:
     attempted: set[Path] = set()
     while True:
         progress = False
+        lock_acquired = False
         for candidate in sorted(worker_dir.glob("opencode-turn-*.json")):
             if candidate in attempted:
                 continue
+            payload = None
             try:
-                payload = _read_opencode_payload(candidate, store)
+                session_id = _peek_opencode_session_id(candidate, store)
             except Exception as error:  # noqa: BLE001 - reject one and continue
                 if candidate.exists():
                     try:
@@ -552,11 +581,6 @@ def drain_opencode_payloads(store: Path) -> None:
                         attempted.add(candidate)
                 continue
             try:
-                if _payload_age(candidate, payload) > _OPENCODE_PAYLOAD_MAX_AGE_SECONDS:
-                    _move_payload(candidate, "payload exceeded 86400 second retry bound", "expired")
-                    progress = True
-                    continue
-                session_id = str(payload["session_id"])
                 lock_path = _worker_lock(store, "opencode", session_id)
                 lock_path.parent.mkdir(parents=True, exist_ok=True)
                 with lock_path.open("a+") as lock:
@@ -564,8 +588,25 @@ def drain_opencode_payloads(store: Path) -> None:
                         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     except BlockingIOError:
                         continue
+                    lock_acquired = True
                     attempted.add(candidate)
-                    if _run_opencode_payload(candidate, payload):
+                    try:
+                        payload = _read_opencode_payload(candidate, store)
+                    except (TypeError, ValueError) as error:
+                        _move_payload(candidate, f"invalid payload: {error}", "rejected")
+                        progress = True
+                        continue
+                    if _payload_age(candidate, payload) > _OPENCODE_PAYLOAD_MAX_AGE_SECONDS:
+                        _move_payload(
+                            candidate, "payload exceeded 86400 second retry bound", "expired",
+                        )
+                        progress = True
+                        continue
+                    completed = (
+                        _run_opencode_payload(candidate, payload, critic_skip_reason)
+                        if critic_skip_reason else _run_opencode_payload(candidate, payload)
+                    )
+                    if completed:
                         candidate.unlink(missing_ok=True)
                         progress = True
             except _RejectPayload as error:
@@ -587,13 +628,16 @@ def drain_opencode_payloads(store: Path) -> None:
             except Exception as error:  # noqa: BLE001 - leave retryable and continue
                 attempted.add(candidate)
                 try:
-                    paths = _opencode_paths(payload)
+                    paths = _opencode_paths(payload) if isinstance(payload, dict) else None
                     from compchem_memory.hook.errors import log_error
 
-                    log_error(error, "opencode", "background", paths.store, {}, "opencode-drain")
+                    if paths is not None:
+                        log_error(
+                            error, "opencode", "background", paths.store, {}, "opencode-drain",
+                        )
                 except Exception:
                     pass
-        if not progress:
+        if not progress and not lock_acquired:
             return
 
 
