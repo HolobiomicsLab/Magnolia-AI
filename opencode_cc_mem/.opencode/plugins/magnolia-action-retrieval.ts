@@ -41,6 +41,9 @@
  *
  * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn execute.before and
  * execute.after fired and wrote action-retrieval rows (callID, outcome ok).
+ * The retired in-process turn probe used shape-tolerant message accessors for
+ * v1 client.session.messages and v2 ctx.session.context; the detached Python
+ * worker now normalizes that same {info:{role}, parts:[...]} family.
  *
  * Toggle: MAGNOLIA_ACTION_RETRIEVE=0|off|false|no disables it.
  * Log: <project>/.magnolia/action-retrieval.jsonl (one line per injection).
@@ -49,10 +52,13 @@ import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join, dirname, basename } from "node:path"
 import { promisify } from "node:util"
-import { eventTurnID, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
 import {
   isolatedModuleArgs, PACKAGE_ROOT, resolveMagnoliaPython,
 } from "../lib/magnolia-python.ts"
+
+// resolveMagnoliaPython self-locates the repository venv; no machine-specific
+// absolute path is stored here, and MAGNOLIA_PYTHON remains the override.
 
 const execFileP = promisify(execFile)
 
@@ -428,7 +434,7 @@ export default {
             const items = core.takeProbeItems(String(sid))
             if (items.length) {
               handoffTurnEnd(directory, String(sid), "probe", {
-                items, turn_id: eventTurnID(ev),
+                items, ...eventTurnDetails(ev),
               })
             }
           }
@@ -452,7 +458,7 @@ export default {
               const items = core.takeProbeItems(String(sid))
               if (items.length) {
                 handoffTurnEnd(directory, String(sid), "probe", {
-                  items, turn_id: eventTurnID(input?.event),
+                  items, ...eventTurnDetails(input?.event),
                 })
               }
             }

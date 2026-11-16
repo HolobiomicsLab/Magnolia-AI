@@ -180,6 +180,7 @@ def test_v2_db_exporter_full_content(tmp_path, monkeypatch):
             ], "model": {}, "cost": 1})),
         ("m3", "ses_x", "assistant", 3, 3, 3, json.dumps({
             "content": [{"type": "text", "text": "Docking done, score -7.2"}]})),
+        ("m4", "ses_x", "idle", 25, 4, 4, json.dumps({"outcome": "succeeded"})),
     ])
     con.commit(); con.close()
 
@@ -194,6 +195,8 @@ def test_v2_db_exporter_full_content(tmp_path, monkeypatch):
     # flat tool parts normalized to the state family reconstruct reads
     tool_part = out["messages"][1]["parts"][1]
     assert tool_part["state"]["output"] == "score -7.2"
+    assert out["turn_boundaries"] == {"m4": "m1"}
+    assert out["turn_sequences"]["25"] == "m1"
 
 
 def test_chain_prefers_v2_db_over_dump_and_cli(tmp_path, monkeypatch):

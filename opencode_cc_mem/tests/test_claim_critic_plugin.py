@@ -34,9 +34,12 @@ globalThis.__MAGNOLIA_TEST_SPAWN = (command, argv, options) => {
 }
 const mod = await import(pluginPath)
 let resumed = false
-const event = {
-  id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
-}
+const event = mode === "v2"
+  ? {
+      id: "evt_terminal", type: "session.execution.succeeded",
+      durable: { aggregateID: "s1", seq: 25 },
+    }
+  : { type: "session.idle", properties: { sessionID: "s1" } }
 if (mode === "v2") {
   const ctx = {
     location: { directory },
@@ -53,9 +56,7 @@ if (mode === "v2") {
   }
 } else {
   const hooks = await mod.default.server({ directory })
-  hooks.event({
-    event: { id: "evt_u1", type: "session.idle", properties: { sessionID: "s1" } },
-  })
+  hooks.event({ event })
   resumed = calls.length === 1
 }
 const payload = calls.length
@@ -85,7 +86,8 @@ const ctx = {
   event: { subscribe: () => (async function* () {
     await gate
     yield {
-      id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
+      id: "evt_terminal", type: "session.execution.succeeded",
+      durable: { aggregateID: "s1", seq: 25 },
     }
     resumed = true
     if (calls.length !== 1) throw new Error("capture handoff was not synchronous")
@@ -117,7 +119,8 @@ const ctx = {
   event: { subscribe: () => (async function* () {
     await gate
     yield {
-      id: "evt_u1", type: "session.execution.succeeded", durable: { aggregateID: "s1" },
+      id: "evt_terminal", type: "session.execution.succeeded",
+      durable: { aggregateID: "s1", seq: 25 },
     }
     resumed = true
     if (calls.length !== 1) throw new Error("probe handoff was not synchronous")
@@ -172,7 +175,9 @@ def test_turn_end_synchronously_spawns_detached_python_worker(tmp_path, mode):
     assert call["unref"] is True
     assert result["payload"]["operation"] == "critic"
     assert result["payload"]["session_id"] == "s1"
-    assert result["payload"]["turn_id"] == "msg_u1"
+    assert result["payload"]["turn_id"] is None
+    assert result["payload"]["event_id"] == ("evt_terminal" if mode == "v2" else None)
+    assert result["payload"]["durable_seq"] == (25 if mode == "v2" else None)
 
 
 def _run_driver(tmp_path: Path, plugin: Path, source: str, env: dict | None = None) -> dict:
@@ -196,7 +201,8 @@ def test_capture_turn_end_spawns_before_reading_session_context(tmp_path):
     assert result["resumed"] is True
     assert result["calls"][0]["detached"] is True
     assert result["payload"]["operation"] == "capture"
-    assert result["payload"]["turn_id"] == "msg_u1"
+    assert result["payload"]["turn_id"] is None
+    assert result["payload"]["durable_seq"] == 25
 
 
 def test_action_probe_turn_end_hands_injected_items_to_worker(tmp_path):
@@ -216,10 +222,17 @@ def test_action_probe_turn_end_hands_injected_items_to_worker(tmp_path):
     assert result["calls"][0]["detached"] is True
     assert result["payload"]["operation"] == "probe"
     assert result["payload"]["items"][0]["callID"] == "call-1"
-    assert result["payload"]["turn_id"] == "msg_u1"
+    assert result["payload"]["turn_id"] is None
 
 
-def test_turn_end_worker_environment_is_an_allowlist(tmp_path):
+def test_turn_end_worker_environment_is_an_allowlist(tmp_path, monkeypatch):
+    expected_network = {
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+        "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+        "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    }
+    for key in expected_network:
+        monkeypatch.setenv(key, f"test-{key}")
     result = _run_handoff(tmp_path, "v1")
 
     options = result["calls"][0]["options"]
@@ -228,6 +241,7 @@ def test_turn_end_worker_environment_is_an_allowlist(tmp_path):
     assert env["MAGNOLIA_PROJECT_DIR"].endswith("/project")
     assert "PYTHONPATH" not in options["envKeys"]
     assert "OPENCODE_SERVER_PASSWORD" not in options["envKeys"]
+    assert expected_network <= set(options["envKeys"])
 
 
 def test_turn_end_isolated_worker_cannot_import_project_json(tmp_path):

@@ -119,6 +119,8 @@ class _FixedDateTime(datetime):
         "@literature first\rsecond line",
         "@literature a\u2028status: done",
         "@literature " + "\U0001f600" * 50,
+        "@literature \ufeffcheck paper",
+        "@literature check paper\x1f",
     ],
 )
 def test_doorbell_letter_is_byte_identical_to_hook_core(tmp_path, monkeypatch, prompt):

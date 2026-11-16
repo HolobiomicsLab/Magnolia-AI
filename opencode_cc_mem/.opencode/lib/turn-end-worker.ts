@@ -13,10 +13,13 @@ type Operation = "capture" | "critic" | "probe"
 let sequence = 0
 
 const WORKER_ENV_KEYS = [
-  "HOME", "PATH", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "OPENCODE_DB",
+  "HOME", "PATH", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+  "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+  "http_proxy", "https_proxy", "all_proxy", "no_proxy", "OPENCODE_DB",
   "MAGNOLIA_CRITIC", "MAGNOLIA_CRITIC_PROVIDER", "MAGNOLIA_CRITIC_MODEL",
   "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
-  "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_LLM_API_KEY",
+  "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_OPENROUTER_STICKY",
+  "OPENROUTER_REFERER", "OPENROUTER_TITLE", "MAGNOLIA_LLM_API_KEY",
   "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY",
   "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
   "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "OPENROUTER_API_KEY",
@@ -59,11 +62,23 @@ function projectPaths(directory: string) {
 export function eventTurnID(event: any): string | null {
   const raw = event?.turnID ?? event?.turn_id ?? event?.data?.turnID ??
     event?.data?.turn_id ?? event?.data?.messageID ?? event?.properties?.turnID ??
-    event?.properties?.turn_id ?? event?.properties?.messageID ??
-    event?.properties?.info?.id ?? event?.messageID ?? event?.id
-  if (!raw) return null
-  const identity = String(raw)
-  return identity.startsWith("evt_") ? `msg_${identity.slice(4)}` : identity
+    event?.properties?.turn_id ?? event?.properties?.messageID ?? event?.messageID
+  return raw === undefined || raw === null || raw === "" ? null : String(raw)
+}
+
+/** Preserve only event identity fields OpenCode actually emitted. */
+export function eventTurnDetails(event: any): Record<string, unknown> {
+  const eventID = event?.id
+  const durableSeq = event?.durable?.seq
+  return {
+    turn_id: eventTurnID(event),
+    event_id: eventID === undefined || eventID === null || eventID === ""
+      ? null
+      : String(eventID),
+    durable_seq: durableSeq === undefined || durableSeq === null || durableSeq === ""
+      ? null
+      : durableSeq,
+  }
 }
 
 function workerEnvironment(paths: ReturnType<typeof projectPaths>): NodeJS.ProcessEnv {

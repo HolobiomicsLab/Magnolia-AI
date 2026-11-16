@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from compchem_memory.hook.project import ProjectPaths
@@ -16,6 +17,14 @@ _ATTEMPT_LIMIT = 3
 _OPENCODE_LEASE_SECONDS = 300
 _OPENCODE_DUMP_LIMIT = 4_000_000
 _OPENCODE_PAYLOAD_MAX_AGE_SECONDS = 86_400
+
+
+class _RejectPayload(ValueError):
+    """A payload cannot ever resolve to durable work."""
+
+
+class _ExpirePayload(RuntimeError):
+    """A retryable payload exhausted its bounded attempts."""
 
 
 def _mark(store: Path, harness: str, session_id: str, key: str, status: str) -> None:
@@ -101,8 +110,12 @@ def _run_turn(paths: ProjectPaths, payload: dict, job: dict) -> None:
             probe_application(
                 paths, harness, session_id, str(job.get("reply_text") or ""), job.get("turn_id"),
             )
-            run_critic(paths, harness, session_id, job.get("agent_id"), job.get("turn_id"))
-            _mark(store, harness, session_id, key, "done")
+            outcome = run_critic(
+                paths, harness, session_id, job.get("agent_id"), job.get("turn_id"),
+            )
+            _mark(store, harness, session_id, key, (
+                "failed" if getattr(outcome, "kind", "verdict") == "error" else "done"
+            ))
         except Exception as error:  # noqa: BLE001 - worker failure is durable evidence
             from compchem_memory.hook.errors import log_error
 
@@ -273,20 +286,79 @@ def _finalize_opencode_capture(
     return messages
 
 
+def _message_created(message: dict) -> float | None:
+    """Return a message creation stamp in Unix seconds when available."""
+    info = message.get("info") if isinstance(message.get("info"), dict) else {}
+    time_data = info.get("time") if isinstance(info.get("time"), dict) else {}
+    raw = time_data.get("created", info.get("time_created"))
+    if raw is None:
+        message_time = message.get("time") if isinstance(message.get("time"), dict) else {}
+        raw = message_time.get("created", message.get("time_created"))
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        value = float(raw)
+        return value / 1000 if value > 10_000_000_000 else value
+    if isinstance(raw, str) and raw:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def _payload_turn_id(payload: dict, exported: dict, messages: list[dict]) -> str | None:
-    """Resolve only the terminal event's own turn; never guess the newest turn."""
+    """Resolve a real message id, sequence boundary, or v1 queue-time boundary."""
     identity = payload.get("turn_id")
-    if not isinstance(identity, str) or not identity:
-        return None
     user_ids = {
         _message_id(message, index) for index, message in enumerate(messages)
         if _message_role(message) == "user"
     }
-    if identity in user_ids:
+    if isinstance(identity, str) and identity in user_ids:
         return identity
     boundaries = exported.get("turn_boundaries")
-    if isinstance(boundaries, dict) and boundaries.get(identity) in user_ids:
+    if isinstance(identity, str) and isinstance(boundaries, dict) \
+            and boundaries.get(identity) in user_ids:
         return str(boundaries[identity])
+    event_id = payload.get("event_id")
+    if isinstance(event_id, str) and isinstance(boundaries, dict) \
+            and boundaries.get(event_id) in user_ids:
+        return str(boundaries[event_id])
+    durable_seq = payload.get("durable_seq")
+    if isinstance(durable_seq, (str, int, float)) and not isinstance(durable_seq, bool):
+        sequences = exported.get("turn_sequences")
+        if isinstance(sequences, dict) and sequences.get(str(durable_seq)) in user_ids:
+            return str(sequences[str(durable_seq)])
+        users = exported.get("user_sequences")
+        if isinstance(users, list):
+            try:
+                sequence_value = float(durable_seq)
+            except (TypeError, ValueError):
+                return None
+            eligible = [
+                row for row in users if isinstance(row, dict)
+                and isinstance(row.get("seq"), (int, float))
+                and float(row["seq"]) <= sequence_value
+                and row.get("turn_id") in user_ids
+            ]
+            if eligible:
+                return str(max(eligible, key=lambda row: float(row["seq"]))["turn_id"])
+        return None
+    if any(
+        payload.get(field) is not None and payload.get(field) != ""
+        for field in ("turn_id", "event_id")
+    ):
+        return None
+    queued_at = payload.get("queued_at")
+    if not isinstance(queued_at, (int, float)) or isinstance(queued_at, bool):
+        return None
+    eligible_messages = [
+        (created, _message_id(message, index))
+        for index, message in enumerate(messages)
+        if _message_role(message) == "user"
+        and (created := _message_created(message)) is not None
+        and created <= float(queued_at)
+    ]
+    if eligible_messages:
+        return max(eligible_messages, key=lambda row: row[0])[1]
     return None
 
 
@@ -317,6 +389,7 @@ def _claim_opencode_operation(
 
 def _finish_opencode_operation(
     paths: ProjectPaths, session_id: str, operation: str, turn_id: str, status: str,
+    reason: str | None = None,
 ) -> None:
     """Persist the terminal state of one OpenCode operation."""
     with SessionState.open(paths.store, "opencode", session_id) as state:
@@ -324,8 +397,22 @@ def _finish_opencode_operation(
         ledger = ledger if isinstance(ledger, dict) else {}
         key = f"{operation}--{turn_id}"
         row = ledger.get(key)
-        ledger[key] = {**(row if isinstance(row, dict) else {}), "status": status}
+        ledger[key] = {
+            **(row if isinstance(row, dict) else {}), "status": status,
+            **({"reason": reason} if reason else {}),
+        }
         state.data["opencode_turns"] = ledger
+
+
+def _record_payload_error(job_path: Path, payload: dict, reason: str) -> None:
+    """Persist one retryable failure with its payload across worker processes."""
+    from compchem_memory.atomic_io import atomic_write_text
+
+    payload["attempts"] = int(payload.get("attempts", 0)) + 1
+    payload["last_error"] = reason
+    atomic_write_text(job_path, json.dumps(payload, ensure_ascii=False))
+    if payload["attempts"] >= _ATTEMPT_LIMIT:
+        raise _ExpirePayload(reason)
 
 
 def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
@@ -336,12 +423,13 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
     session_id = str(payload["session_id"])
     exported = opencode_ingest.live_session_exporter()(session_id)
     if not isinstance(exported, dict):
+        _record_payload_error(job_path, payload, "session export unavailable")
         return False
     messages = _finalize_opencode_capture(paths, session_id, exported)
     turn_id = _payload_turn_id(payload, exported, messages)
     operation = str(payload["operation"])
     if turn_id is None:
-        return False
+        raise _RejectPayload("unresolvable turn identity")
     owner = job_path.name
     claim = _claim_opencode_operation(paths, session_id, operation, turn_id, owner)
     if claim == "done":
@@ -350,13 +438,27 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
         return False
     try:
         if operation == "critic":
-            from compchem_memory.hook.critic import _has_verdict, run_critic
+            from compchem_memory.hook.critic import CriticOutcome, _has_verdict, run_critic
 
-            run_critic(paths, "opencode", session_id, None, turn_id)
+            outcome = run_critic(paths, "opencode", session_id, None, turn_id)
             verdict_path = paths.store / "claim-critic" / f"{safe_component(session_id)}.jsonl"
-            if not _has_verdict(verdict_path, "opencode", turn_id):
-                _finish_opencode_operation(paths, session_id, operation, turn_id, "failed")
+            if not isinstance(outcome, CriticOutcome):
+                outcome = (
+                    CriticOutcome.verdict()
+                    if _has_verdict(verdict_path, "opencode", turn_id)
+                    else CriticOutcome.error("critic returned no typed outcome")
+                )
+            if outcome.kind == "error":
+                reason = outcome.reason or "critic error"
+                _finish_opencode_operation(
+                    paths, session_id, operation, turn_id, "failed", reason,
+                )
+                _record_payload_error(job_path, payload, reason)
                 return False
+            _finish_opencode_operation(
+                paths, session_id, operation, turn_id, "done", outcome.reason,
+            )
+            return True
         elif operation == "probe":
             from compchem_memory.hook.action_retrieval import probe_items
 
@@ -368,12 +470,15 @@ def _run_opencode_payload(job_path: Path, payload: dict) -> bool:
             if len(settled) != len(owned):
                 raise OSError("application telemetry could not be logged")
         elif operation != "capture":
-            raise ValueError(f"unknown OpenCode operation: {operation}")
+            raise _RejectPayload(f"unknown OpenCode operation: {operation}")
+    except (_RejectPayload, _ExpirePayload):
+        raise
     except Exception as error:  # noqa: BLE001 - one payload must not abort the drain
         from compchem_memory.hook.errors import log_error
 
-        _finish_opencode_operation(paths, session_id, operation, turn_id, "failed")
+        _finish_opencode_operation(paths, session_id, operation, turn_id, "failed", str(error))
         log_error(error, "opencode", "background", paths.store, {}, "opencode-turn")
+        _record_payload_error(job_path, payload, str(error))
         return False
     _finish_opencode_operation(paths, session_id, operation, turn_id, "done")
     return True
@@ -399,7 +504,7 @@ def _move_payload(path: Path, reason: str, category: str) -> None:
     with log_path.open("a", encoding="utf-8") as log:
         fcntl.flock(log.fileno(), fcntl.LOCK_EX)
         log.write(json.dumps({
-            "ts": time.time(), "payload": destination.name, "reason": reason,
+            "ts": time.time(), "payload": str(destination), "reason": reason,
         }, ensure_ascii=False) + "\n")
 
 
@@ -413,6 +518,14 @@ def _read_opencode_payload(path: Path, store: Path) -> dict:
         raise ValueError("payload is missing required fields")
     if Path(str(payload["store"])).resolve() != store.resolve():
         raise ValueError("payload belongs to another project store")
+    if payload["operation"] not in {"capture", "critic", "probe"}:
+        raise ValueError("payload has an unknown operation")
+    for field in ("turn_id", "event_id"):
+        if payload.get(field) is not None and not isinstance(payload.get(field), str):
+            raise ValueError(f"payload {field} is not a string")
+    attempts = payload.get("attempts", 0)
+    if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0:
+        raise ValueError("payload attempts is not a non-negative integer")
     return payload
 
 
@@ -422,38 +535,66 @@ def drain_opencode_payloads(store: Path) -> None:
     worker_dir = store / "hook-workers"
     if not worker_dir.exists():
         return
-    for candidate in sorted(worker_dir.glob("opencode-turn-*.json")):
-        try:
-            payload = _read_opencode_payload(candidate, store)
-        except Exception as error:  # noqa: BLE001 - reject one and continue
-            if candidate.exists():
+    attempted: set[Path] = set()
+    while True:
+        progress = False
+        for candidate in sorted(worker_dir.glob("opencode-turn-*.json")):
+            if candidate in attempted:
+                continue
+            try:
+                payload = _read_opencode_payload(candidate, store)
+            except Exception as error:  # noqa: BLE001 - reject one and continue
+                if candidate.exists():
+                    try:
+                        _move_payload(candidate, f"invalid payload: {error}", "rejected")
+                        progress = True
+                    except Exception:
+                        attempted.add(candidate)
+                continue
+            try:
+                if _payload_age(candidate, payload) > _OPENCODE_PAYLOAD_MAX_AGE_SECONDS:
+                    _move_payload(candidate, "payload exceeded 86400 second retry bound", "expired")
+                    progress = True
+                    continue
+                session_id = str(payload["session_id"])
+                lock_path = _worker_lock(store, "opencode", session_id)
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                with lock_path.open("a+") as lock:
+                    try:
+                        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        continue
+                    attempted.add(candidate)
+                    if _run_opencode_payload(candidate, payload):
+                        candidate.unlink(missing_ok=True)
+                        progress = True
+            except _RejectPayload as error:
                 try:
-                    _move_payload(candidate, f"invalid payload: {error}", "rejected")
+                    _move_payload(candidate, str(error), "rejected")
+                    progress = True
+                except Exception:
+                    attempted.add(candidate)
+            except _ExpirePayload as error:
+                try:
+                    _move_payload(
+                        candidate,
+                        f"payload exhausted {_ATTEMPT_LIMIT} attempts: {error}",
+                        "expired",
+                    )
+                    progress = True
+                except Exception:
+                    attempted.add(candidate)
+            except Exception as error:  # noqa: BLE001 - leave retryable and continue
+                attempted.add(candidate)
+                try:
+                    paths = _opencode_paths(payload)
+                    from compchem_memory.hook.errors import log_error
+
+                    log_error(error, "opencode", "background", paths.store, {}, "opencode-drain")
                 except Exception:
                     pass
-            continue
-        try:
-            if _payload_age(candidate, payload) > _OPENCODE_PAYLOAD_MAX_AGE_SECONDS:
-                _move_payload(candidate, "payload exceeded 86400 second retry bound", "expired")
-                continue
-            session_id = str(payload["session_id"])
-            lock_path = _worker_lock(store, "opencode", session_id)
-            lock_path.parent.mkdir(parents=True, exist_ok=True)
-            with lock_path.open("a+") as lock:
-                try:
-                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    continue
-                if _run_opencode_payload(candidate, payload):
-                    candidate.unlink(missing_ok=True)
-        except Exception as error:  # noqa: BLE001 - leave retryable and continue
-            try:
-                paths = _opencode_paths(payload)
-                from compchem_memory.hook.errors import log_error
-
-                log_error(error, "opencode", "background", paths.store, {}, "opencode-drain")
-            except Exception:
-                pass
+        if not progress:
+            return
 
 
 def run_opencode_job(job_path: Path) -> None:

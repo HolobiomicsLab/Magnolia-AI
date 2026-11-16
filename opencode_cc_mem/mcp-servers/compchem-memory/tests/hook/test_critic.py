@@ -580,7 +580,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
 
-    critic.run_critic(paths, "claude", "s1", None)
+    outcome = critic.run_critic(paths, "claude", "s1", None)
 
     row = json.loads((paths.store / "claim-critic" / "s1.jsonl").read_text().strip())
     assert row | {"ts": row["ts"]} == row
@@ -590,6 +590,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row["usage"] == {"prompt_tokens": 12, "cached_tokens": 8}
     assert row["quality_floor_dropped"] is True
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
+    assert outcome.kind == "verdict" and outcome.reason is None
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
 
@@ -664,7 +665,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
-    critic.run_critic(paths, "claude", "s1", None)
+    outcome = critic.run_critic(paths, "claude", "s1", None)
 
     error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
@@ -672,6 +673,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     assert error["usage"] == {"prompt_tokens": 9}
     assert error["quality_floor_dropped"] is True
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
+    assert outcome.kind == "error" and outcome.reason == "HTTP 401: denied"
 
 
 def test_run_critic_dot_dot_session_id_stays_in_store(tmp_path, monkeypatch):
@@ -697,6 +699,34 @@ def test_route_repr_hides_the_key():
     route = Route("deepseek", "judge", "https://judge/chat", "sk-fabricated-route-key", "openai")
     assert "sk-fabricated-route-key" not in repr(route)
     assert route.key == "sk-fabricated-route-key"
+
+
+@pytest.mark.parametrize(
+    ("enabled", "reply", "route", "reason"),
+    [
+        (False, "x" * 200, None, "critic disabled"),
+        (True, "Done.", Route("openai", "judge", "u", "k", "openai"), "short reply"),
+        (True, "x" * 200, None, "no route"),
+    ],
+)
+def test_run_critic_returns_typed_skip_without_judge(
+    tmp_path, monkeypatch, enabled, reply, route, reason,
+):
+    paths = _paths(tmp_path)
+    if enabled:
+        monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    monkeypatch.setattr(critic, "resolve_route", lambda _role: route)
+    calls = []
+    monkeypatch.setattr(critic, "_judge", lambda *_args: calls.append(True))
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text=reply))
+
+    outcome = critic.run_critic(paths, "claude", "s1", None, "t1")
+
+    assert outcome.kind == "skipped"
+    assert outcome.status == "skipped"
+    assert outcome.reason == reason
+    assert calls == []
 
 
 def test_late_stop_trace_excludes_the_next_turns_tools(tmp_path):

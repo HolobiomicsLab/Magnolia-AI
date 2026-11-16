@@ -2,6 +2,7 @@
 
 import json
 import fcntl
+import time
 from pathlib import Path
 
 from compchem_memory.hook import action_retrieval, background, critic
@@ -336,3 +337,199 @@ def test_expired_opencode_payload_is_moved_aside_with_reason(tmp_path):
     assert list((store / "hook-workers" / "expired").glob("opencode-turn-expired*.json"))
     log = (store / "hook-workers" / "opencode-turn-errors.jsonl").read_text()
     assert "exceeded 86400 second retry bound" in log
+
+
+def _write_verdict_outcome(observed):
+    def write(paths, harness, session_id, _agent_id, turn_id):
+        from compchem_memory.hook.critic import CriticOutcome
+
+        observed.append(turn_id)
+        output = paths.store / "claim-critic" / f"{session_id}.jsonl"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        prior = output.read_text() if output.exists() else ""
+        output.write_text(
+            prior + json.dumps({"harness": harness, "turn_id": turn_id}) + "\n",
+            encoding="utf-8",
+        )
+        return CriticOutcome.verdict()
+
+    return write
+
+
+def test_v1_turn_without_event_identity_uses_queued_at_boundary(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    queued_at = time.time()
+    exported = {"messages": [
+        {"info": {"role": "user", "id": "u1", "time": {"created": queued_at - 50}}, "parts": []},
+        {"info": {"role": "assistant", "id": "a1"}, "parts": []},
+        {"info": {"role": "user", "id": "u2", "time": {"created": queued_at + 50}}, "parts": []},
+    ]}
+    from compchem_memory import opencode_ingest
+
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: lambda _sid: exported)
+    observed = []
+    monkeypatch.setattr(critic, "run_critic", _write_verdict_outcome(observed))
+    payload = _opencode_payload(tmp_path, project, store, "s1", None)
+    payload["queued_at"] = queued_at
+    job = _opencode_job(store, "v1", payload)
+
+    background.run_opencode_job(job)
+
+    assert observed == ["u1"]
+    assert not job.exists()
+
+
+def test_v2_durable_sequence_resolves_session_message_boundary(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    exported = {
+        "messages": _messages(("u1", "one"), ("u2", "two")),
+        "turn_sequences": {"13": "u1", "25": "u2"},
+    }
+    from compchem_memory import opencode_ingest
+
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: lambda _sid: exported)
+    observed = []
+    monkeypatch.setattr(critic, "run_critic", _write_verdict_outcome(observed))
+    payload = _opencode_payload(tmp_path, project, store, "s1", None)
+    payload["durable_seq"] = 25
+    job = _opencode_job(store, "seq", payload)
+
+    background.run_opencode_job(job)
+
+    assert observed == ["u2"]
+    assert not job.exists()
+
+
+def test_unresolvable_turn_is_logged_and_rejected_once(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    exported = {"messages": _messages(("u1", "one"))}
+    from compchem_memory import opencode_ingest
+
+    exports = {"count": 0}
+
+    def export(_sid):
+        exports["count"] += 1
+        return exported
+
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: export)
+    payload = _opencode_payload(tmp_path, project, store, "s1", "evt_unknown")
+    job = _opencode_job(store, "unknown", payload)
+
+    background.run_opencode_job(job)
+    background.drain_opencode_payloads(store)
+
+    assert exports["count"] == 1
+    assert not job.exists()
+    assert list((store / "hook-workers" / "rejected").glob("opencode-turn-unknown*.json"))
+    error = (store / "hook-workers" / "opencode-turn-errors.jsonl").read_text()
+    assert "unresolvable turn identity" in error
+    assert "opencode-turn-unknown.json" in error
+
+
+def test_skipped_short_critic_completes_without_judge_call(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    exported = {"messages": _messages(("u1", "Done."))}
+    from compchem_memory import opencode_ingest
+
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: lambda _sid: exported)
+    judge_calls = []
+    monkeypatch.setattr(critic, "_judge", lambda *_args: judge_calls.append(True))
+    job = _opencode_job(store, "short", _opencode_payload(
+        tmp_path, project, store, "s1", "u1",
+    ))
+
+    background.run_opencode_job(job)
+    for index in range(5):
+        background.run_opencode_job(_opencode_job(
+            store, f"later-{index}",
+            _opencode_payload(tmp_path, project, store, "s1", "u1", operation="capture"),
+        ))
+
+    assert judge_calls == []
+    assert not job.exists()
+    with SessionState.open(store, "opencode", "s1") as state:
+        row = state.data["opencode_turns"]["critic--u1"]
+        assert row["status"] == "done"
+        assert row["reason"] == "short reply"
+
+
+def test_critic_error_retries_are_capped_per_payload(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    exported = {"messages": _messages(("u1", "claim " * 80))}
+    from compchem_memory import opencode_ingest
+    from compchem_memory.llm import CallResult, Route
+
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: lambda _sid: exported)
+    monkeypatch.setattr(
+        critic, "resolve_route",
+        lambda _role: Route("openai", "judge", "https://invalid", "key", "openai"),
+    )
+    judge_calls = []
+
+    def fail_judge(*_args):
+        judge_calls.append(True)
+        return CallResult("", "error", "judge", "HTTP 500", 500)
+
+    monkeypatch.setattr(critic, "_judge", fail_judge)
+    job = _opencode_job(store, "error", _opencode_payload(
+        tmp_path, project, store, "s1", "u1",
+    ))
+
+    background.run_opencode_job(job)
+    for index in range(5):
+        background.run_opencode_job(_opencode_job(
+            store, f"later-{index}",
+            _opencode_payload(tmp_path, project, store, "s1", "u1", operation="capture"),
+        ))
+
+    assert len(judge_calls) == background._ATTEMPT_LIMIT
+    assert not job.exists()
+    expired = list((store / "hook-workers" / "expired").glob("opencode-turn-error*.json"))
+    assert len(expired) == 1
+    saved = json.loads(expired[0].read_text())
+    assert saved["attempts"] == background._ATTEMPT_LIMIT
+    assert "HTTP 500" in saved["last_error"]
+
+
+def test_drain_rescans_payload_skipped_behind_session_lock(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    exports = {
+        "sA": {"messages": _messages(("uA", "alpha"))},
+        "sB": {"messages": _messages(("uB", "beta"))},
+    }
+    from compchem_memory import opencode_ingest
+
+    monkeypatch.setattr(opencode_ingest, "live_session_exporter", lambda: exports.get)
+    blocked = _opencode_job(store, "00-a", _opencode_payload(
+        tmp_path, project, store, "sA", "uA", operation="capture",
+    ))
+    trigger = _opencode_job(store, "01-b", _opencode_payload(
+        tmp_path, project, store, "sB", "uB", operation="capture",
+    ))
+    lock_path = background._worker_lock(store, "opencode", "sA")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    held = lock_path.open("a+")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+    original = background._run_opencode_payload
+
+    def run_and_release(path, payload):
+        result = original(path, payload)
+        if payload["session_id"] == "sB":
+            fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+            held.close()
+        return result
+
+    monkeypatch.setattr(background, "_run_opencode_payload", run_and_release)
+
+    background.run_opencode_job(trigger)
+
+    assert not blocked.exists()
+    assert not trigger.exists()
