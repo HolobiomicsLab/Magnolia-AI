@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import os
+import argparse
+import json
 from dataclasses import dataclass
+from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Mapping
 
 CLIENTS = ("claude-code", "codex", "vibe")
 ROLES = ("worker", "reviewer", "helper", "evaluator", "interactive")
+HARNESS_CLIENTS = {
+    "opencode": "opencode",
+    "claude": "claude-code",
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "vibe": "vibe",
+}
 
 
 class RouteError(ValueError):
@@ -38,10 +49,19 @@ def _value(inputs: Mapping[str, Any], key: str) -> Any:
 
 
 def _global(inputs: Mapping[str, Any], harness: str | None = None) -> tuple[str, str | None, str]:
-    client = harness or str(inputs.get("harness") or "opencode")
+    configured_value = harness if harness is not None else inputs.get("harness")
+    configured = configured_value if isinstance(configured_value, str) else "opencode"
+    configured = configured or "opencode"
+    client = HARNESS_CLIENTS.get(configured, configured)
     if client == "opencode":
         return client, inputs.get("main_model"), "main_model"
-    return client, _value(inputs, "models").get(client), f"models.{client}"
+    models = _value(inputs, "models")
+    model_key = "claude" if client == "claude-code" else client
+    model = models.get(model_key)
+    if model is None and model_key != client:
+        model = models.get(client)
+        model_key = client
+    return client, model if isinstance(model, str) else None, f"models.{model_key}"
 
 
 def _route(
@@ -80,6 +100,7 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
     client, global_model, global_source = _global(inputs)
     selected: str | None = None
     source = global_source
+    explicit_harness = get("explicit_harness") or get("harness_flag")
     if role == "worker":
         stage = _value(inputs, "stage")
         worker = _value(inputs, "worker")
@@ -111,23 +132,30 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
             (routes.get("evaluator"), "routes.evaluator"),
         )
     else:
+        explicit_model = get("model") or get("model_flag")
+        if explicit_harness:
+            client, harness_model, harness_source = _global(
+                inputs, str(explicit_harness)
+            )
+            selected = explicit_model or harness_model
+            source = "model" if explicit_model else harness_source
+            return _route(
+                selected,
+                role,
+                source,
+                client,
+                required=False,
+            )
         candidates = (
-            (get("model") or get("model_flag"), "model"),
+            (explicit_model, "model"),
             (routes.get("interactive"), "routes.interactive"),
         )
     for candidate, candidate_source in candidates:
         if candidate:
             selected, source = candidate, candidate_source
             break
-    explicit_harness = get("explicit_harness") or get("harness_flag")
-    if role == "interactive" and explicit_harness and selected is None:
-        client, selected, source = _global(inputs, str(explicit_harness))
-        if selected is None:
-            return _route(None, role, source, client, required=False)
     if role == "interactive" and selected is None:
-        if explicit_harness:
-            client = str(explicit_harness)
-        return _route(None, role, source, client, required=False)
+        return _route(None, role, global_source, client, required=False)
     if role == "helper" and selected is None and global_model is None:
         selected, source = "deepseek/deepseek-flash", "legacy-fallback"
     if role == "evaluator" and selected is None:
@@ -135,3 +163,44 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
     if selected is None:
         selected, source = global_model, global_source
     return _route(selected, role, source, client, required=True)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Small launcher bridge that keeps Bash on the shared resolver."""
+    parser = argparse.ArgumentParser(prog="python -m campaign_runner.routing")
+    parser.add_argument("--root", required=True, type=Path)
+    parser.add_argument("--role", required=True, choices=ROLES)
+    parser.add_argument("--harness")
+    parser.add_argument("--model")
+    parser.add_argument("--validate", action="store_true")
+    args = parser.parse_args(argv)
+    setup_path = args.root / ".magnolia" / "llm-setup.json"
+    try:
+        setup = json.loads(setup_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        setup = {}
+    if not isinstance(setup, dict):
+        setup = {}
+    if args.validate:
+        inputs = {"routes": {args.role: args.model}}
+    else:
+        inputs = dict(setup)
+        if args.harness:
+            inputs["harness_flag"] = args.harness
+        if args.model:
+            inputs["model_flag"] = args.model
+    route = resolve_route(args.role, inputs)
+    if not args.validate:
+        harness = "claude" if route.client == "claude-code" else route.client
+        print(json.dumps({
+            "harness": harness,
+            "client": route.client,
+            "model": route.model,
+            "source": route.source,
+            "native_default": route.native_default,
+        }, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

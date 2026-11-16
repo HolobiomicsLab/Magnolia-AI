@@ -57,6 +57,13 @@ def _effective_cap(context: ExecContext, default: int | None = None) -> int | No
     return min(caps) if caps else None
 
 
+def _client_budget(context: ExecContext, client: str) -> float | None:
+    governance = context.governance
+    if governance is None:
+        return None
+    return governance.governor.policy.client_budget(client)
+
+
 def _release_prepared_memory_service(prepared: Any) -> None:
     """Release a managed handle when registry validation refuses after preparation."""
     handle = getattr(prepared, "memory_service_handle", None)
@@ -164,6 +171,7 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                     model=route.model,
                     role=role,
                     max_turns=effective_cap,
+                    max_budget_usd=_client_budget(context, "claude-code"),
                     timeout_seconds=context.timeout_seconds,
                     governance=context.governance,
                     resume_permitted=(
@@ -239,7 +247,8 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 effective_cap = _effective_cap(context, default_cap)
                 if effective_cap is None:
                     raise ExecutorRefused("Vibe requires a positive effective cap")
-                price = context.setup.get("max_price")
+                policy_price = _client_budget(context, "vibe")
+                price = policy_price if policy_price is not None else context.setup.get("max_price")
                 if price is not None and (
                     isinstance(price, bool)
                     or not isinstance(price, (int, float))

@@ -60,6 +60,8 @@ usage() {
     cat <<EOF
 Usage: magnolia [--harness opencode|claude|codex|vibe] [--profile NAME] [setup] [--critic] <project>
        magnolia setup --harness claude|codex|vibe [--model M] <project>
+       magnolia setup --route ROLE=MODEL [<project>]
+       magnolia usage [resume <subscription-key>]
        magnolia memory set <model> [--provider P]
        magnolia memory status
 
@@ -85,6 +87,8 @@ Options:
                    checks the client with one call, then records the choice.
   --model M        Model for the client (setup, or one launch). Else the
                    "models.<harness>" key of llm-setup.json.
+  --route ROLE=M   Record a default route for interactive, worker, reviewer,
+                   helper or evaluator while preserving the other setup keys.
   --opencode-v2    Launch the opencode v2 binary (pinned at
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
@@ -129,6 +133,15 @@ Options:
                    <project>/.magnolia/claim-critic/ and shown as toasts.
                    Changes nothing.
 
+Usage governor identity:
+  Subscription keys are exactly claude-code, codex, vibe and
+  opencode:<provider>. Two logins of one client share a key, and projects share
+  that key's budget. Policy and ledger files are per OS user (so a shared OS
+  account shares one budget). Interactive launches and API-billed memory or
+  critic calls never acquire a governor slot. Optional monetary caps are
+  client-native: Claude --max-budget-usd and Vibe --max-price; Codex 0.169.0
+  has no monetary-cap flag. The removed max_price_per_run policy key is invalid.
+
 Experimental switches reference (per-launch env vars; canonical list lives in
 AGENTS.md "Dormant switches" — the effective set is printed at every launch):
   MAGNOLIA_ADMISSION_GATE=1         admission gate on            [soak]
@@ -164,6 +177,17 @@ EOF
     else
         echo "  (projects dir missing at $PROJECTS_DIR/)"
     fi
+}
+
+run_harness_cli() {
+    local src="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
+    PYTHONPATH="$OPENCODE_DIR:$src${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m compchem_memory.harness "$@"
+}
+
+run_routing_cli() {
+    PYTHONPATH="$OPENCODE_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m campaign_runner.routing "$@"
 }
 
 # Scaffold a new project: <project>/.magnolia/ + standard subdirs.
@@ -420,6 +444,7 @@ render_config() {
     MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
     MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
     MAG_PORT="${COMPCHEM_TOOLS_PORT:-$project_port}" \
+    MAG_INTERACTIVE_MODEL="${RESOLVED_MODEL:-}" \
     "$PYTHON_CMD" - <<'PY'
 import json, os, pathlib
 setup = {}
@@ -441,6 +466,8 @@ cfg = (cfg.replace("@@PROJECT@@", json_string_content(os.environ["MAG_PROJ"]))
 cfg = json.loads(cfg)
 if setup.get("main_model"):
     cfg["model"] = setup["main_model"]
+if os.environ.get("MAG_INTERACTIVE_MODEL"):
+    cfg["model"] = os.environ["MAG_INTERACTIVE_MODEL"]
 if mem_on:
     env = cfg["mcp"]["compchem-memory"]["environment"]
     env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
@@ -774,6 +801,12 @@ if [ "${1:-}" = "memory" ]; then
     esac
 fi
 
+if [ "${1:-}" = "usage" ]; then
+    shift
+    run_harness_cli usage --root "$OPENCODE_DIR" "$@"
+    exit $?
+fi
+
 # Parse flags (--profile NAME, --opencode-v2, --print-env, --critic, setup)
 # plus the single project positional.
 CRITIC=0
@@ -783,6 +816,7 @@ PROJECT=""
 PRINT_ENV=0
 HARNESS_FLAG=""
 MODEL_FLAG=""
+ROUTE_FLAG=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --critic) CRITIC=1 ;;
@@ -817,6 +851,15 @@ while [ "$#" -gt 0 ]; do
             MODEL_FLAG="$1"
             ;;
         --model=*) MODEL_FLAG="${1#--model=}" ;;
+        --route)
+            shift
+            if [ -z "${1:-}" ]; then
+                echo "error: --route requires ROLE=MODEL" >&2
+                exit 1
+            fi
+            ROUTE_FLAG="$1"
+            ;;
+        --route=*) ROUTE_FLAG="${1#--route=}" ;;
         --*) echo "error: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
             if [ -n "$PROJECT" ]; then
@@ -829,6 +872,22 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
+if [ "$SETUP" = "1" ] && [ -n "$ROUTE_FLAG" ]; then
+    ROUTE_ROLE="${ROUTE_FLAG%%=*}"
+    ROUTE_MODEL="${ROUTE_FLAG#*=}"
+    if [ "$ROUTE_ROLE" = "$ROUTE_FLAG" ] || [ -z "$ROUTE_MODEL" ]; then
+        echo "error: --route requires ROLE=MODEL" >&2
+        exit 1
+    fi
+    run_routing_cli --root "$OPENCODE_DIR" --role "$ROUTE_ROLE" \
+        --model "$ROUTE_MODEL" --validate || exit $?
+    ROUTE_JSON="$(MAG_V="$ROUTE_MODEL" "$PYTHON_CMD" -c \
+        'import json, os; print(json.dumps(os.environ["MAG_V"]))')"
+    setup_set_json "routes.$ROUTE_ROLE" "$ROUTE_JSON"
+    echo "setup: recorded routes.$ROUTE_ROLE"
+    exit 0
+fi
+
 if [ -z "$PROJECT" ]; then
     echo "error: no project specified" >&2
     echo >&2
@@ -836,10 +895,16 @@ if [ -z "$PROJECT" ]; then
     exit 1
 fi
 
-# Harness: the flag beats the setup key, which beats the default (opencode).
-# (setup_get returns "" for a null or non-string key, which is then ignored.)
-HARNESS="${HARNESS_FLAG:-$(setup_get harness)}"
-HARNESS="${HARNESS:-opencode}"
+# Resolve interactive launches through the same role resolver as campaigns,
+# helpers and evaluators. The helper returns only the selected route.
+ROUTE_ARGS=(--root "$OPENCODE_DIR" --role interactive)
+[ -z "$HARNESS_FLAG" ] || ROUTE_ARGS+=(--harness "$HARNESS_FLAG")
+[ -z "$MODEL_FLAG" ] || ROUTE_ARGS+=(--model "$MODEL_FLAG")
+ROUTE_RESULT="$(run_routing_cli "${ROUTE_ARGS[@]}")" || exit $?
+HARNESS="$(MAG_ROUTE="$ROUTE_RESULT" "$PYTHON_CMD" -c \
+    'import json, os; print(json.loads(os.environ["MAG_ROUTE"])["harness"])')"
+RESOLVED_MODEL="$(MAG_ROUTE="$ROUTE_RESULT" "$PYTHON_CMD" -c \
+    'import json, os; print(json.loads(os.environ["MAG_ROUTE"])["model"] or "")')"
 case "$HARNESS" in
     opencode) CLIENT_NAME="opencode" ;;
     claude|codex|vibe) CLIENT_NAME="$HARNESS" ;;
@@ -1095,16 +1160,16 @@ fi
 ARGV=()
 CLIENT_ENV=()
 if [ "$HARNESS" != "opencode" ]; then
-    LAUNCH_MODEL="${MODEL_FLAG:-$(setup_get_json "models.$HARNESS")}"
+    LAUNCH_MODEL="$RESOLVED_MODEL"
     LAUNCH_OUT="$(mktemp "${TMPDIR:-/tmp}/magnolia-launch.XXXXXX")"
     trap 'rm -f "$LAUNCH_OUT"' EXIT
     LAUNCH_ARGS=(launch --harness "$HARNESS" --root "$OPENCODE_DIR" --project "$PROJECT"
                  --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT"
-                 --holder-pid "$$")
+                 --holder-pid "$$" --route-resolved)
     [ -z "$LAUNCH_MODEL" ] || LAUNCH_ARGS+=(--model "$LAUNCH_MODEL")
     LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
     LAUNCH_RC=0
-    PYTHONPATH="${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
+    PYTHONPATH="$OPENCODE_DIR:${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
         "$PYTHON_CMD" -m compchem_memory.harness "${LAUNCH_ARGS[@]}" >"$LAUNCH_OUT" || LAUNCH_RC=$?
     if [ "$LAUNCH_RC" -ne 0 ]; then
         # The CLI already printed its one stderr line; pass its exit code through.

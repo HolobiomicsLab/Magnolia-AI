@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.harness.files import atomic_write, validate_project_paths
@@ -19,6 +21,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Render one launch, returning the protocol's process exit code."""
     try:
         args = _parse(argv)
+        if args.command == "route":
+            return _print_route(args)
+        if args.command == "validate-route":
+            return _validate_route(args)
+        if args.command == "usage":
+            return _usage(args)
         launch, renderer = _render(args)
         _validate(launch)
         project_dir = args.root.resolve() / "projects" / args.project
@@ -55,6 +63,22 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     launch.add_argument("--tools-port", required=True, type=int)
     launch.add_argument("--holder-pid", required=True, type=int)
     launch.add_argument("--model")
+    launch.add_argument("--route-resolved", action="store_true")
+    route = subcommands.add_parser("route")
+    route.add_argument("--root", required=True, type=Path)
+    route.add_argument("--harness", choices=("opencode", "claude", "codex", "vibe"))
+    route.add_argument("--model")
+    validate_route = subcommands.add_parser("validate-route")
+    validate_route.add_argument("--root", required=True, type=Path)
+    validate_route.add_argument(
+        "--role", required=True,
+        choices=("interactive", "worker", "reviewer", "helper", "evaluator"),
+    )
+    validate_route.add_argument("--model", required=True)
+    usage = subcommands.add_parser("usage")
+    usage.add_argument("--root", required=True, type=Path)
+    usage.add_argument("action", nargs="?", choices=("resume",))
+    usage.add_argument("subscription_key", nargs="?")
     return parser.parse_args(argv)
 
 
@@ -71,10 +95,10 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         raise MissingBinary(f"missing client binary: {renderer.binary}")
     root = args.root.resolve()
     setup = _setup(root)
-    # main_model is an OpenCode provider/model id: it never reaches another client.
-    client_models = setup.get("models")
-    client_model = client_models.get(args.harness) if isinstance(client_models, dict) else None
-    model = args.model or (client_model if isinstance(client_model, str) and client_model else None)
+    model = args.model
+    if not args.route_resolved:
+        route = _resolve_interactive(root, setup, args.harness, args.model)
+        model = route.model
     project_dir = root / "projects" / args.project
     context = LaunchContext(
         root=root,
@@ -112,6 +136,156 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
         rendered.env["MAGNOLIA_MEMORY_SERVICE_HANDLE"] = encode_handle(handle)
         return rendered, renderer
     return renderer(neutral, context), renderer
+
+
+def _campaign_modules(root: Path):
+    """Import installation-local campaign contracts from any caller cwd."""
+    installation = str(root.resolve())
+    if installation not in sys.path:
+        sys.path.insert(0, installation)
+    from campaign_runner.governor import Governor
+    from campaign_runner.routing import resolve_route
+
+    return Governor, resolve_route
+
+
+def _resolve_interactive(root: Path, setup: dict, harness: str | None, model: str | None):
+    _, resolve_route = _campaign_modules(root)
+    inputs = dict(setup)
+    if harness:
+        inputs["harness_flag"] = harness
+    if model:
+        inputs["model_flag"] = model
+    return resolve_route("interactive", inputs)
+
+
+def _print_route(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    route = _resolve_interactive(root, _setup(root), args.harness, args.model)
+    harness = "claude" if route.client == "claude-code" else route.client
+    print(json.dumps({
+        "harness": harness,
+        "client": route.client,
+        "model": route.model,
+        "source": route.source,
+        "native_default": route.native_default,
+    }, separators=(",", ":")))
+    return 0
+
+
+def _validate_route(args: argparse.Namespace) -> int:
+    _, resolve_route = _campaign_modules(args.root.resolve())
+    resolve_route(args.role, {"routes": {args.role: args.model}})
+    return 0
+
+
+_SUBSCRIPTION_KEY = re.compile(
+    r"(?:claude-code|codex|vibe|opencode:[A-Za-z0-9._-]+)\Z"
+)
+
+
+def _display_subscription_key(value: object) -> str:
+    """Render only the documented budget identity forms."""
+    return value if isinstance(value, str) and _SUBSCRIPTION_KEY.fullmatch(value) else "unknown"
+
+
+def _usage(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    Governor, resolve_route = _campaign_modules(root)
+    governor = Governor()
+    if args.action == "resume":
+        key = args.subscription_key
+        if not isinstance(key, str) or _SUBSCRIPTION_KEY.fullmatch(key) is None:
+            raise ValueError("invalid subscription key")
+        if not governor.resume_key(key):
+            raise ValueError("no releasable observed quota hold for that subscription")
+        print("released observed quota hold; policy budgets and pending work are unchanged")
+        return 0
+    if args.subscription_key is not None:
+        raise ValueError("usage accepts only the optional resume action")
+
+    setup = _setup(root)
+    print("Routes:")
+    for role in ("interactive", "worker", "reviewer", "helper", "evaluator"):
+        try:
+            route = resolve_route(role, setup)
+            model = route.model if route.model is not None else "native default"
+            print(f"  {role}: {route.client}/{model} [{route.source}]")
+        except Exception as exc:  # a missing route is reportable, not fatal
+            print(f"  {role}: unavailable [{str(exc).splitlines()[0]}]")
+
+    report = governor.report(datetime.now(timezone.utc).date())
+    print("Usage (UTC):")
+    _print_period("day", report["day"])
+    _print_period("week", report["week"])
+    print("Live waits:")
+    if not report["waits"] and not report["holds"]:
+        print("  none")
+    for wait in report["waits"]:
+        reset = wait.get("reset_at") or "manual resume required"
+        key = _display_subscription_key(wait.get("key"))
+        print(
+            f"  {wait['caller_id']}: {key} reason={wait['reason']} "
+            f"reset={reset}"
+        )
+        if str(wait.get("caller_id", "")).startswith("evaluator:"):
+            print(
+                "    pending evaluation: python -m router_runner.agentd "
+                "resume-eval <id> --db <path>"
+            )
+    waiting_keys = {wait["key"] for wait in report["waits"]}
+    for hold in report["holds"]:
+        if hold["key"] in waiting_keys:
+            continue
+        reset = hold.get("reset_at") or "manual resume required"
+        key = _display_subscription_key(hold.get("key"))
+        print(
+            f"  hold: {key} reason={hold.get('reason', 'quota')} "
+            f"reset={reset}"
+        )
+    return 0
+
+
+def _number(value: object) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _print_period(label: str, period: dict) -> None:
+    span = period.get("date") or f"{period['from']}..{period['through']}"
+    usage = period["usage"]
+    unknown = period["unknown"]
+    fields = (
+        ("turns", "turns"),
+        ("input_tokens", "input"),
+        ("output_tokens", "output"),
+        ("reasoning_tokens", "reasoning"),
+        ("cached_tokens", "cache-read"),
+        ("cache_write_tokens", "cache-write"),
+        ("cost", "cost"),
+    )
+    values = " ".join(f"{shown}={_number(usage[name])}" for name, shown in fields)
+    missing = sum(unknown.values())
+    print(f"  {label} {span}: runs={period['runs']} {values} unknown={missing}")
+    print("    by subscription:")
+    _print_groups(period["by_subscription"])
+    print("    by project digest:")
+    _print_groups(period["by_project"])
+
+
+def _print_groups(groups: dict) -> None:
+    if not groups:
+        print("      none")
+        return
+    for name, summary in groups.items():
+        usage = summary["usage"]
+        unknown = sum(summary["unknown"].values())
+        print(
+            f"      {name}: runs={summary['runs']} input={_number(usage['input_tokens'])} "
+            f"output={_number(usage['output_tokens'])} "
+            f"cache-read={_number(usage['cached_tokens'])} unknown={unknown}"
+        )
 
 
 def _setup(root: Path) -> dict:

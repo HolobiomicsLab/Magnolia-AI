@@ -7,6 +7,7 @@ import fcntl
 import json
 import math
 import os
+import re
 import subprocess
 import tempfile
 import time as system_time
@@ -17,7 +18,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
-import yaml
 from compchem_memory.process_identity import (
     _proc_stat_fields,
     verified_process_start_token as _verified_process_start_token,
@@ -38,7 +38,7 @@ POLICY_KEYS = frozenset(
         "max_runs_per_day",
         "max_turns_per_run",
         "min_seconds_between_runs",
-        "max_price_per_run",
+        "client_native_budgets",
         "api_key_providers",
     }
 )
@@ -57,6 +57,7 @@ class Policy:
     max_turns_per_run: int = DEFAULT_MAX_TURNS_PER_RUN
     min_seconds_between_runs: int = DEFAULT_MIN_SECONDS_BETWEEN_RUNS
     max_price_per_run: float | None = None
+    client_native_budgets: tuple[tuple[str, float], ...] = ()
     api_key_providers: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -87,6 +88,33 @@ class Policy:
             not isinstance(item, str) or not item.strip() for item in providers
         ):
             raise PolicyError("api_key_providers must be an explicit list of names")
+        budgets = self.client_native_budgets
+        if isinstance(budgets, Mapping):
+            budgets = tuple(budgets.items())
+            object.__setattr__(self, "client_native_budgets", budgets)
+        if not isinstance(budgets, tuple):
+            raise PolicyError("client_native_budgets must be a mapping")
+        for item in budgets:
+            if not isinstance(item, tuple) or len(item) != 2:
+                raise PolicyError("client_native_budgets must be a mapping")
+            client, budget = item
+            if client not in {"claude-code", "vibe"}:
+                raise PolicyError(
+                    "client_native_budgets supports only claude-code and vibe"
+                )
+            if (
+                isinstance(budget, bool)
+                or not isinstance(budget, (int, float))
+                or not math.isfinite(budget)
+                or budget <= 0
+            ):
+                raise PolicyError(
+                    "client-native budgets must be positive and finite"
+                )
+
+    def client_budget(self, client: str) -> float | None:
+        """Return a proved native monetary cap; Codex has no such flag."""
+        return dict(self.client_native_budgets).get(client)
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Policy":
@@ -100,6 +128,10 @@ class Policy:
                 raise PolicyError(f"usage policy does not exist: {policy_path}")
             return cls()
         try:
+            import yaml
+        except ImportError as exc:
+            raise PolicyError("PyYAML is required to read a usage policy") from exc
+        try:
             payload = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError) as exc:
             raise PolicyError(f"cannot read usage policy {policy_path}: {exc}") from exc
@@ -109,6 +141,10 @@ class Policy:
         if unknown:
             raise PolicyError("unknown usage policy fields: " + ", ".join(unknown))
         values = dict(payload)
+        budgets = values.get("client_native_budgets", {})
+        if not isinstance(budgets, Mapping):
+            raise PolicyError("client_native_budgets must be a mapping")
+        values["client_native_budgets"] = tuple(budgets.items())
         providers = values.get("api_key_providers", [])
         if not isinstance(providers, list):
             raise PolicyError("api_key_providers must be an explicit list")
@@ -298,6 +334,8 @@ class Governor:
             current = state["cooldowns"].get(key)
             if current is None:
                 return False
+            if current.get("reason") == "daily_limit":
+                return False
             if expected_hold is not None and current.get("generation") != expected_hold:
                 return False
             removed = state["cooldowns"].pop(key, None) is not None
@@ -455,8 +493,16 @@ class Governor:
             current = first_day + timedelta(days=offset)
             by_day.append({"day": current.isoformat(), "runs": sum(_row_day(row) == current for row in week)})
         return {
-            "day": {"date": day.isoformat(), "runs": len(selected)},
-            "week": {"from": first_day.isoformat(), "through": day.isoformat(), "runs": len(week), "days": by_day},
+            "day": {
+                "date": day.isoformat(),
+                **_usage_summary(selected),
+            },
+            "week": {
+                "from": first_day.isoformat(),
+                "through": day.isoformat(),
+                **_usage_summary(week),
+                "days": by_day,
+            },
             "waits": sorted(waits, key=lambda item: (item["key"], item["caller_id"])),
             "holds": sorted(holds, key=lambda item: item["key"]),
         }
@@ -863,6 +909,54 @@ def _xdg_root(name: str, fallback: Path) -> Path:
         if candidate.is_absolute():
             return candidate
     return fallback
+
+
+_USAGE_FIELDS = (
+    "turns",
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cached_tokens",
+    "cache_write_tokens",
+    "cost",
+    "duration_seconds",
+)
+_SUBSCRIPTION_GROUP = re.compile(
+    r"(?:claude-code|codex|vibe|opencode:[A-Za-z0-9._-]+)\Z"
+)
+_PROJECT_DIGEST_GROUP = re.compile(r"[0-9a-f]{8,64}\Z")
+
+
+def _usage_summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate privacy-bounded ledger rows without treating unknown as zero."""
+
+    def totals(items: list[Mapping[str, Any]]) -> dict[str, Any]:
+        values = {name: 0 for name in _USAGE_FIELDS}
+        unknown = {name: 0 for name in _USAGE_FIELDS}
+        for row in items:
+            usage = row.get("usage")
+            for name in _USAGE_FIELDS:
+                value = usage.get(name) if isinstance(usage, Mapping) else None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    values[name] += value
+                else:
+                    unknown[name] += 1
+        return {"runs": len(items), "usage": values, "unknown": unknown}
+
+    def grouped(field: str, pattern: re.Pattern[str]) -> dict[str, Any]:
+        groups: dict[str, list[Mapping[str, Any]]] = {}
+        for row in rows:
+            value = row.get(field)
+            if not isinstance(value, str) or pattern.fullmatch(value) is None:
+                value = "unknown"
+            groups.setdefault(value, []).append(row)
+        return {key: totals(groups[key]) for key in sorted(groups)}
+
+    return {
+        **totals(rows),
+        "by_subscription": grouped("subscription_key", _SUBSCRIPTION_GROUP),
+        "by_project": grouped("project_digest", _PROJECT_DIGEST_GROUP),
+    }
 
 
 def _utc(value: datetime) -> datetime:

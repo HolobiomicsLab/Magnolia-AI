@@ -25,6 +25,20 @@ subscription; Magnolia never reads or passes a client's credentials. Record a de
 `harness` and `models.<H>` in `.magnolia/llm-setup.json`. `MAGNOLIA_DRY_RUN=1` prints the argv,
 working directory and environment without starting anything.
 
+Role defaults use the same resolver for interactive sessions, campaign workers and reviewers,
+daemon helpers and router evaluators. Configure one with `magnolia setup --route
+<interactive|worker|reviewer|helper|evaluator>=<model>`, and inspect the effective source with
+`magnolia usage`. Subscription keys are exactly `claude-code`, `codex`, `vibe` and
+`opencode:<provider>`. They identify a client/provider budget, not an account or project: two
+logins of one client share a key, multiple projects share the budget, and the policy and ledger
+are per OS user. A shared OS service account therefore shares one budget. Interactive launches
+and API-billed memory/critic calls remain outside subscription admission.
+
+The usage policy has no universal `max_price_per_run`. Optional monetary limits are native to
+the supporting client: `client_native_budgets.claude-code` renders Claude Code's
+`--max-budget-usd`, and `client_native_budgets.vibe` renders Vibe's `--max-price`. Both default
+to unset. Codex CLI 0.169.0 has no monetary budget flag and is not refused for that absence.
+
 Each launch renders project-owned files and merges them with the member's own entries: Magnolia
 replaces only the MCP servers `compchem-tools`, `compchem-memory` and `perspicacite`, hook
 commands that run `-m compchem_memory.hook`, and Vibe hooks named `magnolia-*`. A member entry
