@@ -9,9 +9,9 @@ import os
 import signal
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .distill import drain_queue
 from .executors.contracts import ExecContext
@@ -398,13 +398,26 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         environment["OPENCODE_SERVER_PASSWORD"] = str(record["password"])
         environment["OPENCODE_SERVER_USERNAME"] = "opencode"
 
-    def worker_factory(model: str, timeout: int) -> WorkerExecutor:
+    def worker_factory(
+        model: str,
+        timeout: int,
+        resume_from: Path | None = None,
+        resume_artifact: Any = None,
+    ) -> WorkerExecutor:
         route = resolve_route("worker", {"worker": {"model": model}})
         executor = executor_for(
             route,
             "worker",
-            execution_context(
-                route, "worker", timeout, protocol.worker.max_steps, _WORKER_AGENT
+            replace(
+                execution_context(
+                    route,
+                    "worker",
+                    timeout,
+                    protocol.worker.max_steps,
+                    _WORKER_AGENT,
+                ),
+                resume_from=resume_from,
+                resume_artifact=resume_artifact,
             ),
         )
         return executor

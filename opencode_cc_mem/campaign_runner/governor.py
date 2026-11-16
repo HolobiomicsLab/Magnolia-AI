@@ -326,7 +326,6 @@ class Governor:
         reset_at = limit.reset_at
         if limit.reason == "daily_limit" and reset_at is None:
             reset_at = _next_daily_reset(now)
-            limit.reset_at = reset_at
         observed = {
             "reason": limit.reason,
             "reset_at": reset_at.isoformat() if reset_at else None,
@@ -337,14 +336,14 @@ class Governor:
             current = state["cooldowns"].get(key)
             stored = _merge_cooldown(current, observed)
             state["cooldowns"][key] = stored
-        limit.hold_id = str(stored["generation"])
+        hold_id = str(stored["generation"])
         reset = stored.get("reset_at")
         return QuotaWaiting(
             key,
             "campaign",
             "quota",
             _parse_time(reset) if reset else None,
-            limit.hold_id,
+            hold_id,
         )
 
     def wait(

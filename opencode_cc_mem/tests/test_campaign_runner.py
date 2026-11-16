@@ -254,7 +254,8 @@ def make_runner(store, fake_worker, fake_reviewer, statuses=None):
         store,
         project,
         RunnerConfig(
-            worker_factory=lambda model, timeout: fake_worker,
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: fake_worker,
             jobs=jobs,
             reviewer=fake_reviewer,
         ),
@@ -274,7 +275,8 @@ def test_hard_stage_uses_hard_model(tmp_path):
         store,
         project,
         RunnerConfig(
-            worker_factory=lambda model, timeout: (
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: (
                 models.append(model) or fake_worker
             ),
             jobs=JobController(store, project, FakeJobBackend()),
@@ -360,7 +362,8 @@ def test_project_mismatch_is_rejected(tmp_path):
             store,
             wrong_project,
             RunnerConfig(
-                worker_factory=lambda model, timeout: FakeWorker(store.run_dir),
+                worker_factory=lambda model, timeout, resume_from=None,
+                resume_artifact=None: FakeWorker(store.run_dir),
                 jobs=JobController(store, wrong_project, FakeJobBackend()),
                 reviewer=FakeReviewer(),
             ),
@@ -376,7 +379,8 @@ def test_project_directory_is_realpath_before_launch(tmp_path):
         store,
         alias,
         RunnerConfig(
-            worker_factory=lambda model, timeout: FakeWorker(store.run_dir),
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: FakeWorker(store.run_dir),
             jobs=JobController(store, project, FakeJobBackend()),
             reviewer=FakeReviewer(),
         ),

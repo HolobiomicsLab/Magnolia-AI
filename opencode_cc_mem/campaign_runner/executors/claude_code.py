@@ -31,6 +31,7 @@ from .contracts import (
     RunOutcome,
     SessionIdentity,
     UsageRecord,
+    binding_identity_matches,
 )
 from .registry import ExecutorRefused
 
@@ -583,9 +584,9 @@ class ClaudeCodeExecutor:
         payload = self._load_bindings()
         expected = self._binding_identity()
         current = payload["sessions"].get(session_id)
-        if current is not None and current != expected:
+        if current is not None and not binding_identity_matches(current, expected):
             raise ExecutorRefused("Claude session has a different bound identity")
-        if current == expected:
+        if current is not None:
             return
         payload["sessions"][session_id] = expected
         path = self._binding_path()
@@ -601,7 +602,7 @@ class ClaudeCodeExecutor:
         current = self._load_bindings()["sessions"].get(session_id)
         if current is None:
             raise ExecutorRefused(f"unknown Claude session: {session_id}")
-        if current != self._binding_identity():
+        if not binding_identity_matches(current, self._binding_identity()):
             raise ExecutorRefused("Claude session has a different bound identity")
 
     def _identity(self, session_id: str | None) -> SessionIdentity | None:

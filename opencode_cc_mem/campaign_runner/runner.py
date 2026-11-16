@@ -22,7 +22,7 @@ from .lease import (
     stop_active_leases,
 )
 from .models import Stage
-from .governor import Governor
+from .governor import Governor, _reservation_process_alive
 from .process import ProcessControl, run_process
 from .reviewers import ReviewError, ReviewResult, build_review_prompt, choose_reviewer_model
 from .security import redact_paths, redact_structure
@@ -59,11 +59,14 @@ class ReviewExecutor(Protocol):
         run_dir: Path,
         control: ProcessControl | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> ReviewResult:
         ...
 
 
-WorkerFactory = Callable[[str, int], WorkerExecutor]
+WorkerFactory = Callable[
+    [str, int, Path | None, ResumeArtifact | None], WorkerExecutor
+]
 
 
 SYSTEM_PROMPT = (
@@ -230,6 +233,11 @@ class CampaignRunner:
                                 else self._checkpoint_session_id(resumed)
                             ),
                             resume_artifact=resumed.resume_artifact,
+                            resume_from=(
+                                Path(resumed.resume_from)
+                                if resumed.resume_from is not None
+                                else None
+                            ),
                         )
                     except CampaignBusyError as exc:
                         actions.append(f"busy: {exc}")
@@ -599,6 +607,7 @@ class CampaignRunner:
         result_ref: str | None = None,
         retry_cursor: int | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> CampaignState:
         """Persist one typed quota outcome without entering repair handling."""
         governor = self.config.quota_governor
@@ -634,6 +643,7 @@ class CampaignRunner:
             result_ref=result_ref,
             retry_cursor=retry_cursor,
             resume_artifact=resume_artifact,
+            resume_from=str(resume_from) if resume_from is not None else None,
         )
         return self.store.wait_for_quota(checkpoint)
 
@@ -665,6 +675,7 @@ class CampaignRunner:
             checkpoint.result_ref,
             checkpoint.retry_cursor,
             checkpoint.resume_artifact,
+            checkpoint.resume_from,
         )
         return self.store.refresh_quota_wait(refreshed)
 
@@ -733,16 +744,19 @@ class CampaignRunner:
             raise CampaignBusyError(
                 f"attempt lease is still active or unknown: {stage}/{attempt}"
             )
-        for key in ("worker_pid", "worker_pgid"):
-            try:
-                if int(lease.get(key) or 0) > 0:
-                    raise CampaignBusyError(
-                        f"attempt worker liveness is unknown: {stage}/{attempt}"
-                    )
-            except (TypeError, ValueError) as exc:
-                raise CampaignBusyError(
-                    f"attempt worker liveness is unknown: {stage}/{attempt}"
-                ) from exc
+        reservation = {
+            "pid": lease.get("worker_pid"),
+            "pgid": lease.get("worker_pgid"),
+            "process_start_token": lease.get("worker_start_token"),
+        }
+        has_worker = (
+            lease.get("worker_pid") is not None
+            or lease.get("worker_pgid") is not None
+        )
+        if has_worker and _reservation_process_alive(reservation):
+            raise CampaignBusyError(
+                f"attempt worker is still active: {stage}/{attempt}"
+            )
         path = self.store.leases_dir / f"{stage}-{attempt}.json"
         if read_lease(self.store.run_dir, stage, attempt) == lease:
             path.unlink(missing_ok=True)
@@ -961,6 +975,7 @@ class CampaignRunner:
         lease: AttemptLease,
         resume_session: str | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> CampaignState:
         previous_result = self._read_worker_result(attempt_dir)
         try:
@@ -971,9 +986,8 @@ class CampaignRunner:
         timeout = stage.timeout_seconds or self.protocol.worker.timeout_seconds
         route = resolve_route("worker", {"worker": {"model": model}})
         try:
-            executor = self.config.worker_factory(model, timeout)
-            executor = self._resume_executor(
-                executor, resume_artifact, route.client
+            executor = self.config.worker_factory(
+                model, timeout, resume_from, resume_artifact
             )
             result = executor.run(
                 prompt,
@@ -988,6 +1002,9 @@ class CampaignRunner:
         lease.update_session(result.session_id)
         session_identity = getattr(result, "session_identity", None)
         result_resume_artifact = getattr(result, "resume_artifact", None)
+        result_resume_from = self._bound_invocation_dir(
+            executor, result_resume_artifact or resume_artifact
+        )
         recorded_usage = self._record_worker_usage(
             result, route.client, previous_result
         )
@@ -1019,6 +1036,7 @@ class CampaignRunner:
                     (attempt_dir / "worker_result.json").relative_to(self.store.run_dir)
                 ),
                 resume_artifact=result_resume_artifact or resume_artifact,
+                resume_from=result_resume_from or resume_from,
             )
         if result.stopped_reason:
             return self._finish_stopped(stage, attempt, result.stopped_reason, "stop")
@@ -1072,6 +1090,10 @@ class CampaignRunner:
                 return self._finish_gate_failure(
                     stage, attempt, attempt_dir, [f"review failed: {exc}"], review=None
                 )
+            if review.stopped_reason:
+                return self._finish_stopped(
+                    stage, attempt, review.stopped_reason, "stop"
+                )
             if review.outcome is not None and review.outcome.kind == "quota":
                 return self._wait_for_quota(
                     review.outcome,
@@ -1087,6 +1109,7 @@ class CampaignRunner:
                     ),
                     retry_cursor=review.attempts,
                     resume_artifact=review.resume_artifact,
+                    resume_from=review.resume_from,
                 )
             if review.outcome is not None and review.outcome.kind != "success":
                 return self._finish_gate_failure(
@@ -1098,10 +1121,6 @@ class CampaignRunner:
                         f"{review.outcome.kind}"
                     ],
                     review=review,
-                )
-            if review.stopped_reason:
-                return self._finish_stopped(
-                    stage, attempt, review.stopped_reason, "stop"
                 )
             if len(review.followups) > self.protocol.budget.max_followups:
                 return self._finish_gate_failure(
@@ -1212,6 +1231,9 @@ class CampaignRunner:
         resumed = self.store.load().resumed_from_quota
         if resumed is not None and resumed.suspended_phase == "reviewer":
             review_kwargs["resume_artifact"] = resumed.resume_artifact
+            review_kwargs["resume_from"] = (
+                Path(resumed.resume_from) if resumed.resume_from is not None else None
+            )
         result = self.config.reviewer.run(
             model,
             prompt,
@@ -1550,6 +1572,24 @@ class CampaignRunner:
         if "resume_permitted" in names:
             changes["resume_permitted"] = True
         return replace(executor, **changes)
+
+    def _bound_invocation_dir(
+        self,
+        executor: WorkerExecutor,
+        artifact: ResumeArtifact | None,
+    ) -> Path | None:
+        """Return the private invocation directory that wrote a resume artifact."""
+        if artifact is None:
+            return None
+        prepared = getattr(executor, "prepared", None)
+        invocation = getattr(prepared, "invocation_dir", None)
+        if invocation is None:
+            raise RunnerError("resumable worker did not expose its invocation directory")
+        path = Path(invocation).resolve()
+        private_root = (self.store.control_dir / "executors").resolve()
+        if not path.is_relative_to(private_root):
+            raise RunnerError("worker resume invocation is outside private run state")
+        return path
 
     def _record_worker_usage(
         self,

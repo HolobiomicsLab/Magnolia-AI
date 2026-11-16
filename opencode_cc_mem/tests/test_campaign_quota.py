@@ -1,20 +1,23 @@
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from campaign_runner.executors import contracts as executor_contracts
 from campaign_runner.executors.contracts import (
-    LimitInfo, ResumeArtifact, RunOutcome, SessionIdentity, UsageRecord,
+    ExecContext, LimitInfo, ResumeArtifact, RunOutcome, SessionIdentity, UsageRecord,
 )
 from campaign_runner.governor import AdmissionRequest, Governor, Policy, QuotaWaiting
 from campaign_runner.jobs import FakeJobBackend, JobController
+from campaign_runner.lease import AttemptLease
 from campaign_runner.reviewers import Reviewer, ReviewResult
 from campaign_runner.runner import CampaignRunner, RunnerConfig
 from campaign_runner.routing import ResolvedRoute
@@ -30,15 +33,25 @@ from campaign_runner.workers import (
 NOW = datetime(2026, 11, 16, 9, tzinfo=timezone.utc)
 
 
-def _store(tmp_path, *, review=False, repair=False):
+def _store(
+    tmp_path,
+    *,
+    review=False,
+    repair=False,
+    worker_model="provider/model",
+    reviewer_model=None,
+):
     source = tmp_path / "source"
     source.mkdir()
     payload = {
         "schema": 1,
         "id": "quota",
         "project": "project",
-        "worker": {"model": "provider/model", "agent": "campaign-worker"},
-        "reviewer": {"enabled": review, "model": "other/reviewer" if review else None},
+        "worker": {"model": worker_model, "agent": "campaign-worker"},
+        "reviewer": {
+            "enabled": review,
+            "model": reviewer_model or ("other/reviewer" if review else None),
+        },
         "budget": {
             "max_tokens": 1000,
             "max_wall_hours": 1,
@@ -110,13 +123,101 @@ def _runner(store, worker, governor, reviewer=None):
         store,
         project,
         RunnerConfig(
-            worker_factory=lambda model, timeout: worker,
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: worker,
             jobs=JobController(store, project, FakeJobBackend()),
             reviewer=reviewer,
             quota_governor=governor,
             clock=lambda: NOW,
         ),
     )
+
+
+@dataclass
+class BoundSessionStub:
+    """Small client stub enforcing the same stored-binding invariant as executors."""
+
+    client: str
+    prepared: SimpleNamespace
+    store: CampaignStore
+    calls: list[Path]
+    role: str = "worker"
+    resume_artifact: ResumeArtifact | None = None
+
+    def __post_init__(self):
+        if self.resume_artifact is None:
+            return
+        binding = json.loads(
+            (self.prepared.invocation_dir / "session-binding.json").read_text()
+        )
+        if binding != {
+            "client": self.client,
+            "session_id": self.resume_artifact.session_id,
+            "role": self.role,
+        }:
+            raise RuntimeError("unknown or rebound stub session")
+
+    def run(self, *args, **kwargs):
+        self.calls.append(self.prepared.invocation_dir)
+        if self.resume_artifact is not None:
+            if self.role == "worker":
+                self.store.work_dir.mkdir(parents=True, exist_ok=True)
+                (self.store.work_dir / "out.md").write_text("done")
+                return _result()
+            return WorkerResult(
+                0,
+                False,
+                0.1,
+                "bound",
+                '{"issues":[],"followups":[]}',
+                "",
+                0,
+                empty_usage(),
+                1,
+                [],
+                [],
+                outcome=RunOutcome("success"),
+            )
+        self.prepared.invocation_dir.mkdir(parents=True, exist_ok=True)
+        artifact = ResumeArtifact(self.client, "bound", "config", self.role, "project")
+        (self.prepared.invocation_dir / "session-binding.json").write_text(
+            json.dumps({"client": self.client, "session_id": "bound", "role": self.role})
+        )
+        result = _result(quota=True, attempts=1, text="partial")
+        result.resume_artifact = artifact
+        result.session_identity = SessionIdentity(
+            self.client, "test", "bound", "project", self.role, "config"
+        )
+        return result
+
+
+class BoundSessionFactory:
+    def __init__(self, client, store, role="worker"):
+        self.client = client
+        self.store = store
+        self.role = role
+        self.calls = []
+        self.constructed = []
+
+    def __call__(self, resume_from=None, resume_artifact=None):
+        if resume_from is None:
+            invocation = (
+                self.store.control_dir
+                / "executors"
+                / f"{self.client}-{len(self.constructed) + 1}"
+            )
+        else:
+            invocation = Path(resume_from)
+        executor = BoundSessionStub(
+            self.client,
+            SimpleNamespace(invocation_dir=invocation),
+            self.store,
+            self.calls,
+            self.role,
+            resume_artifact,
+        )
+        self.constructed.append(invocation)
+        return executor
 
 
 def test_daily_cap_wait_starts_no_client_or_attempt(tmp_path):
@@ -577,6 +678,7 @@ def test_resumed_worker_prelaunch_quota_preserves_resume_artifact(tmp_path):
     @dataclass
     class ResumeAwareWorker:
         results: list[WorkerResult]
+        prepared: SimpleNamespace
         resume_artifact: ResumeArtifact | None = None
         resume_permitted: bool = False
 
@@ -590,10 +692,21 @@ def test_resumed_worker_prelaunch_quota_preserves_resume_artifact(tmp_path):
 
     first = _result(quota=True, attempts=1, text="partial")
     first.resume_artifact = artifact
+    invocation = store.control_dir / "executors" / "resume-aware"
+    invocation.mkdir(parents=True)
     worker = ResumeAwareWorker(
-        [first, _result(quota=True, attempts=0, text=""), _result()]
+        [first, _result(quota=True, attempts=0, text=""), _result()],
+        SimpleNamespace(invocation_dir=invocation),
     )
     runner = _runner(store, worker, HoldGovernor())
+    runner.config.worker_factory = (
+        lambda model, timeout, resume_from=None, resume_artifact=None: replace(
+            worker,
+            prepared=SimpleNamespace(invocation_dir=resume_from or invocation),
+            resume_artifact=resume_artifact,
+            resume_permitted=resume_artifact is not None,
+        )
+    )
     runner._worker_model = lambda stage: "claude-code/sonnet"
 
     assert runner.run_once()["state"]["state"] == "waiting_quota"
@@ -669,3 +782,205 @@ def test_resumed_worker_keeps_unknown_lease_busy(tmp_path):
     assert result["state"]["state"] == "running"
     assert result["actions"] == ["busy: attempt lease owner is unknown: work/1"]
     assert path.exists()
+
+
+@pytest.mark.parametrize("client", ["claude-code", "codex", "vibe"])
+def test_bound_worker_quota_resumes_original_invocation(client, tmp_path):
+    store = _store(tmp_path, worker_model=f"{client}/test")
+    factory = BoundSessionFactory(client, store)
+    runner = _runner(store, object(), HoldGovernor())
+    runner.config.worker_factory = (
+        lambda model, timeout, resume_from=None, resume_artifact=None: factory(
+            resume_from, resume_artifact
+        )
+    )
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    checkpoint = store.load().quota_wait
+    assert checkpoint.resume_from == str(factory.constructed[0])
+    assert Path(checkpoint.resume_from).is_relative_to(store.control_dir / "executors")
+
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "completed"
+    assert factory.constructed == [factory.constructed[0], factory.constructed[0]]
+    assert factory.calls == [factory.constructed[0], factory.constructed[0]]
+
+
+@pytest.mark.parametrize("client", ["claude-code", "codex", "vibe"])
+def test_bound_reviewer_quota_resumes_original_invocation(
+    client, tmp_path, monkeypatch
+):
+    store = _store(tmp_path, review=True, reviewer_model=f"{client}/test")
+    factory = BoundSessionFactory(client, store, role="reviewer")
+
+    def executor_for_stub(route, role, context):
+        assert role == "reviewer"
+        return factory(context.resume_from, context.resume_artifact)
+
+    monkeypatch.setattr("campaign_runner.reviewers.executor_for", executor_for_stub)
+    reviewer = Reviewer(
+        binary="unused",
+        context_factory=lambda route, cwd, attempt_dir: ExecContext(
+            route=route,
+            role="reviewer",
+            project_dir=cwd,
+            run_dir=store.run_dir,
+            control_dir=store.control_dir,
+            work_dir=store.work_dir,
+        ),
+    )
+    worker = ResultWorker(store.run_dir, [_result()])
+    runner = _runner(store, worker, HoldGovernor(), reviewer)
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    checkpoint = store.load().quota_wait
+    assert checkpoint.resume_from == str(factory.constructed[0])
+
+    runner.resume_quota(manual=True)
+    assert runner.run_once()["state"]["state"] == "completed"
+    assert worker.calls == 1
+    assert factory.constructed == [factory.constructed[0], factory.constructed[0]]
+
+
+@pytest.mark.parametrize("tamper", ["directory", "session"])
+def test_tampered_bound_worker_checkpoint_uses_failure_path(tamper, tmp_path):
+    store = _store(tmp_path, worker_model="claude-code/test")
+    factory = BoundSessionFactory("claude-code", store)
+    runner = _runner(store, object(), HoldGovernor())
+    runner.config.worker_factory = (
+        lambda model, timeout, resume_from=None, resume_artifact=None: factory(
+            resume_from, resume_artifact
+        )
+    )
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    checkpoint = store.load().quota_wait
+    if tamper == "directory":
+        changed = replace(
+            checkpoint,
+            resume_from=str(store.control_dir / "executors" / "other-invocation"),
+        )
+    else:
+        changed = replace(
+            checkpoint,
+            resume_artifact=replace(checkpoint.resume_artifact, session_id="forged"),
+        )
+    store.refresh_quota_wait(changed)
+
+    runner.resume_quota(manual=True)
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "waiting_human"
+    assert len(factory.calls) == 1
+
+
+def test_resumed_worker_reconciles_provably_dead_worker_group(tmp_path):
+    store = _store(tmp_path)
+    worker = ResultWorker(
+        store.run_dir, [_result(quota=True, attempts=1, text="partial"), _result()]
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner.run_once()
+    runner.resume_quota(manual=True)
+    path = store.leases_dir / "work-1.json"
+    path.write_text(json.dumps({
+        "stage": "work",
+        "attempt": 1,
+        "owner_pid": 99999999,
+        "owner_pgid": 99999999,
+        "worker_pid": 99999998,
+        "worker_pgid": 99999998,
+        "hostname": os.uname().nodename,
+    }))
+
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "completed"
+    assert not path.exists()
+
+
+def test_resumed_worker_keeps_live_worker_group_busy(tmp_path):
+    store = _store(tmp_path)
+    worker = ResultWorker(
+        store.run_dir, [_result(quota=True, attempts=1, text="partial"), _result()]
+    )
+    runner = _runner(store, worker, HoldGovernor())
+    runner.run_once()
+    runner.resume_quota(manual=True)
+    path = store.leases_dir / "work-1.json"
+    path.write_text(json.dumps({
+        "stage": "work",
+        "attempt": 1,
+        "owner_pid": 99999999,
+        "owner_pgid": 99999999,
+        "worker_pid": os.getpid(),
+        "worker_pgid": os.getpgid(0),
+        "hostname": os.uname().nodename,
+    }))
+
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "running"
+    assert result["actions"] == ["busy: attempt worker is still active: work/1"]
+    assert path.exists()
+
+
+def test_attempt_lease_records_worker_start_token(tmp_path):
+    lease = AttemptLease.acquire(tmp_path, "work", 1)
+    try:
+        lease.update_pid(os.getpid(), os.getpgid(0))
+        recorded = json.loads(lease.path.read_text())
+        assert recorded["worker_start_token"]
+    finally:
+        lease.release()
+
+
+def test_checkpoint_limit_does_not_mutate_limit_info(tmp_path):
+    governor = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=tmp_path / "usage.jsonl",
+        clock=lambda: NOW,
+    )
+    limit = LimitInfo("daily_limit", None, "client")
+
+    waiting = governor.checkpoint_limit("claude-code", limit)
+
+    assert waiting.reset_at is not None
+    assert waiting.hold_id is not None
+    assert limit == LimitInfo("daily_limit", None, "client")
+
+
+def test_reviewer_cancellation_without_stop_file_is_stopped(tmp_path):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class CancelledReviewer:
+        def run(self, *args, **kwargs):
+            return ReviewResult(
+                model="other/reviewer",
+                stopped_reason="observation failed",
+                outcome=RunOutcome("cancelled"),
+            )
+
+    result = _runner(store, worker, HoldGovernor(), CancelledReviewer()).run_once()
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+
+    assert result["state"]["state"] == "halted"
+    assert receipt["status"] == "stopped"
+
+
+@pytest.mark.parametrize("client", ["claude-code", "codex", "vibe"])
+def test_pre_client_binding_without_client_key_matches_own_client(client):
+    expected = {
+        "client": client,
+        "configuration_identity_digest": "digest",
+        "role": "worker",
+        "project_identity": "project",
+    }
+    legacy = {key: value for key, value in expected.items() if key != "client"}
+
+    assert executor_contracts.binding_identity_matches(legacy, expected)
+    assert not executor_contracts.binding_identity_matches(
+        {**legacy, "role": "reviewer"}, expected
+    )
