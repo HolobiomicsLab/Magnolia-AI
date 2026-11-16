@@ -816,6 +816,7 @@
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "6a5923fbb04fbefcf24b7debfad2f9f6b6cd351655e3393c967c12fe16eef19e",
             "components": {
+              "model": "gpt-5.6-luna",
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "a38ef3835c5815a8d00937c78cd7e46fdc383c970b1738016a3a32dce6b8bff2",
               "native_files": "eae00d1cd21b37621197eb744847ea32e1279db4ebdd8617f044e332ef4ec7e2",
@@ -921,6 +922,7 @@
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "cca3c04408e103ec008bd07315f09c0240a736a69ee120ce68f95b19eec3653e",
             "components": {
+              "model": "gpt-5.6-luna",
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
               "native_files": "73c726565df452cff38dbd97d9c331d850a3b9dc7770befe1f3446fb99cbf041",
@@ -1026,6 +1028,7 @@
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "c38546a4b203f21061cabb3614d585fcc47af6c221741818e122fc689a055e61",
             "components": {
+              "model": "gpt-5.6-luna",
               "settings": "2b9d3fbc2bc45ab24440c9fd9dc9286969735748ac4b3d696c96680c92d24498",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
@@ -1131,6 +1134,7 @@
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "aa29a9f118f6152b6278a5bb14d7974ec0778c5027e40fceb08dc5aa88264fe3",
             "components": {
+              "model": "gpt-5.6-luna",
               "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",

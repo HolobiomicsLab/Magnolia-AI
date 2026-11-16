@@ -10,6 +10,7 @@ import re
 import shlex
 import stat
 import subprocess
+import tempfile
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -230,7 +231,11 @@ def _prepare_launch(
                 executable = None
             if executable is not None:
                 if route.client == "codex":
-                    _installed_client_version(executable)
+                    _installed_client_version(
+                        executable,
+                        invocation_dir=invocation_dir,
+                        launch_env=env,
+                    )
                 client_sha256 = _file_digest(executable)
                 context = replace(context, launch_argv=(str(executable),))
     if context.resume_from is not None:
@@ -504,7 +509,11 @@ def _normalized_launch_identity(
         for name, body in native_bodies.items()
     }
     components = {
-        "client_version": _installed_client_version(executable),
+        "client_version": _installed_client_version(
+            executable,
+            invocation_dir=invocation_dir,
+            launch_env=launch_env,
+        ),
         "client_sha256": _file_digest(executable),
         "settings": _settings_rule_digest(context, settings_body, replacements),
         "mcp": _digest(_normalize_identity_body(mcp_body, replacements)),
@@ -518,6 +527,8 @@ def _normalized_launch_identity(
             _canonical_bytes(_required_policy_env_names(launch_env))
         ),
     }
+    if context.route is not None and context.route.client == "codex":
+        components["model"] = context.route.model
     return {
         "schema_version": "magnolia-normalized-launch-identity-v1",
         "executable": str(executable),
@@ -540,7 +551,8 @@ def _verify_bound_launch_identity(
     observed = actual.get("components")
     if not isinstance(expected, Mapping) or not isinstance(observed, Mapping):
         raise ExecutorRefused("capability launch identity mismatch: components")
-    for name in LAUNCH_IDENTITY_COMPONENTS:
+    names = (*LAUNCH_IDENTITY_COMPONENTS, *(("model",) if "model" in observed else ()))
+    for name in names:
         if expected.get(name) != observed.get(name):
             raise ExecutorRefused(f"capability launch identity mismatch: {name}")
 
@@ -561,8 +573,13 @@ def _resolved_client_executable(
     return executable
 
 
-def _installed_client_version(executable: Path) -> str:
-    """Read installed metadata without invoking the subscription client."""
+def _installed_client_version(
+    executable: Path,
+    *,
+    invocation_dir: Path,
+    launch_env: Mapping[str, str],
+) -> str:
+    """Read client metadata with any Codex writes confined to the run."""
     package = executable.parent.parent / "package.json"
     try:
         metadata = json.loads(package.read_text(encoding="utf-8"))
@@ -574,15 +591,22 @@ def _installed_client_version(executable: Path) -> str:
     ) and version:
         return version
     try:
-        completed = subprocess.run(
-            [str(executable), "--version"],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-            env={"PATH": os.defpath},
-        )
+        invocation_dir.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with tempfile.TemporaryDirectory(
+            prefix=".codex-version-", dir=invocation_dir.parent
+        ) as temporary_home:
+            completed = subprocess.run(
+                [str(executable), "--version"],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+                env={
+                    "HOME": temporary_home,
+                    "PATH": launch_env.get("PATH", os.defpath),
+                },
+            )
     except (OSError, subprocess.SubprocessError) as exc:
         raise ExecutorRefused("launched client version metadata is unavailable") from exc
     match = re.fullmatch(r"codex-cli\s+([^\s]+)\s*", completed.stdout)

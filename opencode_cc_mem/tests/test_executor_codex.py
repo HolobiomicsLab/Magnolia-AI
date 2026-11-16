@@ -21,7 +21,7 @@ from campaign_runner.executors.contracts import LimitInfo, RunOutcome
 from campaign_runner.governor import AdmissionRequest, Governor, Policy
 from campaign_runner.launch import configuration_identity
 from campaign_runner.routing import ResolvedRoute
-from campaign_runner.workers import EMPTY_OUTPUT_NOTE, InvocationGovernance
+from campaign_runner.workers import EMPTY_OUTPUT_NOTE, InvocationGovernance, WorkerError
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_codex import native_artifacts
 
@@ -383,12 +383,106 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     for feature in (
         "apps", "browser_use", "browser_use_external",
         "browser_use_full_cdp_access", "code_mode_host", "goals",
-        "image_generation", "in_app_browser", "multi_agent",
+        "computer_use", "image_generation", "in_app_browser", "multi_agent",
         "standalone_web_search",
     ):
         assert ["--disable", feature] in pairs
     assert ["--enable", "skip_host_skill_discovery"] in pairs
+    overrides = [
+        argv[index + 1]
+        for index, value in enumerate(argv[:-1])
+        if value == "-c"
+    ]
+    assert 'web_search="disabled"' in overrides
+    assert "sandbox_workspace_write.network_access=false" in overrides
+    assert "sandbox_workspace_write.writable_roots=[]" in overrides
+    assert (
+        'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
+        'exclude=[],set={},include_only=[]}'
+    ) in overrides
     assert "mcp_servers.magnolia-read.enabled=false" not in argv
+    assert argv[-2:] == ["--", "prompt"]
+
+
+@pytest.mark.parametrize(
+    ("owner_setting", "expected_override"),
+    (
+        ('web_search = "live"\n', 'web_search="disabled"'),
+        (
+            "[sandbox_workspace_write]\nnetwork_access = true\n",
+            "sandbox_workspace_write.network_access=false",
+        ),
+        (
+            'sandbox_workspace_write = { writable_roots = ["/"] }\n',
+            "sandbox_workspace_write.writable_roots=[]",
+        ),
+        (
+            '[shell_environment_policy]\ninherit = "all"\n',
+            'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
+            'exclude=[],set={},include_only=[]}',
+        ),
+        ("[features]\ncomputer_use = true\n", None),
+    ),
+)
+def test_codex_worker_pins_each_owner_isolation_setting(
+    tmp_path, owner_setting, expected_override
+):
+    context = _context(tmp_path, role="worker")
+    evidence = context.role_capabilities["codex"]["worker"]
+    evidence["capabilities"] = [
+        "native_read", "native_glob", "native_grep", "native_edit",
+        "mcp:compchem-memory.memory_get_context",
+        "mcp:compchem-memory.memory_search",
+        "mcp:compchem-memory.memory_get_run_history",
+    ]
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(owner_setting + trust.read_text())
+    expected_context = LaunchContext(
+        root=ROOT, project="project-fixture", project_dir=context.project_dir,
+        python="/venv/bin/python", tools_port=8123, model="gpt-test", setup={},
+        run_dir=context.run_dir, control_dir=context.control_dir,
+        work_dir=context.work_dir, role="worker", invocation_id="worker-one",
+        noninteractive=True,
+    )
+    servers = {
+        "compchem-memory": {
+            "command": "/venv/bin/python",
+            "args": ISOLATED_MEMORY_ARGS,
+            "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
+            "tools": {
+                name: {"approval_mode": "approve"} for name in (
+                    "memory_get_context", "memory_search", "memory_get_run_history",
+                )
+            },
+        },
+        "magnolia-read": {
+            "command": "/venv/bin/python",
+            "args": ["-I", str(RUNNER), "--read-server"],
+            "cwd": str(context.project_dir),
+            "env_vars": [
+                "MAGNOLIA_HOOK_POLICY",
+                "MAGNOLIA_HOOK_POLICY_REQUIRED",
+                "MAGNOLIA_HOOK_POLICY_SHA256",
+                "MAGNOLIA_CONTROL_DIR",
+                "PYTHONPYCACHEPREFIX",
+            ],
+            "tools": {
+                name: {"approval_mode": "approve"}
+                for name in ("read_file", "list_dir", "search")
+            },
+        },
+    }
+    for relative, body in native_artifacts(expected_context, servers).items():
+        (context.project_dir / relative).write_bytes(body)
+    evidence["identity"] = configuration_identity(context)
+
+    argv = executor_for(context.route, "worker", context)._argv("prompt", None)
+
+    if expected_override is not None:
+        assert expected_override in argv
+    assert ["--disable", "computer_use"] in [
+        argv[index:index + 2] for index in range(len(argv) - 1)
+    ]
 
 
 @pytest.mark.parametrize("role", ("helper", "evaluator"))
@@ -452,6 +546,44 @@ def test_codex_accepts_owner_plugin_ids_with_at_separator(tmp_path):
 
     assert "plugins.visualize@openai-bundled.enabled=false" in argv
     assert "plugins.pdf@openai-primary-runtime.enabled=false" in argv
+
+
+@pytest.mark.parametrize(
+    ("owner_setting", "key_name"),
+    (
+        ('model_provider = "custom"\n', "model_provider"),
+        ('[model_providers.custom]\nname = "redirect"\n', "model_providers"),
+        ('openai_base_url = "https://redirect.invalid"\n', "openai_base_url"),
+        ('chatgpt_base_url = "https://redirect.invalid"\n', "chatgpt_base_url"),
+        ('api_base_url = "https://redirect.invalid"\n', "api_base_url"),
+        (
+            'profile = "redirect"\n[profiles.redirect]\n'
+            'openai_base_url = "https://redirect.invalid"\n',
+            "profiles.redirect.openai_base_url",
+        ),
+        (
+            'profile = "redirect"\n[profiles.redirect]\nmodel_provider = "custom"\n',
+            "profiles.redirect.model_provider",
+        ),
+    ),
+)
+def test_codex_refuses_each_owner_endpoint_or_credential_redirect(
+    tmp_path, owner_setting, key_name
+):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(owner_setting + trust.read_text())
+
+    with pytest.raises(ExecutorRefused, match=key_name.replace(".", r"\.")):
+        executor_for(context.route, "helper", context)
+
+
+def test_codex_allows_builtin_openai_owner_provider(tmp_path):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text('model_provider = "openai"\n' + trust.read_text())
+
+    assert isinstance(executor_for(context.route, "helper", context), CodexExecutor)
 
 
 @pytest.mark.parametrize("name", ("magnolia-read", "magnolia_read"))
@@ -731,6 +863,8 @@ def test_codex_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
 
     assert second.session_id == "bound"
     assert "resume" in _calls(state)[1]["argv"]
+    assert _calls(state)[0]["argv"][-2:] == ["--", "first"]
+    assert _calls(state)[1]["argv"][-3:] == ["bound", "--", "second"]
     wrong_role = replace(first.resume_artifact, role="helper")
     with pytest.raises(ExecutorRefused, match="resume artifact"):
         executor_for(
@@ -767,6 +901,48 @@ def test_codex_refuses_forged_resume_session_without_starting_client(tmp_path):
 
     assert binding_path.read_bytes() == original_binding
     assert len(_calls(state)) == 1
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    ("-last", "../escape", "thread name", "name/child", "a" * 129),
+)
+def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
+    context = _context(tmp_path)
+    executor = executor_for(context.route, "helper", context)
+
+    with pytest.raises(ExecutorRefused, match="session id"):
+        executor._argv("prompt", session_id)
+
+
+@pytest.mark.parametrize(
+    "dangerous_argv",
+    (
+        ["--dangerously-bypass-approvals-and-sandbox"],
+        ["--dangerously-bypass-hook-trust=1"],
+        ["-c", 'approval_policy="on-request"'],
+        ["-c", 'sandbox_mode="danger-full-access"'],
+        ["-c", "dangerously_bypass_approvals_and_sandbox=true"],
+    ),
+)
+def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+    safe_argv = executor._argv("prompt", None)
+    separator = safe_argv.index("--")
+    executor._argv = lambda prompt, session_id: [
+        *safe_argv[:separator], *dangerous_argv, *safe_argv[separator:]
+    ]
+
+    with pytest.raises(WorkerError, match="forbidden Codex launch"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert _calls(state) == []
 
 
 def test_codex_resumes_legacy_binding_without_client_key(tmp_path):
@@ -911,6 +1087,43 @@ def test_codex_user_config_change_is_disabled_without_changing_run_identity(tmp_
 
     assert configuration_identity(context) == identity
     assert "mcp_servers.late_server.enabled=false" in executor._argv("prompt", None)
+
+
+def test_codex_rechecks_owner_redirect_immediately_before_spawn(tmp_path):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text('openai_base_url = "https://redirect.invalid"\n' + trust.read_text())
+
+    with pytest.raises(ExecutorRefused, match="openai_base_url"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert _calls(state) == []
+
+
+def test_codex_session_binding_records_relevant_owner_config_digest(tmp_path):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, _state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+
+    executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    payload = json.loads(
+        (executor.prepared.invocation_dir / "codex-session-bindings.json").read_text()
+    )
+    digest = payload["sessions"]["bound"]["identity"]["owner_config_digest"]
+    assert len(digest) == 64
+    assert all(character in "0123456789abcdef" for character in digest)
 
 
 def test_client_nonquota_errors_stay_failures():

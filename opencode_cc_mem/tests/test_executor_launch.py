@@ -345,6 +345,71 @@ def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
         executor._verify_client_bytes()
 
 
+def test_codex_version_probe_uses_run_owned_home_and_launch_path(tmp_path):
+    record = tmp_path / "version-environment.txt"
+    binary = tmp_path / "codex-version-probe"
+    binary.write_text(
+        "#!/bin/sh\n"
+        f'printf \'%s\\n%s\\n\' "$HOME" "$PATH" > "{record}"\n'
+        '/bin/mkdir -p "$HOME/.codex/tmp/arg0"\n'
+        "printf '%s\\n' 'codex-cli 0.154.0'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    context = _context(
+        tmp_path,
+        client="codex",
+        launch_argv=(str(binary),),
+        environment={"PATH": "/run-owned/bin"},
+    )
+
+    launch = prepare_launch(context)
+
+    home, observed_path = record.read_text().splitlines()
+    assert Path(home).parent == launch.invocation_dir.parent
+    assert not Path(home).exists()
+    assert observed_path == "/run-owned/bin"
+
+
+def test_codex_normalized_launch_identity_names_selected_model(tmp_path):
+    from campaign_runner import launch as module
+
+    context = _context(
+        tmp_path,
+        client="codex",
+        model="gpt-bound",
+        python_executable=sys.executable,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_PYTHON": sys.executable,
+        },
+    )
+    launch = prepare_launch(context)
+    native = {
+        str(path.relative_to(launch.invocation_dir)): body
+        for path, body in launch.files.items()
+        if str(path.relative_to(launch.invocation_dir)).startswith(".codex/")
+    }
+
+    normalized = module._normalized_launch_identity(
+        context,
+        launch.invocation_dir,
+        launch.env,
+        launch.files[launch.invocation_dir / "settings.json"],
+        launch.files[launch.invocation_dir / "mcp.json"],
+        native,
+        launch.files[launch.invocation_dir / "policy.json"],
+    )
+
+    assert normalized["components"]["model"] == "gpt-bound"
+    changed = copy.deepcopy(normalized)
+    changed["components"]["model"] = "gpt-other"
+    with pytest.raises(ExecutorRefused, match="identity mismatch: model"):
+        module._verify_bound_launch_identity(
+            {"launch_identity": normalized}, changed
+        )
+
+
 def test_codex_configuration_identity_ignores_owner_config(tmp_path):
     binary = _fake_codex_client(tmp_path)
     owner = tmp_path / "owner.toml"
