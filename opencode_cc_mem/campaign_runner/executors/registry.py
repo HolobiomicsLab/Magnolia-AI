@@ -118,6 +118,28 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
     if route.client != "opencode":
         if not _capable(context, route.client, role):
             raise ExecutorRefused(f"{route.client} lacks accepted {role} role capability")
+        if route.client == "claude-code":
+            from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
+            from campaign_runner.roles import load_role
+
+            from .claude_code import ClaudeCodeExecutor
+
+            if not route.model:
+                raise ExecutorRefused("Claude Code requires an explicit selected model")
+            prepared = prepare_launch(context)
+            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+            effective_cap = _effective_cap(context, default_cap)
+            if effective_cap is None:
+                raise ExecutorRefused("Claude Code requires a positive effective cap")
+            return ClaudeCodeExecutor(
+                prepared=prepared,
+                model=route.model,
+                role=role,
+                max_turns=effective_cap,
+                timeout_seconds=context.timeout_seconds,
+                governance=context.governance,
+                resume_permitted=context.resume_from is not None,
+            )
         raise ExecutorRefused(f"{route.client} {role} executor is not implemented in this task")
     if role == "service":
         return OpenCodeServiceExecutor(

@@ -1,6 +1,7 @@
 import pytest
 
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
+from campaign_runner.executors.capabilities import load_role_capabilities
 from campaign_runner.routing import resolve_route
 from campaign_runner.workers import OpenCodeExecutor
 
@@ -30,3 +31,24 @@ def test_opencode_executor_is_unchanged(tmp_path):
     executor = executor_for(route, "worker", context)
     assert isinstance(executor, OpenCodeExecutor)
     assert executor.model == "opencode-go/deepseek-v4.1-flash"
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_default_claude_capability_projection_refuses_every_role(role):
+    route = resolve_route(
+        role,
+        {
+            "harness": "claude-code",
+            "models": {"claude-code": "claude-code/haiku"},
+            "routes": {role: "claude-code/haiku"},
+            "model": "claude-code/haiku",
+        },
+    )
+    context = ExecContext(
+        route=route,
+        role=role,
+        role_capabilities=load_role_capabilities(),
+    )
+
+    with pytest.raises(ExecutorRefused, match="lacks accepted"):
+        executor_for(route, role, context)
