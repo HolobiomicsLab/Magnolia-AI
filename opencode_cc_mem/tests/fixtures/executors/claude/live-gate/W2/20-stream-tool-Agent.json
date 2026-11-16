@@ -1,0 +1,23 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Agent hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_019QFmMuHbdvzzErxF1XGPdn",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "description": "Reply hi",
+      "prompt": "Reply with the single word: hi",
+      "subagent_type": "general-purpose"
+    },
+    "name": "Agent"
+  }
+}

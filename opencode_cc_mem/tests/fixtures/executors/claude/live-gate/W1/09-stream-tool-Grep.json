@@ -1,0 +1,22 @@
+{
+  "is_error": null,
+  "result_head": "docs/notes.md:1:ALLOWED-NOTES docs line",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01T8zXekdsSbuBwa6wBXqfLQ",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "output_mode": "content",
+      "path": "docs",
+      "pattern": "ALLOWED"
+    },
+    "name": "Grep"
+  }
+}

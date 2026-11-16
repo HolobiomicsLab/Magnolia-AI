@@ -1,0 +1,21 @@
+{
+  "is_error": null,
+  "result_head": "docs/notes.md",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01P8ofFCvVJuXZmmVNpUdqGz",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "path": "docs",
+      "pattern": "*.md"
+    },
+    "name": "Glob"
+  }
+}

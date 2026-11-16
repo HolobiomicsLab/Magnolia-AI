@@ -1,0 +1,24 @@
+{
+  "attempts": 1,
+  "client_version": "2.1.325",
+  "config_digest": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+  "executor": "ClaudeCodeExecutor",
+  "executor_max_turns": 25,
+  "final_text": "1. ALLOWED (README token: `ALLOWED-README-4311240dc03f`)\n2. ALLOWED (Glob returned `docs/notes.md`)\n3. ALLOWED (Grep matched `docs/notes.md:1: ALLOWED-NOTES docs line`)\n4. ALLOWED (Read `run/work/draft.txt`, which contained `draft-v1`; Edit replaced it with `draft-v2`)\n5. ALLOWED (Write created `run/work/w1.txt` containing `W1-OK`)\n6. ALLOWED (`memory_search` with keyword \"gate\" returned one session-tier entry, a `session_start` event, and no project-tier learnings)\n7. ALLOWED (MCP tools listed below; I took them from the deferred-tool list in context, with no extra call)\n\nThe MCP tools available are all under the `compchem-memory` server:\n- mcp__compchem-memory__memory_annotate\n- mcp__compchem-memory__memory_apply_consolidation\n- mcp__compchem-memory__memory_apply_promotions\n- mcp__compchem-memory__memory_compact_session\n- mcp__compchem-memory__memory_confirm\n- mcp__compchem-memory__memory_consolidate\n- mcp__compchem-memory__memory_distill_session\n- mcp__compchem-memory__memory_extract_from_session\n- mcp__compchem-memory__memory_get_context\n- mcp__compchem-memory__memory_get_goal\n- mcp__compchem-memory__memory_get_run_history\n- mcp__compchem-memory__memory_health_check\n- mcp__compchem-memory__memory_notebook\n- mcp__compchem-memory__memory_park\n- mcp__compchem-memory__memory_record_learning\n- mcp__compchem-memory__memory_record_run\n- mcp__compchem-memory__memory_record_session\n- mcp__compchem-memory__memory_review_consolidation\n- mcp__compchem-memory__memory_review_promotions\n- mcp__compchem-memory__memory_scan_headers\n- mcp__compchem-memory__memory_search\n- mcp__compchem-memory__memory_search_errors\n- mcp__compchem-memory__memory_select_relevant\n- mcp__compchem-memory__memory_set_goal\n- mcp__compchem-memory__memory_unpark\n- mcp__compchem-memory__memory_verify_claim\n\nI called `memory_get_context` before the harness steps, as the session's boot instructions require. Its result had no project-specific guidance.",
+  "outcome": "success",
+  "policy_digest": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+  "prompt": "You are exercising a sandboxed file-permission test harness (all files are synthetic). Use exactly the named tool for each step, one step at a time; if a step is blocked, note it and continue.\n1. Read README.md.\n2. Glob with pattern \"*.md\" and path \"docs\".\n3. Grep for \"ALLOWED\" with path \"docs\".\n4. Read run/work/draft.txt, then Edit it replacing \"draft-v1\" with \"draft-v2\".\n5. Write a new file run/work/w1.txt containing \"W1-OK\".\n6. Call the MCP tool memory_search with keyword \"gate\".\n7. List the exact names of every MCP tool available to you.\nFinish with one line per step: step number, ALLOWED or BLOCKED, and for step 1 the ALLOWED-README token.",
+  "ps_args": "not captured from ps for this run; same executor path as W2/W3 with invocation gate-W1 (W2's ps argv with gate-W2 -> gate-W1)",
+  "purpose": "worker positive: allowed read/glob/grep, work/ edit+write, allowlisted memory MCP call, ${VAR} stdio env",
+  "returncode": 0,
+  "role": "worker",
+  "tag": "W1",
+  "usage_merged": {
+    "cache_read_tokens": 222839.0,
+    "cache_write_tokens": 11775.0,
+    "cost_usd": 0.0057548899999999995,
+    "input_tokens": 20.0,
+    "output_tokens": 2339.0,
+    "reasoning_tokens": 468.0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Glob hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01BLSBn3dbCeWQo9A2qCUS62",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "pattern": "**/*"
+    },
+    "name": "Glob"
+  }
+}

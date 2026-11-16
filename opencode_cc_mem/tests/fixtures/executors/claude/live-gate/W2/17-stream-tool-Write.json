@@ -1,0 +1,22 @@
+{
+  "is_error": true,
+  "result_head": "Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01QgQN21g4PWbNwgcUXBvHwh",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "content": "x",
+      "file_path": "README-planted.txt"
+    },
+    "name": "Write"
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "api_error_status": null,
+  "duration_api_ms": 13176,
+  "duration_ms": 14574,
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "fast_mode_state": "off",
+  "first_content_frame_ms": 680,
+  "is_error": false,
+  "modelUsage": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 11775,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 11775,
+      "cacheReadInputTokens": 222839,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0057548899999999995,
+      "inputTokens": 20,
+      "maxOutputTokens": 128000,
+      "outputTokens": 2339,
+      "provider": "firstParty",
+      "thinkingTokens": 468,
+      "webSearchRequests": 0
+    }
+  },
+  "model_usage_since_last_result": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 11775,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 11775,
+      "cacheReadInputTokens": 222839,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0057548899999999995,
+      "inputTokens": 20,
+      "maxOutputTokens": 128000,
+      "outputTokens": 2339,
+      "provider": "firstParty",
+      "thinkingTokens": 468,
+      "webSearchRequests": 0
+    }
+  },
+  "num_turns": 10,
+  "permission_denials": [],
+  "queued_turn_count": 0,
+  "result": "1. ALLOWED (README token: <redacted> ALLOWED (Glob returned `docs/notes.md`)\n3. ALLOWED (Grep matched `docs/notes.md:1: ALLOWED-NOTES docs line`)\n4. ALLOWED (Read `run/work/draft.txt`, which contained `draft-v1`; Edit replaced it with `draft-v2`)\n5. ALLOWED (Write created `run/work/w1.txt` containing `W1-OK`)\n6. ALLOWED (`memory_search` with keyword \"gate\" returned one session-tier entry, a `session_start` event, and no project-tier learnings)\n7. ALLOWED (MCP tools listed below; I took them from the deferred-tool list in context, with no extra call)\n\nThe MCP tools available are all under the `compchem-memory` server:\n- mcp__compchem-memory__memory_annotate\n- mcp__compchem-memory__memory_apply_consolidation\n- mcp__compchem-memory__memory_apply_promotions\n- mcp__compchem-memory__memory_compact_session\n- mcp__compchem-memory__memory_confirm\n- mcp__compchem-memory__memory_consolidate\n- mcp__compchem-memory__memory_distill_session\n- mcp__compchem-memory__memory_extract_from_session\n- mcp__compchem-memory__memory_get_context\n- mcp__compchem-memory__memory_get_goal\n- mcp__compchem-memory__memory_get_run_history\n- mcp__compchem-memory__memory_health_check\n- mcp__compchem-memory__memory_notebook\n- mcp__compchem-memory__memory_park\n- mcp__compchem-memory__memory_record_learning\n- mcp__compchem-memory__memory_record_run\n- mcp__compchem-memory__memory_record_session\n- mcp__compchem-memory__memory_review_consolidation\n- mcp__compchem-memory__memory_review_promotions\n- mcp__compchem-memory__memory_scan_headers\n- mcp__compchem-memory__memory_search\n- mcp__compchem-memory__memory_search_errors\n- mcp__compchem-memory__memory_select_relevant\n- mcp__compchem-memory__memory_set_goal\n- mcp__compchem-memory__memory_unpark\n- mcp__compchem-memory__memory_verify_claim\n\nI called `memory_get_context` before the harness steps, as the session's boot instructions require. Its result had no project-specific guidance.",
+  "result_index": 0,
+  "safety_stops": 0,
+  "session_id": "ses-fixture-1",
+  "stop_reason": "end_turn",
+  "subagent_stats": {
+    "by_type": {},
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "system": 0,
+      "user": 0
+    },
+    "max_depth": 0,
+    "refused": {
+      "budget": 0,
+      "concurrency_limit": 0,
+      "depth_limit": 0
+    },
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "spawned": 0,
+    "spawned_by_subagents": 0,
+    "started_in_background": 0
+  },
+  "subtype": "success",
+  "terminal_reason": "completed",
+  "time_to_request_ms": 88,
+  "total_cost_usd": 0.0057548899999999995,
+  "ttft_ms": 2213,
+  "ttft_stream_ms": 680,
+  "type": "result",
+  "usage": {
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 11775,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 11775,
+    "cache_read_input_tokens": 222839,
+    "fallback_credit": null,
+    "inference_geo": "global",
+    "input_tokens": 20,
+    "iterations": [
+      {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 312,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 312,
+        "cache_read_input_tokens": 24395,
+        "input_tokens": 2,
+        "output_tokens": 959,
+        "type": "message"
+      }
+    ],
+    "output_tokens": 2339,
+    "output_tokens_details": {
+      "thinking_tokens": 468
+    },
+    "server_tool_use": {
+      "web_fetch_requests": 0,
+      "web_search_requests": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "uuid": "4211421c-2262-4274-b59e-b1636564b7d4"
+}

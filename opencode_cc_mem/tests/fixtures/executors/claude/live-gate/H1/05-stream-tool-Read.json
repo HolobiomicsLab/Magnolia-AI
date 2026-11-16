@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "1\tALLOWED-NOTES docs line\n2\t",
+  "tool_result_meta": [
+    {
+      "id": "toolu_0184UbuHvzgywHrMqodspZVj",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs/notes.md"
+    },
+    "name": "Read"
+  }
+}

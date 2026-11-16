@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "1\t# Gate project\n2\tALLOWED-README-4311240dc03f\n3\t",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01Ebu54xrfk9LmqUFNH337Kr",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+    },
+    "name": "Read"
+  }
+}

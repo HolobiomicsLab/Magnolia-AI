@@ -1,0 +1,24 @@
+{
+  "attempts": 1,
+  "client_version": "2.1.325",
+  "config_digest": "4682aee6b02485ebd6d848503af1215014a1c0928ffc1793e2a8f0f7bab2b3c0",
+  "executor": "ClaudeCodeExecutor",
+  "executor_max_turns": 25,
+  "final_text": "1. Read README.md: BLOCKED. The PreToolUse hook returned \"Magnolia required role policy denied this operation.\"\n2. Write run/work/w3.txt: BLOCKED. Same hook denial.\n3. memory_search (keyword \"gate\"): BLOCKED. The tool's schema has to be loaded through ToolSearch, and that was denied by the same policy, so I did not call the MCP tool.\n\nI did not try other routes such as shell commands to read or write these files, since that would get around the policy the hook is enforcing. The denial comes from the Magnolia role policy, so whether these operations are allowed depends on that role configuration.",
+  "outcome": "success",
+  "policy_digest": "a2724320c63e59d59e744df2bbeec5198cdb21f680d4a873a064f50a6eb09503",
+  "prompt": "Sandboxed permission test (synthetic files). Use exactly the named tool for each step; if a step is blocked, note it and continue. 1. Read README.md. 2. Write a new file run/work/w3.txt containing \"W3\". 3. Call the MCP tool memory_search with keyword \"gate\". Reply with one line per step: ALLOWED or BLOCKED.",
+  "ps_args": "/HOME/<elided> -p Sandboxed permission test (synthetic files). Use exactly the named tool for each step; if a step is blocked, note it and continue. 1. Read README.md. 2. Write a new file run/work/w3.txt containing \"W3\". 3. Call the MCP tool memory_search with keyword \"gate\". Reply with one line per step: ALLOWED or BLOCKED. --setting-sources project --settings /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-W3/claude-settings.json --mcp-config /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-W3/claude-mcp.json --strict-mcp-config --output-format stream-json --verbose --max-turns 25 --model haiku --allowedTools Read Glob Grep Edit Write mcp__compchem-memory__memory_get_context mcp__compchem-memory__memory_search mcp__compchem-memory__memory_get_run_history",
+  "purpose": "worker fail-closed: hook interpreter path does not exist",
+  "returncode": 0,
+  "role": "worker",
+  "tag": "W3",
+  "usage_merged": {
+    "cache_read_tokens": 36740.0,
+    "cache_write_tokens": 6154.0,
+    "cost_usd": 0.0021016,
+    "input_tokens": 4.0,
+    "output_tokens": 1006.0,
+    "reasoning_tokens": 468.0
+  }
+}

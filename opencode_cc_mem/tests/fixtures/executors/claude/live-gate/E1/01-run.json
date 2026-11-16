@@ -1,0 +1,24 @@
+{
+  "attempts": 1,
+  "client_version": "2.1.325",
+  "config_digest": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+  "executor": "ClaudeCodeExecutor",
+  "executor_max_turns": 1,
+  "final_text": "EVAL-OK 4\nBash, Write, memory_get_context (I can't confirm the full list from here)",
+  "outcome": "success",
+  "policy_digest": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+  "prompt": "Do not use any tool. Reply with exactly: EVAL-OK followed by the value of 2+2, then on a second line the exact names of all tools available to you (or NONE).",
+  "ps_args": "/HOME/<elided> -p Do not use any tool. Reply with exactly: EVAL-OK followed by the value of 2+2, then on a second line the exact names of all tools available to you (or NONE). --setting-sources project --settings /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-E1/claude-settings.json --mcp-config /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-E1/claude-mcp.json --strict-mcp-config --output-format stream-json --verbose --max-turns 1 --model haiku --tools",
+  "purpose": "evaluator: --tools \"\", empty strict MCP, one turn",
+  "returncode": 0,
+  "role": "evaluator",
+  "tag": "E1",
+  "usage_merged": {
+    "cache_read_tokens": 649.0,
+    "cache_write_tokens": 4030.0,
+    "cost_usd": 0.00125369,
+    "input_tokens": 2.0,
+    "output_tokens": 882.0,
+    "reasoning_tokens": 844.0
+  }
+}

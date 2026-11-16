@@ -1,0 +1,22 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Bash hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01QN9q2McmZpacmHdFgEEpBE",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "command": "touch /TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/r1-marker",
+      "description": "Create marker file run/work/r1-marker"
+    },
+    "name": "Bash"
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1666
+    },
+    {
+      "kind": "prompt"
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "-n": true,
+        "output_mode": "content",
+        "path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs",
+        "pattern": "ALLOWED"
+      },
+      "kind": "tool",
+      "name": "grep",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "-n": true,
+        "output_mode": "content",
+        "path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs",
+        "pattern": "ALLOWED"
+      },
+      "kind": "tool",
+      "name": "grep",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt",
+        "new_string": "review-v2",
+        "old_string": "draft-v2",
+        "replace_all": false
+      },
+      "kind": "tool",
+      "name": "edit",
+      "output": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "server": null
+    },
+    {
+      "input": {
+        "content": "R1\n",
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/r1.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "output": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "server": null
+    },
+    {
+      "input": {
+        "command": "touch /TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/r1-marker",
+        "description": "Create marker file run/work/r1-marker"
+      },
+      "kind": "tool",
+      "name": "bash",
+      "output": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "server": null
+    },
+    {
+      "kind": "session-end"
+    }
+  ],
+  "source": "<project>/.magnolia/transcripts/claude/<session>.jsonl"
+}

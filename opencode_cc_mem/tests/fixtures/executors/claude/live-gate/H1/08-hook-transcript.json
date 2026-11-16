@@ -1,0 +1,51 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1666
+    },
+    {
+      "kind": "prompt"
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs/notes.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "output": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "server": null
+    },
+    {
+      "kind": "assistant"
+    },
+    {
+      "kind": "session-end"
+    }
+  ],
+  "source": "<project>/.magnolia/transcripts/claude/<session>.jsonl"
+}

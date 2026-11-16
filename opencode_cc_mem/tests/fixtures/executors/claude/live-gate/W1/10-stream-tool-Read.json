@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "1\tdraft-v1\n2\t",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01PLCeedyhNWMy2XXb5VCKHM",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt"
+    },
+    "name": "Read"
+  }
+}

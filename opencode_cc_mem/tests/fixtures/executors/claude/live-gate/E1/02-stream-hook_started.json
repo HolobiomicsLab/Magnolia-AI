@@ -1,0 +1,9 @@
+{
+  "hook_event": "SessionStart",
+  "hook_id": "f357fcaa-6d80-4ee9-91b7-230c237748a7",
+  "hook_name": "SessionStart:startup",
+  "session_id": "ses-fixture-1",
+  "subtype": "hook_started",
+  "type": "system",
+  "uuid": "05478fb5-7edc-4764-8e96-beb9dfb80135"
+}

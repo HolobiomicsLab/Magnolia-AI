@@ -1,0 +1,17 @@
+{
+  "note": "memsrv.sh log, one line per memory-server start by the client (W1, W2, W3 in order); token_state=expanded means ${MAGNOLIA_LIVE_GATE_TOKEN} in claude-mcp.json stdio env was expanded by Claude Code; values are not recorded",
+  "starts": [
+    {
+      "anthropic_key_present": false,
+      "token_state": "expanded"
+    },
+    {
+      "anthropic_key_present": false,
+      "token_state": "expanded"
+    },
+    {
+      "anthropic_key_present": false,
+      "token_state": "expanded"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "1\tgate\n2\t",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01H8sYxjr5K77SmKddXfGbMK",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "run/control/gate.txt"
+    },
+    "name": "Read"
+  }
+}

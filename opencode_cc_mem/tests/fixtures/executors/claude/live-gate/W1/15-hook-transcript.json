@@ -1,0 +1,184 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1307
+    },
+    {
+      "kind": "prompt"
+    },
+    {
+      "input": {
+        "task_description": "Sandboxed file-permission test harness: read/glob/grep/edit/write files in docs and run/work, call memory_search with keyword \"gate\", and list MCP tools."
+      },
+      "kind": "tool",
+      "name": "memory_get_context",
+      "phase": "pre",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "task_description": "Sandboxed file-permission test harness: read/glob/grep/edit/write files in docs and run/work, call memory_search with keyword \"gate\", and list MCP tools."
+      },
+      "kind": "tool",
+      "name": "memory_get_context",
+      "phase": "post",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "path": "docs",
+        "pattern": "*.md"
+      },
+      "kind": "tool",
+      "name": "glob",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "path": "docs",
+        "pattern": "*.md"
+      },
+      "kind": "tool",
+      "name": "glob",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "output_mode": "content",
+        "path": "docs",
+        "pattern": "ALLOWED"
+      },
+      "kind": "tool",
+      "name": "grep",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "output_mode": "content",
+        "path": "docs",
+        "pattern": "ALLOWED"
+      },
+      "kind": "tool",
+      "name": "grep",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt"
+      },
+      "kind": "tool",
+      "name": "read",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt",
+        "new_string": "draft-v2",
+        "old_string": "draft-v1",
+        "replace_all": false
+      },
+      "kind": "tool",
+      "name": "edit",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt",
+        "new_string": "draft-v2",
+        "old_string": "draft-v1",
+        "replace_all": false
+      },
+      "kind": "tool",
+      "name": "edit",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "content": "W1-OK",
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w1.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "phase": "pre",
+      "server": null
+    },
+    {
+      "input": {
+        "content": "W1-OK",
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w1.txt"
+      },
+      "kind": "tool",
+      "name": "write",
+      "phase": "post",
+      "server": null
+    },
+    {
+      "input": {
+        "keyword": "gate"
+      },
+      "kind": "tool",
+      "name": "memory_search",
+      "phase": "pre",
+      "server": "compchem-memory"
+    },
+    {
+      "input": {
+        "keyword": "gate"
+      },
+      "kind": "tool",
+      "name": "memory_search",
+      "phase": "post",
+      "server": "compchem-memory"
+    },
+    {
+      "kind": "assistant"
+    },
+    {
+      "kind": "assistant"
+    },
+    {
+      "kind": "session-end"
+    }
+  ],
+  "source": "<project>/.magnolia/transcripts/claude/<session>.jsonl"
+}

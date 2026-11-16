@@ -1,0 +1,103 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude post-tool",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude post-tool",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "sh -c 'fallback='\"'\"'{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Magnolia required role policy denied this operation.\"}}'\"'\"'\nblock() { printf '\"'\"'%s\\n'\"'\"' \"$fallback\"; }\nexec 3<&0 || { block; exit $?; }\nout=$(mktemp \"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\") || { block; exit $?; }\ncleanup() { rm -f \"$out\"; }\ntrap cleanup 0\n/TMPDIR/claude-scratchpad -m compchem_memory.hook claude pre-tool <&3 3<&- >\"$out\" &\nhook_pid=$!\nexec 3<&-\n(\n  elapsed=0\n  while kill -0 \"$hook_pid\" 2>/dev/null; do\n    if [ \"$elapsed\" -ge 12 ]; then\n      kill -TERM \"$hook_pid\" 2>/dev/null\n      sleep 1\n      kill -KILL \"$hook_pid\" 2>/dev/null\n      exit 0\n    fi\n    sleep 1\n    elapsed=$((elapsed + 1))\n  done\n) </dev/null >/dev/null 2>&1 &\ntimer_pid=$!\nwait \"$hook_pid\"\nstatus=$?\nkill \"$timer_pid\" 2>/dev/null\nwait \"$timer_pid\" 2>/dev/null\nif [ \"$status\" -eq 0 ]; then cat \"$out\" || block; else block; fi\nexit $?'",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude session-end",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude session-start",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude turn-end",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude agent-start",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude agent-end",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "/TMPDIR/claude-scratchpad -m compchem_memory.hook claude prompt",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

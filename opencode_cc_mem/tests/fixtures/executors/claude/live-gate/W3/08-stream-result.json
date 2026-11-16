@@ -1,0 +1,143 @@
+{
+  "api_error_status": null,
+  "duration_api_ms": 5132,
+  "duration_ms": 5210,
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "fast_mode_state": "off",
+  "first_content_frame_ms": 560,
+  "is_error": false,
+  "modelUsage": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 6154,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 6154,
+      "cacheReadInputTokens": 36740,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0021016,
+      "inputTokens": 4,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1006,
+      "provider": "firstParty",
+      "thinkingTokens": 468,
+      "webSearchRequests": 0
+    }
+  },
+  "model_usage_since_last_result": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 6154,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 6154,
+      "cacheReadInputTokens": 36740,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0021016,
+      "inputTokens": 4,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1006,
+      "provider": "firstParty",
+      "thinkingTokens": 468,
+      "webSearchRequests": 0
+    }
+  },
+  "num_turns": 4,
+  "permission_denials": [
+    {
+      "tool_input": {
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/README.md"
+      },
+      "tool_name": "Read",
+      "tool_use_id": "toolu_01XopTs43CN8UJWBxFHcGGLr"
+    },
+    {
+      "tool_input": {
+        "content": "W3",
+        "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w3.txt"
+      },
+      "tool_name": "Write",
+      "tool_use_id": "toolu_01CQFcduhPEzJiisfnRRzCyB"
+    },
+    {
+      "tool_input": {
+        "max_results": 1,
+        "query": "select:mcp__compchem-memory__memory_search"
+      },
+      "tool_name": "ToolSearch",
+      "tool_use_id": "toolu_01WEmPwbBbazN57CnJ9fUJMC"
+    }
+  ],
+  "queued_turn_count": 0,
+  "result": "1. Read README.md: BLOCKED. The PreToolUse hook returned \"Magnolia required role policy denied this operation.\"\n2. Write run/work/w3.txt: BLOCKED. Same hook denial.\n3. memory_search (keyword \"gate\"): BLOCKED. The tool's schema has to be loaded through ToolSearch, and that was denied by the same policy, so I did not call the MCP tool.\n\nI did not try other routes such as shell commands to read or write these files, since that would get around the policy the hook is enforcing. The denial comes from the Magnolia role policy, so whether these operations are allowed depends on that role configuration.",
+  "result_index": 0,
+  "safety_stops": 0,
+  "session_id": "ses-fixture-1",
+  "stop_reason": "end_turn",
+  "subagent_stats": {
+    "by_type": {},
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "system": 0,
+      "user": 0
+    },
+    "max_depth": 0,
+    "refused": {
+      "budget": 0,
+      "concurrency_limit": 0,
+      "depth_limit": 0
+    },
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "spawned": 0,
+    "spawned_by_subagents": 0,
+    "started_in_background": 0
+  },
+  "subtype": "success",
+  "terminal_reason": "completed",
+  "time_to_request_ms": 47,
+  "total_cost_usd": 0.0021016,
+  "ttft_ms": 1403,
+  "ttft_stream_ms": 560,
+  "type": "result",
+  "usage": {
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 6154,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 6154,
+    "cache_read_input_tokens": 36740,
+    "fallback_credit": null,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "iterations": [
+      {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 684,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 684,
+        "cache_read_input_tokens": 21105,
+        "input_tokens": 2,
+        "output_tokens": 516,
+        "type": "message"
+      }
+    ],
+    "output_tokens": 1006,
+    "output_tokens_details": {
+      "thinking_tokens": 468
+    },
+    "server_tool_use": {
+      "web_fetch_requests": 0,
+      "web_search_requests": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "uuid": "1a2b2e37-56f5-4d80-8bbe-207184e79217"
+}

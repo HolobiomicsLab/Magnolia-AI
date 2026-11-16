@@ -1,0 +1,24 @@
+{
+  "attempts": 1,
+  "client_version": "2.1.325",
+  "config_digest": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+  "executor": "ClaudeCodeExecutor",
+  "executor_max_turns": 25,
+  "final_text": "1. ALLOWED: `docs/notes.md` read successfully. Its content is `ALLOWED-NOTES docs line`.\n2. BLOCKED: reading `README.md` was denied by a Magnolia role policy hook (`PreToolUse:Read`). I did not try to read it another way.\n\nRead\n\nOnly `Read` is in my function list. I can't see any deferred tools, so this may not be every tool that exists.",
+  "outcome": "success",
+  "policy_digest": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+  "prompt": "Synthetic permission test. 1. Read docs/notes.md. 2. Read README.md. If a step is blocked, note it and continue. Then reply with one line per step (ALLOWED or BLOCKED) and a last line listing the exact names of all tools available to you.",
+  "ps_args": "/HOME/<elided> -p Synthetic permission test. 1. Read docs/notes.md. 2. Read README.md. If a step is blocked, note it and continue. Then reply with one line per step (ALLOWED or BLOCKED) and a last line listing the exact names of all tools available to you. --setting-sources project --settings /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-H1/claude-settings.json --mcp-config /TMPDIR/claude-gate.8E1oyJOLrn/project/run/control/executors/gate-H1/claude-mcp.json --strict-mcp-config --output-format stream-json --verbose --max-turns 25 --model haiku --tools Read --allowedTools Read",
+  "purpose": "helper with native_read over docs/: exact --tools Read",
+  "returncode": 0,
+  "role": "helper",
+  "tag": "H1",
+  "usage_merged": {
+    "cache_read_tokens": 7471.0,
+    "cache_write_tokens": 4750.0,
+    "cost_usd": 0.00139711,
+    "input_tokens": 4.0,
+    "output_tokens": 744.0,
+    "reasoning_tokens": 388.0
+  }
+}
