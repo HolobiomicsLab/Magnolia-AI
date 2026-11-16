@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import tomllib
 import uuid
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
 FORBIDDEN_FLAGS = frozenset({"--dangerously-bypass-hook-trust", "--full-auto"})
+BARE_TOML_KEY = re.compile(r"[A-Za-z0-9_-]+")
 QuotaDetector = Callable[[Mapping[str, Any]], RunOutcome | None]
 
 
@@ -173,26 +175,33 @@ def require_codex_trust(project_dir: Path, setup: Mapping[str, Any]) -> None:
         row for row in rows
         if isinstance(row, Mapping) and row.get("sourcePath") == expected_source
     ]
+    expected_rows: dict[str, str] = {}
     for event_name, groups in registered.items():
         if not isinstance(groups, list):
             raise ExecutorRefused("Codex project hooks are missing or invalid")
-        handler_count = sum(
-            len(group.get("hooks", ()))
-            for group in groups
-            if isinstance(group, Mapping) and isinstance(group.get("hooks"), list)
-        )
-        trusted_rows = [
-            row for row in project_rows
-            if _normalized_event(row.get("eventName")) == _normalized_event(event_name)
-        ]
-        if len(trusted_rows) != handler_count:
-            raise ExecutorRefused(
-                f"Codex {event_name} hook has no complete trust row; review it with /hooks"
-            )
+        for group_index, group in enumerate(groups):
+            handlers = group.get("hooks") if isinstance(group, Mapping) else None
+            if not isinstance(handlers, list):
+                raise ExecutorRefused("Codex project hooks are missing or invalid")
+            for hook_index, _handler in enumerate(handlers):
+                key = _hook_key(expected_source, event_name, group_index, hook_index)
+                expected_rows[key] = event_name
+    rows_by_key: dict[str, Mapping[str, Any]] = {}
     for row in project_rows:
         key = row.get("key")
+        if not isinstance(key, str) or key in rows_by_key:
+            raise ExecutorRefused(
+                "Codex hook trust rows have missing or duplicate keys; review them with /hooks"
+            )
+        rows_by_key[key] = row
+    if set(rows_by_key) != set(expected_rows):
+        raise ExecutorRefused(
+            "Codex hook trust keys do not match hooks.json; review the project hooks with /hooks"
+        )
+    for key, event_name in expected_rows.items():
+        row = rows_by_key[key]
         current_hash = row.get("currentHash")
-        stored = state.get(key) if isinstance(state, Mapping) and isinstance(key, str) else None
+        stored = state.get(key) if isinstance(state, Mapping) else None
         if (
             row.get("enabled") is not True
             or row.get("trustStatus") != "trusted"
@@ -204,10 +213,7 @@ def require_codex_trust(project_dir: Path, setup: Mapping[str, Any]) -> None:
             raise ExecutorRefused(
                 "Codex hooks are stale or untrusted; review the project hooks with /hooks"
             )
-        if not any(
-            _normalized_event(row.get("eventName")) == _normalized_event(event_name)
-            for event_name in registered
-        ):
+        if _normalized_event(row.get("eventName")) != _normalized_event(event_name):
             raise ExecutorRefused("Codex trusted hook evidence does not match hooks.json")
     if not project_rows:
         raise ExecutorRefused("Codex hook trust evidence targets a different project")
@@ -395,10 +401,13 @@ class CodexExecutor:
                 entries = payload.get(section)
                 if not isinstance(entries, Mapping):
                     continue
-                overrides.extend(
-                    f"{section}.{json.dumps(str(name))}.enabled=false"
-                    for name in sorted(entries)
-                )
+                for name in sorted(str(value) for value in entries):
+                    if BARE_TOML_KEY.fullmatch(name) is None:
+                        raise ExecutorRefused(
+                            f"Codex {section} entry {name!r} is not a bare TOML key; "
+                            "rename it to use only letters, digits, underscores, or hyphens"
+                        )
+                    overrides.append(f"{section}.{name}.enabled=false")
         return overrides
 
     def _native_artifact(self, relative: str) -> Path:
@@ -621,6 +630,12 @@ def _normalized_event(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     return "".join(char.lower() for char in value if char.isalnum())
+
+
+def _hook_key(source: str, event_name: str, group_index: int, hook_index: int) -> str:
+    """Return the persisted Codex key for one hooks.json handler."""
+    snake_event = re.sub(r"(?<!^)(?=[A-Z])", "_", event_name).lower()
+    return f"{source}:{snake_event}:{group_index}:{hook_index}"
 
 
 def _pid_is_running(pid: int | None) -> bool:

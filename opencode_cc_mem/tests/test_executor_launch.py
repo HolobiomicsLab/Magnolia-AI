@@ -17,14 +17,29 @@ from compchem_memory.hook.doorbell import process_prompt
 from compchem_memory.hook.project import ProjectPaths
 
 
-FORBIDDEN = {
+STRIPPED_CLIENT_ENV = {
     "CLAUDE_CONFIG_DIR": "CLAUDE-SENTINEL",
     "CODEX_HOME": "CODEX-HOME-SENTINEL",
     "VIBE_HOME": "VIBE-HOME-SENTINEL",
     "CODEX_API_KEY": "CODEX-KEY-SENTINEL",
     "ANTHROPIC_API_KEY": "ANTHROPIC-KEY-SENTINEL",
     "ANTHROPIC_AUTH_TOKEN": "ANTHROPIC-AUTH-SENTINEL",
+    "OPENAI_API_KEY": "OPENAI-KEY-SENTINEL",
+    "MISTRAL_API_KEY": "MISTRAL-KEY-SENTINEL",
 }
+PASSTHROUGH_CLIENT_ENV = {
+    "MAGNOLIA_OPENAI_API_KEY": "MN-OAI-ALIAS-SENTINEL",
+    "MAGNOLIA_MISTRAL_API_KEY": "MN-MIS-ALIAS-SENTINEL",
+    "OPENROUTER_API_KEY": "OPENROUTER-KEY-SENTINEL",
+    "DEEPSEEK_API_KEY": "DEEPSEEK-KEY-SENTINEL",
+    "KIMI_PLAN_MAGNOLIA_API_KEY": "KIMI-PLAN-KEY-SENTINEL",
+    "KIMI_API_KEY": "KIMI-KEY-SENTINEL",
+    "ZHIPU_API_KEY": "ZHIPU-KEY-SENTINEL",
+    "ZAI_API_KEY": "ZAI-KEY-SENTINEL",
+    "MAGNOLIA_LLM_API_KEY": "MAGNOLIA-MEMORY-KEY-SENTINEL",
+    "MAGNOLIA_CRITIC_API_KEY": "MAGNOLIA-CRITIC-KEY-SENTINEL",
+}
+PARENT_CLIENT_ENV = {**STRIPPED_CLIENT_ENV, **PASSTHROUGH_CLIENT_ENV}
 ROOT = Path(__file__).parents[1]
 WORKER_CAPABILITIES = (
     "native_read",
@@ -93,7 +108,7 @@ def _context(
         "invocation_id": invocation,
         "launch_argv": (f"stub-{client}", "--headless"),
         "role_capabilities": {client: {role: evidence}},
-        "environment": {"PATH": os.environ.get("PATH", ""), **FORBIDDEN},
+        "environment": {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV},
     }
     values.update(changes)
     context = ExecContext(**values)
@@ -126,7 +141,7 @@ def test_required_role_env_wins(tmp_path):
     assert launch.env["MAGNOLIA_DOORBELL"] == "0"
 
 
-def test_member_oauth_and_openai_key_are_not_filtered(tmp_path):
+def test_member_oauth_survives_but_client_api_key_is_filtered(tmp_path):
     context = _context(
         tmp_path,
         environment={
@@ -138,7 +153,26 @@ def test_member_oauth_and_openai_key_are_not_filtered(tmp_path):
     launch = prepare_launch(context)
 
     assert launch.env["CLAUDE_CODE_OAUTH_TOKEN"] == "member-subscription-token"
-    assert launch.env["OPENAI_API_KEY"] == "task-zero-verification-key"
+    assert "OPENAI_API_KEY" not in launch.env
+
+
+def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            memory_service={
+                "transport": "stdio",
+                "command": "/venv/bin/python",
+                "env_vars": ["OPENROUTER_API_KEY"],
+            },
+        )
+    )
+
+    assert "OPENROUTER_API_KEY" in _artifact_text(launch)
+    assert launch.env["OPENROUTER_API_KEY"] == "OPENROUTER-KEY-SENTINEL"
 
 
 def test_parallel_roles_and_interactive_render_do_not_cross_contaminate(tmp_path):
@@ -280,25 +314,28 @@ def test_missing_stale_or_untrusted_launch_refused(tmp_path, evidence_change, me
 
 
 @pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
-def test_effective_environment_and_artifacts_reject_sentinels(tmp_path, client):
+def test_effective_environment_strips_only_client_credentials(tmp_path, client):
     launch = prepare_launch(_context(tmp_path, client=client, invocation=client))
     resumed = prepare_launch(
         _context(tmp_path, client=client, invocation=client, resume_from=launch.invocation_dir)
     )
     combined = json.dumps(dict(launch.env), sort_keys=True) + _artifact_text(launch)
 
-    for name, sentinel in FORBIDDEN.items():
+    for name, sentinel in STRIPPED_CLIENT_ENV.items():
         assert name not in launch.env
         assert name not in resumed.env
         assert sentinel not in combined
+    for name, sentinel in PASSTHROUGH_CLIENT_ENV.items():
+        assert launch.env[name] == sentinel
+        assert resumed.env[name] == sentinel
     assert all(path.stat().st_mode & 0o222 == 0 for path in launch.files)
 
 
-@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
 def test_inherited_forbidden_value_cannot_survive_under_other_name(
     tmp_path, monkeypatch, name
 ):
-    sentinel = FORBIDDEN[name]
+    sentinel = STRIPPED_CLIENT_ENV[name]
     monkeypatch.setenv(name, sentinel)
     context = _context(
         tmp_path,
@@ -310,24 +347,25 @@ def test_inherited_forbidden_value_cannot_survive_under_other_name(
         prepare_launch(context)
 
 
-@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
 def test_forbidden_value_in_argv_is_refused(tmp_path, name):
     with pytest.raises(ExecutorRefused, match="forbidden client environment"):
         prepare_launch(
             _context(
                 tmp_path,
-                launch_argv=("stub", "--credential", FORBIDDEN[name]),
+                launch_argv=("stub", "--credential", STRIPPED_CLIENT_ENV[name]),
             )
         )
 
 
-@pytest.mark.parametrize("name", tuple(FORBIDDEN))
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
 def test_forbidden_value_in_resumed_artifact_is_refused(tmp_path, name):
     first = prepare_launch(_context(tmp_path))
     settings = first.invocation_dir / "settings.json"
     settings.chmod(0o644)
     settings.write_text(
-        json.dumps({"copied_value": FORBIDDEN[name]}) + "\n", encoding="utf-8"
+        json.dumps({"copied_value": STRIPPED_CLIENT_ENV[name]}) + "\n",
+        encoding="utf-8",
     )
     settings.chmod(0o444)
 
@@ -471,8 +509,14 @@ def test_memory_role_without_route_is_refused(tmp_path):
         )
 
 
-def test_memory_route_depending_on_filtered_variable_is_refused(tmp_path):
-    with pytest.raises(ExecutorRefused, match="filtered.*ANTHROPIC_API_KEY"):
+@pytest.mark.parametrize(
+    "api_key_name",
+    ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MISTRAL_API_KEY"),
+)
+def test_memory_route_depending_on_filtered_variable_is_refused(
+    tmp_path, api_key_name
+):
+    with pytest.raises(ExecutorRefused, match=rf"filtered.*{api_key_name}"):
         prepare_launch(
             _context(
                 tmp_path,
@@ -481,17 +525,18 @@ def test_memory_route_depending_on_filtered_variable_is_refused(tmp_path):
                 memory_service={
                     "transport": "stdio",
                     "command": "/venv/bin/python",
-                    "env_vars": ["ANTHROPIC_API_KEY"],
+                    "env_vars": [api_key_name],
                 },
             )
         )
 
 
-def test_memory_config_refuses_embedded_client_secret(tmp_path):
+def test_codex_rendered_config_refuses_stripped_key_value(tmp_path):
     with pytest.raises(ExecutorRefused, match="forbidden client environment value"):
         prepare_launch(
             _context(
                 tmp_path,
+                client="codex",
                 role="worker",
                 capabilities=(
                     "native_read",
@@ -505,7 +550,7 @@ def test_memory_config_refuses_embedded_client_secret(tmp_path):
                 memory_service={
                     "transport": "stdio",
                     "command": "/venv/bin/python",
-                    "args": ["--api-key", "ANTHROPIC-KEY-SENTINEL"],
+                    "args": ["--api-key", "OPENAI-KEY-SENTINEL"],
                 },
             )
         )

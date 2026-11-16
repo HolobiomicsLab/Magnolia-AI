@@ -27,10 +27,29 @@ from campaign_runner.workers import InvocationGovernance, WorkerError
 ROOT = Path(__file__).parents[1]
 LIVE = ROOT / "tests/fixtures/executors/claude/live-p3"
 SYNTHETIC = ROOT / "tests/fixtures/executors/claude/synthetic"
-FORBIDDEN_ENV = {
+STRIPPED_ENV = {
     "CLAUDE_CONFIG_DIR": "forbidden-config",
+    "CODEX_HOME": "forbidden-codex-home",
+    "VIBE_HOME": "forbidden-vibe-home",
+    "CODEX_API_KEY": "forbidden-codex-key",
     "ANTHROPIC_API_KEY": "forbidden-key",
+    "ANTHROPIC_AUTH_TOKEN": "forbidden-anthropic-token",
+    "OPENAI_API_KEY": "forbidden-openai-key",
+    "MISTRAL_API_KEY": "forbidden-mistral-key",
 }
+PASSTHROUGH_ENV = {
+    "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
+    "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
+    "OPENROUTER_API_KEY": "forbidden-openrouter-key",
+    "DEEPSEEK_API_KEY": "forbidden-deepseek-key",
+    "KIMI_PLAN_MAGNOLIA_API_KEY": "forbidden-kimi-plan-key",
+    "KIMI_API_KEY": "forbidden-kimi-key",
+    "ZHIPU_API_KEY": "forbidden-zhipu-key",
+    "ZAI_API_KEY": "forbidden-zai-key",
+    "MAGNOLIA_LLM_API_KEY": "forbidden-memory-key",
+    "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
+}
+PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
 ROLE_CAPABILITIES = {
     "worker": (
         "native_read",
@@ -94,9 +113,9 @@ state = pathlib.Path(config["state"])
 index = len(list(state.glob("call-*.json")))
 (state / f"call-{index}.json").write_text(json.dumps({
     "argv": sys.argv,
-    "forbidden_env": {
+    "client_env": {
         name: os.environ.get(name)
-        for name in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")
+        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
         if name in os.environ
     },
     "role": os.environ.get("MAGNOLIA_ROLE"),
@@ -173,7 +192,7 @@ def _context(
         "environment": {
             "PATH": os.environ.get("PATH", ""),
             "CLAUDE_STUB_CONFIG": str(config),
-            **FORBIDDEN_ENV,
+            **PARENT_CLIENT_ENV,
         },
         "role_cap": role_cap,
         "governor_cap": governor_cap,
@@ -288,7 +307,7 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
             }
         }
     }
-    assert call["forbidden_env"] == {}
+    assert call["client_env"] == PASSTHROUGH_ENV
     assert call["role"] == "worker"
     assert Path(call["policy"]).is_absolute()
 
@@ -494,7 +513,7 @@ def test_claude_one_same_session_empty_retry(tmp_path):
         for line in (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     ]
     assert len(rows) == 2
-    assert rows[0]["session_identity"] is None
+    assert rows[0]["session_identity"]["session_id"] == "retry-session"
     assert rows[1]["session_identity"]["session_id"] == "retry-session"
     binding = json.loads(
         (tmp_path / "run/control/executors/claude-one/session-bindings.json").read_text()
