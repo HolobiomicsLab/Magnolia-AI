@@ -1,0 +1,11 @@
+{
+  "synthetic": false,
+  "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/claude/parent/05-PreToolUse.json",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "mcp__probe__echo",
+  "tool_input": {
+    "text": "top"
+  },
+  "permission_mode": "default"
+}
+
