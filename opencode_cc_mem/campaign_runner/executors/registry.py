@@ -179,6 +179,14 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 governance=context.governance,
                 resume_permitted=context.resume_from is not None,
                 reasoning_effort=str(context.setup.get("codex_reasoning_effort", "low")),
+                user_config_path=Path(
+                    str(
+                        context.setup.get(
+                            "codex_user_config_path",
+                            Path.home() / ".codex" / "config.toml",
+                        )
+                    )
+                ),
             )
         if route.client == "vibe":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import stat
 import tomllib
 import uuid
@@ -43,7 +44,7 @@ class ParsedCodexRun:
 
     @property
     def bounded_events(self) -> int:
-        return self.item_completed + self.turns
+        return self.turns
 
 
 def parse_codex_stream(
@@ -166,29 +167,49 @@ def require_codex_trust(project_dir: Path, setup: Mapping[str, Any]) -> None:
     except (OSError, ValueError, TypeError) as exc:
         raise ExecutorRefused("Codex project hooks are missing or invalid") from exc
     registered = project_hooks.get("hooks") if isinstance(project_hooks, Mapping) else None
-    matched = 0
-    for row in rows:
-        if not isinstance(row, Mapping) or row.get("sourcePath") != expected_source:
-            continue
-        matched += 1
+    if not isinstance(registered, Mapping):
+        raise ExecutorRefused("Codex project hooks are missing or invalid")
+    project_rows = [
+        row for row in rows
+        if isinstance(row, Mapping) and row.get("sourcePath") == expected_source
+    ]
+    for event_name, groups in registered.items():
+        if not isinstance(groups, list):
+            raise ExecutorRefused("Codex project hooks are missing or invalid")
+        handler_count = sum(
+            len(group.get("hooks", ()))
+            for group in groups
+            if isinstance(group, Mapping) and isinstance(group.get("hooks"), list)
+        )
+        trusted_rows = [
+            row for row in project_rows
+            if _normalized_event(row.get("eventName")) == _normalized_event(event_name)
+        ]
+        if len(trusted_rows) != handler_count:
+            raise ExecutorRefused(
+                f"Codex {event_name} hook has no complete trust row; review it with /hooks"
+            )
+    for row in project_rows:
         key = row.get("key")
         current_hash = row.get("currentHash")
         stored = state.get(key) if isinstance(state, Mapping) and isinstance(key, str) else None
         if (
             row.get("enabled") is not True
             or row.get("trustStatus") != "trusted"
+            or not isinstance(current_hash, str)
+            or not current_hash
             or not isinstance(stored, Mapping)
             or stored.get("trusted_hash") != current_hash
         ):
             raise ExecutorRefused(
                 "Codex hooks are stale or untrusted; review the project hooks with /hooks"
             )
-        event_name = row.get("eventName")
-        if isinstance(event_name, str):
-            native_event = event_name[0].upper() + event_name[1:]
-            if not isinstance(registered, Mapping) or native_event not in registered:
-                raise ExecutorRefused("Codex trusted hook evidence does not match hooks.json")
-    if matched == 0:
+        if not any(
+            _normalized_event(row.get("eventName")) == _normalized_event(event_name)
+            for event_name in registered
+        ):
+            raise ExecutorRefused("Codex trusted hook evidence does not match hooks.json")
+    if not project_rows:
         raise ExecutorRefused("Codex hook trust evidence targets a different project")
 
 
@@ -203,6 +224,8 @@ class CodexExecutor:
     resume_permitted: bool = False
     quota_detector: QuotaDetector | None = None
     reasoning_effort: str = "low"
+    user_config_path: Path | None = None
+    _disable_overrides: tuple[str, ...] = field(default=(), init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.role not in {"helper", "evaluator"}:
@@ -217,7 +240,8 @@ class CodexExecutor:
             raise WorkerError("forbidden Codex launch flag")
         self._native_artifact(".codex/config.toml")
         self._native_artifact(".codex/hooks.json")
-        self._verify_discovered_hook()
+        self._verify_project_artifacts()
+        self._disable_overrides = tuple(self._discovered_disable_overrides())
 
     def run(
         self,
@@ -290,7 +314,7 @@ class CodexExecutor:
                         baseline=baseline,
                         quota_detector=self.quota_detector,
                     )
-                    outcome = self._outcome(process, parsed, effective_cap)
+                    outcome = self._outcome(process, parsed)
                     if session_id and parsed.session_id and parsed.session_id != session_id:
                         errors.append({"kind": "resume_identity_mismatch"})
                         outcome = RunOutcome("refused")
@@ -336,40 +360,45 @@ class CodexExecutor:
         overrides = [
             "approval_policy=\"never\"",
             "notify=[]",
-            f"model_reasoning_effort=\"{self.reasoning_effort}\"",
+            f"model_reasoning_effort={json.dumps(self.reasoning_effort)}",
+        ]
+        argv = [
+            self.prepared.argv[0],
+            "-C", str(self.prepared.discovery_dir),
+            "-s", "read-only",
+            "-m", self.model,
+            "exec",
         ]
         if session_id:
-            overrides.insert(2, f"model=\"{self.model}\"")
-            argv = [self.prepared.argv[0], "exec", "resume", "--json"]
-        else:
-            argv = [
-                self.prepared.argv[0], "exec", "--json", "-C",
-                str(self.prepared.discovery_dir),
-            ]
+            argv.append("resume")
+        argv.append("--json")
         for override in overrides:
             argv.extend(["-c", override])
-        for override in self._discovered_disable_overrides():
+        for override in self._disable_overrides:
             argv.extend(["-c", override])
-        argv.extend(["--disable", "code_mode_host"])
-        if not session_id:
-            argv.extend(["-s", "read-only", "-m", self.model])
+        argv.extend(["--disable", "code_mode_host", "--disable", "apps"])
         argv.extend(([session_id] if session_id else []) + [prompt])
         return argv
 
     def _discovered_disable_overrides(self) -> list[str]:
-        path = self.prepared.discovery_dir / ".codex" / "config.toml"
-        try:
-            payload = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise ExecutorRefused("cannot verify discovered Codex project config") from exc
         overrides: list[str] = []
-        for section, prefix in (("mcp_servers", "mcp_servers"), ("plugins", "plugins")):
-            entries = payload.get(section)
-            if not isinstance(entries, Mapping):
-                continue
-            overrides.extend(
-                f"{prefix}.{json.dumps(str(name))}.enabled=false" for name in sorted(entries)
-            )
+        paths = [self.prepared.discovery_dir / ".codex" / "config.toml"]
+        paths.append(self.user_config_path or Path.home() / ".codex" / "config.toml")
+        for path in paths:
+            try:
+                payload = tomllib.loads(path.read_text(encoding="utf-8"))
+            except (OSError, tomllib.TOMLDecodeError) as exc:
+                raise ExecutorRefused(
+                    f"cannot verify Codex config used by the client: {path}"
+                ) from exc
+            for section in ("mcp_servers", "plugins"):
+                entries = payload.get(section)
+                if not isinstance(entries, Mapping):
+                    continue
+                overrides.extend(
+                    f"{section}.{json.dumps(str(name))}.enabled=false"
+                    for name in sorted(entries)
+                )
         return overrides
 
     def _native_artifact(self, relative: str) -> Path:
@@ -393,26 +422,23 @@ class CodexExecutor:
                 raise ExecutorRefused("Codex required hook is absent")
         return path
 
-    def _verify_discovered_hook(self) -> None:
-        try:
-            native = json.loads(
-                (self.prepared.invocation_dir / ".codex" / "hooks.json").read_text(
-                    encoding="utf-8"
+    def _verify_project_artifacts(self) -> None:
+        """Refuse when Codex would read bytes other than the bound identity."""
+        for relative in (".codex/config.toml", ".codex/hooks.json"):
+            expected_path = self.prepared.invocation_dir / relative
+            project_path = self.prepared.discovery_dir / relative
+            expected = self.prepared.files.get(expected_path)
+            try:
+                actual = project_path.read_bytes()
+            except OSError as exc:
+                raise ExecutorRefused(
+                    f"Codex project file {relative} is missing; render the expected role config"
+                ) from exc
+            if expected is None or actual != expected:
+                raise ExecutorRefused(
+                    f"Codex project file {relative} differs from the run-owned role identity; "
+                    "synchronize the project config before launch"
                 )
-            )
-            discovered = json.loads(
-                (self.prepared.discovery_dir / ".codex" / "hooks.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-        except (OSError, ValueError, TypeError) as exc:
-            raise ExecutorRefused("cannot verify discovered Codex required hook") from exc
-        required = _codex_hook_commands(native, "PreToolUse")
-        active = _codex_hook_commands(discovered, "PreToolUse")
-        if not required or not required.issubset(active):
-            raise ExecutorRefused(
-                "discovered Codex PreToolUse hook does not match the run-owned fail-closed wrapper"
-            )
 
     def _binding_path(self) -> Path:
         return self.prepared.invocation_dir / "codex-session-bindings.json"
@@ -467,18 +493,28 @@ class CodexExecutor:
         return SessionIdentity("codex", self.model, session_id, project, self.role, self._binding_identity()["configuration_identity_digest"])
 
     def _control(self, control: ProcessControl | None, admission: Admission | None, cap: int) -> ProcessControl:
+        client_pid: int | None = None
+        over_cap_observations = 0
+
         def on_start(pid: int, pgid: int) -> None:
+            nonlocal client_pid
+            client_pid = pid
             if admission is not None:
                 admission.mark_started(pid=pid, pgid=pgid)
             if control and control.on_start:
                 control.on_start(pid, pgid)
 
         def observe(stdout: Path, stderr: Path) -> RunOutcome | None:
+            nonlocal over_cap_observations
             parsed = parse_codex_stream(stdout.read_text(encoding="utf-8", errors="replace"), quota_detector=self.quota_detector)
             if parsed.outcome is not None:
                 return parsed.outcome
-            if parsed.bounded_events > cap:
-                return RunOutcome("cap_reached")
+            if parsed.bounded_events > cap and _pid_is_running(client_pid):
+                over_cap_observations += 1
+                if over_cap_observations > 1:
+                    return RunOutcome("cap_reached")
+            else:
+                over_cap_observations = 0
             return control.observe(stdout, stderr) if control and control.observe else None
 
         return ProcessControl(
@@ -490,13 +526,20 @@ class CodexExecutor:
             hold_before_exec=admission is not None,
         )
 
-    def _outcome(self, process: Any, parsed: ParsedCodexRun, cap: int) -> RunOutcome:
+    def _outcome(self, process: Any, parsed: ParsedCodexRun) -> RunOutcome:
         if parsed.outcome is not None:
             return parsed.outcome
-        if process.outcome is not None and process.outcome.kind in {"quota", "timeout", "cancelled", "cap_reached"}:
+        if process.outcome is not None and process.outcome.kind in {
+            "quota", "timeout", "cancelled"
+        }:
             return process.outcome
-        if parsed.bounded_events > cap:
-            return RunOutcome("cap_reached")
+        if (
+            process.outcome is not None
+            and process.outcome.kind == "cap_reached"
+            and process.stopped_reason == "cap_reached"
+            and process.returncode != 0
+        ):
+            return process.outcome
         if process.returncode != 0 or not parsed.result_seen:
             return RunOutcome("failure")
         return RunOutcome("success")
@@ -573,22 +616,24 @@ def _event_message(event: Mapping[str, Any]) -> str | None:
     return _text(event.get("message")) or _text(event.get("error"))
 
 
-def _codex_hook_commands(payload: Any, event: str) -> set[str]:
-    hooks = payload.get("hooks") if isinstance(payload, Mapping) else None
-    groups = hooks.get(event) if isinstance(hooks, Mapping) else None
-    commands: set[str] = set()
-    if not isinstance(groups, list):
-        return commands
-    for group in groups:
-        handlers = group.get("hooks") if isinstance(group, Mapping) else None
-        if not isinstance(handlers, list):
-            continue
-        commands.update(
-            handler["command"]
-            for handler in handlers
-            if isinstance(handler, Mapping) and isinstance(handler.get("command"), str)
-        )
-    return commands
+def _normalized_event(value: Any) -> str:
+    """Normalize native and app-server hook event spellings."""
+    if not isinstance(value, str):
+        return ""
+    return "".join(char.lower() for char in value if char.isalnum())
+
+
+def _pid_is_running(pid: int | None) -> bool:
+    """Return whether the observed client can still be stopped."""
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _text(value: Any) -> str | None:

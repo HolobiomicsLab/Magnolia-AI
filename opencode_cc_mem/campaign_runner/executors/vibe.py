@@ -15,6 +15,7 @@ from campaign_runner.governor import Admission, AdmissionRequest, QuotaWaiting, 
 from campaign_runner.process import ProcessControl, ProcessStartError, run_process
 from campaign_runner.security import redact_paths
 from campaign_runner.workers import InvocationGovernance, WorkerError, WorkerResult
+from compchem_memory.harness.render_vibe import READ_ONLY_DISABLED_TOOLS
 
 from .contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
 from .registry import ExecutorRefused
@@ -39,7 +40,9 @@ class ParsedVibeRun:
     exit_code: int | None = None
 
 
-def parse_vibe_export(text: str, *, stdout_text: str = "") -> ParsedVibeRun:
+def parse_vibe_export(
+    text: str, *, stdout_text: str = "", stderr_text: str = ""
+) -> ParsedVibeRun:
     """Parse one per-invocation ``export.json`` without inventing counters."""
     parsed = ParsedVibeRun()
     try:
@@ -57,19 +60,14 @@ def parse_vibe_export(text: str, *, stdout_text: str = "") -> ParsedVibeRun:
     parsed.turns = _integer(payload.get("steps"))
     parsed.exit_code = _integer(payload.get("exit_code"))
     parsed.export_outcome = _text(payload.get("outcome"))
-    subset = payload.get("config_subset")
-    if isinstance(subset, Mapping):
-        parsed.reported_model = _text(subset.get("active_model")) or None
-    notices = payload.get("stderr_notices")
-    if isinstance(notices, list):
-        for notice in notices:
-            if not isinstance(notice, str):
-                continue
-            match = _FALLBACK_MODEL.search(notice)
-            if match:
-                parsed.reported_model = match.group(1)
-            if notice:
-                parsed.diagnostics.append({"kind": "client_notice", "message": notice})
+    config = payload.get("config")
+    if isinstance(config, Mapping):
+        parsed.reported_model = _text(config.get("active_model")) or None
+    for notice in _vibe_notices(payload, stderr_text):
+        match = _FALLBACK_MODEL.search(notice)
+        if match:
+            parsed.reported_model = match.group(1)
+        parsed.diagnostics.append({"kind": "client_notice", "message": notice})
     parsed.final_text, parsed.all_text = _vibe_text(payload, stdout_text)
     usage = payload.get("usage") if isinstance(payload.get("usage"), Mapping) else {}
     raw = {
@@ -186,7 +184,7 @@ class VibeExecutor:
             raise ExecutorRefused("Vibe telemetry must be disabled with VIBE_ENABLE_TELEMETRY=false")
         self._native_artifact(".vibe/config.toml")
         self._native_artifact(".vibe/hooks.toml")
-        self._verify_discovered_hook()
+        self._verify_project_artifacts()
 
     def run(
         self,
@@ -237,10 +235,19 @@ class VibeExecutor:
                 except OSError:
                     export_text = ""
                 stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
-                parsed = parse_vibe_export(export_text, stdout_text=stdout_text)
+                stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace")
+                parsed = parse_vibe_export(
+                    export_text, stdout_text=stdout_text, stderr_text=stderr_text
+                )
                 outcome = parsed.outcome
                 if process.outcome is not None and process.outcome.kind in {"quota", "timeout", "cancelled"}:
                     outcome = process.outcome
+                elif parsed.reported_model is None:
+                    parsed.diagnostics.append({
+                        "kind": "model_unverified",
+                        "selected": self.model,
+                    })
+                    outcome = RunOutcome("failure")
                 elif parsed.reported_model != self.model:
                     parsed.diagnostics.append(
                         {
@@ -300,9 +307,9 @@ class VibeExecutor:
             "--output-dir",
             str(output_dir),
             "--auto-approve",
-            "--disabled-tools",
-            "file_system.bash",
         ]
+        for tool in READ_ONLY_DISABLED_TOOLS:
+            argv.extend(["--disabled-tools", tool])
         if self.max_price is not None:
             argv.extend(["--max-price", str(self.max_price)])
         return argv
@@ -327,26 +334,23 @@ class VibeExecutor:
             raise ExecutorRefused("Vibe native config does not isolate the selected model")
         return path
 
-    def _verify_discovered_hook(self) -> None:
-        try:
-            native = tomllib.loads(
-                (self.prepared.invocation_dir / ".vibe" / "hooks.toml").read_text(
-                    encoding="utf-8"
+    def _verify_project_artifacts(self) -> None:
+        """Refuse when Vibe would read bytes other than the bound identity."""
+        for relative in (".vibe/config.toml", ".vibe/hooks.toml"):
+            expected_path = self.prepared.invocation_dir / relative
+            project_path = self.prepared.discovery_dir / relative
+            expected = self.prepared.files.get(expected_path)
+            try:
+                actual = project_path.read_bytes()
+            except OSError as exc:
+                raise ExecutorRefused(
+                    f"Vibe project file {relative} is missing; render the expected role config"
+                ) from exc
+            if expected is None or actual != expected:
+                raise ExecutorRefused(
+                    f"Vibe project file {relative} differs from the run-owned role identity; "
+                    "synchronize the project config before launch"
                 )
-            )
-            discovered = tomllib.loads(
-                (self.prepared.discovery_dir / ".vibe" / "hooks.toml").read_text(
-                    encoding="utf-8"
-                )
-            )
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise ExecutorRefused("cannot verify discovered Vibe required hook") from exc
-        required = _vibe_pre_tool_commands(native)
-        active = _vibe_pre_tool_commands(discovered)
-        if not required or not required.issubset(active):
-            raise ExecutorRefused(
-                "discovered Vibe pre_tool hook does not match the run-owned fail-closed wrapper"
-            )
 
     def _identity(self, session_id: str) -> SessionIdentity:
         digest = uuid.uuid5(uuid.NAMESPACE_OID, f"{self.prepared.policy_digest}:{self.prepared.config_digest}:{self.role}").hex
@@ -429,27 +433,24 @@ def _vibe_text(payload: Mapping[str, Any], stdout_text: str) -> tuple[str, str]:
     return (messages[-1] if messages else "", "\n".join(messages))
 
 
-def _vibe_pre_tool_commands(payload: Mapping[str, Any]) -> set[str]:
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, list):
-        return set()
-    return {
-        hook["command"]
-        for hook in hooks
-        if isinstance(hook, Mapping)
-        and hook.get("type") == "pre_tool"
-        and hook.get("strict") is True
-        and isinstance(hook.get("command"), str)
-    }
+def _vibe_notices(payload: Mapping[str, Any], stderr_text: str) -> list[str]:
+    """Collect real RunExport warnings and process stderr notices."""
+    notices: list[str] = []
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list):
+        for warning in warnings:
+            message = warning.get("message") if isinstance(warning, Mapping) else None
+            if isinstance(message, str) and message:
+                notices.append(message)
+    notices.extend(line for line in stderr_text.splitlines() if line)
+    return notices
 
 
 def _vibe_outcome(value: str | None, exit_code: int | None) -> RunOutcome:
     if value == "finished" and exit_code in (None, 0):
         return RunOutcome("success")
-    if value == "turn_limit":
-        return RunOutcome("turn_limit")
-    if value == "price_limit":
-        return RunOutcome("price_limit")
+    if value in {"turn_limit", "price_limit"}:
+        return RunOutcome(value)
     return RunOutcome("failure")
 
 
