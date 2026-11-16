@@ -186,7 +186,10 @@ def _context(
     )
     evidence = {
         "accepted": True, "trusted": True, "stale": False, "identity": "pending",
-        "discovery_dir": str(project.resolve()),
+        "discovery_dir": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config",
+        },
         "capabilities": ["native_read", "native_glob", "native_grep"],
         "model_isolation": {
             "accepted": True, "model": "selected-model", "identity": "fixture"

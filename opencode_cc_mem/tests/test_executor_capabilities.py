@@ -29,7 +29,7 @@ def _all_observed_table(tmp_path):
     values = {
         "argv": ["client", "run"],
         "model_delivery": {"accepted": True, "model": "model", "identity": "model"},
-        "discovery_dir": "/project",
+        "discovery_dir": {"scope": "launch-project"},
         "trust": True,
         "hook_policy_digest": "sha256:policy",
         "native_schemas": {"read": "file_path"},
@@ -245,7 +245,7 @@ def test_all_observed_prerequisites_project_to_accepted_launch_fields(tmp_path):
         "stale": False,
         "trusted": True,
         "identity": "sha256:policy",
-        "discovery_dir": "/project",
+        "discovery_dir": {"scope": "launch-project"},
         "capabilities": ["native_read"],
         "model_isolation": {"accepted": True, "model": "model", "identity": "model"},
         "blocking_cells": [],
@@ -304,18 +304,20 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_current_table_refuses_launches_without_current_identity_binding():
+def test_current_table_accepts_claude_and_refuses_codex_vibe():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
 
     assert set(projected) == {"claude-code", "codex", "vibe"}
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
-        assert all(not role["accepted"] for role in client.values())
 
     assert all(role["gate_accepted"] for role in projected["claude-code"].values())
-    assert all(role["stale"] for role in projected["claude-code"].values())
+    assert all(role["accepted"] for role in projected["claude-code"].values())
+    assert all(not role["stale"] for role in projected["claude-code"].values())
+    assert all("launch_identity" in role for role in projected["claude-code"].values())
     for client in ("codex", "vibe"):
+        assert all(not role["accepted"] for role in projected[client].values())
         assert all(role["blocking_cells"] for role in projected[client].values())
 
     assert any("D2" in reason for reason in projected["codex"]["worker"]["reasons"])

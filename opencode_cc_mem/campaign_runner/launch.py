@@ -29,6 +29,7 @@ from compchem_memory.harness.render_common import policy_files
 
 from .executors.contracts import ExecContext
 from .executors.registry import ExecutorRefused
+from .process import _resolve_executable
 from .roles import RolePolicy, load_role
 
 
@@ -78,6 +79,21 @@ CODEX_READ_SERVER_TOOLS = (
     "mcp:magnolia-read.list_dir",
     "mcp:magnolia-read.search",
 )
+REQUIRED_POLICY_ENV = (
+    "MAGNOLIA_HOOK_POLICY",
+    "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    "MAGNOLIA_HOOK_POLICY_SHA256",
+)
+LAUNCH_IDENTITY_COMPONENTS = (
+    "client_version",
+    "client_sha256",
+    "settings",
+    "mcp",
+    "native_files",
+    "policy",
+    "hook_command",
+    "required_env",
+)
 
 
 @dataclass(frozen=True)
@@ -119,10 +135,8 @@ def _prepare_launch(
     policy = load_role(ROLE_CONFIG_NAMES[context.role])
     required = _required_capabilities(policy, context)
     evidence = _capability_evidence(context, required)
-    discovery_dir = Path(str(evidence["discovery_dir"])).resolve()
     project_dir = context.project_dir.resolve()
-    if discovery_dir != project_dir:
-        raise ExecutorRefused("capability discovery directory does not match the project")
+    discovery_dir = _launch_project_discovery(evidence, project_dir)
     read_roots = _canonical_read_roots(policy, context, required)
     edit_roots = _canonical_edit_roots(policy, context)
     invocation_dir = _invocation_dir(context)
@@ -139,18 +153,30 @@ def _prepare_launch(
     config_digest = _configuration_identity(
         context, settings_body, mcp_body, native_bodies
     )
-    expected_evidence_identity = (
-        configuration_identity(evidence_context)
-        if evidence_context is not None
-        else config_digest
-    )
-    if evidence["identity"] != expected_evidence_identity:
-        raise ExecutorRefused(
-            "capability configuration identity does not match discovered configuration"
-        )
     env = _effective_environment(
         context, invocation_dir / "policy.json", policy_digest
     )
+    if "launch_identity" in evidence:
+        launch_identity = _normalized_launch_identity(
+            context,
+            invocation_dir,
+            env,
+            settings_body,
+            mcp_body,
+            native_bodies,
+            policy_body,
+        )
+        _verify_bound_launch_identity(evidence, launch_identity)
+    else:
+        expected_evidence_identity = (
+            configuration_identity(evidence_context)
+            if evidence_context is not None
+            else config_digest
+        )
+        if evidence["identity"] != expected_evidence_identity:
+            raise ExecutorRefused(
+                "capability configuration identity does not match discovered configuration"
+            )
     if context.resume_from is not None:
         return _resume_launch(
             context,
@@ -347,6 +373,218 @@ def _capability_evidence(
         if isolation.get("model") != context.route.model or not isolation.get("identity"):
             raise ExecutorRefused("model isolation evidence does not match selected model")
     return evidence
+
+
+def _launch_project_discovery(
+    evidence: Mapping[str, Any], project_dir: Path
+) -> Path:
+    """Resolve scope evidence to this launch's canonical project directory."""
+    discovery = evidence.get("discovery_dir")
+    if not isinstance(discovery, Mapping) or set(discovery) - {
+        "scope",
+        "configuration",
+    }:
+        raise ExecutorRefused(
+            "capability discovery evidence must use launch-project scope"
+        )
+    if discovery.get("scope") != "launch-project":
+        raise ExecutorRefused(
+            "capability discovery evidence must use launch-project scope"
+        )
+    return project_dir.resolve()
+
+
+def _normalized_launch_identity(
+    context: ExecContext,
+    invocation_dir: Path,
+    launch_env: Mapping[str, str],
+    settings_body: bytes,
+    mcp_body: bytes,
+    native_bodies: Mapping[str, bytes],
+    policy_body: bytes,
+) -> dict[str, Any]:
+    """Bind executable bytes and path-independent rendered launch components."""
+    executable = _resolved_client_executable(context, launch_env)
+    replacements = _identity_replacements(context, invocation_dir)
+    normalized_native = {
+        name: _normalize_identity_body(body, replacements)
+        for name, body in native_bodies.items()
+    }
+    components = {
+        "client_version": _installed_client_version(executable),
+        "client_sha256": _file_digest(executable),
+        "settings": _digest(_normalize_identity_body(settings_body, replacements)),
+        "mcp": _digest(_normalize_identity_body(mcp_body, replacements)),
+        "native_files": _digest_named_bodies(sorted(normalized_native.items())),
+        "policy": _digest(_normalize_identity_body(policy_body, replacements)),
+        "hook_command": _hook_commands_digest(native_bodies, replacements),
+        "required_env": _digest(_canonical_bytes(list(REQUIRED_POLICY_ENV))),
+    }
+    return {
+        "schema_version": "magnolia-normalized-launch-identity-v1",
+        "executable": str(executable),
+        "components": components,
+    }
+
+
+def _verify_bound_launch_identity(
+    evidence: Mapping[str, Any], actual: Mapping[str, Any]
+) -> None:
+    """Refuse the first named normalized component that differs from evidence."""
+    bound = evidence.get("launch_identity")
+    if bound is None:
+        return
+    if not isinstance(bound, Mapping) or bound.get("schema_version") != actual.get(
+        "schema_version"
+    ):
+        raise ExecutorRefused("capability launch identity mismatch: schema_version")
+    expected = bound.get("components")
+    observed = actual.get("components")
+    if not isinstance(expected, Mapping) or not isinstance(observed, Mapping):
+        raise ExecutorRefused("capability launch identity mismatch: components")
+    for name in LAUNCH_IDENTITY_COMPONENTS:
+        if expected.get(name) != observed.get(name):
+            raise ExecutorRefused(f"capability launch identity mismatch: {name}")
+
+
+def _resolved_client_executable(
+    context: ExecContext, launch_env: Mapping[str, str]
+) -> Path:
+    assert context.project_dir is not None
+    try:
+        resolved = _resolve_executable(
+            context.launch_argv[0], context.project_dir.resolve(), launch_env
+        )
+        executable = Path(resolved).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused("launched client executable is unavailable") from exc
+    if not executable.is_file():
+        raise ExecutorRefused("launched client executable is not a regular file")
+    return executable
+
+
+def _installed_client_version(executable: Path) -> str:
+    """Read installed metadata without invoking the subscription client."""
+    for parent in executable.parents:
+        package = parent / "package.json"
+        if not package.is_file():
+            continue
+        try:
+            version = json.loads(package.read_text(encoding="utf-8")).get("version")
+        except (OSError, ValueError, TypeError):
+            continue
+        if isinstance(version, str) and version:
+            return version
+    release = next(
+        (
+            part.split("-", 1)[0]
+            for part in executable.parts
+            if re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?", part)
+        ),
+        None,
+    )
+    if release:
+        return release
+    raise ExecutorRefused("launched client version metadata is unavailable")
+
+
+def _file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise ExecutorRefused("launched client executable cannot be hashed") from exc
+    return digest.hexdigest()
+
+
+def _identity_replacements(
+    context: ExecContext, invocation_dir: Path
+) -> tuple[tuple[str, str], ...]:
+    named_paths = {
+        "{invocation_dir}": invocation_dir,
+        "{project_dir}": context.project_dir,
+        "{run_dir}": context.run_dir,
+        "{control_dir}": context.control_dir,
+        "{work_dir}": context.work_dir,
+        "{installation_root}": context.installation_root,
+        "{workspace_root}": context.workspace_root,
+    }
+    replacements = [
+        (str(path.resolve()), name)
+        for name, path in named_paths.items()
+        if path is not None
+    ]
+    if context.python_executable:
+        replacements.append((context.python_executable, "{python_executable}"))
+    if context.project_identity:
+        replacements.append((context.project_identity, "{project_identity}"))
+    return tuple(sorted(set(replacements), key=lambda item: len(item[0]), reverse=True))
+
+
+def _normalize_identity_body(
+    body: bytes, replacements: tuple[tuple[str, str], ...]
+) -> bytes:
+    try:
+        value = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _replace_identity_text(body.decode("utf-8"), replacements).encode()
+    return _canonical_bytes(_normalize_identity_value(value, replacements))
+
+
+def _normalize_identity_value(
+    value: Any,
+    replacements: tuple[tuple[str, str], ...],
+    *,
+    key: str | None = None,
+) -> Any:
+    if key == "required_capability_identity":
+        return "{required_capability_identity}"
+    if isinstance(value, Mapping):
+        return {
+            str(name): _normalize_identity_value(item, replacements, key=str(name))
+            for name, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_identity_value(item, replacements) for item in value]
+    if isinstance(value, str):
+        return _replace_identity_text(value, replacements)
+    return value
+
+
+def _replace_identity_text(
+    value: str, replacements: tuple[tuple[str, str], ...]
+) -> str:
+    for concrete, placeholder in replacements:
+        value = value.replace(concrete, placeholder)
+    return value
+
+
+def _hook_commands_digest(
+    native_bodies: Mapping[str, bytes],
+    replacements: tuple[tuple[str, str], ...],
+) -> str:
+    commands: list[str] = []
+    for body in native_bodies.values():
+        try:
+            value = _normalize_identity_value(json.loads(body), replacements)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        _collect_hook_commands(value, commands)
+    return _digest(_canonical_bytes(sorted(commands)))
+
+
+def _collect_hook_commands(value: Any, commands: list[str]) -> None:
+    if isinstance(value, Mapping):
+        command = value.get("command")
+        if isinstance(command, str) and "compchem_memory.hook" in command:
+            commands.append(command)
+        for item in value.values():
+            _collect_hook_commands(item, commands)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_hook_commands(item, commands)
 
 
 def _canonical_read_roots(
@@ -1050,6 +1288,10 @@ def _prepared(
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _canonical_bytes(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 

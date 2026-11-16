@@ -32,7 +32,11 @@ def _capable(context: ExecContext, client: str, role: str) -> bool:
     if isinstance(capabilities, dict):
         evidence = capabilities.get(role, False)
         if isinstance(evidence, dict):
-            return evidence.get("accepted") is True
+            if evidence.get("accepted") is not True:
+                return False
+            if evidence.get("launch_identity") is not None:
+                return context.project_dir is not None and bool(context.launch_argv)
+            return True
         return evidence is True
     return role in capabilities
 

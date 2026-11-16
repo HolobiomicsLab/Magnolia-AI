@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_from": {
-    "revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+    "revision": "a6439a52c5634a7c4c90e3745887873b4527c1e0",
     "sources": [
       "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
       "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
@@ -10,13 +10,13 @@
       "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/"
     ]
   },
-  "note": "Claude live role gates are accepted on production evidence but launch-stale pending project-independent discovery/configuration identity binding. Codex and Vibe remain refused.",
+  "note": "Claude live role gates are accepted and launch-bound to the real client plus normalized project-independent rendered components. Codex and Vibe remain refused.",
   "rows": [
     {
       "client": "claude-code",
       "role": "worker",
       "role_label": "worker",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
@@ -40,10 +40,18 @@
               "MAGNOLIA_HOOK_POLICY",
               "MAGNOLIA_HOOK_POLICY_REQUIRED",
               "MAGNOLIA_HOOK_POLICY_SHA256"
-            ]
+            ],
+            "components": {
+              "settings": "8ab235d91a29d8a1b097938a495673d303fa71a1968e8147547c89d06330f155",
+              "mcp": "3207e10818c398ef8bc2e8736dd408efe3f5317066f7fb3edf130cadd4828533",
+              "native_files": "5eb040d491b34aab3a60116c453c62c30365b634368da50b79eaa484b375ca00",
+              "policy": "e314a49bde7032c89646e4714027f087a42b42eb408f21f3e0d6ea0436b9dbe7",
+              "hook_command": "80cd868fbcc8da06609794f8109acadeac7779cad85310c1834dd3f137f83b02",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
           }
         },
-        "reason": "Accepted on the owner-recorded hook-only enforcement ruling: the required fail-closed hook enforces the worker MCP allowlist; launch remains stale only until project-independent identity binding is implemented."
+        "reason": "Accepted on the owner-recorded hook-only enforcement ruling and bound to the real Claude binary plus normalized launch shape."
       },
       "cells": {
         "identity": {
@@ -208,7 +216,7 @@
       "client": "claude-code",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
@@ -232,10 +240,18 @@
               "MAGNOLIA_HOOK_POLICY",
               "MAGNOLIA_HOOK_POLICY_REQUIRED",
               "MAGNOLIA_HOOK_POLICY_SHA256"
-            ]
+            ],
+            "components": {
+              "settings": "718a52afbc3aa7362873063633cf09f163426ba87c67fbcc6621356a688e8fe5",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "ff5588524dc34c90ca63133539dd750a407903cfbab91e17c2f3d8f1e8c70095",
+              "policy": "9c10e4ad51a0f1df72c3f61e9d917a6be5f3d40e0e85c67b70f8c01d0e024756",
+              "hook_command": "80cd868fbcc8da06609794f8109acadeac7779cad85310c1834dd3f137f83b02",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
           }
         },
-        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
       },
       "cells": {
         "identity": {
@@ -393,7 +409,7 @@
       "client": "claude-code",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
@@ -417,10 +433,18 @@
               "MAGNOLIA_HOOK_POLICY",
               "MAGNOLIA_HOOK_POLICY_REQUIRED",
               "MAGNOLIA_HOOK_POLICY_SHA256"
-            ]
+            ],
+            "components": {
+              "settings": "e058ec276b84612a7ea88abfee866146d0804042bcadf4c4b4093cbc46d9d9c3",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "ff5588524dc34c90ca63133539dd750a407903cfbab91e17c2f3d8f1e8c70095",
+              "policy": "916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b",
+              "hook_command": "80cd868fbcc8da06609794f8109acadeac7779cad85310c1834dd3f137f83b02",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
           }
         },
-        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
       },
       "cells": {
         "identity": {
@@ -577,7 +601,7 @@
       "client": "claude-code",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
@@ -601,10 +625,18 @@
               "MAGNOLIA_HOOK_POLICY",
               "MAGNOLIA_HOOK_POLICY_REQUIRED",
               "MAGNOLIA_HOOK_POLICY_SHA256"
-            ]
+            ],
+            "components": {
+              "settings": "f9fd8f6e6296e0bad40e3a8da6695400b2d72e658cc609014759a78117ba4179",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "ff5588524dc34c90ca63133539dd750a407903cfbab91e17c2f3d8f1e8c70095",
+              "policy": "3b50e1c928aab12e50f9255e25fd6c6f47f586714802c578a59759cbc7e5d0be",
+              "hook_command": "80cd868fbcc8da06609794f8109acadeac7779cad85310c1834dd3f137f83b02",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
           }
         },
-        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
       },
       "cells": {
         "identity": {
