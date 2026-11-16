@@ -1,0 +1,23 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:mcp__compchem-memory__memory_record_run hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01M5cvgHdoLA4PfyrS5SPtxY",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "run_id": "gate",
+      "status": "ok",
+      "tool": "gate"
+    },
+    "name": "mcp__compchem-memory__memory_record_run"
+  }
+}

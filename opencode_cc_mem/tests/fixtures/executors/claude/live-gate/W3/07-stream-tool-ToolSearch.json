@@ -1,0 +1,22 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:ToolSearch hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01WEmPwbBbazN57CnJ9fUJMC",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "max_results": 1,
+      "query": "select:mcp__compchem-memory__memory_search"
+    },
+    "name": "ToolSearch"
+  }
+}

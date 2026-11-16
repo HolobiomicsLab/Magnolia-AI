@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "{\"result\":\"[\\n  {\\n    \\\"event_type\\\": \\\"session_start\\\",\\n    \\\"timestamp\\\": \\\"2026-11-16T07:50:03.633652+00:00\\\",\\n    \\\"session_id\\\": \\\"2026-11-16_075003\\\",\\n    \\\"project_id\\\": \\\"project\\\",\\n    \\\"project_dir\\\": \\\"/TMPDIR/claude-gate.8E1oyJOLrn/pr",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01H9uwjbwNs6DVAQ1725uDD1",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "keyword": "gate"
+    },
+    "name": "mcp__compchem-memory__memory_search"
+  }
+}

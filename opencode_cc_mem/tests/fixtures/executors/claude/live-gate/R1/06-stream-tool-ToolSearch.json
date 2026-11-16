@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "[{\"type\": \"tool_reference\", \"tool_name\": \"CronDelete\"}, {\"type\": \"tool_reference\", \"tool_name\": \"EnterWorktree\"}, {\"type\": \"tool_reference\", \"tool_name\": \"ExitWorktree\"}]",
+  "tool_result_meta": [
+    {
+      "id": "toolu_014mHMHrDWqq5ZPaR8hLtTa2",
+      "permission_decision": {
+        "decision": "accept",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "max_results": 10,
+      "query": "memory"
+    },
+    "name": "ToolSearch"
+  }
+}

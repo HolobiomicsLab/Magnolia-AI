@@ -1,0 +1,14 @@
+{
+  "exit_code": 127,
+  "hook_event": "SessionStart",
+  "hook_id": "45abec20-8cbc-4582-ac18-3f1a545eef31",
+  "hook_name": "SessionStart:startup",
+  "outcome": "error",
+  "output": "/bin/sh: /TMPDIR/claude-gate.8E1oyJOLrn/no-such-dir/python3: No such file or directory\n",
+  "session_id": "ses-fixture-1",
+  "stderr": "/bin/sh: /TMPDIR/claude-gate.8E1oyJOLrn/no-such-dir/python3: No such file or directory\n",
+  "stdout": "",
+  "subtype": "hook_response",
+  "type": "system",
+  "uuid": "0b97dfbd-ff5b-42a0-a546-e620883ad3dc"
+}

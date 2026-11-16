@@ -1,0 +1,38 @@
+{
+  "actual_work": {
+    "pgid": 11702,
+    "pid": 11702,
+    "process_start_token": "ps:11702:Mon Nov 16 07:53:22 2026",
+    "service_request_id": null
+  },
+  "billing": "subscription",
+  "client": "claude-code",
+  "effective_cap": 25,
+  "ended_at": "2026-11-16T07:53:29.365339+00:00",
+  "invocation_id": "live-gate-W3:worker:1:ee83305b30cd474e87aaeb0ed0754276",
+  "outcome": {
+    "kind": "success",
+    "limit": null
+  },
+  "parent_run_id": "live-gate-W3",
+  "project_digest": "live-gate-project",
+  "reserved_at": "2026-11-16T07:53:22.410104+00:00",
+  "resolved_model": "haiku",
+  "run_kind": "worker",
+  "schema_version": "magnolia-invocation-v1",
+  "session_identity": null,
+  "started_at": "2026-11-16T07:53:22.419658+00:00",
+  "subscription_key": "claude-code",
+  "usage": {
+    "cache_write_tokens": 6154,
+    "cached_tokens": 36740,
+    "completeness": "complete",
+    "cost": 0.0021016,
+    "duration_seconds": 6.949205500073731,
+    "input_tokens": 4,
+    "output_tokens": 1006,
+    "reasoning_tokens": 468,
+    "source": "claude-stream-json",
+    "turns": 4
+  }
+}

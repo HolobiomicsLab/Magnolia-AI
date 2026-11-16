@@ -1,0 +1,21 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Read hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01GX5XHiusMkAuEcza3WwBsd",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate-outside.QapjcdqwVs/credentials.env"
+    },
+    "name": "Read"
+  }
+}

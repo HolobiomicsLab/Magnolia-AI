@@ -1,0 +1,24 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Edit hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01PE5UG83m8jnKALPpRtf5BS",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt",
+      "new_string": "review-v2",
+      "old_string": "draft-v2",
+      "replace_all": false
+    },
+    "name": "Edit"
+  }
+}

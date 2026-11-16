@@ -1,0 +1,21 @@
+{
+  "is_error": null,
+  "result_head": "File created successfully at: /TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w1.txt (file state is current in your context \u2014 no need to Read it back)",
+  "tool_result_meta": [
+    {
+      "id": "toolu_013uWN5xvA4D4mGEXjqS9frf",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "content": "W1-OK",
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w1.txt"
+    },
+    "name": "Write"
+  }
+}
