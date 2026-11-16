@@ -36,6 +36,7 @@ def make_workspace(tmp_path: Path) -> Path:
     shutil.copy2(OPENCODE_DIR / "opencode.json.template", oc / "opencode.json.template")
     shutil.copy2(OPENCODE_DIR / "AGENTS.md", oc / "AGENTS.md")
     shutil.copytree(OPENCODE_DIR / "rules", oc / "rules")
+    shutil.copytree(OPENCODE_DIR / "campaign_runner", oc / "campaign_runner")
     (oc / ".magnolia").mkdir()
     (oc / "projects" / PROJECT / ".magnolia").mkdir(parents=True)
     venv_bin = root / ".venv" / "bin"
@@ -164,7 +165,7 @@ def test_opencode_config_snapshot(tmp_path):
 PKG_SRC = OPENCODE_DIR / "mcp-servers" / "compchem-memory" / "src"
 
 
-def run_raw(ws: Path, args, env=None, stubs=None, dry=True):
+def run_raw(ws: Path, args, env=None, stubs=None, dry=True, cwd=None):
     """Run the launcher and return the CompletedProcess (any exit code).
 
     `stubs` names the directory put first on PATH (default: all stubs). The
@@ -189,6 +190,7 @@ def run_raw(ws: Path, args, env=None, stubs=None, dry=True):
     return subprocess.run(
         ["/bin/bash", str(script), *args],
         env=full_env, capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+        cwd=cwd,
     )
 
 
@@ -568,3 +570,121 @@ def test_launch_failure_prints_only_the_cli_line(tmp_path):
     assert proc.returncode == 1
     assert "not prepared" not in proc.stderr
     assert not (tmp_path / "daemon-ran-tools").exists()
+
+
+def test_setup_route_preserves_other_keys(tmp_path):
+    ws = make_workspace(tmp_path)
+    path = write_setup(ws, {
+        "main_model": "openai/gpt-oss",
+        "memory_enabled": True,
+        "routes": {"worker": "codex/gpt-5.6-sol"},
+    })
+
+    proc = run_raw(ws, ["setup", "--route", "reviewer=claude-code/opus", PROJECT])
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == {
+        "main_model": "openai/gpt-oss",
+        "memory_enabled": True,
+        "routes": {
+            "worker": "codex/gpt-5.6-sol",
+            "reviewer": "claude-code/opus",
+        },
+    }
+
+
+def test_interactive_explicit_flags_and_per_harness_default(tmp_path):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, {
+        "harness": "claude",
+        "models": {"claude": "sonnet", "codex": "gpt-default"},
+        "routes": {"interactive": "vibe/zai-glm-5.2"},
+    })
+
+    configured = dry_json(run_raw(ws, [PROJECT]))
+    explicit = dry_json(run_raw(ws, ["--harness", "codex", PROJECT]))
+    model = dry_json(run_raw(ws, ["--harness", "codex", "--model", "gpt-explicit", PROJECT]))
+
+    assert configured["argv"][0] == "vibe"
+    vibe_config = ws / "opencode_cc_mem" / "projects" / PROJECT / ".vibe" / "config.toml"
+    assert "zai-glm-5.2" in vibe_config.read_text()
+    assert explicit["argv"][0] == "codex" and "gpt-default" in explicit["argv"]
+    assert model["argv"][0] == "codex" and "gpt-explicit" in model["argv"]
+
+
+def test_interactive_native_default_and_import_from_unrelated_cwd(tmp_path):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, {"harness": "codex", "models": {}})
+    elsewhere = tmp_path / "unrelated"
+    elsewhere.mkdir()
+
+    out = dry_json(run_raw(ws, [PROJECT], cwd=elsewhere))
+
+    assert out["argv"][0] == "codex"
+    assert "-m" not in out["argv"]
+
+
+def test_interactive_launch_never_acquires_slot(tmp_path):
+    ws = make_workspace(tmp_path)
+    state = tmp_path / "xdg-state"
+    config = tmp_path / "xdg-config"
+
+    proc = run_raw(
+        ws,
+        ["--harness", "codex", PROJECT],
+        env={"XDG_STATE_HOME": str(state), "XDG_CONFIG_HOME": str(config)},
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert not (state / "magnolia" / "usage-ledger.jsonl").exists()
+    assert not (state / "magnolia" / "usage-state.json").exists()
+
+
+def test_memory_critic_api_calls_never_acquire_slot(tmp_path):
+    ws = make_workspace(tmp_path)
+    state = tmp_path / "xdg-state"
+    config = tmp_path / "xdg-config"
+    api_calls = tmp_path / "api-calls"
+    package = (
+        ws / "opencode_cc_mem" / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory"
+    )
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "llm.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "def _resolve_call(): return ('openai', 'fixture')\n"
+        "def call_llm(system, user, **kwargs):\n"
+        "    path = Path(os.environ['API_CALLS'])\n"
+        "    with path.open('a') as stream:\n"
+        "        stream.write(('critic' if os.environ.get('MAGNOLIA_CRITIC') else 'memory') + '\\n')\n"
+        "    return user.rsplit(': ', 1)[-1].upper()\n",
+        encoding="utf-8",
+    )
+    opencode = tmp_path / "stubbin" / "opencode-v2"
+    opencode.write_text(
+        "#!/bin/bash\n"
+        "if [ \"${1:-}\" = --version ]; then echo 'stub 0.0'; exit 0; fi\n"
+        "\"$PYTHON_CMD\" -c \"from compchem_memory.llm import call_llm; call_llm('s', 'critic')\"\n",
+        encoding="utf-8",
+    )
+    opencode.chmod(0o755)
+    env = {
+        "XDG_STATE_HOME": str(state),
+        "XDG_CONFIG_HOME": str(config),
+        "OPENAI_API_KEY": "fixture-key",
+        "MAGNOLIA_SETUP_NONCE": "fixture-probe",
+        "API_CALLS": str(api_calls),
+        "PYTHON_CMD": sys.executable,
+        "PYTHONPATH": str(package.parent),
+    }
+
+    memory = run_raw(ws, ["memory", "set", "fixture", "--provider", "openai"], env=env)
+    critic = run_raw(ws, ["--critic", PROJECT], env=env, dry=False)
+
+    assert memory.returncode == 0, memory.stderr
+    assert critic.returncode == 0, critic.stderr
+    assert api_calls.read_text().splitlines() == ["memory", "critic"]
+    assert not (state / "magnolia" / "usage-ledger.jsonl").exists()
+    assert not (state / "magnolia" / "usage-state.json").exists()

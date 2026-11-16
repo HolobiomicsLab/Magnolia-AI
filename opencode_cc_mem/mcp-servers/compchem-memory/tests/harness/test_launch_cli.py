@@ -392,3 +392,30 @@ def test_launch_without_client_model_passes_none(tmp_path, monkeypatch, capsysbi
     capsysbinary.readouterr()
 
     assert renderer.context.model is None
+
+
+def test_interactive_native_default_and_import_from_unrelated_cwd(
+    tmp_path, monkeypatch, capsysbinary
+):
+    root = _root(tmp_path)
+    campaign = root / "campaign_runner"
+    campaign.mkdir()
+    source = Path(__file__).parents[4] / "campaign_runner"
+    shutil.copy2(source / "__init__.py", campaign / "__init__.py")
+    shutil.copy2(source / "routing.py", campaign / "routing.py")
+    shutil.copy2(source / "reviewers.py", campaign / "reviewers.py")
+    (root / ".magnolia").mkdir()
+    (root / ".magnolia" / "llm-setup.json").write_text(
+        json.dumps({"harness": "codex", "models": {}}), encoding="utf-8"
+    )
+    renderer = FakeRenderer()
+    monkeypatch.setitem(RENDERERS, "codex", renderer)
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    monkeypatch.chdir(tmp_path)
+
+    args = _args(root)
+    args[args.index("claude")] = "codex"
+    assert launch_cli.main(args) == 0
+    capsysbinary.readouterr()
+
+    assert renderer.context.model is None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import stat
 import uuid
 from dataclasses import dataclass, field
@@ -250,6 +251,7 @@ class ClaudeCodeExecutor:
     model: str
     role: str
     max_turns: int
+    max_budget_usd: float | None = None
     timeout_seconds: int = 1800
     governance: InvocationGovernance | None = None
     resume_permitted: bool = False
@@ -263,6 +265,13 @@ class ClaudeCodeExecutor:
             raise WorkerError("Claude launch requires an explicit model")
         if self.max_turns < 1:
             raise WorkerError("Claude launch requires a positive turn cap")
+        if self.max_budget_usd is not None and (
+            isinstance(self.max_budget_usd, bool)
+            or not isinstance(self.max_budget_usd, (int, float))
+            or not math.isfinite(self.max_budget_usd)
+            or self.max_budget_usd <= 0
+        ):
+            raise WorkerError("Claude launch requires a positive finite native budget")
         if FORBIDDEN_ENV & set(self.prepared.env):
             names = ", ".join(sorted(FORBIDDEN_ENV & set(self.prepared.env)))
             raise WorkerError(f"forbidden Claude child environment: {names}")
@@ -486,6 +495,8 @@ class ClaudeCodeExecutor:
         ]
         if session_id:
             argv.extend(["--resume", session_id])
+        if self.max_budget_usd is not None:
+            argv.extend(["--max-budget-usd", str(self.max_budget_usd)])
         native, mcp_tools = self._allowed_tools()
         if self.role in {"helper", "evaluator"}:
             argv.extend(["--tools", ",".join(native)])

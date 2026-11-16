@@ -64,3 +64,37 @@ def test_helper_evaluator_and_interactive_precedence(monkeypatch):
     assert (explicit.client, explicit.model, explicit.source) == ("claude-code", "sonnet", "models.claude-code")
     unprefixed = resolve_route("worker", {"harness": "codex", "models": {"codex": "gpt-5"}, "worker": {"model": "opencode-go/glm-5.3"}})
     assert (unprefixed.client, unprefixed.model) == ("opencode", "opencode-go/glm-5.3")
+
+
+def test_all_five_real_consumers_share_resolver(monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_AGENTS_MODEL", raising=False)
+    monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)
+    inputs = {
+        "harness": "claude",
+        "main_model": "openai/gpt-oss",
+        "models": {"claude": "sonnet"},
+        "routes": {
+            "interactive": "codex/gpt-5.6-sol",
+            "worker": "vibe/zai-glm-5.2",
+            "reviewer": "claude-code/opus",
+            "helper": "opencode-go/kimi-k3",
+            "evaluator": "codex/gpt-5.6-sol",
+        },
+    }
+
+    resolved = {role: resolve_route(role, inputs) for role in (
+        "interactive", "worker", "reviewer", "helper", "evaluator"
+    )}
+
+    assert resolved["interactive"].client == "codex"
+    assert resolved["worker"].client == "vibe"
+    assert resolved["reviewer"].client == "claude-code"
+    assert resolved["helper"].subscription_key == "opencode:opencode-go"
+    assert resolved["evaluator"].source == "routes.evaluator"
+
+
+def test_subscription_key_strings_are_exact():
+    assert resolve_route("worker", {"worker": {"model": "claude-code/opus"}}).subscription_key == "claude-code"
+    assert resolve_route("worker", {"worker": {"model": "codex/gpt-5.6-sol"}}).subscription_key == "codex"
+    assert resolve_route("worker", {"worker": {"model": "vibe/zai-glm-5.2"}}).subscription_key == "vibe"
+    assert resolve_route("worker", {"worker": {"model": "openrouter/deepseek-v4"}}).subscription_key == "opencode:openrouter"
