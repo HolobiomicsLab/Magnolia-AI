@@ -581,26 +581,47 @@ def probe_application(
         pending = state.data.get("pending_application", [])
         if not isinstance(pending, list) or not pending:
             return
-        reply = reply_text.lower()
         selected, _ = _pending_for_turn(pending, turn_id)
-        for item in list(selected):
-            try:
-                tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
-                matched = [token for token in tokens if token in reply]
-                row = {
-                    "event": "application",
-                    "sessionID": session_id,
-                    "tool": item.get("tool"),
-                    "callID": item.get("callID"),
-                    "applied": bool(tokens) and len(matched) >= min(2, len(tokens)),
-                    "matched": matched,
-                    "distinct": len(tokens),
-                }
-            except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
-                pending.remove(item)
-                continue
-            try:
-                _log(paths, row)
-            except Exception:  # noqa: BLE001 - keep this and later items for the next probe
-                break
+        for item in probe_items(paths, harness, session_id, selected, reply_text, turn_id):
             pending.remove(item)
+
+
+def probe_items(
+    paths: ProjectPaths,
+    harness: str,
+    session_id: str,
+    items: list[dict],
+    reply_text: str,
+    turn_id: str | None = None,
+) -> list[dict]:
+    """Record application telemetry for an explicit, already-owned item set.
+
+    Returns the items that are settled: logged, or malformed and dropped. It
+    stops at the first logging failure, leaving that item and later ones
+    unsettled so the caller keeps them for the next probe.
+    """
+    reply = reply_text.lower()
+    settled: list[dict] = []
+    for item in list(items):
+        try:
+            tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
+            matched = [token for token in tokens if token in reply]
+            row = {
+                "event": "application",
+                "sessionID": session_id,
+                "turnID": turn_id,
+                "tool": item.get("tool"),
+                "callID": item.get("callID"),
+                "applied": bool(tokens) and len(matched) >= min(2, len(tokens)),
+                "matched": matched,
+                "distinct": len(tokens),
+            }
+        except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
+            settled.append(item)
+            continue
+        try:
+            _log(paths, row)
+        except Exception:  # noqa: BLE001 - keep this and later items for the next probe
+            break
+        settled.append(item)
+    return settled

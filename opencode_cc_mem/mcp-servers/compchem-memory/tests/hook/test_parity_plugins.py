@@ -336,11 +336,7 @@ def test_job_notice_plugin_respects_hook_client_claim(tmp_path):
 
 ACTION_DRIVER = r"""
 const [pluginPath, directory] = process.argv.slice(2)
-const { readFile, writeFile } = await import("node:fs/promises")
-// Bun exposes import.meta.dir; Node exposes the equivalent import.meta.dirname.
-const nodePlugin = new URL("./magnolia-action-retrieval-node.ts", import.meta.url)
-await writeFile(nodePlugin, (await readFile(new URL(pluginPath), "utf8")).replaceAll("import.meta.dir", "import.meta.dirname"))
-const mod = await import(nodePlugin)
+const mod = await import(pluginPath)
 const hooks = {}
 await mod.default.setup({
   location: { directory },

@@ -25,13 +25,13 @@
  * plus an event-stream subscription as belt-and-suspenders — both feeding the
  * same recorder, so the JSONL contract the Python side reads is unchanged.
  *
- * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn the prompt hook
- * wrote the session mapping and the turn-end handler wrote
- * opencode-transcripts/<sid>.json. Which turn-end event name 2.3.0 delivers
- * is not established, so both names stay accepted (see setup()).
+ * OpenCode 2.3.0 (probed 2026-11-14): loads. The prompt hook writes the
+ * session mapping; turn end synchronously detaches Python capture finalisation
+ * because `opencode run` does not await event-started async work.
  */
-import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, existsSync, readFileSync } from "node:fs"
 import { join, dirname, basename } from "node:path"
+import { handoffTurnEnd } from "../lib/turn-end-worker.ts"
 
 function isProjectRoot(directory: string): boolean {
   return (
@@ -143,41 +143,6 @@ function makeRecorder(directory: string, worktree: string | undefined): Recorder
   return record
 }
 
-/** Directory for the v2 in-process transcript dumps (next to the mapping). */
-function transcriptsDir(directory: string, project?: string | null): string {
-  const proj = project ?? activeProject(directory)
-  if (proj) return join(projectStore(directory, proj), "opencode-transcripts")
-  return join(directory, ".magnolia", "opencode-transcripts")
-}
-
-const MAX_DUMP_CHARS = 4_000_000 // ~4 MB cap; larger sessions truncate the tail
-
-/** Dump the full in-process message list (v2 exports are user-text-only). */
-function dumpTranscript(dir: string, sessionID: string, messages: unknown): void {
-  try {
-    mkdirSync(dir, { recursive: true })
-    let body = JSON.stringify({
-      ts: new Date().toISOString(),
-      sessionID,
-      source: "plugin-v2-ctx.session.context",
-      messages,
-    })
-    if (body.length > MAX_DUMP_CHARS) {
-      // A truncated JSON string is useless to the reader — write a valid,
-      // marked object instead.
-      body = JSON.stringify({
-        ts: new Date().toISOString(),
-        sessionID,
-        source: "plugin-v2-ctx.session.context",
-        truncated: true,
-        note: "session exceeded 4 MB; dump clipped — use the CLI export fallback",
-        messages: (Array.isArray(messages) ? messages : []).slice(0, 200),
-      })
-    }
-    writeFileSync(join(dir, `${sessionID}.json`), body)
-  } catch { /* never throw into opencode */ }
-}
-
 export default {
   id: "magnolia-session-capture",
 
@@ -191,9 +156,8 @@ export default {
       try { record(event?.sessionID) } catch { /* never throw */ }
     })
 
-    // Belt-and-suspenders: session lifecycle events also carry the id, AND
-    // (v2) each turn-end dumps the full in-process message list — the distill
-    // feed that replaces the export CLI (v2 exports are user-text-only).
+    // Belt-and-suspenders: lifecycle events also carry the id. At turn end the
+    // detached worker reads the durable v2 database and writes the distill feed.
     // v2 event vocabulary (logged 2026-10-07): there is NO session.idle in the
     // stream; the turn-terminal signal is session.execution.succeeded with the
     // session id at durable.aggregateID (data.sessionID on usage events).
@@ -218,18 +182,10 @@ export default {
           // project; skip API/test sessions and other locations entirely.
           if (!record.isKnown(sidStr)) continue
           record(sidStr)
-          const proj = record.projectOf(sidStr)
-          if (!proj) continue
+          if (!record.projectOf(sidStr)) continue
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
-          if (turnEnd && ctx?.session?.context) {
-            const messages = await ctx.session
-              .context({ sessionID: sidStr })
-              .catch(() => null)
-            if (messages) {
-              dumpTranscript(transcriptsDir(directory, proj), sidStr, messages)
-            }
-          }
+          if (turnEnd) handoffTurnEnd(directory, sidStr, "capture")
         }
       } catch { /* aborted or stream error — never break the session */ }
     })()
@@ -246,12 +202,17 @@ export default {
       },
       // Belt-and-suspenders: session lifecycle bus events also carry the id,
       // in case chat.message's shape differs across opencode versions.
-      event: async (input: any) => {
+      event: (input: any) => {
         const sid =
           input?.event?.properties?.sessionID ??
           input?.event?.properties?.info?.id ??
           input?.event?.sessionID
-        if (sid) record(sid)
+        if (sid) {
+          record(sid)
+          if (input?.event?.type === "session.idle") {
+            handoffTurnEnd(directory, String(sid), "capture")
+          }
+        }
       },
     }
   },
