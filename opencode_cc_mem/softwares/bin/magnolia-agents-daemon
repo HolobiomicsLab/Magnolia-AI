@@ -252,13 +252,20 @@ def _quota_wait_is_active(root: str, letter: AdmittedLetter) -> bool:
 
 
 def resume_quota_waits(root: str, lane: str | None = None) -> int:
-    """Explicitly clear durable helper quota waits, optionally for one lane."""
+    """Clear matching daemon waits and their observed governor generations."""
+    from campaign_runner.governor import Governor
+
     state = load_state(root)
     waits = state.setdefault("quota_waits", {})
+    governor = Governor()
     removed = 0
     for key, wait in tuple(waits.items()):
         if lane is not None and isinstance(wait, dict) and wait.get("lane") != lane:
             continue
+        if isinstance(wait, dict) and wait.get("subscription_key") and wait.get("hold_id"):
+            governor.resume_key(
+                str(wait["subscription_key"]), expected_hold=str(wait["hold_id"])
+            )
         del waits[key]
         removed += 1
     if removed:
@@ -601,7 +608,7 @@ def _text_quota_outcome(stdout: str, stderr: str, returncode: int):
 
     if returncode == 0:
         return None
-    text = f"{stdout}\n{stderr}".lower()
+    text = stderr.lower()
     signals = (
         "rate_limit",
         "rate limit",
@@ -610,9 +617,17 @@ def _text_quota_outcome(stdout: str, stderr: str, returncode: int):
         "billing_error",
         "quota exceeded",
     )
-    if not any(signal in text for signal in signals):
-        return None
-    return RunOutcome("quota", LimitInfo("client quota", None, "client output"))
+    if any(signal in text for signal in signals):
+        return RunOutcome("quota", LimitInfo("client quota", None, "client stderr"))
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        outcome = _event_quota_outcome(event)
+        if outcome is not None:
+            return outcome
+    return None
 
 
 def _event_quota_outcome(event):
@@ -1229,10 +1244,11 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
         outcome = parsed.get("outcome")
         if outcome is not None and outcome.kind == "quota":
             limit = outcome.limit
+            observed = governor.quota_wait(route.subscription_key)
             raise HelperQuotaWaiting(
                 route.subscription_key,
-                limit.hold_id if limit else None,
-                limit.reset_at if limit else None,
+                observed.hold_id if observed else (limit.hold_id if limit else None),
+                observed.reset_at if observed else (limit.reset_at if limit else None),
                 limit.reason if limit else "quota",
             )
         if parsed["rc"] != 0:
@@ -1267,6 +1283,78 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
         f"Last narration:\n\n{narration[-3000:]}")
 
 
+def _matching_pending_write(root: str, admitted: AdmittedLetter) -> dict | None:
+    """Return a saved post-client write only for the unchanged request."""
+    state = load_state(root)
+    writes = state.setdefault("pending_writes", {})
+    key = str(admitted.letter)
+    pending = writes.get(key)
+    if isinstance(pending, dict) and pending.get("letter_digest") == admitted.digest():
+        return pending
+    if key in writes:
+        del writes[key]
+        save_state(root, state)
+    return None
+
+
+def _save_pending_write(root: str, admitted: AdmittedLetter, pending: dict) -> None:
+    """Checkpoint a paid answer before any inbox write is attempted."""
+    state = load_state(root)
+    state.setdefault("pending_writes", {})[str(admitted.letter)] = pending
+    save_state(root, state)
+
+
+def _finish_pending_write(
+    root: str, agent: str, admitted: AdmittedLetter, pending: dict
+) -> str:
+    """Retry only inbox writes for one already-computed helper answer."""
+    task_file = admitted.letter
+    if not pending.get("reply_written"):
+        try:
+            write_reply(
+                admitted,
+                agent,
+                str(pending["body"]),
+                replace_existing=bool(pending["replace_existing"]),
+            )
+        except AdmissionRefused as exc:
+            log_line(root, f"[{agent}] reply refused: {exc.reason}")
+            if pending["final_status"] == "done":
+                pending["final_status"] = "error"
+                pending["final_text"] = set_status(pending["final_text"], "error")
+        except OSError as exc:
+            log_line(root, f"[{agent}] reply write pending: {exc}")
+            return "pending_write"
+        pending["reply_written"] = True
+        _save_pending_write(root, admitted, pending)
+    try:
+        admitted.write_text(str(pending["final_text"]))
+    except AdmissionRefused as exc:
+        log_line(root, f"[{agent}] letter write refused: {exc.reason}")
+        state = load_state(root)
+        state.setdefault("pending_writes", {}).pop(str(task_file), None)
+        save_state(root, state)
+        return "refused"
+    except OSError as exc:
+        log_line(root, f"[{agent}] letter write pending: {exc}")
+        return "pending_write"
+
+    final_status = str(pending["final_status"])
+    state = load_state(root)
+    state.setdefault("pending_writes", {}).pop(str(task_file), None)
+    if final_status == "prototyped" and is_deferred_task(admitted.read_text()):
+        state["done"].pop(str(task_file), None)
+    else:
+        state["done"][str(task_file)] = hashlib.sha1(
+            admitted.read_text().encode()
+        ).hexdigest()
+    save_state(root, state)
+    if admitted.is_scheduled:
+        consume_generation_receipt(admitted)
+    log_line(root, f"[{agent}] {task_file.name} -> {final_status}")
+    return final_status
+
+
 def handle_task(task_file: Path, agent: str, root: str,
                 runner=default_runner, timeout_s: int = TASK_TIMEOUT_S,
                 lane_cfg: dict | None = None) -> str:
@@ -1286,6 +1374,9 @@ def handle_task(task_file: Path, agent: str, root: str,
             log_line(root, f"[{agent}] {task_file.name} -> refused (generation consumed)")
             return "refused"
         text = admitted.read_text()
+        pending = _matching_pending_write(root, admitted)
+        if pending is not None:
+            return _finish_pending_write(root, agent, admitted, pending)
         project_dir = str(admitted.lane_project)
         is_ticket = bool(_TICKET_RE.search(_header_window(text)))
         prompt = (
@@ -1343,18 +1434,6 @@ def handle_task(task_file: Path, agent: str, root: str,
             body = f"## Task failed\n\nThe helper run raised: {exc}\n\n"
             body += "To try again, set this letter's `status:` line back to `open`."
 
-        try:
-            write_reply(
-                admitted,
-                agent,
-                body,
-                replace_existing=status != "refused",
-            )
-        except AdmissionRefused as exc:
-            log_line(root, f"[{agent}] reply refused: {exc.reason}")
-            if status == "done":
-                status = "error"
-
         final_status = status
         final_text = set_status(text, status)
         if status == "done" and is_ticket:
@@ -1370,24 +1449,18 @@ def handle_task(task_file: Path, agent: str, root: str,
                 final_status = new_state
                 final_text = set_status(text, final_status)
 
-        try:
-            admitted.write_text(final_text)
-        except AdmissionRefused as exc:
-            log_line(root, f"[{agent}] letter write refused: {exc.reason}")
-            return "refused"
-
-        state = load_state(root)
-        if final_status == "prototyped" and is_deferred_task(final_text):
-            state["done"].pop(str(task_file), None)
-        else:
-            state["done"][str(task_file)] = hashlib.sha1(
-                admitted.read_text().encode()
-            ).hexdigest()
-        save_state(root, state)
-        if admitted.is_scheduled:
-            consume_generation_receipt(admitted)
-        log_line(root, f"[{agent}] {task_file.name} -> {final_status}")
-        return final_status
+        pending = {
+            "lane": agent,
+            "letter_digest": admitted.digest(),
+            "body": body,
+            "replace_existing": status != "refused",
+            "final_status": final_status,
+            "final_text": final_text,
+            "reply_written": False,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _save_pending_write(root, admitted, pending)
+        return _finish_pending_write(root, agent, admitted, pending)
     finally:
         admitted.close()
 
@@ -1425,6 +1498,8 @@ def deliver_wait_for(root: str, lanes: dict) -> int:
         if inbox.is_symlink() or not inbox.is_dir():
             continue
         for f in sorted(inbox.rglob("*.task.md")):
+            if _refusal_is_current(root, f):
+                continue
             try:
                 admitted = admit_letter(root, agent, f)
             except AdmissionRefused as exc:
@@ -1571,8 +1646,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.resume_quota is not None:
         lane = None if args.resume_quota == "*" else args.resume_quota
-        cleared = resume_quota_waits(args.root, lane)
-        print(f"cleared {cleared} helper quota wait(s)")
+        request_quota_resume(args.root, lane)
+        print("quota resume request queued for next agents daemon scan")
+        return 0
     log_line(args.root, f"daemon start (pid={os.getpid()}, once={args.once})")
     while True:
         try:

@@ -6,6 +6,7 @@ import importlib.util
 import os
 import json
 import stat
+from datetime import datetime, timedelta, timezone
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -908,17 +909,23 @@ def test_daemon_route_and_model_reach_client(tmp_path, monkeypatch):
 
     def helper_executor(route, context):
         captured["route"] = route
+        captured["launch_argv"] = context.launch_argv
+        captured["environment"] = context.environment
         return FakeExecutor()
 
     monkeypatch.setattr(d, "_helper_executor", helper_executor)
     monkeypatch.setattr(d, "_role_capabilities", lambda: {})
     monkeypatch.setattr(d, "_configuration_digest", lambda context: "policy-1")
+    monkeypatch.setattr(d, "_client_binary", lambda route: "/fixture/bin/claude")
 
     answer = d.default_runner("literature", str(lane), root, "PROMPT", 60)
 
     assert answer == "FINAL ANSWER: done"
     assert captured["route"].client == "claude-code"
     assert captured["route"].model == "haiku"
+    assert captured["launch_argv"] == ("/fixture/bin/claude",)
+    assert captured["environment"]["MAGNOLIA_ROOT"] == root
+    assert captured["environment"]["MAGNOLIA_PROJECT_DIR"] == str(lane.resolve())
 
 
 def test_daemon_session_resume_and_route_switch(tmp_path, monkeypatch):
@@ -1029,6 +1036,18 @@ def test_daemon_wait_survives_restart(tmp_path):
     assert d.discover_tasks(root, d.discover_lanes(root)) == [task]
 
 
+def test_known_quota_reset_readmits_unchanged_letter(tmp_path):
+    root = _root(tmp_path)
+    task, _ = _registered_letter(root)
+
+    def quota(*args, **kwargs):
+        reset = datetime.now(timezone.utc) - timedelta(seconds=1)
+        raise d.HelperQuotaWaiting("claude-code", "hold-1", reset, "quota")
+
+    assert d.handle_task(task, "literature", root, runner=quota) == "waiting_quota"
+    assert d.discover_tasks(root, d.discover_lanes(root)) == [task]
+
+
 def test_resume_quota_reaches_running_daemon_via_durable_request(tmp_path, monkeypatch):
     root = _root(tmp_path)
     task, _ = _registered_letter(root)
@@ -1079,6 +1098,167 @@ def test_governed_opencode_text_quota_is_typed_and_held(tmp_path, monkeypatch):
     assert result["outcome"].kind == "quota"
     state = json.loads(governor.state_path.read_text(encoding="utf-8"))
     assert state["cooldowns"][route.subscription_key]["reason"] == "client quota"
+
+
+def test_opencode_model_prose_does_not_create_quota_hold(tmp_path, monkeypatch):
+    from campaign_runner.governor import Governor
+    from campaign_runner.workers import InvocationGovernance
+
+    root = _root(tmp_path)
+    project = Path(root) / "opencode_cc_mem" / "projects" / "literature"
+    binary = tmp_path / "opencode-crash"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' '{\"type\":\"text\",\"part\":{\"type\":\"text\","
+        "\"messageID\":\"m\",\"text\":\"Explain API rate limit handling\"}}'\n"
+        "printf '%s\\n' 'segfault in provider' >&2\nexit 1\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    route = d._resolve_helper_route(root, str(project), "deepseek/deepseek-flash")
+    governor = Governor()
+    governance = InvocationGovernance(
+        governor, route, "helper:ordinary-crash", d._project_digest(project), role_cap=40
+    )
+
+    result = d._run_once(
+        route.model,
+        str(project),
+        {"MAGNOLIA_ROOT": root},
+        10,
+        ["hello"],
+        d.runs_dir(root) / "crash.jsonl",
+        binary=str(binary),
+        governance=governance,
+    )
+
+    assert result["rc"] == 1
+    assert result["outcome"].kind == "failure"
+    state = json.loads(governor.state_path.read_text(encoding="utf-8"))
+    assert route.subscription_key not in state["cooldowns"]
+
+
+def test_resume_quota_releases_observed_governor_hold_and_runs_once(
+    tmp_path, monkeypatch
+):
+    root = _root(tmp_path)
+    task = _task(
+        Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    )
+    mode = tmp_path / "mode"
+    calls = tmp_path / "calls"
+    binary = tmp_path / "opencode"
+    binary.write_text(
+        "#!/bin/sh\n"
+        f"printf 'call\\n' >> '{calls}'\n"
+        f"if [ \"$(cat '{mode}')\" = quota ]; then\n"
+        "  printf 'rate limit exceeded\\n' >&2\n  exit 1\nfi\n"
+        "printf '%s\\n' '{\"sessionID\":\"fresh-id\",\"part\":{\"type\":\"text\","
+        "\"messageID\":\"m\",\"text\":\"FINAL ANSWER: recovered\"}}'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    mode.write_text("quota", encoding="utf-8")
+    config = tmp_path / "config" / "magnolia"
+    config.mkdir(parents=True)
+    (config / "usage-policy.yaml").write_text(
+        "min_seconds_between_runs: 1\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setattr(d, "_opencode_bin", lambda: str(binary))
+    monkeypatch.setattr(d, "_render_project_config", lambda *args: None)
+    monkeypatch.setattr(d, "_ensure_tools_daemon", lambda *args: None)
+
+    assert d.handle_task(task, "literature", root) == "waiting_quota"
+    wait = d.load_state(root)["quota_waits"][str(task)]
+    assert wait["hold_id"]
+    assert calls.read_text(encoding="utf-8").splitlines() == ["call"]
+
+    assert d.resume_quota_waits(root, "literature") == 1
+    mode.write_text("ok", encoding="utf-8")
+    assert d.scan_once(root, lanes=d.discover_lanes(root)) == ["literature:done"]
+    assert calls.read_text(encoding="utf-8").splitlines() == ["call", "call"]
+
+
+def test_reply_oserror_retries_only_persisted_write(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    task = _task(
+        Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    )
+    runner_calls = []
+    real_write_reply = d.write_reply
+    blocked = {"value": True}
+
+    def flaky_write_reply(*args, **kwargs):
+        if blocked["value"]:
+            raise OSError("read-only sender directory")
+        return real_write_reply(*args, **kwargs)
+
+    monkeypatch.setattr(d, "write_reply", flaky_write_reply)
+    runner = lambda *args, **kwargs: runner_calls.append(1) or "FINAL ANSWER: paid"
+
+    assert d.handle_task(task, "literature", root, runner=runner) == "pending_write"
+    assert runner_calls == [1]
+    blocked["value"] = False
+    assert d.scan_once(root, runner=runner, lanes=d.discover_lanes(root)) == [
+        "literature:done"
+    ]
+    assert runner_calls == [1]
+    assert "FINAL ANSWER: paid" in task.with_name("20260924_ask_reply.md").read_text()
+
+
+def test_letter_and_reply_atomic_rewrites_keep_expected_modes(tmp_path):
+    root = _root(tmp_path)
+    task = _task(
+        Path(root) / "opencode_cc_mem" / "projects" / "literature" / "inbox"
+    )
+    task.chmod(0o640)
+    previous_umask = os.umask(0o022)
+    try:
+        assert d.handle_task(
+            task, "literature", root, runner=lambda *args: "FINAL ANSWER: ok"
+        ) == "done"
+    finally:
+        os.umask(previous_umask)
+
+    assert stat.S_IMODE(task.stat().st_mode) == 0o640
+    assert stat.S_IMODE(task.with_name("20260924_ask_reply.md").stat().st_mode) == 0o644
+
+
+def test_unchanged_refusal_is_logged_once_across_delivery_and_scan(tmp_path):
+    root = _root(tmp_path)
+    task = _task(
+        Path(root)
+        / "opencode_cc_mem"
+        / "projects"
+        / "literature"
+        / "inbox"
+        / "from-ghost"
+    )
+    task.write_text(task.read_text().replace("from: xiulian", "from: ghost"))
+    lanes = d.discover_lanes(root)
+
+    for _ in range(3):
+        d.deliver_wait_for(root, lanes)
+        d.scan_once(root, runner=lambda *args: "FINAL ANSWER: no", lanes=lanes)
+
+    log = (d.state_dir(root) / "daemon.log").read_text(encoding="utf-8")
+    assert log.count(f"{task.name} -> refused") == 1
+
+
+def test_resume_quota_without_daemon_records_request_and_exits(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    scans = []
+    monkeypatch.setattr(d, "acquire_lock", lambda _root: 3)
+    monkeypatch.setattr(d, "scan_once", lambda *args, **kwargs: scans.append(1) or [])
+
+    assert d.main(["--root", root, "--resume-quota", "literature"]) == 0
+    requests = list((d.state_dir(root) / "quota-resume-requests").glob("*.json"))
+    assert len(requests) == 1
+    assert json.loads(requests[0].read_text(encoding="utf-8"))["lane"] == "literature"
+    assert scans == []
 
 
 def test_sender_refusal_starts_no_client_and_acquires_no_slot(tmp_path, monkeypatch):
