@@ -186,15 +186,113 @@ def test_known_reset_and_manual_resume_restore_phase(tmp_path):
     assert resumed.state == "queued"
     assert resumed.attempt == 0
     assert resumed.quota_wait is None
+    assert resumed.resumed_from_quota == quota_wait(reset_at=reset_at)
 
     manual = make_store(tmp_path / "manual")
     manual.transition("running", "worker started", stage="analyze", attempt=1)
-    manual.wait_for_quota(quota_wait("worker", attempt=1, hold_id="fresh-hold"))
-    resumed = manual.resume_if_quota_ready(NOW, manual=True)
+    checkpoint = quota_wait("worker", attempt=1, hold_id="fresh-hold")
+    manual.wait_for_quota(checkpoint)
+    resumed = manual.resume_if_quota_ready(
+        NOW, manual=True, expected_hold_id="fresh-hold"
+    )
     assert resumed.state == "running"
     assert resumed.attempt == 1
     assert resumed.quota_wait is None
+    assert resumed.resumed_from_quota == checkpoint
     assert manual.read_events()[-1]["quota_hold_id"] == "fresh-hold"
+
+
+def test_manual_resume_requires_current_hold_generation(tmp_path):
+    store = make_store(tmp_path)
+    first = quota_wait(hold_id="h1", reset_at=NOW)
+    store.wait_for_quota(first)
+    assert store.resume_if_quota_ready(NOW).resumed_from_quota == first
+
+    second = quota_wait(hold_id="h2")
+    store.wait_for_quota(second)
+    with pytest.raises(StateError, match="expected_hold_id"):
+        store.resume_if_quota_ready(NOW, manual=True)
+
+    stale = store.resume_if_quota_ready(
+        NOW, manual=True, expected_hold_id="h1"
+    )
+    assert stale.state == "waiting_quota"
+    assert stale.quota_wait == second
+    assert stale.resumed_from_quota is None
+
+    resumed = store.resume_if_quota_ready(
+        NOW, manual=True, expected_hold_id="h2"
+    )
+    assert resumed.state == "queued"
+    assert resumed.resumed_from_quota == second
+
+
+def test_resume_crash_reconciles_continuation_data(tmp_path):
+    store = make_store(tmp_path)
+    store.transition("running", "worker started", stage="analyze", attempt=1)
+    store.transition("validating", "worker succeeded", attempt=1)
+    checkpoint = quota_wait(
+        "reviewer",
+        reset_at=NOW,
+        attempt=1,
+        result_ref="attempts/analyze/1/worker_result.json",
+        retry_cursor=2,
+    )
+    store.wait_for_quota(checkpoint)
+    real_save = store.save
+    store.save = lambda state: (_ for _ in ()).throw(OSError("crash"))
+    with pytest.raises(OSError, match="crash"):
+        store.resume_if_quota_ready(NOW)
+    store.save = real_save
+
+    repaired = store.reconcile()
+
+    assert repaired.state == "validating"
+    assert repaired.quota_wait is None
+    assert repaired.resumed_from_quota == checkpoint
+    assert repaired.resumed_from_quota.result_ref.endswith("worker_result.json")
+    assert repaired.resumed_from_quota.retry_cursor == 2
+    assert repaired.resumed_from_quota.session_identity == checkpoint.session_identity
+    assert store.load().resumed_from_quota == checkpoint
+    assert store.read_events()[-1]["quota_resumed_from"] == checkpoint.to_dict()
+
+    advanced = store.transition("queued", "review retry completed", attempt=1)
+    assert advanced.resumed_from_quota is None
+    assert store.read_events()[-1]["quota_resumed_from"] is None
+
+
+def test_paused_quota_exit_clears_checkpoint_and_cannot_reenter_generically(tmp_path):
+    store = make_store(tmp_path)
+    store.wait_for_quota(quota_wait(hold_id="old"))
+    store.pause("operator pause")
+
+    queued = store.transition("queued", "operator requeue")
+
+    assert queued.quota_wait is None
+    assert store.read_events()[-1]["quota_wait_after"] is None
+    store.transition("running", "worker started", attempt=1)
+    with pytest.raises(StateError, match="wait_for_quota"):
+        store.transition("waiting_quota", "generic entry")
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("stage", "no-such-stage", "quota checkpoint stage"),
+        ("attempt", 1, "quota checkpoint attempt"),
+    ],
+)
+def test_load_rejects_checkpoint_inconsistent_with_campaign(
+    tmp_path, field, value, message
+):
+    store = make_store(tmp_path)
+    store.wait_for_quota(quota_wait())
+    payload = json.loads(store.campaign_path.read_text())
+    payload["quota_wait"][field] = value
+    store.campaign_path.write_text(json.dumps(payload))
+
+    with pytest.raises(StateError, match=message):
+        store.load()
 
 
 def test_pause_halt_stop_while_waiting(tmp_path):

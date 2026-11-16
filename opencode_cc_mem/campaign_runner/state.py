@@ -108,6 +108,7 @@ CAMPAIGN_KEYS = {
     "job_core_hours",
     "paused_from",
     "quota_wait",
+    "resumed_from_quota",
 }
 QUOTA_PHASE_STATES = {
     "pre-worker": "queued",
@@ -315,6 +316,7 @@ class CampaignState:
     job_core_hours: dict[str, float] = field(default_factory=dict)
     paused_from: str | None = None
     quota_wait: QuotaWait | None = None
+    resumed_from_quota: QuotaWait | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "CampaignState":
@@ -371,8 +373,18 @@ class CampaignState:
         quota_wait = (
             QuotaWait.from_dict(raw_quota_wait) if raw_quota_wait is not None else None
         )
+        raw_resumed_from_quota = value.get("resumed_from_quota")
+        resumed_from_quota = (
+            QuotaWait.from_dict(raw_resumed_from_quota)
+            if raw_resumed_from_quota is not None
+            else None
+        )
         if value["state"] == "waiting_quota" and quota_wait is None:
             raise StateError("waiting_quota state requires quota_wait")
+        if quota_wait is not None and resumed_from_quota is not None:
+            raise StateError(
+                "campaign cannot have both quota_wait and resumed_from_quota"
+            )
         return cls(
             schema=1,
             protocol_id=str(value["protocol_id"]),
@@ -391,6 +403,7 @@ class CampaignState:
             job_core_hours=job_core_hours,
             paused_from=paused_from,
             quota_wait=quota_wait,
+            resumed_from_quota=resumed_from_quota,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -410,6 +423,9 @@ class CampaignState:
             "job_core_hours": self.job_core_hours,
             "paused_from": self.paused_from,
             "quota_wait": self.quota_wait.to_dict() if self.quota_wait else None,
+            "resumed_from_quota": (
+                self.resumed_from_quota.to_dict() if self.resumed_from_quota else None
+            ),
         }
 
 
@@ -594,7 +610,41 @@ class CampaignStore:
             raise StateError("campaign protocol hash does not match protocol copy")
         if state.stage not in {stage.id for stage in protocol.stages}:
             raise StateError(f"campaign refers to unknown stage '{state.stage}'")
+        stage_ids = {stage.id for stage in protocol.stages}
+        self._validate_quota_checkpoint(
+            state.quota_wait, state, stage_ids, "quota checkpoint"
+        )
+        self._validate_quota_checkpoint(
+            state.resumed_from_quota,
+            state,
+            stage_ids,
+            "resumed quota checkpoint",
+        )
         return state
+
+    @staticmethod
+    def _validate_quota_checkpoint(
+        checkpoint: QuotaWait | None,
+        state: CampaignState,
+        stage_ids: set[str],
+        label: str,
+    ) -> None:
+        if checkpoint is None:
+            return
+        if checkpoint.stage not in stage_ids:
+            raise StateError(
+                f"{label} stage '{checkpoint.stage}' is not present in the protocol"
+            )
+        if checkpoint.stage != state.stage:
+            raise StateError(
+                f"{label} stage '{checkpoint.stage}' does not match "
+                f"campaign stage '{state.stage}'"
+            )
+        if checkpoint.attempt != state.attempt:
+            raise StateError(
+                f"{label} attempt {checkpoint.attempt} does not match "
+                f"campaign attempt {state.attempt} for stage '{state.stage}'"
+            )
 
     def verify_memory_state(self) -> None:
         state = self.load()
@@ -658,6 +708,8 @@ class CampaignStore:
         if state.quota_wait is not None:
             event["quota_hold_id"] = state.quota_wait.hold_id
             event["quota_wait_after"] = state.quota_wait.to_dict()
+        if state.resumed_from_quota is not None:
+            event["quota_resumed_from"] = state.resumed_from_quota.to_dict()
         return event
 
     def transition(
@@ -703,8 +755,14 @@ class CampaignStore:
     ) -> CampaignState:
         state = self.load()
         validate_transition(state.state, target)
-        if target == "waiting_quota" and state.quota_wait is None:
-            raise StateError("use wait_for_quota() to enter waiting_quota")
+        if target == "waiting_quota" and not (
+            state.state == "paused"
+            and state.paused_from == "waiting_quota"
+            and state.quota_wait is not None
+        ):
+            raise StateError(
+                "use wait_for_quota() to enter waiting_quota from a campaign phase"
+            )
         if state.state == "waiting_quota" and target in QUOTA_PHASE_STATES.values():
             raise StateError("use resume_if_quota_ready() to leave waiting_quota")
         if (
@@ -723,12 +781,24 @@ class CampaignStore:
         event = self._new_event(state, target, reason, resolved_stage, resolved_attempt)
         if target == "paused":
             event["paused_from"] = state.state
+        clear_paused_quota = (
+            state.state == "paused"
+            and state.paused_from == "waiting_quota"
+            and target != "waiting_quota"
+        )
+        if clear_paused_quota:
+            event["quota_wait_after"] = None
+        if state.resumed_from_quota is not None:
+            event["quota_resumed_from"] = None
         self._append_event_locked(event)
         state.state = target
         if target == "paused":
             state.paused_from = str(event["paused_from"])
         state.stage = resolved_stage
         state.attempt = resolved_attempt
+        if clear_paused_quota:
+            state.quota_wait = None
+        state.resumed_from_quota = None
         state.updated_at = str(event["ts"])
         self.save(state)
         return state
@@ -758,9 +828,12 @@ class CampaignStore:
             )
             event["quota_hold_id"] = checkpoint.hold_id
             event["quota_wait_after"] = checkpoint.to_dict()
+            if state.resumed_from_quota is not None:
+                event["quota_resumed_from"] = None
             self._append_event_locked(event)
             state.state = "waiting_quota"
             state.quota_wait = checkpoint
+            state.resumed_from_quota = None
             state.updated_at = str(event["ts"])
             self.save(state)
             return state
@@ -769,11 +842,16 @@ class CampaignStore:
         self,
         now: datetime,
         manual: bool = False,
+        expected_hold_id: str | None = None,
     ) -> CampaignState:
         """Restore the exact suspended phase when its reset is due or cleared manually."""
         current_time = _utc_datetime(now, "resume time")
         if not isinstance(manual, bool):
             raise StateError("manual must be a boolean")
+        if expected_hold_id is not None:
+            expected_hold_id = _required_text(expected_hold_id, "expected_hold_id")
+        if manual and expected_hold_id is None:
+            raise StateError("manual quota resume requires expected_hold_id")
         with self.lock():
             state = self.load()
             if state.state != "waiting_quota":
@@ -781,6 +859,8 @@ class CampaignStore:
             checkpoint = state.quota_wait
             if checkpoint is None:
                 raise StateError("waiting_quota state has no quota checkpoint")
+            if manual and expected_hold_id != checkpoint.hold_id:
+                return state
             if not manual and (
                 checkpoint.reset_at is None or current_time < checkpoint.reset_at
             ):
@@ -801,11 +881,13 @@ class CampaignStore:
             )
             event["quota_hold_id"] = checkpoint.hold_id
             event["quota_wait_after"] = None
+            event["quota_resumed_from"] = checkpoint.to_dict()
             self._append_event_locked(event)
             state.state = target
             state.stage = checkpoint.stage
             state.attempt = checkpoint.attempt
             state.quota_wait = None
+            state.resumed_from_quota = checkpoint
             state.updated_at = str(event["ts"])
             self.save(state)
             return state
@@ -930,12 +1012,16 @@ class CampaignStore:
 
     @staticmethod
     def _apply_quota_event(state: CampaignState, event: Mapping[str, Any]) -> None:
-        if "quota_wait_after" not in event:
-            return
-        checkpoint = event["quota_wait_after"]
-        state.quota_wait = (
-            QuotaWait.from_dict(checkpoint) if checkpoint is not None else None
-        )
+        if "quota_wait_after" in event:
+            checkpoint = event["quota_wait_after"]
+            state.quota_wait = (
+                QuotaWait.from_dict(checkpoint) if checkpoint is not None else None
+            )
+        if "quota_resumed_from" in event:
+            resumed = event["quota_resumed_from"]
+            state.resumed_from_quota = (
+                QuotaWait.from_dict(resumed) if resumed is not None else None
+            )
 
     def pause(self, reason: str = "operator pause") -> CampaignState:
         with self.lock():
