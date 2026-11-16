@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,6 +41,7 @@ def _context(project: Path, *, key: str = "provider-secret") -> SimpleNamespace:
             "memory_service_timeout": 0.01,
         },
         environment={"OPENAI_API_KEY": key},
+        holder_pid=os.getpid(),
     )
 
 
@@ -164,9 +167,11 @@ def _stub_runtime(monkeypatch, identities: dict[int, str] | None = None):
     identities.setdefault(os.getpid(), f"ps:{os.getpid()}:test-launcher")
     started: list[tuple[list[str], dict[str, str]]] = []
     stopped: list[tuple[int, str]] = []
+    commands: dict[int, tuple[str, ...]] = {}
 
     def start(argv, cwd, environment, log_path):
         started.append((list(argv), dict(environment)))
+        commands[4101] = tuple(argv)
         return FakeProcess(4101)
 
     monkeypatch.setattr(memory_service, "_start_process", start)
@@ -174,12 +179,11 @@ def _stub_runtime(monkeypatch, identities: dict[int, str] | None = None):
     monkeypatch.setattr(
         memory_service, "_process_identity", lambda pid: identities.get(pid)
     )
+    monkeypatch.setattr(memory_service, "_listener_owned_by_pid", lambda pid, port: True)
     monkeypatch.setattr(
         memory_service,
         "_process_command",
-        lambda pid: ("/test/python", "-m", "compchem_memory.memory_http")
-        if pid in identities
-        else None,
+        commands.get,
     )
     monkeypatch.setattr(
         memory_service,
@@ -380,7 +384,13 @@ def test_forged_record_naming_other_project_service_is_not_signalled(
         "process_identity": identities[service_pid],
         "service_identity": "project-d-identity",
         "token_file": str(token_path),
-        "command": ["/test/python", "-m", memory_service.SERVICE_MODULE],
+        "command": [
+            "/test/python",
+            "-m",
+            memory_service.SERVICE_MODULE,
+            "--project-dir",
+            str(project_d.resolve()),
+        ],
         "holders": [],
     }
     memory_service._write_record(state, forged)
@@ -425,7 +435,7 @@ def test_forged_record_naming_other_project_service_is_not_signalled(
             }
             if "44300" in url
             else {
-                "project_digest": memory_service.project_digest(project_d),
+                "project_digest": memory_service.project_digest(project_c),
                 "process_identity": identities[service_pid],
                 "service_identity": "project-d-identity",
             }
@@ -506,6 +516,248 @@ def test_real_forged_record_does_not_kill_unrelated_process(tmp_path, monkeypatc
         victim.wait(timeout=5)
 
 
+def test_forged_health_sleep_record_is_never_signalled_by_ensure_or_release(
+    tmp_path, monkeypatch, caplog
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    memory_service._ensure_private_state_dir(state)
+    token_path = state / "bearer-token"
+    token_path.write_text("forged-token\n", encoding="utf-8")
+    token_path.chmod(0o600)
+    victim = subprocess.Popen(
+        ["/bin/sleep", "30"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        victim_identity = f"ps:{victim.pid}:victim"
+        holder_identity = f"ps:{os.getpid()}:holder"
+        replacement_pid = 4101
+        replacement_identity = "ps:4101:replacement"
+        service_identities: list[str] = []
+        signalled: list[tuple[int, str]] = []
+        forged = {
+            "pid": victim.pid,
+            "port": 44100,
+            "project_digest": memory_service.project_digest(project),
+            "project_dir": str(project.resolve()),
+            "process_identity": victim_identity,
+            "service_identity": "forged-service",
+            "token_file": str(token_path),
+            "command": ["/bin/sleep", "30"],
+            "holders": [],
+        }
+        memory_service._write_record(state, forged)
+
+        def identity(pid):
+            return {
+                victim.pid: victim_identity,
+                replacement_pid: replacement_identity,
+                os.getpid(): holder_identity,
+            }.get(pid)
+
+        def start(argv, cwd, environment, log_path):
+            service_identities.append(environment["MAGNOLIA_MEMORY_SERVICE_IDENTITY"])
+            return FakeProcess(replacement_pid)
+
+        def health(url, token, timeout=2.0):
+            if "44100" in url:
+                return {
+                    "project_digest": memory_service.project_digest(project),
+                    "process_identity": victim_identity,
+                    "service_identity": "forged-service",
+                }
+            return {
+                "project_digest": memory_service.project_digest(project),
+                "process_identity": replacement_identity,
+                "service_identity": service_identities[-1],
+            }
+
+        monkeypatch.setattr(memory_service, "_process_identity", identity)
+        monkeypatch.setattr(
+            memory_service,
+            "_process_command",
+            lambda pid: ("/bin/sleep", "30")
+            if pid == victim.pid
+            else (
+                "/test/python",
+                "-m",
+                memory_service.SERVICE_MODULE,
+                "--project-dir",
+                str(project.resolve()),
+            ),
+        )
+        monkeypatch.setattr(memory_service, "_start_process", start)
+        monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 44101)
+        monkeypatch.setattr(memory_service, "_health", health)
+        monkeypatch.setattr(
+            memory_service,
+            "_terminate_owned",
+            lambda pid, identity: signalled.append((pid, identity)) or True,
+        )
+
+        replacement = memory_service.ensure_memory_service(_context(project))
+
+        assert victim.poll() is None
+        assert (victim.pid, victim_identity) not in signalled
+        assert "left untouched" in caplog.text
+        memory_service._write_record(state, forged)
+        forged_handle = memory_service.ServiceHandle(
+            url="http://127.0.0.1:44100/mcp",
+            project_digest=memory_service.project_digest(project),
+            process_identity=victim_identity,
+            project_dir=project.resolve(),
+            holder_id="forged-holder",
+            service_identity="forged-service",
+            token_file=token_path,
+        )
+
+        assert memory_service.release_memory_service(forged_handle) is False
+        assert victim.poll() is None
+        assert (victim.pid, victim_identity) not in signalled
+
+        memory_service._write_record(
+            state,
+            {
+                **forged,
+                "pid": replacement_pid,
+                "port": 44101,
+                "process_identity": replacement.process_identity,
+                "service_identity": replacement.service_identity,
+                "command": [
+                    "/test/python",
+                    "-m",
+                    memory_service.SERVICE_MODULE,
+                    "--project-dir",
+                    str(project.resolve()),
+                ],
+                "holders": [
+                    {
+                        "id": replacement.holder_id,
+                        "pid": os.getpid(),
+                        "process_identity": holder_identity,
+                    }
+                ],
+            },
+        )
+        memory_service.release_memory_service(replacement)
+    finally:
+        if victim.poll() is None:
+            victim.terminate()
+            victim.wait(timeout=5)
+
+
+@pytest.mark.parametrize("interrupt", [KeyboardInterrupt, SystemExit])
+def test_interrupted_readiness_has_provisional_record_and_cleans_up(
+    tmp_path, monkeypatch, interrupt
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    started, _ = _stub_runtime(monkeypatch)
+    stopped = []
+
+    def interrupt_readiness(process, url, token, timeout):
+        record = json.loads(
+            (memory_service.private_state_dir(project) / "service.json").read_text()
+        )
+        assert record["provisional"] is True
+        assert record["pid"] == process.pid
+        assert record["command"] == started[-1][0]
+        raise interrupt()
+
+    monkeypatch.setattr(memory_service, "_wait_ready", interrupt_readiness)
+    monkeypatch.setattr(
+        memory_service, "_stop_started_process", lambda process: stopped.append(process.pid)
+    )
+
+    with pytest.raises(interrupt):
+        memory_service.ensure_memory_service(_context(project))
+
+    state = memory_service.private_state_dir(project)
+    assert stopped == [4101]
+    assert not (state / "service.json").exists()
+    assert not (state / "bearer-token").exists()
+
+
+def test_sigint_during_readiness_leaves_no_service_or_record(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    state = memory_service.private_state_dir(project)
+    code = f"""
+from pathlib import Path
+from types import SimpleNamespace
+from compchem_memory.harness import memory_service
+memory_service._health = lambda *args, **kwargs: None
+context = SimpleNamespace(
+    project_dir=Path({str(project)!r}),
+    python={sys.executable!r},
+    setup={{
+        "memory_provider": "openai",
+        "memory_model": "test-model",
+        "memory_service_timeout": 30,
+    }},
+    environment={{
+        "HOME": {str(Path.home())!r},
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": {os.environ.get("PYTHONPATH", "")!r},
+        "OPENAI_API_KEY": "provider-secret",
+    }},
+    holder_pid={os.getpid()},
+)
+memory_service.ensure_memory_service(context)
+"""
+    acquirer = subprocess.Popen(
+        [sys.executable, "-c", code],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=dict(os.environ),
+    )
+    service_pid = None
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if (state / "service.json").exists():
+                record = json.loads((state / "service.json").read_text())
+                service_pid = int(record["pid"])
+                assert record["provisional"] is True
+                break
+            if acquirer.poll() is not None:
+                _, stderr = acquirer.communicate()
+                pytest.skip(f"sandbox could not start the loopback service: {stderr[-300:]}")
+            time.sleep(0.05)
+        if service_pid is None:
+            pytest.skip("sandbox did not expose a provisional service record")
+
+        acquirer.send_signal(signal.SIGINT)
+        acquirer.wait(timeout=10)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(service_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+
+        with pytest.raises(ProcessLookupError):
+            os.kill(service_pid, 0)
+        assert not (state / "service.json").exists()
+        assert not (state / "bearer-token").exists()
+    finally:
+        if acquirer.poll() is None:
+            acquirer.kill()
+            acquirer.wait(timeout=5)
+        if service_pid is not None:
+            try:
+                os.kill(service_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
 def test_health_reuse_uses_two_second_timeout_and_retries_once(
     tmp_path, monkeypatch
 ):
@@ -531,6 +783,29 @@ def test_health_reuse_uses_two_second_timeout_and_retries_once(
 
     assert second.process_identity == first.process_identity
     assert calls == [2.0, 2.0]
+
+
+def test_stopped_service_skips_health_wait(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    started, _ = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+    memory_service.ensure_memory_service(_context(project))
+    state = memory_service.private_state_dir(project)
+    record = json.loads((state / "service.json").read_text())
+    monkeypatch.setattr(memory_service, "_process_is_stopped", lambda pid: True)
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda *args: pytest.fail("a stopped service must not incur a health timeout"),
+    )
+
+    assert memory_service._reuse(
+        record,
+        state,
+        project,
+        memory_service._new_holder(os.getpid()),
+    ) is None
 
 
 def test_holders_are_the_long_lived_launchers(tmp_path, monkeypatch):
@@ -576,6 +851,7 @@ def test_next_acquire_reaps_service_when_all_holders_are_dead(tmp_path, monkeypa
             "process_identity": "ps:5999:dead",
         }
     ]
+    record["provisional"] = True
     memory_service._write_record(state, record)
 
     replacement = memory_service.ensure_memory_service(_context(project))
@@ -639,10 +915,12 @@ def test_memory_service_cleanup_preserves_other_project(tmp_path, monkeypatch):
     identities[os.getpid()] = f"ps:{os.getpid()}:test-launcher"
     stopped: list[tuple[int, str]] = []
     service_identities: dict[int, str] = {}
+    commands: dict[int, tuple[str, ...]] = {}
 
     def start(argv, cwd, environment, log_path):
         pid = next(next_pid)
         service_identities[pid] = environment["MAGNOLIA_MEMORY_SERVICE_IDENTITY"]
+        commands[pid] = tuple(argv)
         return FakeProcess(pid)
 
     monkeypatch.setattr(
@@ -652,13 +930,7 @@ def test_memory_service_cleanup_preserves_other_project(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 43101)
     monkeypatch.setattr(memory_service, "_process_identity", identities.get)
-    monkeypatch.setattr(
-        memory_service,
-        "_process_command",
-        lambda pid: ("/test/python", "-m", "compchem_memory.memory_http")
-        if pid in {4101, 4102}
-        else None,
-    )
+    monkeypatch.setattr(memory_service, "_process_command", commands.get)
     monkeypatch.setattr(
         memory_service,
         "_health",

@@ -1,6 +1,8 @@
+import gc
 import json
 import sqlite3
 import sys
+import weakref
 from pathlib import Path
 
 import pytest
@@ -330,6 +332,40 @@ def test_reviewer_configured_repairs_no_executor_empty_retry(tmp_path, monkeypat
         ["campaign-reviewer"]["steps"] == 8
         for call in calls
     )
+
+
+def test_vibe_reviewer_keeps_memory_lease_across_format_retries(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from campaign_runner.executors.vibe import VibeExecutor
+
+    handle = object()
+    prepared = SimpleNamespace(memory_service_handle=handle)
+    released = []
+    executor = object.__new__(VibeExecutor)
+    executor.prepared = prepared
+    executor.role = "reviewer"
+    executor._memory_service_finalizer = weakref.finalize(
+        executor,
+        VibeExecutor._release_prepared_memory_service,
+        prepared,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+    monkeypatch.setattr(VibeExecutor, "_run", lambda self, *args, **kwargs: object())
+
+    executor.run("review", tmp_path, tmp_path, stem="reviewer")
+    executor.run("repair", tmp_path, tmp_path, stem="reviewer_retry_1")
+
+    assert released == []
+    del executor
+    gc.collect()
+    assert released == [handle]
+    assert prepared.memory_service_handle is None
 
 
 def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
