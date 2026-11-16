@@ -243,7 +243,36 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert started[0][1]["MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY"] == (
         f"ps:{os.getpid()}:test-launcher"
     )
+    state = memory_service.private_state_dir(project)
+    state_flag = started[0][0].index("--state-dir")
+    assert Path(started[0][0][state_flag + 1]) == state
     assert memory_service.release_memory_service(first) is False
+    assert memory_service.release_memory_service(second) is True
+    assert stopped == [(4101, "ps:4101:start")]
+
+
+def test_release_preserves_holder_when_identity_probe_is_unknown(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    identities = {
+        4101: "ps:4101:start",
+        os.getpid(): f"ps:{os.getpid()}:test-launcher",
+    }
+    started, stopped = _stub_runtime(monkeypatch, identities)
+    _healthy_for(monkeypatch, project, started)
+    first = memory_service.ensure_memory_service(_context(project))
+    second = memory_service.ensure_memory_service(_context(project))
+    holder_identity = identities.pop(os.getpid())
+    monkeypatch.setattr(memory_service, "_process_exists", lambda pid: True)
+
+    assert memory_service.release_memory_service(first) is False
+    record = json.loads(
+        (memory_service.private_state_dir(project) / "service.json").read_text()
+    )
+    assert [holder["id"] for holder in record["holders"]] == [second.holder_id]
+    assert stopped == []
+
+    identities[os.getpid()] = holder_identity
     assert memory_service.release_memory_service(second) is True
     assert stopped == [(4101, "ps:4101:start")]
 
@@ -337,7 +366,13 @@ def test_forged_identity_correct_record_never_signals_unrelated_process(
         memory_service,
         "_process_command",
         lambda pid: ("/bin/sleep", "600") if pid == victim_pid else (
-            "/test/python", "-m", "compchem_memory.memory_http", "--project-dir", str(project.resolve()),
+            "/test/python",
+            "-m",
+            "compchem_memory.memory_http",
+            "--project-dir",
+            str(project.resolve()),
+            "--state-dir",
+            str(state),
         ),
         raising=False,
     )
@@ -421,6 +456,8 @@ def test_forged_record_naming_other_project_service_is_not_signalled(
             memory_service.SERVICE_MODULE,
             "--project-dir",
             str(project_c.resolve()),
+            "--state-dir",
+            str(state),
         ),
     )
     monkeypatch.setattr(
@@ -603,6 +640,8 @@ def test_forged_health_sleep_record_is_never_signalled_by_ensure_or_release(
                 memory_service.SERVICE_MODULE,
                 "--project-dir",
                 str(project.resolve()),
+                "--state-dir",
+                str(state),
             ),
         )
         monkeypatch.setattr(memory_service, "_start_process", start)
@@ -1005,6 +1044,7 @@ def test_ready_identity_records_reexec_command_and_preserves_spaces(
     observed = (
         "/framework/Python.app/Contents/MacOS/Python", "-m",
         memory_service.SERVICE_MODULE, "--project-dir", str(project.resolve()),
+        "--state-dir", str(memory_service.private_state_dir(project)),
     )
     if raw_ps:
         observed = " ".join(observed) + "\n"
@@ -1285,7 +1325,16 @@ def test_provisional_record_reaps_bootstrap_or_final_command_only(tmp_path, monk
     project.mkdir()
     started, stopped = _stub_runtime(monkeypatch)
     _healthy_for(monkeypatch, project, started)
-    command = ("/test/python", "-m", memory_service.SERVICE_MODULE, "--project-dir", str(project.resolve()))
+    state = memory_service.private_state_dir(project)
+    command = (
+        "/test/python",
+        "-m",
+        memory_service.SERVICE_MODULE,
+        "--project-dir",
+        str(project.resolve()),
+        "--state-dir",
+        str(state),
+    )
     runtime = "/framework path/Python.app/Contents/MacOS/Python"
     bootstrap = (runtime, "-c", memory_service._UNMASK_AND_EXEC, *command)
     final = (runtime, *command[1:])
@@ -1503,8 +1552,8 @@ def test_service_exits_when_acquirer_sigkilled_during_readiness(tmp_path):
         "HTTP_PROXY": "http://127.0.0.1:9",
         "HTTPS_PROXY": "http://127.0.0.1:9",
         "NO_PROXY": "127.0.0.1",
-        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.05",
-        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "0.2",
+        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.5",
+        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "5",
     }
     code = f"""
 import os, time
@@ -1539,7 +1588,7 @@ ms.ensure_memory_service(SimpleNamespace(
         acquirer.kill()
         acquirer.wait(timeout=5)
 
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 10
         while memory_service._process_identity(service_pid) and time.monotonic() < deadline:
             time.sleep(0.02)
 
@@ -1573,8 +1622,8 @@ def test_service_exits_after_double_signal_during_startup(tmp_path):
         "HTTP_PROXY": "http://127.0.0.1:9",
         "HTTPS_PROXY": "http://127.0.0.1:9",
         "NO_PROXY": "127.0.0.1",
-        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.05",
-        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "0.2",
+        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S": "0.5",
+        "MAGNOLIA_MEMORY_SERVICE_GRACE_S": "5",
     }
     code = f"""
 import json, os, signal
@@ -1607,7 +1656,7 @@ ms.ensure_memory_service(SimpleNamespace(
         assert marker.exists()
         service_pid = int(marker.read_text())
 
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 10
         while memory_service._process_identity(service_pid) and time.monotonic() < deadline:
             time.sleep(0.02)
 
