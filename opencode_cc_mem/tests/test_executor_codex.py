@@ -18,6 +18,7 @@ from campaign_runner.executors.codex import (
     REQUIRED_FEATURES,
     RESTRICTED_FEATURES,
     _relevant_owner_config,
+    _validate_final_argv,
     parse_codex_stream,
     require_codex_trust,
 )
@@ -388,6 +389,9 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     pairs = [argv[i:i + 2] for i in range(len(argv) - 1)]
     for feature in (*RESTRICTED_FEATURES, "apps"):
         assert ["--disable", feature] in pairs
+    for feature in ("code_mode_host", "code_mode_host_grpc"):
+        assert ["--disable", feature] not in pairs
+        assert ["--enable", feature] in pairs
     for feature in (
         "skill_mcp_dependency_install",
         "remote_plugin",
@@ -516,6 +520,8 @@ def test_codex_helper_evaluator_independent_contracts(tmp_path, role):
     assert argv[argv.index("-C") + 1] == str(context.project_dir)
     pairs = [argv[index:index + 2] for index in range(len(argv))]
     assert ["--disable", "code_mode_host"] in pairs
+    assert ["--enable", "code_mode_host"] not in pairs
+    assert ["--enable", "code_mode_host_grpc"] not in pairs
     assert ["--disable", "apps"] in pairs
     assert "mcp_servers.user_mail.enabled=false" in argv
     assert "plugins.user_plugin.enabled=false" in argv
@@ -1216,6 +1222,22 @@ def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
         executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
 
     assert _calls(state) == []
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_codex_worker_reviewer_final_argv_refuses_code_mode_disable(
+    role,
+):
+    with pytest.raises(WorkerError, match="forbidden Codex launch"):
+        _validate_final_argv([
+            "codex",
+            "--enable",
+            "code_mode_host",
+            "--disable",
+            "code_mode_host",
+            "--",
+            "prompt",
+        ], role=role)
 
 
 def test_codex_refuses_sandbox_override_without_sandbox_flag(tmp_path):
