@@ -434,6 +434,18 @@ Each phase ends with Tao's review on its own branch.
 - SessionStart currently injects boot context into every Claude role. The reviewer cap of eight is
   consequently tight (two turns were spent looking for unavailable memory tools). Role-selective
   boot injection is a follow-up, not a blocker.
+- Claude production workers use the observed stdio memory-server shape, including `${VAR}`
+  expansion for named server environment entries; unauthenticated HTTP memory routes are refused.
+  The launch binding measures required policy names from the effective environment, hashes the hook
+  package plus required-mode wrapper, and binds Magnolia's venv-interpreter selection rule rather
+  than a machine path. Turn caps are bound as the positive `min(role, governor)` rule, not as probe
+  values. The Claude child receives only the observed base variables, Magnolia policy bindings, its
+  own subscription token and standard proxy/CA variables; endpoint/runtime redirects are named and
+  refused.
+- The executor records and spawns the absolute real path whose SHA-256 passed the gate, then hashes
+  it again immediately before process spawn. A residual TOCTOU interval remains between that final
+  file read and the kernel exec; eliminating it would require descriptor-based execution supported
+  end to end by the governed-process barrier.
 
 ## 11. Interfaces seen by others
 

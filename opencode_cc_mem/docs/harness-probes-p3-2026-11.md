@@ -135,8 +135,28 @@ invocation/session capability identity remains project-bound.
 
 The offline production-shaped recheck resolved `claude` through the same PATH lookup used by the
 governed process, then canonicalized it to
-`~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`.
+`<npm-global>/@anthropic-ai/claude-code/bin/claude.exe`.
 Installed package metadata reports `2.1.325`; the real executable SHA-256 is
 `84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2`. No client process was
 started. All four production-shaped role renders reproduced their bound components in two distinct
 temporary projects, so the Claude stale flags are cleared. Codex and Vibe remain refused.
+
+## Task CF Round 3 — review-gap closure
+
+The accepted worker binding now uses the W1-observed stdio memory shape: a named command and args,
+with each named environment entry rendered as `${VAR}` for Claude Code expansion. Campaign launches
+construct that stdio route from Magnolia's selected Python; an unauthenticated HTTP memory URL is
+refused for every client. Vibe's separate authenticated managed-service evidence remains refused.
+
+The normalized binding measures the `MAGNOLIA_HOOK_POLICY*` names actually present in the effective
+child environment. It additionally binds the Magnolia venv-interpreter selection rule and a digest
+of `compchem_memory/hook/**/*.py` plus the required-mode wrapper in `render_common.py`. Settings bind
+the rule that `--max-turns` is a positive `min(role cap, governor cap)`, so production defaults and
+tighter configured caps are accepted without blessing one probe value. Claude's environment is an
+allowlist; endpoint/runtime modifiers are refused with their names.
+
+The prepared argv contains the absolute real path whose bytes were hashed. The Claude executor
+re-hashes that same path immediately before each spawn. A small residual TOCTOU interval remains
+between the final hash read and kernel exec; the gate does not claim descriptor-pinned execution.
+Tests use a local fake npm package and a capability projection rebound to its bytes. The installed
+2.1.325 comparison is separate and skips with an explicit reason when that exact package is absent.

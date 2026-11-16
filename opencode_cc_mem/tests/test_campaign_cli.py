@@ -49,6 +49,17 @@ def test_vibe_campaign_route_is_managed_and_never_static(monkeypatch):
     assert _memory_route(route) == {"transport": "managed"}
 
 
+def test_claude_campaign_route_is_stdio_with_expanded_environment_names():
+    route = ResolvedRoute("claude-code", "haiku", "family", "claude-code", "worker", "test")
+
+    memory = _memory_route(route, "/repo/.venv/bin/python3")
+
+    assert memory["transport"] == "stdio"
+    assert memory["command"] == "/repo/.venv/bin/python3"
+    assert memory["args"] == ["-m", "compchem_memory.server"]
+    assert "MAGNOLIA_PROJECT_DIR" in memory["env_vars"]
+
+
 def make_inputs(tmp_path):
     campaign_dir = tmp_path / "project" / "campaigns"
     campaign_dir.mkdir(parents=True, exist_ok=True)

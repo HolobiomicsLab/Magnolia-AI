@@ -208,7 +208,12 @@ def _context(
         installation_root=ROOT, workspace_root=tmp_path,
         project_identity="project-fixture", python_executable="/venv/bin/python",
         tools_port=8123, launch_argv=(str(binary or "codex-stub"),),
-        memory_service={"transport": "http", "url": "http://127.0.0.1:8765/mcp"},
+        memory_service={
+            "transport": "stdio",
+            "command": "/venv/bin/python",
+            "args": ["-m", "compchem_memory.server"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+        },
         role_capabilities={"codex": {role: evidence}},
         environment=environment,
         setup={
@@ -278,7 +283,11 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     invocation = context.control_dir / "executors" / f"{role}-one"
     servers = {}
     if role == "worker":
-        servers["compchem-memory"] = {"url": "http://127.0.0.1:8765/mcp"}
+        servers["compchem-memory"] = {
+            "command": "/venv/bin/python",
+            "args": ["-m", "compchem_memory.server"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+        }
     servers["magnolia-read"] = {
             "command": "/venv/bin/python",
             "args": ["-m", "compchem_memory.harness.read_server"],

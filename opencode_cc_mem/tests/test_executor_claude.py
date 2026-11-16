@@ -38,18 +38,11 @@ STRIPPED_ENV = {
     "MISTRAL_API_KEY": "forbidden-mistral-key",
 }
 PASSTHROUGH_ENV = {
-    "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
-    "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
-    "OPENROUTER_API_KEY": "forbidden-openrouter-key",
-    "DEEPSEEK_API_KEY": "forbidden-deepseek-key",
-    "KIMI_PLAN_MAGNOLIA_API_KEY": "forbidden-kimi-plan-key",
-    "KIMI_API_KEY": "forbidden-kimi-key",
-    "ZHIPU_API_KEY": "forbidden-zhipu-key",
-    "ZAI_API_KEY": "forbidden-zai-key",
-    "MAGNOLIA_LLM_API_KEY": "forbidden-memory-key",
-    "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
+    "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+    "HTTPS_PROXY": "http://proxy.example",
+    "SSL_CERT_FILE": "/certs/ca.pem",
 }
-PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
+PARENT_CLIENT_ENV = dict(PASSTHROUGH_ENV)
 ROLE_CAPABILITIES = {
     "worker": (
         "native_read",
@@ -92,7 +85,8 @@ def _live_event(cell, name):
 def _stub(tmp_path, streams, *, returncodes=None, linger_after_first=False):
     state = tmp_path / "stub-state"
     state.mkdir()
-    config = tmp_path / "stub-config.json"
+    binary = tmp_path / "claude-stub"
+    config = binary.with_suffix(".json")
     config.write_text(
         json.dumps(
             {
@@ -104,18 +98,22 @@ def _stub(tmp_path, streams, *, returncodes=None, linger_after_first=False):
         ),
         encoding="utf-8",
     )
-    binary = tmp_path / "claude-stub"
     binary.write_text(
         """#!/usr/bin/env python3
 import json, os, pathlib, sys, time
-config = json.loads(pathlib.Path(os.environ["CLAUDE_STUB_CONFIG"]).read_text())
+config = json.loads(pathlib.Path(__file__).with_suffix(".json").read_text())
 state = pathlib.Path(config["state"])
 index = len(list(state.glob("call-*.json")))
 (state / f"call-{index}.json").write_text(json.dumps({
     "argv": sys.argv,
     "client_env": {
         name: os.environ.get(name)
-        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
+        for name in (
+            "CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY",
+            "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY",
+            "MISTRAL_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "HTTPS_PROXY",
+            "SSL_CERT_FILE",
+        )
         if name in os.environ
     },
     "role": os.environ.get("MAGNOLIA_ROLE"),
@@ -186,15 +184,16 @@ def _context(
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
         "memory_service": {
-            "transport": "http",
-            "url": "http://127.0.0.1:8765/mcp",
+            "transport": "stdio",
+            "command": os.environ.get("PYTHON", "/usr/bin/python3"),
+            "args": ["-m", "compchem_memory.server"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         "invocation_id": invocation,
         "launch_argv": (str(binary),),
         "role_capabilities": {"claude-code": {role: evidence}},
         "environment": {
             "PATH": os.environ.get("PATH", ""),
-            "CLAUDE_STUB_CONFIG": str(config),
             **PARENT_CLIENT_ENV,
         },
         "role_cap": role_cap,
@@ -308,8 +307,9 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
     assert mcp == {
         "mcpServers": {
             "compchem-memory": {
-                "type": "http",
-                "url": "http://127.0.0.1:8765/mcp",
+                "command": context.python_executable,
+                "args": ["-m", "compchem_memory.server"],
+                "env": {"MAGNOLIA_PROJECT_DIR": "${MAGNOLIA_PROJECT_DIR}"},
             }
         }
     }
