@@ -42,13 +42,25 @@ def _memory_setup(root: Path = _ROOT) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _memory_route(route: ResolvedRoute) -> dict[str, str]:
-    """Return a managed Vibe route; retain existing routes for other clients."""
+def _memory_route(
+    route: ResolvedRoute, python_executable: str | None = None
+) -> dict[str, Any]:
+    """Return authenticated managed Vibe or observed-shape stdio memory."""
     if route.client == "vibe":
         return {"transport": "managed"}
     return {
-        "transport": "http",
-        "url": os.environ.get("MAGNOLIA_MEMORY_URL", "http://127.0.0.1:8765/mcp"),
+        "transport": "stdio",
+        "command": python_executable or os.environ.get("MAGNOLIA_PYTHON", sys.executable),
+        "args": ["-m", "compchem_memory.server"],
+        "env_vars": [
+            "MAGNOLIA_ROOT",
+            "MAGNOLIA_PROJECT_DIR",
+            "MAGNOLIA_RULES_DIR",
+            "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+            "MAGNOLIA_DISTILL_INTERVAL_MIN",
+            "MAGNOLIA_MEMORY_MODEL",
+            "MAGNOLIA_MEMORY_PROVIDER",
+        ],
     }
 
 
@@ -316,6 +328,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
     server = getattr(args, "server", None) or os.environ.get("MAGNOLIA_OPENCODE_SERVER")
     database = getattr(args, "db", None) or _default_db()
     environment = {
+        **os.environ,
         "MAGNOLIA_PROJECT_DIR": str(project_dir),
         "MAGNOLIA_ROOT": str(project_dir.parents[1]),
     }
@@ -367,10 +380,12 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             installation_root=_ROOT,
             workspace_root=project_dir.parent,
             project_identity=project_digest,
-            python_executable=sys.executable,
+            python_executable=os.environ.get("MAGNOLIA_PYTHON", sys.executable),
             tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
             setup=memory_setup,
-            memory_service=_memory_route(route),
+            memory_service=_memory_route(
+                route, os.environ.get("MAGNOLIA_PYTHON", sys.executable)
+            ),
             invocation_id=uuid.uuid4().hex,
             launch_argv=(client_binary,),
             environment=environment,

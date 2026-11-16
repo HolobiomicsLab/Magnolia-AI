@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import shutil
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from campaign_runner.executors import ExecContext, ExecutorRefused
+from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.capabilities import load_role_capabilities
 from campaign_runner.launch import configuration_identity, prepare_launch
 from campaign_runner.routing import ResolvedRoute
@@ -112,11 +113,23 @@ def _context(
         "python_executable": "/venv/bin/python",
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
-        "memory_service": {"transport": "http", "url": "http://127.0.0.1:8765/mcp"},
+        "memory_service": {
+            "transport": "stdio",
+            "command": "/venv/bin/python",
+            "args": ["-m", "compchem_memory.server"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+        },
         "invocation_id": invocation,
         "launch_argv": (f"stub-{client}", "--headless"),
         "role_capabilities": {client: {role: evidence}},
-        "environment": {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV},
+        "environment": (
+            {
+                "PATH": os.environ.get("PATH", ""),
+                "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            }
+            if client == "claude-code"
+            else {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
+        ),
     }
     values.update(changes)
     context = ExecContext(**values)
@@ -128,13 +141,30 @@ def _artifact_text(launch):
     return "\n".join(path.read_text(encoding="utf-8") for path in launch.files)
 
 
+def _fake_claude_client(tmp_path):
+    package = tmp_path / "npm-global" / "@anthropic-ai" / "claude-code"
+    binary = package / "bin" / "claude.exe"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    (package / "package.json").write_text(
+        json.dumps({"name": "@anthropic-ai/claude-code", "version": "2.1.325"}),
+        encoding="utf-8",
+    )
+    return binary
+
+
 def _production_claude_context(tmp_path, *, role="helper", project_name="project", **changes):
     project = tmp_path / project_name
     run = tmp_path / f"run-{project_name}-{role}"
     project.mkdir(exist_ok=True)
     (run / "control").mkdir(parents=True, exist_ok=True)
     (run / "work").mkdir(exist_ok=True)
-    capabilities = load_role_capabilities()
+    binary = _fake_claude_client(tmp_path)
+    capabilities = copy.deepcopy(load_role_capabilities())
+    identity = capabilities["claude-code"][role]["launch_identity"]["components"]
+    identity["client_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
+    identity["client_version"] = "2.1.325"
     route = ResolvedRoute(
         "claude-code", "haiku", "claude-haiku", "claude-code", role, "test"
     )
@@ -158,14 +188,16 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
         "memory_service": {
-            "transport": "http",
-            "url": "http://127.0.0.1:8765/mcp",
+            "transport": "stdio",
+            "command": sys.executable,
+            "args": ["-m", "compchem_memory.server"],
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
         },
         "invocation_id": f"{role}-{project_name}",
-        "launch_argv": ("claude",),
+        "launch_argv": (str(binary),),
         "role_capabilities": capabilities,
         "environment": {"PATH": os.environ.get("PATH", "")},
-        "role_cap": role_cap,
+        "role_cap": 30 if role == "worker" else role_cap,
         "governor_cap": 60,
     }
     values.update(changes)
@@ -410,9 +442,24 @@ def test_missing_stale_or_untrusted_launch_refused(tmp_path, evidence_change, me
 
 @pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
 def test_effective_environment_strips_only_client_credentials(tmp_path, client):
-    launch = prepare_launch(_context(tmp_path, client=client, invocation=client))
+    environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
+    if client == "claude-code":
+        environment = {
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            **PASSTHROUGH_CLIENT_ENV,
+        }
+    launch = prepare_launch(
+        _context(tmp_path, client=client, invocation=client, environment=environment)
+    )
     resumed = prepare_launch(
-        _context(tmp_path, client=client, invocation=client, resume_from=launch.invocation_dir)
+        _context(
+            tmp_path,
+            client=client,
+            invocation=client,
+            resume_from=launch.invocation_dir,
+            environment=environment,
+        )
     )
     combined = json.dumps(dict(launch.env), sort_keys=True) + _artifact_text(launch)
 
@@ -421,7 +468,7 @@ def test_effective_environment_strips_only_client_credentials(tmp_path, client):
         assert name not in resumed.env
         assert sentinel not in combined
     for name, sentinel in PASSTHROUGH_CLIENT_ENV.items():
-        if client == "vibe" and name != "MAGNOLIA_CRITIC_API_KEY":
+        if client == "claude-code":
             assert name not in launch.env
             assert name not in resumed.env
         else:
@@ -438,21 +485,28 @@ def test_inherited_forbidden_value_cannot_survive_under_other_name(
     monkeypatch.setenv(name, sentinel)
     context = _context(
         tmp_path,
-        environment=None,
+        environment={"PATH": os.environ.get("PATH", ""), name: sentinel},
         renderer_env={"COPIED_VALUE": sentinel},
     )
 
-    with pytest.raises(ExecutorRefused, match="forbidden client environment"):
-        prepare_launch(context)
+    if name.startswith("ANTHROPIC_"):
+        with pytest.raises(ExecutorRefused, match=name):
+            prepare_launch(context)
+    else:
+        launch = prepare_launch(context)
+        assert name not in launch.env
+        assert sentinel not in json.dumps(dict(launch.env)) + _artifact_text(launch)
 
 
 @pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
 def test_forbidden_value_in_argv_is_refused(tmp_path, name):
-    with pytest.raises(ExecutorRefused, match="forbidden client environment"):
+    message = name if name.startswith("ANTHROPIC_") else "forbidden client environment"
+    with pytest.raises(ExecutorRefused, match=message):
         prepare_launch(
             _context(
                 tmp_path,
                 launch_argv=("stub", "--credential", STRIPPED_CLIENT_ENV[name]),
+                environment={name: STRIPPED_CLIENT_ENV[name]},
             )
         )
 
@@ -523,14 +577,15 @@ def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter
         memory_service={
             "transport": "http",
             "url": f"http://127.0.0.1:8765/mcp{delimiter}{secret}",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
         },
     )
 
-    with pytest.raises(ExecutorRefused, match="forbidden client environment value"):
+    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
         prepare_launch(context)
 
 
-def test_forbidden_secret_value_is_not_matched_inside_longer_key_token(tmp_path):
+def test_redirecting_secret_name_is_refused_even_inside_longer_value(tmp_path):
     secret = "sk-ant-SECRET_123"
     context = _context(
         tmp_path,
@@ -540,12 +595,12 @@ def test_forbidden_secret_value_is_not_matched_inside_longer_key_token(tmp_path)
         memory_service={
             "transport": "http",
             "url": f"http://127.0.0.1:8765/mcp/{secret}X",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
         },
     )
 
-    launch = prepare_launch(context)
-
-    assert f"{secret}X" in _artifact_text(launch)
+    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
+        prepare_launch(context)
 
 
 def test_noninteractive_mention_writes_no_letter(tmp_path):
@@ -581,7 +636,9 @@ def test_api_memory_route_survives_client_env_filter(tmp_path):
         memory_service={
             "transport": "http",
             "url": "http://127.0.0.1:9876/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
         },
+        environment={"MAGNOLIA_MEMORY_SERVICE_TOKEN": "service-token"},
     )
 
     launch = prepare_launch(context)
@@ -590,6 +647,7 @@ def test_api_memory_route_survives_client_env_filter(tmp_path):
     assert mcp["memory_service"] == {
         "transport": "http",
         "url": "http://127.0.0.1:9876/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
     }
     assert mcp["memory_service"]["url"].startswith("http://127.0.0.1:")
     assert "ANTHROPIC_API_KEY" not in launch.env
@@ -946,6 +1004,153 @@ def test_launch_refuses_on_rendered_shape_drift(tmp_path):
 
     with pytest.raises(ExecutorRefused, match="settings"):
         prepare_launch(context)
+
+
+def test_claude_worker_accepts_observed_stdio_and_refuses_static_http(tmp_path):
+    prepare_launch(_production_claude_context(tmp_path, role="worker"))
+    context = _production_claude_context(
+        tmp_path,
+        role="worker",
+        project_name="http",
+        memory_service={"transport": "http", "url": "http://127.0.0.1:8765/mcp"},
+    )
+
+    with pytest.raises(ExecutorRefused, match="authenticated"):
+        prepare_launch(context)
+
+
+def test_launch_binds_policy_env_names_from_effective_environment(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._effective_environment
+
+    def without_policy_digest(*args, **kwargs):
+        env = original(*args, **kwargs)
+        env.pop("MAGNOLIA_HOOK_POLICY_SHA256")
+        return env
+
+    monkeypatch.setattr(launch_module, "_effective_environment", without_policy_digest)
+    with pytest.raises(ExecutorRefused, match="required_env"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_renamed_policy_environment_name(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._effective_environment
+
+    def renamed_policy_digest(*args, **kwargs):
+        env = original(*args, **kwargs)
+        env["MAGNOLIA_HOOK_POLICY_DIGEST"] = env.pop(
+            "MAGNOLIA_HOOK_POLICY_SHA256"
+        )
+        return env
+
+    monkeypatch.setattr(launch_module, "_effective_environment", renamed_policy_digest)
+    with pytest.raises(ExecutorRefused, match="required_env"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_unselected_hook_interpreter(tmp_path):
+    context = _production_claude_context(
+        tmp_path,
+        python_executable="/usr/bin/python3",
+        environment={"PATH": os.environ.get("PATH", ""), "MAGNOLIA_PYTHON": "/usr/bin/python3"},
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_changed_hook_source(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    monkeypatch.setattr(
+        "campaign_runner.launch._hook_source_digest", lambda _context: "0" * 64
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook_source"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize(
+    ("role", "role_cap"),
+    (("worker", 30), ("worker", 20), ("reviewer", 12)),
+)
+def test_launch_binds_cap_rule_not_concrete_value(tmp_path, role, role_cap):
+    launch = prepare_launch(
+        _production_claude_context(tmp_path, role=role, role_cap=role_cap)
+    )
+    settings = json.loads((launch.invocation_dir / "settings.json").read_text())
+    assert settings["max_turns"] == min(role_cap, 60)
+
+
+def test_claude_rehashes_absolute_client_immediately_before_spawn(tmp_path):
+    context = _production_claude_context(tmp_path)
+    executor = executor_for(context.route, "helper", context)
+    executable = Path(executor.prepared.argv[0])
+    assert executable.is_absolute()
+    executable.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    with pytest.raises(ExecutorRefused, match="changed before spawn"):
+        executor.run("test", context.project_dir, tmp_path / "attempt", retries=0)
+
+
+def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
+    allowed = {
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+        "CLAUDE_CODE_OAUTH_TOKEN": "subscription",
+        "HTTPS_PROXY": "http://proxy.example",
+        "SSL_CERT_FILE": "/certs/ca.pem",
+    }
+    launch = prepare_launch(
+        _production_claude_context(tmp_path, environment={**allowed, "IGNORED": "x"})
+    )
+    assert all(launch.env[name] == value for name, value in allowed.items())
+    assert "IGNORED" not in launch.env
+
+    for name in ("ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "NODE_OPTIONS"):
+        context = _production_claude_context(
+            tmp_path,
+            project_name=name.lower(),
+            environment={**allowed, name: "redirect"},
+        )
+        with pytest.raises(ExecutorRefused, match=name):
+            prepare_launch(context)
+
+
+def test_client_version_reads_only_own_package_json(tmp_path):
+    context = _production_claude_context(tmp_path, project_name="wrong-package")
+    binary = Path(context.launch_argv[0])
+    (tmp_path / "package.json").write_text(
+        json.dumps({"name": "other", "version": "99.0.0"}), encoding="utf-8"
+    )
+    (binary.parent.parent / "package.json").write_text(
+        json.dumps({"name": "other", "version": "2.1.325"}), encoding="utf-8"
+    )
+    with pytest.raises(ExecutorRefused, match="version metadata"):
+        prepare_launch(context)
+
+
+def test_real_claude_2_1_325_identity_when_installed(tmp_path):
+    binary_name = shutil.which("claude")
+    if binary_name is None:
+        pytest.skip("Claude Code 2.1.325 is absent: executable not found")
+    binary = Path(binary_name).resolve()
+    package = binary.parent.parent / "package.json"
+    try:
+        metadata = json.loads(package.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pytest.skip("Claude Code 2.1.325 is absent: package metadata unavailable")
+    if metadata.get("name") != "@anthropic-ai/claude-code" or metadata.get("version") != "2.1.325":
+        pytest.skip("Claude Code 2.1.325 is absent: installed version differs")
+    expected = load_role_capabilities()["claude-code"]["helper"]["launch_identity"]
+    assert hashlib.sha256(binary.read_bytes()).hexdigest() == expected["components"][
+        "client_sha256"
+    ]
 
 
 def test_launch_refuses_non_launch_project_scope(tmp_path):

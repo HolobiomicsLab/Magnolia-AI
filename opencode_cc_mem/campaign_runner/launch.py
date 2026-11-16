@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
 import re
 import stat
+import sys
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -47,6 +49,34 @@ FORBIDDEN_CLIENT_ENV = frozenset(
 )
 FORBIDDEN_PATH_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME"})
 FILTERED_CLIENT_ENV = FORBIDDEN_CLIENT_ENV | {"MAGNOLIA_MODEL"}
+CLAUDE_BASE_ENV = frozenset(
+    {
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "LANG",
+        "TERM",
+        "PATH",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "SSL_CERT_FILE",
+        "NODE_EXTRA_CA_CERTS",
+    }
+)
+CLAUDE_REDIRECT_ENV = frozenset(
+    {
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "NODE_OPTIONS",
+    }
+)
 MEMORY_PROVIDER_ENV = frozenset(
     {
         "MAGNOLIA_LLM_API_KEY",
@@ -79,11 +109,6 @@ CODEX_READ_SERVER_TOOLS = (
     "mcp:magnolia-read.list_dir",
     "mcp:magnolia-read.search",
 )
-REQUIRED_POLICY_ENV = (
-    "MAGNOLIA_HOOK_POLICY",
-    "MAGNOLIA_HOOK_POLICY_REQUIRED",
-    "MAGNOLIA_HOOK_POLICY_SHA256",
-)
 LAUNCH_IDENTITY_COMPONENTS = (
     "client_version",
     "client_sha256",
@@ -92,6 +117,8 @@ LAUNCH_IDENTITY_COMPONENTS = (
     "native_files",
     "policy",
     "hook_command",
+    "hook_interpreter",
+    "hook_source",
     "required_env",
 )
 
@@ -108,6 +135,7 @@ class PreparedLaunch:
     policy_digest: str
     config_digest: str
     required_capability_identity: str
+    client_sha256: str | None = None
     memory_service_handle: Any = None
 
 
@@ -156,6 +184,7 @@ def _prepare_launch(
     env = _effective_environment(
         context, invocation_dir / "policy.json", policy_digest
     )
+    client_sha256 = None
     if "launch_identity" in evidence:
         launch_identity = _normalized_launch_identity(
             context,
@@ -167,6 +196,10 @@ def _prepare_launch(
             policy_body,
         )
         _verify_bound_launch_identity(evidence, launch_identity)
+        context = replace(
+            context, launch_argv=(str(launch_identity["executable"]),)
+        )
+        client_sha256 = str(launch_identity["components"]["client_sha256"])
     else:
         expected_evidence_identity = (
             configuration_identity(evidence_context)
@@ -177,6 +210,14 @@ def _prepare_launch(
             raise ExecutorRefused(
                 "capability configuration identity does not match discovered configuration"
             )
+        if route.client == "claude-code":
+            try:
+                executable = _resolved_client_executable(context, env)
+            except ExecutorRefused:
+                executable = None
+            if executable is not None:
+                client_sha256 = _file_digest(executable)
+                context = replace(context, launch_argv=(str(executable),))
     if context.resume_from is not None:
         return _resume_launch(
             context,
@@ -186,6 +227,7 @@ def _prepare_launch(
             policy_digest,
             config_digest,
             capability_identity,
+            client_sha256,
             {
                 "policy.json": policy_body,
                 "settings.json": settings_body,
@@ -222,6 +264,7 @@ def _prepare_launch(
         policy_digest,
         config_digest,
         capability_identity,
+        client_sha256,
     )
 
 
@@ -413,12 +456,16 @@ def _normalized_launch_identity(
     components = {
         "client_version": _installed_client_version(executable),
         "client_sha256": _file_digest(executable),
-        "settings": _digest(_normalize_identity_body(settings_body, replacements)),
+        "settings": _settings_rule_digest(context, settings_body, replacements),
         "mcp": _digest(_normalize_identity_body(mcp_body, replacements)),
         "native_files": _digest_named_bodies(sorted(normalized_native.items())),
         "policy": _digest(_normalize_identity_body(policy_body, replacements)),
         "hook_command": _hook_commands_digest(native_bodies, replacements),
-        "required_env": _digest(_canonical_bytes(list(REQUIRED_POLICY_ENV))),
+        "hook_interpreter": _hook_interpreter_digest(context, launch_env),
+        "hook_source": _hook_source_digest(context),
+        "required_env": _digest(
+            _canonical_bytes(_required_policy_env_names(launch_env))
+        ),
     }
     return {
         "schema_version": "magnolia-normalized-launch-identity-v1",
@@ -465,27 +512,146 @@ def _resolved_client_executable(
 
 def _installed_client_version(executable: Path) -> str:
     """Read installed metadata without invoking the subscription client."""
-    for parent in executable.parents:
-        package = parent / "package.json"
-        if not package.is_file():
-            continue
-        try:
-            version = json.loads(package.read_text(encoding="utf-8")).get("version")
-        except (OSError, ValueError, TypeError):
-            continue
-        if isinstance(version, str) and version:
-            return version
-    release = next(
-        (
-            part.split("-", 1)[0]
-            for part in executable.parts
-            if re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?", part)
-        ),
-        None,
-    )
-    if release:
-        return release
+    package = executable.parent.parent / "package.json"
+    try:
+        metadata = json.loads(package.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        metadata = {}
+    version = metadata.get("version")
+    if metadata.get("name") == "@anthropic-ai/claude-code" and isinstance(
+        version, str
+    ) and version:
+        return version
     raise ExecutorRefused("launched client version metadata is unavailable")
+
+
+def _settings_rule_digest(
+    context: ExecContext,
+    settings_body: bytes,
+    replacements: tuple[tuple[str, str], ...],
+) -> str:
+    """Bind the cap computation rule while allowing configured cap values."""
+    try:
+        settings = json.loads(settings_body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ExecutorRefused("launch settings are invalid") from exc
+    policy = load_role(ROLE_CONFIG_NAMES[context.role])
+    role_cap = context.role_cap if context.role_cap is not None else policy.default_cap
+    governor_cap = context.governor_cap or DEFAULT_GOVERNOR_CAP
+    expected = min(role_cap, governor_cap)
+    observed = settings.get("max_turns")
+    if isinstance(observed, bool) or not isinstance(observed, int) or observed < 1:
+        raise ExecutorRefused("launch settings max-turns rule requires a positive integer")
+    if observed != expected:
+        raise ExecutorRefused("launch settings max-turns rule differs from min(role, governor)")
+    settings["max_turns"] = {
+        "rule": "min(role_cap,governor_cap)",
+        "positive": True,
+    }
+    return _digest(
+        _normalize_identity_body(_canonical_bytes(settings), replacements)
+    )
+
+
+def _required_policy_env_names(launch_env: Mapping[str, str]) -> list[str]:
+    """Measure required policy names from the actual child environment."""
+    return sorted(
+        name for name in launch_env if name.startswith("MAGNOLIA_HOOK_POLICY")
+    )
+
+
+def _hook_interpreter_digest(
+    context: ExecContext, launch_env: Mapping[str, str]
+) -> str:
+    """Validate Magnolia's selected venv interpreter and bind its selection rule."""
+    selected = launch_env.get("MAGNOLIA_PYTHON")
+    if not selected or not context.python_executable:
+        raise ExecutorRefused("hook interpreter is missing Magnolia's selection")
+    requested = Path(context.python_executable)
+    if not requested.is_absolute() or Path(selected) != requested:
+        raise ExecutorRefused("hook interpreter differs from MAGNOLIA_PYTHON")
+    repository_python = context.installation_root.parent / ".venv" / "bin" / "python3"
+    inherited = os.environ if context.environment is None else context.environment
+    override = inherited.get("MAGNOLIA_PYTHON")
+    if override:
+        expected = Path(str(override))
+    elif repository_python.exists():
+        expected = repository_python
+    elif _sys_prefix_is_venv() and requested.resolve() == Path(sys.executable).resolve():
+        expected = Path(sys.executable)
+    else:
+        raise ExecutorRefused("hook interpreter is not Magnolia's repository venv")
+    if requested.resolve() != expected.resolve():
+        raise ExecutorRefused("hook interpreter differs from Magnolia's resolver selection")
+    if not _is_virtual_environment_python(requested):
+        raise ExecutorRefused("hook interpreter is a bare system Python")
+    rule = {
+        "resolver": "MAGNOLIA_PYTHON-then-repository-venv-v1",
+        "requires_virtual_environment": True,
+        "bare_system_python": False,
+    }
+    return _digest(_canonical_bytes(rule))
+
+
+def _sys_prefix_is_venv() -> bool:
+    """Return whether this launch process itself runs from a virtual environment."""
+    return Path(sys.prefix).resolve() != Path(sys.base_prefix).resolve()
+
+
+def _is_virtual_environment_python(path: Path) -> bool:
+    """Recognize the selected venv without binding its machine-specific path."""
+    if _sys_prefix_is_venv() and path.resolve() == Path(sys.executable).resolve():
+        return True
+    if any(parent.name == ".venv" or parent.name.startswith("venv") for parent in path.parents):
+        return True
+    return any((parent / "pyvenv.cfg").is_file() for parent in path.parents)
+
+
+def _hook_source_digest(context: ExecContext) -> str:
+    """Hash hook sources and the required-mode wrapper that executes them."""
+    source_root = (
+        context.installation_root
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    hook_root = source_root / "hook"
+    render_common = source_root / "harness" / "render_common.py"
+    bodies: list[tuple[str, bytes]] = []
+    try:
+        for path in sorted(hook_root.rglob("*.py")):
+            bodies.append((path.relative_to(source_root).as_posix(), path.read_bytes()))
+        wrapper_source = render_common.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ExecutorRefused("hook source binding is unavailable") from exc
+    if not bodies:
+        raise ExecutorRefused("hook source binding found no hook package")
+    tree = ast.parse(wrapper_source)
+    selected = []
+    for node in tree.body:
+        names = {
+            target.id
+            for target in getattr(node, "targets", ())
+            if isinstance(target, ast.Name)
+        }
+        name = getattr(node, "name", None)
+        if (
+            names & {"_REQUIRED_HOOK_SCRIPT", "REQUIRED_HOOK_TIMEOUT_S"}
+            or name == "_required_pre_tool_command"
+        ):
+            segment = ast.get_source_segment(wrapper_source, node)
+            if segment:
+                selected.append(segment)
+    if len(selected) != 3:
+        raise ExecutorRefused("required-mode hook wrapper binding is incomplete")
+    bodies.append(
+        (
+            "harness/render_common.py::required-wrapper",
+            "\n".join(selected).encode(),
+        )
+    )
+    return _digest_named_bodies(bodies)
 
 
 def _file_digest(path: Path) -> str:
@@ -950,6 +1116,8 @@ def _validate_memory_service(service: Mapping[str, Any]) -> None:
             r"^https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:/|$)", url
         ):
             raise ExecutorRefused("memory HTTP route must be a project-bound loopback URL")
+        if not isinstance(authorization, str) or not authorization:
+            raise ExecutorRefused("memory HTTP route must be authenticated")
         return
     if transport == "stdio":
         if not isinstance(service.get("command"), str) or not service["command"]:
@@ -985,19 +1153,56 @@ def _effective_environment(
     context: ExecContext, policy_path: Path, policy_digest: str
 ) -> dict[str, str]:
     inherited = os.environ if context.environment is None else context.environment
-    env = {
-        str(key): str(value)
-        for key, value in inherited.items()
-        if key not in FILTERED_CLIENT_ENV
-    }
-    env.update(
-        {
+    assert context.route is not None
+    if context.route.client == "claude-code":
+        redirecting = sorted(
+            {
+                name
+                for name in (*inherited, *context.renderer_env)
+                if name in CLAUDE_REDIRECT_ENV
+                or name.startswith("ANTHROPIC_")
+                or (
+                    name.startswith("CLAUDE_CODE_")
+                    and name != "CLAUDE_CODE_OAUTH_TOKEN"
+                )
+            }
+        )
+        if redirecting:
+            raise ExecutorRefused(
+                "Claude client environment changes endpoint/runtime: "
+                + ", ".join(redirecting)
+            )
+        service_names = context.memory_service.get("env_vars", ())
+        if not isinstance(service_names, (list, tuple)):
+            service_names = ()
+        inherited_allowlist = CLAUDE_BASE_ENV | frozenset(
+            str(name) for name in service_names if str(name).startswith("MAGNOLIA_")
+        )
+        env = {
             str(key): str(value)
-            for key, value in context.renderer_env.items()
+            for key, value in inherited.items()
+            if key in inherited_allowlist
+        }
+        env.update(
+            {
+                str(key): str(value)
+                for key, value in context.renderer_env.items()
+                if key in inherited_allowlist and key != "MAGNOLIA_MODEL"
+            }
+        )
+    else:
+        env = {
+            str(key): str(value)
+            for key, value in inherited.items()
             if key not in FILTERED_CLIENT_ENV
         }
-    )
-    assert context.route is not None
+        env.update(
+            {
+                str(key): str(value)
+                for key, value in context.renderer_env.items()
+                if key not in FILTERED_CLIENT_ENV
+            }
+        )
     if (
         context.route.client == "vibe"
         and context.memory_service.get("transport") == "http"
@@ -1023,8 +1228,19 @@ def _effective_environment(
         "MAGNOLIA_CONTROL_DIR": str(context.control_dir.resolve()),
         "MAGNOLIA_WORK_DIR": str(context.work_dir.resolve()),
         "MAGNOLIA_PYTHON": context.python_executable,
+        "MAGNOLIA_ROOT": str(context.installation_root.parent.resolve()),
+        "MAGNOLIA_PROJECT_DIR": str(context.project_dir.resolve()),
+        "MAGNOLIA_RULES_DIR": "rules",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS": "4000",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN": "60",
         "COMPCHEM_TOOLS_PORT": str(context.tools_port),
     }
+    memory_model = context.setup.get("memory_model")
+    memory_provider = context.setup.get("memory_provider")
+    if isinstance(memory_model, str) and memory_model:
+        explicit["MAGNOLIA_MEMORY_MODEL"] = memory_model
+    if isinstance(memory_provider, str) and memory_provider:
+        explicit["MAGNOLIA_MEMORY_PROVIDER"] = memory_provider
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
     service = context.memory_service
@@ -1140,6 +1356,7 @@ def _resume_launch(
     policy_digest: str,
     config_digest: str,
     capability_identity: str,
+    client_sha256: str | None,
     expected_artifacts: Mapping[str, bytes],
 ) -> PreparedLaunch:
     metadata_path = invocation_dir / "launch.json"
@@ -1197,6 +1414,7 @@ def _resume_launch(
         policy_digest,
         config_digest,
         capability_identity,
+        client_sha256,
     )
 
 
@@ -1273,6 +1491,7 @@ def _prepared(
     policy_digest: str,
     config_digest: str,
     capability_identity: str,
+    client_sha256: str | None,
 ) -> PreparedLaunch:
     return PreparedLaunch(
         discovery_dir=discovery_dir,
@@ -1283,6 +1502,7 @@ def _prepared(
         policy_digest=policy_digest,
         config_digest=config_digest,
         required_capability_identity=capability_identity,
+        client_sha256=client_sha256,
         memory_service_handle=context.memory_service.get("_handle"),
     )
 

@@ -339,6 +339,11 @@ def test_claude_rows_accepted_from_live_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
+    worker = next(row for row in rows if row["role"] == "worker")
+    assert "MCP allowlist" in worker["gate"]["reason"]
+    assert {"hook_interpreter", "hook_source"} <= set(
+        worker["gate"]["value"]["configuration_binding"]["components"]
+    )
 
 
 def test_claude_row_stale_on_identity_change():

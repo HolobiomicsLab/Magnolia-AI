@@ -279,6 +279,11 @@ class ClaudeCodeExecutor:
             raise WorkerError(f"forbidden Claude launch flag: {forbidden}")
         if len(self.prepared.argv) != 1:
             raise WorkerError("Claude prepared argv must contain exactly one executable")
+        if (
+            not Path(self.prepared.argv[0]).is_absolute()
+            or not self.prepared.client_sha256
+        ):
+            raise WorkerError("Claude prepared executable is not identity-bound")
         if self.resume_artifact is not None:
             self.resume_permitted = False
             self._accept_resume_artifact(self.resume_artifact)
@@ -345,6 +350,7 @@ class ClaudeCodeExecutor:
                     argv = self._argv(current_prompt, session_id, effective_cap)
                     invocation_control = self._control(control, admission)
                     was_resumed = session_id is not None
+                    self._verify_client_bytes()
                     process = run_process(
                         argv,
                         cwd,
@@ -440,6 +446,21 @@ class ClaudeCodeExecutor:
             identity,
             self._resume_artifact(session_id),
         )
+
+    def _verify_client_bytes(self) -> None:
+        """Re-hash the exact prepared executable immediately before spawn."""
+        executable = Path(self.prepared.argv[0])
+        digest = hashlib.sha256()
+        try:
+            with executable.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            raise ExecutorRefused(
+                "Claude client executable is unavailable before spawn"
+            ) from exc
+        if digest.hexdigest() != self.prepared.client_sha256:
+            raise ExecutorRefused("Claude client executable changed before spawn")
 
     def _argv(self, prompt: str, session_id: str | None, max_turns: int) -> list[str]:
         settings = self._native_artifact("claude-settings.json", "hooks")
