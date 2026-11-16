@@ -1206,19 +1206,16 @@ if [ "$HARNESS" != "opencode" ]; then
     trap cleanup_memory_service EXIT
     CLIENT_RC=0
     if [ "$HARNESS" = "vibe" ]; then
-        if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
-            env -u MAGNOLIA_LLM_API_KEY -u DEEPSEEK_API_KEY -u ANTHROPIC_API_KEY \
-                -u MAGNOLIA_OPENAI_API_KEY -u OPENAI_API_KEY \
-                -u KIMI_PLAN_MAGNOLIA_API_KEY -u KIMI_API_KEY -u OPENROUTER_API_KEY \
-                -u MAGNOLIA_MISTRAL_API_KEY -u MISTRAL_API_KEY -u ZHIPU_API_KEY \
-                -u ZAI_API_KEY "${CLIENT_ENV[@]}" "${ARGV[@]}" || CLIENT_RC=$?
-        else
-            env -u MAGNOLIA_LLM_API_KEY -u DEEPSEEK_API_KEY -u ANTHROPIC_API_KEY \
-                -u MAGNOLIA_OPENAI_API_KEY -u OPENAI_API_KEY \
-                -u KIMI_PLAN_MAGNOLIA_API_KEY -u KIMI_API_KEY -u OPENROUTER_API_KEY \
-                -u MAGNOLIA_MISTRAL_API_KEY -u MISTRAL_API_KEY -u ZHIPU_API_KEY \
-                -u ZAI_API_KEY "${ARGV[@]}" || CLIENT_RC=$?
-        fi
+        (
+            unset MAGNOLIA_LLM_API_KEY DEEPSEEK_API_KEY ANTHROPIC_API_KEY
+            unset MAGNOLIA_OPENAI_API_KEY OPENAI_API_KEY
+            unset KIMI_PLAN_MAGNOLIA_API_KEY KIMI_API_KEY OPENROUTER_API_KEY
+            unset MAGNOLIA_MISTRAL_API_KEY MISTRAL_API_KEY ZHIPU_API_KEY ZAI_API_KEY
+            if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
+                export "${CLIENT_ENV[@]}"
+            fi
+            exec "${ARGV[@]}"
+        ) || CLIENT_RC=$?
     else
         if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
             env "${CLIENT_ENV[@]}" "${ARGV[@]}" || CLIENT_RC=$?

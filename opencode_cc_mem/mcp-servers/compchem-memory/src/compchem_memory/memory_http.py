@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import hmac
 import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import StaticTokenVerifier
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -21,14 +23,20 @@ from compchem_memory.harness.memory_service import (
 )
 
 
-def _request_project_header() -> str | None:
-    """Return the optional project hint for the current HTTP request."""
+def _request_project_headers() -> tuple[str, ...]:
+    """Return every project hint honoured by project resolution."""
     try:
-        headers = get_http_headers(include={"x-project-dir"})
+        headers = get_http_headers(
+            include={"x-project-dir", "x-magnolia-project-dir"}
+        )
     except RuntimeError:
-        return None
-    value = headers.get("x-project-dir") or headers.get("X-Project-Dir")
-    return value if isinstance(value, str) and value.strip() else None
+        return ()
+    values = (
+        headers.get("x-project-dir") or headers.get("X-Project-Dir"),
+        headers.get("x-magnolia-project-dir")
+        or headers.get("X-Magnolia-Project-Dir"),
+    )
+    return tuple(value for value in values if isinstance(value, str) and value.strip())
 
 
 class ProjectBindingMiddleware(Middleware):
@@ -42,14 +50,14 @@ class ProjectBindingMiddleware(Middleware):
             return
         target = Path(str(value)).expanduser().resolve()
         if target != self.project_dir:
-            from compchem_memory.server import ProjectBindingError
-
-            raise ProjectBindingError(
-                f"memory HTTP service is bound to a different project: {self.project_dir}"
+            raise ToolError(
+                f"memory HTTP service is bound to project {self.project_dir}; "
+                "cross-project request refused"
             )
 
     def _validate_header(self) -> None:
-        self._validate(_request_project_header())
+        for value in _request_project_headers():
+            self._validate(value)
 
     async def on_request(
         self,
@@ -114,10 +122,16 @@ def build_server(token: str) -> FastMCP:
     return app
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Run one authenticated streamable-HTTP service on IPv4 loopback only."""
+    parser = argparse.ArgumentParser(prog="python -m compchem_memory.memory_http")
+    parser.add_argument("--project-dir", required=True, type=Path)
+    args = parser.parse_args(argv)
     if os.environ.get("MAGNOLIA_PROJECT_BOUND") != "1":
         raise RuntimeError("memory HTTP service requires strict project binding")
+    bound = Path(os.environ.get("MAGNOLIA_PROJECT_DIR", "")).expanduser().resolve()
+    if args.project_dir.expanduser().resolve() != bound:
+        raise RuntimeError("memory HTTP service project argument differs from its binding")
     token = os.environ.get(TOKEN_ENV, "")
     port = int(os.environ.get("MAGNOLIA_MEMORY_SERVICE_PORT", "0"))
     if port <= 0:

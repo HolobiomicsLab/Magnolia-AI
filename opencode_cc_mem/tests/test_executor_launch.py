@@ -634,6 +634,32 @@ def test_campaign_vibe_managed_route_acquires_project_service(
     assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
 
 
+def test_vibe_reviewer_without_memory_tools_does_not_acquire_managed_service(
+    tmp_path, monkeypatch
+):
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context: acquired.append(context),
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="reviewer",
+        capabilities=("native_read", "native_glob", "native_grep"),
+        setup={},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", "")},
+    )
+
+    launch = prepare_launch(context)
+
+    assert acquired == []
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp["memory_service"] is None
+    assert "MAGNOLIA_MEMORY_SERVICE_TOKEN" not in launch.env
+
+
 def test_memory_role_without_route_is_refused(tmp_path):
     with pytest.raises(ExecutorRefused, match="memory.*route"):
         prepare_launch(

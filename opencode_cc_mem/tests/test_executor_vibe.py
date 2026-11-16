@@ -284,6 +284,27 @@ def test_vibe_releases_managed_memory_after_client_exit(tmp_path, monkeypatch):
     assert executor.prepared.memory_service_handle is None
 
 
+def test_vibe_refusal_after_prepare_releases_managed_memory(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    context = replace(
+        context,
+        setup={**context.setup, "max_price": 0},
+    )
+    handle = object()
+    prepared = type("Prepared", (), {"memory_service_handle": handle})()
+    released = []
+    monkeypatch.setattr("campaign_runner.launch.prepare_launch", lambda value: prepared)
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    with pytest.raises(ExecutorRefused, match="max_price"):
+        executor_for(context.route, "reviewer", context)
+
+    assert released == [handle]
+
+
 def test_vibe_worker_edits_require_D4_and_gate():
     route = ResolvedRoute("vibe", "model", "family", "vibe", "worker", "test")
     context = ExecContext(

@@ -53,6 +53,16 @@ def _effective_cap(context: ExecContext, default: int | None = None) -> int | No
     return min(caps) if caps else None
 
 
+def _release_prepared_memory_service(prepared: Any) -> None:
+    """Release a managed handle when registry validation refuses after preparation."""
+    handle = getattr(prepared, "memory_service_handle", None)
+    if handle is None:
+        return
+    from compchem_memory.harness.memory_service import release_memory_service
+
+    release_memory_service(handle)
+
+
 def _managed_service_record(context: ExecContext) -> Mapping[str, Any] | None:
     if context.project_dir is None or not context.opencode_server:
         return None
@@ -140,22 +150,27 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
             if not route.model:
                 raise ExecutorRefused("Claude Code requires an explicit selected model")
             prepared = prepare_launch(context)
-            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
-            effective_cap = _effective_cap(context, default_cap)
-            if effective_cap is None:
-                raise ExecutorRefused("Claude Code requires a positive effective cap")
-            return ClaudeCodeExecutor(
-                prepared=prepared,
-                model=route.model,
-                role=role,
-                max_turns=effective_cap,
-                timeout_seconds=context.timeout_seconds,
-                governance=context.governance,
-                resume_permitted=(
-                    context.resume_from is not None or context.resume_artifact is not None
-                ),
-                resume_artifact=context.resume_artifact,
-            )
+            try:
+                default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+                effective_cap = _effective_cap(context, default_cap)
+                if effective_cap is None:
+                    raise ExecutorRefused("Claude Code requires a positive effective cap")
+                return ClaudeCodeExecutor(
+                    prepared=prepared,
+                    model=route.model,
+                    role=role,
+                    max_turns=effective_cap,
+                    timeout_seconds=context.timeout_seconds,
+                    governance=context.governance,
+                    resume_permitted=(
+                        context.resume_from is not None
+                        or context.resume_artifact is not None
+                    ),
+                    resume_artifact=context.resume_artifact,
+                )
+            except Exception:
+                _release_prepared_memory_service(prepared)
+                raise
         if route.client == "codex":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
             from campaign_runner.roles import load_role
@@ -170,31 +185,38 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 raise ExecutorRefused("Codex requires a canonical project directory")
             require_codex_trust(context.project_dir, context.setup)
             prepared = prepare_launch(context)
-            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
-            effective_cap = _effective_cap(context, default_cap)
-            if effective_cap is None:
-                raise ExecutorRefused("Codex requires a positive supervising cap")
-            return CodexExecutor(
-                prepared=prepared,
-                model=route.model,
-                role=role,
-                max_turns=effective_cap,
-                timeout_seconds=context.timeout_seconds,
-                governance=context.governance,
-                resume_permitted=(
-                    context.resume_from is not None or context.resume_artifact is not None
-                ),
-                resume_artifact=context.resume_artifact,
-                reasoning_effort=str(context.setup.get("codex_reasoning_effort", "low")),
-                user_config_path=Path(
-                    str(
-                        context.setup.get(
-                            "codex_user_config_path",
-                            Path.home() / ".codex" / "config.toml",
+            try:
+                default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+                effective_cap = _effective_cap(context, default_cap)
+                if effective_cap is None:
+                    raise ExecutorRefused("Codex requires a positive supervising cap")
+                return CodexExecutor(
+                    prepared=prepared,
+                    model=route.model,
+                    role=role,
+                    max_turns=effective_cap,
+                    timeout_seconds=context.timeout_seconds,
+                    governance=context.governance,
+                    resume_permitted=(
+                        context.resume_from is not None
+                        or context.resume_artifact is not None
+                    ),
+                    resume_artifact=context.resume_artifact,
+                    reasoning_effort=str(
+                        context.setup.get("codex_reasoning_effort", "low")
+                    ),
+                    user_config_path=Path(
+                        str(
+                            context.setup.get(
+                                "codex_user_config_path",
+                                Path.home() / ".codex" / "config.toml",
+                            )
                         )
-                    )
-                ),
-            )
+                    ),
+                )
+            except Exception:
+                _release_prepared_memory_service(prepared)
+                raise
         if route.client == "vibe":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
             from campaign_runner.roles import load_role
@@ -208,25 +230,31 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
             require_vibe_trust(context.project_dir, context.setup)
             require_vibe_project_source(context.project_dir, route.model)
             prepared = prepare_launch(context)
-            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
-            effective_cap = _effective_cap(context, default_cap)
-            if effective_cap is None:
-                raise ExecutorRefused("Vibe requires a positive effective cap")
-            price = context.setup.get("max_price")
-            if price is not None and (
-                isinstance(price, bool) or not isinstance(price, (int, float)) or price <= 0
-            ):
-                raise ExecutorRefused("Vibe max_price must be a positive number")
-            return VibeExecutor(
-                prepared=prepared,
-                model=route.model,
-                role=role,
-                max_turns=effective_cap,
-                timeout_seconds=context.timeout_seconds,
-                governance=context.governance,
-                max_price=float(price) if price is not None else None,
-                resume_artifact=context.resume_artifact,
-            )
+            try:
+                default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+                effective_cap = _effective_cap(context, default_cap)
+                if effective_cap is None:
+                    raise ExecutorRefused("Vibe requires a positive effective cap")
+                price = context.setup.get("max_price")
+                if price is not None and (
+                    isinstance(price, bool)
+                    or not isinstance(price, (int, float))
+                    or price <= 0
+                ):
+                    raise ExecutorRefused("Vibe max_price must be a positive number")
+                return VibeExecutor(
+                    prepared=prepared,
+                    model=route.model,
+                    role=role,
+                    max_turns=effective_cap,
+                    timeout_seconds=context.timeout_seconds,
+                    governance=context.governance,
+                    max_price=float(price) if price is not None else None,
+                    resume_artifact=context.resume_artifact,
+                )
+            except Exception:
+                _release_prepared_memory_service(prepared)
+                raise
         raise ExecutorRefused(f"{route.client} {role} executor is not implemented in this task")
     if role == "service":
         return OpenCodeServiceExecutor(

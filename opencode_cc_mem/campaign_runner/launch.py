@@ -229,9 +229,15 @@ def _acquire_managed_memory_service(
     if (
         context.route is None
         or context.route.client != "vibe"
-        or context.role not in {"worker", "reviewer"}
         or context.memory_service.get("transport") != "managed"
     ):
+        return context, None
+    policy = load_role(ROLE_CONFIG_NAMES[context.role])
+    uses_memory = any(
+        tool.startswith("mcp:compchem-memory.")
+        for tool in policy.mcp_tool_allowlist
+    )
+    if not uses_memory:
         return context, None
     if context.project_dir is None or not context.python_executable:
         raise ExecutorRefused("managed Vibe memory requires a project and Python")
