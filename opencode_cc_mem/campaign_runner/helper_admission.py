@@ -18,6 +18,8 @@ from typing import Any
 SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 FROM_HEADER = re.compile(r"^[\s>*-]*from:\s*(\S.*?)\s*$", re.IGNORECASE)
 STATUS_HEADER = re.compile(r"^[\s>*-]*status:\s*\S+?[ \t]*$", re.IGNORECASE)
+WAIT_FOR_HEADER = re.compile(r"^\s*wait_for:\s*job:", re.IGNORECASE)
+JOB_RESULT_HEADER = re.compile(r"^##\s+Job result\b", re.IGNORECASE)
 SCHEDULED_NAME = re.compile(
     r"\d{4}-\d{2}-\d{2}_([A-Za-z0-9][A-Za-z0-9_-]{0,127})-scheduled-sweep\.task\.md"
 )
@@ -423,12 +425,21 @@ def _read_receipt(path: Path, checkout: Path) -> dict[str, Any]:
 def _scheduled_request_digest(content: bytes) -> str:
     text = content.decode("utf-8", errors="replace")
     lines = text.splitlines(keepends=True)
-    immutable = b"".join(
-        line.encode("utf-8")
-        for index, line in enumerate(lines)
-        if index >= HEADER_LINES or STATUS_HEADER.match(line.rstrip("\r\n")) is None
-    )
-    return hashlib.sha256(immutable).hexdigest()
+    request_lines = []
+    for line in lines:
+        if JOB_RESULT_HEADER.match(line.rstrip("\r\n")):
+            break
+        request_lines.append(line)
+    immutable = "".join(
+        line
+        for index, line in enumerate(request_lines)
+        if index >= HEADER_LINES
+        or (
+            STATUS_HEADER.match(line.rstrip("\r\n")) is None
+            and WAIT_FOR_HEADER.match(line.rstrip("\r\n")) is None
+        )
+    ).rstrip("\r\n") + "\n"
+    return hashlib.sha256(immutable.encode("utf-8")).hexdigest()
 
 
 def _open_directory(path: Path, boundary: Path, label: str) -> int:
@@ -505,7 +516,19 @@ def _atomic_write_at(directory_fd: int, name: str, content: bytes) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor = -1
     try:
-        descriptor = os.open(temporary, flags, 0o600, dir_fd=directory_fd)
+        try:
+            current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            preserved_mode = stat.S_IMODE(current.st_mode) if stat.S_ISREG(current.st_mode) else None
+        except FileNotFoundError:
+            preserved_mode = None
+        descriptor = os.open(
+            temporary,
+            flags,
+            preserved_mode if preserved_mode is not None else 0o666,
+            dir_fd=directory_fd,
+        )
+        if preserved_mode is not None:
+            os.fchmod(descriptor, preserved_mode)
         view = memoryview(content)
         while view:
             written = os.write(descriptor, view)

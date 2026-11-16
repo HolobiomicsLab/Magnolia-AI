@@ -141,3 +141,28 @@ def test_scheduled_receipt_ignores_daemon_status_and_records_consumption(tmp_pat
     replay = admit_letter(tmp_path, "literature", letter)
     assert replay.generation_consumed is True
     replay.close()
+
+
+def test_scheduled_ticket_digest_ignores_lifecycle_fields(tmp_path):
+    lane = _project(tmp_path, "literature", lane=True)
+    inbox = lane / "inbox"
+    inbox.mkdir()
+    letter = inbox / "2026-11-16_literature-scheduled-sweep.task.md"
+    request = (
+        "# Scheduled sweep\n- from: agents-daemon\n- status: open\n"
+        "ticket: idea\n\n## Request\nRun the durable evaluation.\n"
+    )
+    letter.write_text(request, encoding="utf-8")
+    write_generation_receipt(tmp_path, "literature", letter)
+
+    letter.write_text(
+        request.replace("status: open", "status: prototyped").replace(
+            "ticket: idea", "ticket: idea\nwait_for: job:run-123"
+        )
+        + "\n## Job result (run-123)\n\n- status: succeeded\n",
+        encoding="utf-8",
+    )
+
+    admitted = admit_letter(tmp_path, "literature", letter)
+    assert admitted.is_scheduled is True
+    admitted.close()
