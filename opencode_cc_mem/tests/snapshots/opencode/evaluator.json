@@ -19,5 +19,8 @@
     "MAGNOLIA_OPENCODE_V2_BIN",
     "OPENCODE_DB"
   ],
+  "step_cap_config": null,
+  "run_timeout_seconds": 90,
+  "catalog_timeout_seconds": 15,
   "agent_file_bytes": null
 }

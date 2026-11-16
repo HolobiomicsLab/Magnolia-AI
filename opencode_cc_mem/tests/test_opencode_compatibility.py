@@ -1,8 +1,12 @@
+import fcntl
+import importlib.util
 import json
 import multiprocessing
 import os
+import resource
 import signal
 import time
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 import pytest
@@ -25,79 +29,273 @@ def _route(role):
     return resolve_route(role, inputs)
 
 
-def test_opencode_recipes_unchanged_through_registry(tmp_path):
-    from campaign_runner.executors.opencode import (
-        OpenCodeEvaluatorExecutor,
-        OpenCodeHelperExecutor,
-        OpenCodeServiceExecutor,
+ROOT = Path(__file__).resolve().parents[1]
+SNAPSHOTS = ROOT / "tests" / "snapshots" / "opencode"
+
+
+def _snapshot(name):
+    return json.loads((SNAPSHOTS / name).read_text())
+
+
+def _normalise(values, tmp_path):
+    return [value.replace(str(tmp_path), "@@TMP@@") for value in values]
+
+
+def _successful_client(kwargs):
+    kwargs["stdout_path"].write_text(
+        json.dumps(
+            {
+                "sessionID": "ses_recipe",
+                "part": {
+                    "type": "text",
+                    "messageID": "m1",
+                    "text": '{"issues":[],"followups":[]}',
+                },
+            }
+        )
+        + "\n"
+    )
+    kwargs["stderr_path"].write_text("")
+    return ProcessOutcome(
+        0, False, 0.1, kwargs["stdout_path"], kwargs["stderr_path"]
     )
 
+
+def _load_agents_daemon():
+    path = ROOT / "softwares" / "bin" / "magnolia-agents-daemon"
+    spec = importlib.util.spec_from_file_location(
+        "compat_agents_daemon",
+        path,
+        loader=SourceFileLoader("compat_agents_daemon", str(path)),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from campaign_runner import reviewers as reviewers_module
+    from campaign_runner import service as service_module
+    from campaign_runner import workers as workers_module
+    from campaign_runner.cli import _service_settings
+    from campaign_runner.executors import opencode as opencode_module
+    from router_runner import evaluator as evaluator_module
+
+    process_calls = []
+
+    def fake_run_process(**kwargs):
+        process_calls.append(kwargs)
+        return _successful_client(kwargs)
+
+    monkeypatch.setattr(workers_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setattr(workers_module, "run_process", fake_run_process)
+    monkeypatch.setattr(
+        reviewers_module,
+        "read_session_usage",
+        lambda *args: workers_module.empty_usage(),
+    )
+
+    worker_route = resolve_route(
+        "worker",
+        {"worker": {"model": "opencode-go/deepseek-v4.1-flash"}},
+    )
     worker = executor_for(
-        _route("worker"),
+        worker_route,
         "worker",
         ExecContext(
-            route=_route("worker"),
+            route=worker_route,
             role="worker",
-            opencode_binary="opencode",
+            project_dir=tmp_path,
+            timeout_seconds=37,
+            opencode_binary=str(tmp_path / "opencode"),
             opencode_server="http://127.0.0.1:4111",
-            opencode_db="db",
+            opencode_db=str(tmp_path / "opencode.db"),
             agent="campaign-worker",
+            environment={"RECIPE_EXTRA": "ignored"},
         ),
     )
-    reviewer = executor_for(
-        _route("reviewer"),
-        "reviewer",
-        ExecContext(
-            route=_route("reviewer"),
-            role="reviewer",
-            opencode_binary="opencode",
-            agent="campaign-reviewer",
+    worker.run("PINNED PROMPT", tmp_path, tmp_path / "worker")
+    worker_call = process_calls[-1]
+    assert {
+        "argv": _normalise(worker_call["argv"], tmp_path),
+        "environment_keys": sorted(worker_call["env"]),
+        "step_cap_config": worker_call["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "timeout_seconds": worker_call["timeout_seconds"],
+        "agent_file_bytes": (
+            ROOT / ".opencode" / "agents" / "campaign-worker.md"
+        ).read_text(),
+    } == _snapshot("campaign-worker.json")
+
+    reviewer = Reviewer(
+        binary=str(tmp_path / "opencode"),
+        server_url="http://127.0.0.1:4111",
+        db_path=str(tmp_path / "opencode.db"),
+        environment={"RECIPE_EXTRA": "ignored"},
+        timeout_seconds=55,
+        max_steps=8,
+    )
+    reviewer.run(
+        "provider/model", "REVIEW", tmp_path, tmp_path / "reviewer", tmp_path
+    )
+    reviewer_call = process_calls[-1]
+    assert {
+        "argv": _normalise(reviewer_call["argv"], tmp_path),
+        "environment_keys": sorted(reviewer_call["env"]),
+        "step_cap_config": json.loads(
+            reviewer_call["env"]["OPENCODE_CONFIG_CONTENT"]
         ),
+        "timeout_seconds": reviewer_call["timeout_seconds"],
+        "agent_file_bytes": (
+            ROOT / ".opencode" / "agents" / "campaign-reviewer.md"
+        ).read_text(),
+    } == _snapshot("campaign-reviewer.json")
+
+    service_seen = {}
+
+    class FakeService:
+        pid = 424242
+
+        def poll(self):
+            return None
+
+    def fake_popen(argv, **kwargs):
+        service_seen.update(argv=argv, environment=kwargs["env"])
+        return FakeService()
+
+    real_ensure_service = service_module.ensure_service
+
+    def capture_ensure_service(*args, **kwargs):
+        service_seen["timeout_seconds"] = kwargs["timeout_seconds"]
+        return real_ensure_service(*args, **kwargs)
+
+    monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
+    monkeypatch.setattr(service_module, "_healthy", lambda *args: True)
+    monkeypatch.setattr(
+        service_module,
+        "_wait_for_agents",
+        lambda port, password, names, **kwargs:
+            service_seen.setdefault("required_agents", list(names)) is not None,
     )
-    helper = executor_for(
-        _route("helper"),
-        "helper",
-        ExecContext(route=_route("helper"), role="helper", opencode_binary="opencode"),
+    monkeypatch.setattr(service_module, "redact_file", lambda path: None)
+    monkeypatch.setattr(opencode_module, "ensure_service", capture_ensure_service)
+    protocol = SimpleNamespace(
+        worker=SimpleNamespace(max_steps=30),
+        reviewer=SimpleNamespace(enabled=True, max_steps=8),
     )
-    evaluator = executor_for(
-        _route("evaluator"),
-        "evaluator",
-        ExecContext(route=_route("evaluator"), role="evaluator", opencode_binary="opencode"),
-    )
+    config, required_agents = _service_settings(protocol)
     service = executor_for(
         _route("worker"),
         "service",
-        ExecContext(route=_route("worker"), role="service", opencode_binary="opencode"),
+        ExecContext(
+            route=_route("worker"),
+            role="service",
+            project_dir=tmp_path,
+            opencode_binary=str(tmp_path / "opencode"),
+            opencode_db=str(tmp_path / "opencode.db"),
+        ),
     )
+    service.ensure(
+        config_content=config,
+        required_agents=required_agents,
+        timeout_seconds=30,
+    )
+    assert {
+        "argv": _normalise(service_seen["argv"], tmp_path),
+        "environment_keys": sorted(service_seen["environment"]),
+        "required_agents": service_seen["required_agents"],
+        "startup_steps": {
+            name: value["steps"]
+            for name, value in json.loads(config)["agents"].items()
+        },
+        "timeout_seconds": service_seen["timeout_seconds"],
+        "agent_file_bytes": {
+            name: (ROOT / ".opencode" / "agents" / name).read_text()
+            for name in ("campaign-worker.md", "campaign-reviewer.md")
+        },
+    } == _snapshot("service.json")
 
-    assert isinstance(worker, OpenCodeExecutor)
-    assert worker._argv("PROMPT", None) == [
-        "opencode", "run", "--model", "provider/model", "--agent",
-        "campaign-worker", "--format", "json", "--auto", "--server",
-        "http://127.0.0.1:4111", "PROMPT",
-    ]
-    assert isinstance(reviewer, OpenCodeExecutor)
-    assert reviewer.max_format_retries == 0
-    assert reviewer._argv("REVIEW", "ses") == [
-        "opencode", "run", "--model", "provider/model", "--agent",
-        "campaign-reviewer", "--format", "json", "--auto", "--session",
-        "ses", "REVIEW",
-    ]
-    assert isinstance(helper, OpenCodeHelperExecutor)
-    assert helper.argv(["PROMPT"]) == [
-        "opencode", "run", "--model", "provider/model", "--format", "json", "PROMPT",
-    ]
-    assert isinstance(evaluator, OpenCodeEvaluatorExecutor)
-    assert evaluator.run_argv("PROMPT") == [
-        "opencode", "--standalone", "run", "--model", "provider/model", "PROMPT",
-    ]
-    assert evaluator.catalog_argv() == [
-        "opencode", "--standalone", "api", "get", "/api/model",
-    ]
-    assert isinstance(service, OpenCodeServiceExecutor)
-    assert service.argv(4137) == [
-        "opencode", "serve", "--hostname", "127.0.0.1", "--port", "4137",
-    ]
+    subprocess_calls = []
+
+    class Completed:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def fake_subprocess_run(argv, **kwargs):
+        subprocess_calls.append((argv, kwargs))
+        if "/api/model" in argv:
+            return Completed('{"data":[{"id":"jev-1.13-free"}]}')
+        if "--standalone" in argv:
+            return Completed(
+                '{"action":"accept","project":"proj_a",'
+                '"confidence":0.92,"reason":"dock"}'
+            )
+        return Completed(
+            json.dumps(
+                {
+                    "sessionID": "ses_helper",
+                    "part": {
+                        "type": "text",
+                        "messageID": "m1",
+                        "text": "FINAL ANSWER: complete",
+                    },
+                }
+            )
+            + "\n"
+        )
+
+    daemon = _load_agents_daemon()
+    monkeypatch.setattr(daemon.subprocess, "run", fake_subprocess_run)
+    daemon._run_once(
+        "provider/model",
+        str(tmp_path),
+        {"BASE_ENV": "ignored"},
+        60,
+        ["PROMPT"],
+        None,
+        binary=str(tmp_path / "opencode"),
+    )
+    helper_argv, helper_kwargs = subprocess_calls[-1]
+    assert {
+        "argv": _normalise(helper_argv, tmp_path),
+        "environment_keys": sorted(helper_kwargs["env"]),
+        "step_cap_config": helper_kwargs["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "timeout_seconds": helper_kwargs["timeout"],
+        "agent_file_bytes": None,
+    } == _snapshot("helper.json")
+
+    monkeypatch.setattr(
+        evaluator_module.os,
+        "environ",
+        {
+            "BASE_ENV": "ignored",
+            "MAGNOLIA_OPENCODE_V2_BIN": str(tmp_path / "opencode"),
+        },
+    )
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    decision = evaluator_module.GenerativeEvaluator(
+        "opencode-go/deepseek-v4.1-flash"
+    ).evaluate("dock", {"projects": ["proj_a"]})
+    assert decision is not None
+    assert evaluator_module._catalog_has_model("jev-1.13-free") is True
+    evaluator_run = subprocess_calls[-2]
+    evaluator_catalog = subprocess_calls[-1]
+    assert {
+        "run_argv": _normalise(evaluator_run[0], tmp_path),
+        "catalog_argv": _normalise(evaluator_catalog[0], tmp_path),
+        "environment_keys": sorted(evaluator_run[1]["env"]),
+        "step_cap_config": evaluator_run[1]["env"].get(
+            "OPENCODE_CONFIG_CONTENT"
+        ),
+        "run_timeout_seconds": evaluator_run[1]["timeout"],
+        "catalog_timeout_seconds": evaluator_catalog[1]["timeout"],
+        "agent_file_bytes": None,
+    } == _snapshot("evaluator.json")
 
 
 def test_governor_cap_reaches_service_and_each_recipe(tmp_path, monkeypatch):
@@ -304,3 +502,133 @@ def test_stopped_launcher_payload_write_obeys_deadline_and_stop(
             time.sleep(0.01)
         else:
             pytest.fail(f"stopped launcher {launcher_pid} was not reaped")
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "expected_kind", "expected_timeout"),
+    [
+        (None, "timeout", True),
+        ("operator stop", "cancelled", False),
+    ],
+)
+def test_pre_exec_interruption_releases_reservation_without_receipt(
+    tmp_path, stop_reason, expected_kind, expected_timeout
+):
+    from campaign_runner.governor import Governor, Policy
+    from campaign_runner.workers import InvocationGovernance
+
+    binary = tmp_path / "client"
+    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.chmod(0o755)
+    ledger = tmp_path / "usage-ledger.jsonl"
+    governor = Governor(
+        Policy(min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+
+    def stop_launcher(pid, _pgid):
+        os.kill(pid, signal.SIGSTOP)
+
+    executor = OpenCodeExecutor(
+        binary=str(binary),
+        model="provider/model",
+        agent="campaign-worker",
+        environment={"BIG": "x" * (512 * 1024)},
+        timeout_seconds=0.2 if stop_reason is None else 30,
+        governance=InvocationGovernance(
+            governor=governor,
+            route=_route("worker"),
+            parent_run_id="pre-exec-run",
+            project_digest="project",
+        ),
+    )
+    result = executor.run(
+        "WORK",
+        tmp_path,
+        tmp_path / "attempt",
+        control=ProcessControl(
+            on_start=stop_launcher,
+            should_stop=lambda: stop_reason,
+            poll_interval=0.01,
+        ),
+    )
+
+    assert result.outcome is not None
+    assert result.outcome.kind == expected_kind
+    assert result.timed_out is expected_timeout
+    assert result.stopped_reason == stop_reason
+    assert not ledger.exists() or not ledger.read_text()
+    state = json.loads(governor.state_path.read_text())
+    assert state["reservations"] == {}
+    assert state["completed"] == {}
+
+
+def test_payload_write_supports_fd_above_select_limit(tmp_path, monkeypatch):
+    from campaign_runner import process as process_module
+
+    soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft_limit <= 1024:
+        pytest.skip(f"open-file soft limit {soft_limit} cannot allocate fd >= 1024")
+
+    read_fd, write_fd = os.pipe()
+    high_fd = None
+    try:
+        try:
+            high_fd = fcntl.fcntl(write_fd, fcntl.F_DUPFD, 1024)
+        except OSError as exc:
+            pytest.skip(f"platform cannot duplicate a write fd above 1024: {exc}")
+        os.close(write_fd)
+        write_fd = None
+        if high_fd < 1024:
+            pytest.skip(f"duplicated fd {high_fd} is below 1024")
+
+        real_write = os.write
+        blocked_once = False
+
+        def block_then_write(fd, body):
+            nonlocal blocked_once
+            if fd == high_fd and not blocked_once:
+                blocked_once = True
+                raise BlockingIOError
+            return real_write(fd, body)
+
+        monkeypatch.setattr(process_module.os, "write", block_then_write)
+        process_module._write_all(
+            high_fd,
+            b"payload",
+            deadline=time.monotonic() + 1,
+            control=ProcessControl(poll_interval=0.01),
+        )
+        assert blocked_once
+        assert os.read(read_fd, len(b"payload")) == b"payload"
+    finally:
+        os.close(read_fd)
+        if write_fd is not None:
+            os.close(write_fd)
+        if high_fd is not None:
+            os.close(high_fd)
+
+
+def test_legacy_managed_service_without_caps_requests_idle_restart(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "campaign_runner.executors.registry.read_service",
+        lambda project: {"port": 4111, "running": True},
+    )
+    route = _route("worker")
+    context = ExecContext(
+        route=route,
+        role="worker",
+        project_dir=tmp_path,
+        role_cap=30,
+        governor_cap=6,
+        opencode_server="http://127.0.0.1:4111",
+        agent="campaign-worker",
+    )
+
+    with pytest.raises(
+        ExecutorRefused,
+        match="service started without recorded caps — restart it when idle",
+    ):
+        executor_for(route, "worker", context)
