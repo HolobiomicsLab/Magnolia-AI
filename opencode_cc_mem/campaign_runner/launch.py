@@ -45,6 +45,22 @@ FORBIDDEN_CLIENT_ENV = frozenset(
 )
 FORBIDDEN_PATH_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME"})
 FILTERED_CLIENT_ENV = FORBIDDEN_CLIENT_ENV | {"MAGNOLIA_MODEL"}
+MEMORY_PROVIDER_ENV = frozenset(
+    {
+        "MAGNOLIA_LLM_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "MAGNOLIA_OPENAI_API_KEY",
+        "OPENAI_API_KEY",
+        "KIMI_PLAN_MAGNOLIA_API_KEY",
+        "KIMI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "MAGNOLIA_MISTRAL_API_KEY",
+        "MISTRAL_API_KEY",
+        "ZHIPU_API_KEY",
+        "ZAI_API_KEY",
+    }
+)
 DEFAULT_GOVERNOR_CAP = 60
 ROLE_CONFIG_NAMES = {
     "worker": "campaign-worker",
@@ -518,7 +534,11 @@ def _codex_mcp_servers(
     service = mcp_payload.get("memory_service")
     if isinstance(service, Mapping):
         if service.get("transport") == "http":
-            servers["compchem-memory"] = {"url": service["url"]}
+            entry = {"url": service["url"]}
+            authorization = service.get("authorization_env")
+            if isinstance(authorization, str):
+                entry["bearer_token_env_var"] = authorization
+            servers["compchem-memory"] = entry
         else:
             args = service.get("args", ())
             if not isinstance(args, (list, tuple)):
@@ -556,6 +576,11 @@ def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             "transport": "http",
             "url": service["url"],
         }
+        authorization = service.get("authorization_env")
+        if isinstance(authorization, str):
+            entry["headers"] = {
+                "Authorization": f"Bearer ${{{authorization}}}"
+            }
     else:
         args = service.get("args", ())
         if not isinstance(args, (list, tuple)):
@@ -665,6 +690,12 @@ def _effective_environment(
         }
     )
     assert context.route is not None
+    if (
+        context.route.client == "vibe"
+        and context.memory_service.get("transport") == "http"
+    ):
+        for name in MEMORY_PROVIDER_ENV:
+            env.pop(name, None)
     assert context.installation_root is not None
     assert context.workspace_root is not None
     assert context.run_dir is not None
@@ -688,6 +719,20 @@ def _effective_environment(
     }
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
+    service = context.memory_service
+    authorization = service.get("authorization_env")
+    token_file = service.get("token_file")
+    if isinstance(authorization, str) and isinstance(token_file, str):
+        try:
+            token_path = Path(token_file).resolve()
+            if token_path.stat().st_mode & 0o777 != 0o600:
+                raise ExecutorRefused("memory service bearer token file is not mode 0600")
+            token = token_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise ExecutorRefused("memory service bearer token is unavailable") from exc
+        if not token:
+            raise ExecutorRefused("memory service bearer token is empty")
+        explicit[authorization] = token
     if context.route.client == "vibe":
         # VIBE_DISABLE_TELEMETRY is ignored by Vibe 3.1.2.
         explicit["VIBE_ENABLE_TELEMETRY"] = "false"

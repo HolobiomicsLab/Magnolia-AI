@@ -29,6 +29,29 @@ class NeutralConfig:
     deny_tools: frozenset[str]
 
 
+def bind_memory_service(
+    neutral: NeutralConfig, route: dict[str, str]
+) -> NeutralConfig:
+    """Replace only compchem-memory with its project-bound HTTP route."""
+    servers = []
+    for server in neutral.servers:
+        if server.name != "compchem-memory":
+            servers.append(server)
+            continue
+        servers.append(
+            McpServer(
+                name=server.name,
+                kind="remote",
+                command=None,
+                url=route["url"],
+                env={},
+                timeout_ms=server.timeout_ms,
+                enabled=server.enabled,
+            )
+        )
+    return NeutralConfig(servers, neutral.deny_tools)
+
+
 def load(template: Path, subs: dict[str, str], setup: dict) -> NeutralConfig:
     """Load a JSON template after applying the launcher's substitutions."""
     text = template.read_text(encoding="utf-8")

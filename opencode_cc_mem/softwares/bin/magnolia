@@ -1120,6 +1120,14 @@ if [ "$HARNESS" != "opencode" ]; then
         echo "error: $CLIENT_NAME launch command came back empty" >&2
         exit 1
     fi
+    if [ "$HARNESS" = "vibe" ]; then
+        # The HTTP memory service was started with these values already. Keep
+        # provider credentials out of Vibe and its minimal MCP environment.
+        unset MAGNOLIA_LLM_API_KEY DEEPSEEK_API_KEY ANTHROPIC_API_KEY
+        unset MAGNOLIA_OPENAI_API_KEY OPENAI_API_KEY
+        unset KIMI_PLAN_MAGNOLIA_API_KEY KIMI_API_KEY OPENROUTER_API_KEY
+        unset MAGNOLIA_MISTRAL_API_KEY MISTRAL_API_KEY ZHIPU_API_KEY ZAI_API_KEY
+    fi
 fi
 
 # Ensure the compchem-tools MCP daemon is up before the client connects to it.
@@ -1181,9 +1189,20 @@ PY
     exit 0
 fi
 if [ "$HARNESS" != "opencode" ]; then
-    # The trap would not survive exec; the files are already read.
+    # Keep the process around so its service reference is released on exit.
     rm -f "$LAUNCH_OUT"
-    trap - EXIT
-    exec "${ARGV[@]}"
+    cleanup_memory_service() {
+        if [ -n "${MAGNOLIA_MEMORY_SERVICE_HANDLE:-}" ]; then
+            LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
+            PYTHONPATH="${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
+                "$PYTHON_CMD" -m compchem_memory.harness.memory_service \
+                release "$MAGNOLIA_MEMORY_SERVICE_HANDLE" >/dev/null 2>&1 || true
+            unset MAGNOLIA_MEMORY_SERVICE_HANDLE MAGNOLIA_MEMORY_SERVICE_TOKEN
+        fi
+    }
+    trap cleanup_memory_service EXIT
+    CLIENT_RC=0
+    "${ARGV[@]}" || CLIENT_RC=$?
+    exit "$CLIENT_RC"
 fi
 MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"

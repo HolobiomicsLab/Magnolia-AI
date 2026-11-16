@@ -105,7 +105,7 @@ def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -
 
 
 def _config(neutral: NeutralConfig, context: LaunchContext, path: Path) -> dict:
-    config: dict = {"mcp_servers": _servers(neutral)}
+    config: dict = {"mcp_servers": _servers(neutral, context)}
     if context.model:
         config["active_model"] = context.model
     # Lists merge by appending, so only add the names the member's file lacks.
@@ -128,11 +128,17 @@ def _existing_disabled_tools(path: Path) -> list[str]:
     return value if isinstance(value, list) else []
 
 
-def _servers(neutral: NeutralConfig) -> list[dict]:
+def _servers(neutral: NeutralConfig, context: LaunchContext) -> list[dict]:
     servers = []
     for server in active_servers(neutral):
         if server.kind == "remote":
             entry = {"name": server.name, "transport": "http", "url": server.url}
+            route = context.memory_service or {}
+            authorization = route.get("authorization_env")
+            if server.name == "compchem-memory" and isinstance(authorization, str):
+                entry["headers"] = {
+                    "Authorization": f"Bearer ${{{authorization}}}"
+                }
         else:
             command, args = split_command(server)
             entry = {"name": server.name, "transport": "stdio", "command": command}

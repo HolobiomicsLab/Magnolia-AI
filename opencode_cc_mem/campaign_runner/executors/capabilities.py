@@ -27,6 +27,7 @@ PREREQUISITE_CELLS = (
     "usage_semantics",
 )
 ALL_CELLS = (*PREREQUISITE_CELLS, "quota_evidence")
+OPTIONAL_CELLS = ("http_header_expansion",)
 
 
 class CapabilityTableError(ValueError):
@@ -113,8 +114,11 @@ def _validate_row(row: Any, index: int, repository_root: Path) -> None:
     if not isinstance(row.get("stale"), bool):
         raise CapabilityTableError(f"row {index}.stale must be a boolean")
     cells = row.get("cells")
-    if not isinstance(cells, Mapping) or set(cells) != set(ALL_CELLS):
+    names = set(cells) if isinstance(cells, Mapping) else set()
+    if not isinstance(cells, Mapping) or not set(ALL_CELLS) <= names:
         raise CapabilityTableError(f"row {index} must contain every capability cell")
+    if names - set((*ALL_CELLS, *OPTIONAL_CELLS)):
+        raise CapabilityTableError(f"row {index} contains an unknown capability cell")
     for name, cell in cells.items():
         _validate_cell(cell, f"row {index}.{name}", repository_root)
     identity = cells["identity"].get("value")

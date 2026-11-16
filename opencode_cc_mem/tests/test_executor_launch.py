@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 
@@ -370,8 +371,12 @@ def test_effective_environment_strips_only_client_credentials(tmp_path, client):
         assert name not in resumed.env
         assert sentinel not in combined
     for name, sentinel in PASSTHROUGH_CLIENT_ENV.items():
-        assert launch.env[name] == sentinel
-        assert resumed.env[name] == sentinel
+        if client == "vibe" and name != "MAGNOLIA_CRITIC_API_KEY":
+            assert name not in launch.env
+            assert name not in resumed.env
+        else:
+            assert launch.env[name] == sentinel
+            assert resumed.env[name] == sentinel
     assert all(path.stat().st_mode & 0o222 == 0 for path in launch.files)
 
 
@@ -539,6 +544,49 @@ def test_api_memory_route_survives_client_env_filter(tmp_path):
     assert mcp["memory_service"]["url"].startswith("http://127.0.0.1:")
     assert "ANTHROPIC_API_KEY" not in launch.env
     assert "ANTHROPIC-KEY-SENTINEL" not in _artifact_text(launch)
+
+
+def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
+    token_file = tmp_path / "memory-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    route = {
+        "transport": "http",
+        "url": "http://127.0.0.1:9876/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "token_file": str(token_file),
+    }
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        memory_service=route,
+    )
+
+    launch = prepare_launch(context)
+    config = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )
+    rendered = config["mcp_servers"][0]
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+
+    assert rendered["transport"] == "http"
+    assert rendered["url"] == route["url"]
+    assert rendered["headers"]["Authorization"] == (
+        "Bearer ${MAGNOLIA_MEMORY_SERVICE_TOKEN}"
+    )
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    memory_keys = set(PASSTHROUGH_CLIENT_ENV) - {"MAGNOLIA_CRITIC_API_KEY"}
+    assert not (memory_keys & set(launch.env))
+    assert "service-bearer-sentinel" not in _artifact_text(launch)
+    assert "token_file" not in mcp["memory_service"]
+    assert configuration_identity(context) != configuration_identity(
+        replace(
+            context,
+            memory_service={**route, "url": "http://127.0.0.1:9877/mcp"},
+        )
+    )
 
 
 def test_memory_role_without_route_is_refused(tmp_path):

@@ -26,6 +26,7 @@ class LaunchContext:
     invocation_id: str | None = None
     noninteractive: bool = False
     role_policy: Mapping[str, Any] | None = None
+    memory_service: Mapping[str, Any] | None = None
 
 
 @dataclass
