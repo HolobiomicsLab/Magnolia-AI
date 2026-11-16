@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tomllib
@@ -14,6 +15,7 @@ import pytest
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.codex import (
     CodexExecutor,
+    _relevant_owner_config,
     parse_codex_stream,
     require_codex_trust,
 )
@@ -400,6 +402,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
         'exclude=[],set={},include_only=[]}'
     ) in overrides
+    assert "shell_environment_policy.experimental_use_profile=false" in overrides
     assert "mcp_servers.magnolia-read.enabled=false" not in argv
     assert argv[-2:] == ["--", "prompt"]
 
@@ -420,6 +423,10 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
             '[shell_environment_policy]\ninherit = "all"\n',
             'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
             'exclude=[],set={},include_only=[]}',
+        ),
+        (
+            '[shell_environment_policy]\nexperimental_use_profile = true\n',
+            "shell_environment_policy.experimental_use_profile=false",
         ),
         ("[features]\ncomputer_use = true\n", None),
     ),
@@ -552,7 +559,6 @@ def test_codex_accepts_owner_plugin_ids_with_at_separator(tmp_path):
     ("owner_setting", "key_name"),
     (
         ('model_provider = "custom"\n', "model_provider"),
-        ('[model_providers.custom]\nname = "redirect"\n', "model_providers"),
         ('openai_base_url = "https://redirect.invalid"\n', "openai_base_url"),
         ('chatgpt_base_url = "https://redirect.invalid"\n', "chatgpt_base_url"),
         ('api_base_url = "https://redirect.invalid"\n', "api_base_url"),
@@ -584,6 +590,144 @@ def test_codex_allows_builtin_openai_owner_provider(tmp_path):
     trust.write_text('model_provider = "openai"\n' + trust.read_text())
 
     assert isinstance(executor_for(context.route, "helper", context), CodexExecutor)
+
+
+@pytest.mark.parametrize("provider", ("openai", "ollama", "lmstudio"))
+def test_codex_refuses_owner_definition_of_builtin_provider(tmp_path, provider):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + f'\n[model_providers.{provider}]\nname = "replacement"\n'
+    )
+
+    with pytest.raises(ExecutorRefused, match=rf"model_providers\.{provider}"):
+        executor_for(context.route, "helper", context)
+
+
+def test_codex_allows_unselected_custom_provider_and_records_only_its_name(tmp_path):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + '\n[model_providers.openrouter]\nbase_url = "https://private.invalid"\n'
+    )
+
+    executor = executor_for(context.route, "helper", context)
+    relevant = _relevant_owner_config(
+        tomllib.loads(trust.read_text()), role="helper"
+    )
+
+    assert isinstance(executor, CodexExecutor)
+    assert relevant["model_providers"] == ["openrouter"]
+    assert "private.invalid" not in json.dumps(relevant)
+
+
+def test_codex_refuses_nonempty_owner_shell_filters_with_named_key(tmp_path):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + '\n[shell_environment_policy.filters]\nCUSTOM = "keep"\n'
+    )
+
+    with pytest.raises(ExecutorRefused, match=r"shell_environment_policy\.filters"):
+        executor_for(context.route, "helper", context)
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "service_api_key",
+        "custom_base_url",
+        "http_proxy",
+        "path",
+        "xdg_config_home",
+        "compchem_tools_port",
+    ),
+)
+def test_codex_refuses_each_protected_owner_shell_set_class(tmp_path, name):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + f'\n[shell_environment_policy.set]\n{json.dumps(name)} = "sentinel"\n'
+    )
+
+    with pytest.raises(
+        ExecutorRefused,
+        match=rf"shell_environment_policy\.set\.{name}",
+    ):
+        executor_for(context.route, "helper", context)
+
+
+def test_codex_allows_and_hashes_benign_owner_shell_set_value(tmp_path):
+    context = _context(tmp_path)
+    trust = Path(context.setup["codex_user_config_path"])
+    name = "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"
+    value = "private-browser-digest"
+    trust.write_text(
+        trust.read_text()
+        + f'\n[shell_environment_policy.set]\n{name} = {json.dumps(value)}\n'
+    )
+
+    executor = executor_for(context.route, "helper", context)
+    relevant = _relevant_owner_config(
+        tomllib.loads(trust.read_text()), role="helper"
+    )
+
+    assert isinstance(executor, CodexExecutor)
+    assert relevant["shell_environment_policy"]["set"] == {
+        name: {"sha256": hashlib.sha256(value.encode()).hexdigest()}
+    }
+    assert value not in json.dumps(relevant)
+
+
+@pytest.mark.parametrize("role", ("helper", "evaluator"))
+def test_codex_helper_evaluator_digest_keeps_unpinned_execution_settings(role):
+    payload = {
+        "web_search": "live",
+        "features": {"multi_agent": True},
+        "shell_environment_policy": {"inherit": "all"},
+        "sandbox_workspace_write": {"exclude_slash_tmp": True},
+    }
+
+    assert _relevant_owner_config(payload, role=role) == payload
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_codex_worker_reviewer_digest_drops_only_their_pins(role):
+    payload = {
+        "web_search": "live",
+        "features": {
+            "multi_agent": True,
+            "unbounded_connection_retries": False,
+        },
+        "shell_environment_policy": {"inherit": "all"},
+        "sandbox_workspace_write": {"exclude_slash_tmp": True},
+    }
+
+    assert _relevant_owner_config(payload, role=role) == {
+        "features": {"unbounded_connection_retries": False}
+    }
+
+
+def test_codex_owner_digest_drops_nonexecuting_and_force_disabled_settings():
+    payload = {
+        "projects": {"/tmp/project": {"trust_level": "trusted"}},
+        "hooks": {"state": {"key": {"trusted_hash": "digest"}}},
+        "plugins": {"plugin": {"enabled": True}},
+        "marketplaces": {"market": {"enabled": True}},
+        "desktop": {"theme": "dark"},
+        "tui": {"notifications": True},
+        "notice": {"hide": True},
+        "mcp_servers": {"server": {"command": "ignored"}},
+        "approvals_reviewer": {"enabled": True},
+    }
+
+    assert _relevant_owner_config(payload, role="helper") == {
+        "approvals_reviewer": {"enabled": True}
+    }
 
 
 @pytest.mark.parametrize("name", ("magnolia-read", "magnolia_read"))
@@ -920,9 +1064,26 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
     (
         ["--dangerously-bypass-approvals-and-sandbox"],
         ["--dangerously-bypass-hook-trust=1"],
+        ["--yolo"],
+        ["-p", "owner"],
+        ["-powner"],
+        ["-p=owner"],
+        ["--profile", "owner"],
+        ["--profile=owner"],
+        ["--add-dir", "/"],
+        ["--add-dir=/"],
+        ["-s=danger-full-access"],
+        ["-sdanger-full-access"],
         ["-c", 'approval_policy="on-request"'],
         ["-c", 'sandbox_mode="danger-full-access"'],
         ["-c", "dangerously_bypass_approvals_and_sandbox=true"],
+        ["-c", 'web_search="live"'],
+        ["--config", "sandbox_workspace_write.network_access=true"],
+        ["--config=network_access=true"],
+        ["-c", 'shell_environment_policy.inherit="all"'],
+        ["-c", "features.computer_use=true"],
+        ["--enable", "computer_use"],
+        ["--enable=computer_use"],
     ),
 )
 def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
@@ -977,6 +1138,122 @@ def test_codex_resumes_legacy_binding_without_client_key(tmp_path):
 
     assert second.session_id == "bound"
     assert "resume" in _calls(state)[1]["argv"]
+
+
+def test_codex_refuses_binding_without_recorded_owner_digest(tmp_path):
+    stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    binary, config, _state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    executor = executor_for(context.route, "evaluator", context)
+    result = executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+    binding_path = executor.prepared.invocation_dir / "codex-session-bindings.json"
+    payload = json.loads(binding_path.read_text())
+    payload["sessions"]["bound"]["identity"].pop("owner_config_digest")
+    binding_path.write_text(json.dumps(payload))
+
+    with pytest.raises(ExecutorRefused, match="different bound identity"):
+        executor_for(
+            context.route,
+            "evaluator",
+            replace(
+                context,
+                resume_from=executor.prepared.invocation_dir,
+                resume_artifact=result.resume_artifact,
+            ),
+        )
+
+
+def test_codex_resume_ignores_unrelated_owner_tui_edit(tmp_path):
+    first_stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    resumed_stream = _jsonl(tmp_path / "resumed.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "again"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 15}},
+    ])
+    binary, config, state = _stub(tmp_path, [first_stream, resumed_stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    executor = executor_for(context.route, "evaluator", context)
+    first = executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(trust.read_text() + "\n[tui]\nnotifications = true\n")
+    resume_context = replace(
+        context,
+        resume_from=executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "evaluator", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.session_id == "bound"
+    assert "resume" in _calls(state)[1]["argv"]
+
+
+def test_codex_resume_records_but_does_not_enforce_owner_digest(tmp_path):
+    first_stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    resumed_stream = _jsonl(tmp_path / "resumed.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "again"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 15}},
+    ])
+    binary, config, _state = _stub(tmp_path, [first_stream, resumed_stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    trust = Path(context.setup["codex_user_config_path"])
+    trust.write_text(
+        trust.read_text()
+        + "\n[shell_environment_policy.set]\n"
+        + 'NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "first"\n'
+    )
+    executor = executor_for(context.route, "evaluator", context)
+    first = executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+    binding_path = executor.prepared.invocation_dir / "codex-session-bindings.json"
+    old_digest = json.loads(binding_path.read_text())["sessions"]["bound"][
+        "identity"
+    ]["owner_config_digest"]
+    trust.write_text(trust.read_text().replace('= "first"', '= "second"'))
+    resume_context = replace(
+        context,
+        resume_from=executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    executor_for(resume_context.route, "evaluator", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    new_digest = json.loads(binding_path.read_text())["sessions"]["bound"][
+        "identity"
+    ]["owner_config_digest"]
+    assert new_digest != old_digest
+
+
+def test_codex_bound_session_still_refuses_model_change(tmp_path):
+    stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    binary, config, _state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    executor = executor_for(context.route, "evaluator", context)
+    executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+    executor.model = "different-model"
+
+    with pytest.raises(ExecutorRefused, match="different bound identity"):
+        executor._require_bound_session("bound")
 
 
 @pytest.mark.parametrize(
