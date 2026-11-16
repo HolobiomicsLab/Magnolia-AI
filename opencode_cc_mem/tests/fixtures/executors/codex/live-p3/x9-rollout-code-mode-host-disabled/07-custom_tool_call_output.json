@@ -1,0 +1,10 @@
+{
+  "call_id": "call_a31898bda64b4f2899aaa8cf9399db9d",
+  "id": "ctco_01a1e31a-99e5-7e91-9999-a6eaa66bc786",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794811533.797531,
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  },
+  "output": "code-mode host is disabled",
+  "type": "custom_tool_call_output"
+}

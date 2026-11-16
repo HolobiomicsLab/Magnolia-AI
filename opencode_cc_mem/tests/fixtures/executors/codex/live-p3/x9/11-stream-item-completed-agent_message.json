@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_3",
+    "text": "Tools: `functions.exec`, `functions.wait`, `functions.request_user_input`, `functions.apply_patch`, `functions.create_goal`, `functions.get_goal`, `functions.list_mcp_resource_templates`, `functions.list_mcp_resources`, `functions.read_mcp_resource`, `functions.request_plugin_install`, `functions.update_goal`, `functions.view_image`, `functions.write_stdin`, `image_gen.imagegen`, `web.run`, `mcp__cua_repl.js`, `mcp__cua_repl.js_reset`.\n\n`functions.exec`: BLOCKED \u2014 code-mode host is disabled  \n`mcp__probe__echo`: BLOCKED \u2014 code-mode host is disabled  \n`mcp__probe__shell`: BLOCKED \u2014 code-mode host is disabled  \n`exec_command`: BLOCKED \u2014 code-mode host is disabled",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

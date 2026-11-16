@@ -1,6 +1,6 @@
 """Reduce Plan 3 Task 0 live probe logs to bounded fixtures, then scrub them.
 
-Usage: extract_live_p3.py <claude_root> <codex_root> <vibe_root> <fixtures_root> [codex_rollout.jsonl]
+Usage: extract_live_p3.py <claude_root> <codex_root> <vibe_root> <fixtures_root> [codex_rollout.jsonl] [x9_rollout.jsonl]
 
 Each root is a run_probes_p3.sh RUNROOT. For every run tag it writes, under
 <fixtures_root>/<client>/live-p3/<tag>/:
@@ -151,6 +151,9 @@ def write_all(out_dir, items, stage):
 def main():
     croot, xroot, vroot, out = sys.argv[1:5]
     rollout = sys.argv[5] if len(sys.argv) > 5 else None
+    rollouts = [("x5", "x5-rollout-code-mode", rollout)]
+    if len(sys.argv) > 6:
+        rollouts.append(("x9", "x9-rollout-code-mode-host-disabled", sys.argv[6]))
     stage = tempfile.mkdtemp()
     plan = [("claude", croot, claude_stream), ("codex", xroot, codex_stream), ("vibe", vroot, vibe_stream)]
     for client, root, stream in plan:
@@ -173,15 +176,17 @@ def main():
                        ("hooks-list-project-rows", {"errors": data.get("errors"), "warnings": data.get("warnings"),
                                                     "hooks": rows})], stage)
     # Codex code mode: outer exec calls and their outputs from the probe session's own rollout
-    if rollout:
+    for rtag, rdir, rpath in rollouts:
+        if not rpath:
+            continue
         keep = []
-        for j in jl(rollout):
+        for j in jl(rpath):
             p = j.get("payload", {})
             if p.get("type") in ("custom_tool_call", "custom_tool_call_output", "function_call",
                                  "function_call_output"):
                 keep.append((p.get("type") + ("-" + p["name"] if p.get("name") else ""), p))
-        write_all(os.path.join(out, "codex", "live-p3", "x5-rollout-code-mode"),
-                  [("run", {"client": "codex", "tag": "x5", "source": "the x5 probe session's rollout file, "
+        write_all(os.path.join(out, "codex", "live-p3", rdir),
+                  [("run", {"client": "codex", "tag": rtag, "source": f"the {rtag} probe session's rollout file, "
                             "tool-call entries only", "synthetic": False})] + keep, stage)
 
 

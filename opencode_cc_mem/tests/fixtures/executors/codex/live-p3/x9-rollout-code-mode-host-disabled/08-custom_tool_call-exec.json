@@ -1,0 +1,12 @@
+{
+  "call_id": "call_eb0005b92d314d9ab9493c35363187e0",
+  "id": "ctc_00648f4f35d7ab34016afaa68ea6b087d2ac9089a4cdf536dc",
+  "input": "const r = await tools.exec_command({cmd:\"cat README.md\",workdir:\"/TMPDIR/probe-p3-codex-omV8qQ/proj\"}); text(r.output);\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794811534.6538014,
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

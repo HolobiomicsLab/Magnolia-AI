@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "Tools: `functions.exec`, `functions.wait`, `functions.request_user_input`, `functions.apply_patch`, `functions.create_goal`, `functions.get_goal`, `functions.list_mcp_resource_templates`, `functions.list_mcp_resources`, `functions.read_mcp_resource`, `functions.request_plugin_install`, `functions.update_goal`, `functions.view_image`, `functions.write_stdin`, `image_gen.imagegen`, `web.run`, `mcp__cua_repl.js`, `mcp__cua_repl.js_reset`.\n\n`functions.exec`: BLOCKED \u2014 code-mode host is disabled  \n`mcp__probe__echo`: BLOCKED \u2014 code-mode host is disabled  \n`mcp__probe__shell`: BLOCKED \u2014 code-mode host is disabled  \n`exec_command`: BLOCKED \u2014 code-mode host is disabled",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-45-20-ses-fixture-1.jsonl",
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  }
+}

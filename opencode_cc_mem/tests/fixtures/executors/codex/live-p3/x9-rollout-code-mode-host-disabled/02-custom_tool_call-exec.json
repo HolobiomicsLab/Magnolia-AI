@@ -1,0 +1,12 @@
+{
+  "call_id": "call_0514170316434d8bbedfd1019d1d0909",
+  "id": "ctc_00648f4f35d7ab34016afaa686fe8487d2af0fc577b3c52281",
+  "input": "text(\"code-mode-outer-ran\");\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794811526.9960008,
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}
