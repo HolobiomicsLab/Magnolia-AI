@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import signal
 import socket
 import sys
 import urllib.request
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from compchem_memory import memory_http, server
+from compchem_memory.harness import memory_service
 from compchem_memory.harness.memory_service import (
     ensure_memory_service,
     release_memory_service,
@@ -20,6 +22,45 @@ from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from mcp import types as mt
 from types import SimpleNamespace
+
+
+@pytest.fixture(autouse=True)
+def _private_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+
+def _watchdog_record(project, *, holders=None, provisional=False):
+    state = memory_service.private_state_dir(project)
+    memory_service._ensure_private_state_dir(state)
+    record = {
+        "pid": 4101,
+        "port": 43101,
+        "project_digest": memory_service.project_digest(project),
+        "project_dir": str(project.resolve()),
+        "process_identity": "ps:4101:service",
+        "service_identity": "service-id",
+        "token_file": str(state / "bearer-token"),
+        "holders": list(holders or []),
+    }
+    if provisional:
+        record["provisional"] = True
+    memory_service._write_record(state, record)
+    return state, record
+
+
+def _watchdog(project, clock):
+    return memory_http.ServiceWatchdog(
+        project,
+        service_identity="service-id",
+        process_pid=4101,
+        process_identity="ps:4101:service",
+        acquirer_pid=4100,
+        acquirer_identity="ps:4100:acquirer",
+        grace_seconds=5,
+        now=lambda: clock[0],
+    )
 
 
 def test_memory_http_refuses_missing_or_wrong_bearer():
@@ -38,6 +79,114 @@ def test_memory_http_two_projects_are_isolated(tmp_path):
     assert memory_http.health_payload(first, "proc:1:first") != memory_http.health_payload(
         second, "proc:2:second"
     )
+
+
+def test_service_exits_when_record_removed(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    state, _record = _watchdog_record(project)
+    (state / "service.json").unlink()
+    monkeypatch.setattr(
+        memory_http, "_process_identity", lambda pid: f"ps:{pid}:live"
+    )
+
+    assert _watchdog(project, [0.0]).should_exit() is True
+    (state / "service.json").write_text("{not-json", encoding="utf-8")
+    os.chmod(state / "service.json", 0o600)
+    assert _watchdog(project, [0.0]).should_exit() is True
+
+
+def test_service_exits_when_record_names_other_pid(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    state, record = _watchdog_record(project)
+    record["pid"] = 9999
+    memory_service._write_record(state, record)
+    monkeypatch.setattr(
+        memory_http,
+        "_process_identity",
+        lambda pid: "ps:4101:service" if pid == 4101 else None,
+    )
+
+    assert _watchdog(project, [0.0]).should_exit() is True
+    record["pid"] = 4101
+    record["process_identity"] = "ps:4101:other"
+    memory_service._write_record(state, record)
+    assert _watchdog(project, [0.0]).should_exit() is True
+    record["process_identity"] = "ps:4101:service"
+    record["project_digest"] = "other-project"
+    memory_service._write_record(state, record)
+    assert _watchdog(project, [0.0]).should_exit() is True
+
+
+def test_service_stays_while_holder_alive(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"id": "holder", "pid": 4200, "process_identity": "ps:4200:holder"}
+    state, record = _watchdog_record(project, holders=[holder], provisional=True)
+    record["observed_command"] = ["/wrapper", "-m", "compchem_memory.memory_http"]
+    memory_service._write_record(state, record)
+    identities = {
+        4100: "ps:4100:acquirer",
+        4101: "ps:4101:service",
+        4200: "ps:4200:holder",
+    }
+    monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    live_command = ("/framework/Python", "-m", "compchem_memory.memory_http")
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: live_command)
+    clock = [20.0]
+    watchdog = _watchdog(project, clock)
+
+    assert watchdog.should_exit() is False
+    refreshed = json.loads((state / "service.json").read_text())
+    assert refreshed["observed_command"] == list(live_command)
+    clock[0] = 200.0
+    assert watchdog.should_exit() is False
+
+
+def test_service_exits_after_last_holder_dies_and_grace(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"id": "holder", "pid": 4200, "process_identity": "ps:4200:holder"}
+    _watchdog_record(project, holders=[holder])
+    identities = {
+        4100: "ps:4100:acquirer",
+        4101: "ps:4101:service",
+        4200: "ps:4200:holder",
+    }
+    monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    clock = [10.0]
+    watchdog = _watchdog(project, clock)
+
+    assert watchdog.should_exit() is False
+    identities.pop(4200)
+    clock[0] = 14.9
+    assert watchdog.should_exit() is False
+    clock[0] = 15.0
+    assert watchdog.should_exit() is True
+
+
+def test_watchdog_never_signals_other_processes(monkeypatch):
+    raised = []
+
+    class StopEvent:
+        def wait(self, interval):
+            return False
+
+    class Watchdog:
+        def should_exit(self):
+            return True
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
+    monkeypatch.setattr(
+        memory_http.os,
+        "kill",
+        lambda *args: pytest.fail(f"watchdog signalled an external pid: {args}"),
+    )
+
+    memory_http._watchdog_loop(Watchdog(), 0.01, StopEvent())
+
+    assert raised == [signal.SIGTERM]
 
 
 def test_memory_http_rejects_cross_project_request(tmp_path, monkeypatch):
@@ -202,7 +351,7 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
     home = tmp_path / "home"
     project = tmp_path / "project"
     other = tmp_path / "other"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
     project.mkdir()
     other.mkdir()
     monkeypatch.setenv("HOME", str(home))

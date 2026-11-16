@@ -115,6 +115,8 @@ SERVER_RUNTIME_ENV = frozenset(
         "MAGNOLIA_HANDOVER_SKIP_EXPORT",
         "MAGNOLIA_LLM_MODEL",
         "MAGNOLIA_LLM_PROVIDER",
+        "MAGNOLIA_MEMORY_SERVICE_GRACE_S",
+        "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S",
         "MAGNOLIA_OFFPEAK_DISABLE",
         "MAGNOLIA_OPENCODE_DIR",
         "MAGNOLIA_OPENCODE_V2",
@@ -453,6 +455,10 @@ def _start_service(
     holder: dict[str, Any],
 ) -> ServiceHandle:
     setup = getattr(context, "setup", {}) or {}
+    acquirer_pid = os.getpid()
+    acquirer_identity = _process_identity(acquirer_pid)
+    if not acquirer_identity:
+        raise ExecutorRefused("memory service acquirer identity could not be verified")
     requested_port = setup.get("memory_service_port")
     port = _choose_port(requested_port)
     token = secrets.token_urlsafe(32)
@@ -475,6 +481,8 @@ def _start_service(
             "MAGNOLIA_PROJECT_BOUND": "1",
             "MAGNOLIA_MEMORY_SERVICE_PORT": str(port),
             "MAGNOLIA_MEMORY_SERVICE_IDENTITY": service_identity,
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": str(acquirer_pid),
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY": acquirer_identity,
             "MAGNOLIA_SERVER_STARTED_AT": str(time.time()),
             TOKEN_ENV: token,
         }
