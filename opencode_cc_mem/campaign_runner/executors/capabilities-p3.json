@@ -1,342 +1,756 @@
 {
   "schema_version": 1,
   "generated_from": {
-    "revision": "b7504a580631d83ef424819e5659618dde87b1cc",
+    "revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
     "sources": [
-      "opencode_cc_mem/docs/harness-probes-2026-11.md",
       "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
-      "opencode_cc_mem/docs/harness-campaign-2026-11-15.md"
+      "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
+      "opencode_cc_mem/docs/harness-probes-2026-11.md",
+      "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+      "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/"
     ]
   },
-  "note": "Offline initial gate plus Task 6 synthetic-only native schemas. Live acceptance is still required; every role remains refused.",
+  "note": "Claude live role gates are accepted on production evidence but launch-stale pending project-independent discovery/configuration identity binding. Codex and Vibe remain refused.",
   "rows": [
     {
       "client": "claude-code",
       "role": "worker",
       "role_label": "worker",
-      "stale": false,
+      "stale": true,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          }
+        },
+        "reason": "Accepted on the owner-recorded hook-only enforcement ruling: the required fail-closed hook enforces the worker MCP allowlist; launch remains stale only until project-independent identity binding is implemented."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
           "value": {
             "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
             "version": "2.1.325",
             "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
-          }
+          },
+          "note": "Executable version and SHA-256 are confirmed unchanged in the live record."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/01-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/01-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/02-stream-hook_started.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/01-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+          "value": {
+            "role": "worker",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/15-hook-transcript.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W2/23-hook-transcript.json",
+          "value": {
+            "actions": [
+              "secret and recursive reads",
+              "edits outside run/work",
+              "symlink escapes",
+              "shell",
+              "delegation",
+              "non-allowlisted MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/16-ledger-row.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/14-stream-result.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
         },
         "quota_evidence": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
-          "note": "constructed parser fixture only; no account quota was observed"
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
         }
-      }
+      },
+      "notes": [
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat."
+      ]
     },
     {
       "client": "claude-code",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": false,
+      "stale": true,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          }
+        },
+        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
           "value": {
             "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
             "version": "2.1.325",
             "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
-          }
+          },
+          "note": "Executable version and SHA-256 are confirmed unchanged in the live record."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/01-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/01-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/02-stream-hook_started.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/01-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+          "value": {
+            "role": "reviewer",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/14-hook-transcript.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/14-hook-transcript.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/15-ledger-row.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_argv": true
+          },
+          "note": "Cap 8 is enforced but tight because SessionStart boot context consumed turns."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/13-stream-result.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
         },
         "quota_evidence": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
-          "note": "constructed parser fixture only; no account quota was observed"
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
         }
-      }
+      },
+      "notes": [
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1."
+      ]
     },
     {
       "client": "claude-code",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": false,
+      "stale": true,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          }
+        },
+        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
           "value": {
             "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
             "version": "2.1.325",
             "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
-          }
+          },
+          "note": "Executable version and SHA-256 are confirmed unchanged in the live record."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/01-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/01-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/02-stream-hook_started.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/01-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+          "value": {
+            "role": "helper",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/08-hook-transcript.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/08-hook-transcript.json",
+          "value": {
+            "actions": [
+              "reads outside the named root",
+              "edits",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/09-ledger-row.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/07-stream-result.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
         },
         "quota_evidence": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
-          "note": "constructed parser fixture only; no account quota was observed"
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
         }
-      }
+      },
+      "notes": [
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat."
+      ]
     },
     {
       "client": "claude-code",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": false,
+      "stale": true,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.325",
+            "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          }
+        },
+        "reason": "Live role gate passed outright; launch remains stale only until project-independent identity binding is implemented."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
           "value": {
             "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
             "version": "2.1.325",
             "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
-          }
+          },
+          "note": "Executable version and SHA-256 are confirmed unchanged in the live record."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/01-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/01-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/02-stream-hook_started.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/01-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+          "value": {
+            "role": "evaluator",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json",
+          "value": {
+            "capabilities": []
+          },
+          "note": "Allowed actions observed with the production required hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json",
+          "value": {
+            "actions": [
+              "all tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/07-ledger-row.json",
+          "value": {
+            "effective_max_turns": 1,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/05-stream-result.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
         },
         "quota_evidence": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json",
-          "note": "constructed parser fixture only; no account quota was observed"
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
         }
-      }
+      },
+      "notes": [
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat."
+      ]
     },
     {
       "client": "codex",

@@ -241,6 +241,7 @@ def test_all_observed_prerequisites_project_to_accepted_launch_fields(tmp_path):
 
     assert role == {
         "accepted": True,
+        "gate_accepted": True,
         "stale": False,
         "trusted": True,
         "identity": "sha256:policy",
@@ -303,7 +304,7 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_current_table_refuses_every_new_client_role():
+def test_current_table_refuses_launches_without_current_identity_binding():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
 
@@ -311,8 +312,55 @@ def test_current_table_refuses_every_new_client_role():
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
         assert all(not role["accepted"] for role in client.values())
-        assert all(role["blocking_cells"] for role in client.values())
+
+    assert all(role["gate_accepted"] for role in projected["claude-code"].values())
+    assert all(role["stale"] for role in projected["claude-code"].values())
+    for client in ("codex", "vibe"):
+        assert all(role["blocking_cells"] for role in projected[client].values())
 
     assert any("D2" in reason for reason in projected["codex"]["worker"]["reasons"])
     assert any("D2" in reason for reason in projected["codex"]["reviewer"]["reasons"])
     assert any("D4" in reason for reason in projected["vibe"]["worker"]["reasons"])
+
+
+def test_claude_rows_accepted_from_live_gate():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)["claude-code"]
+    rows = [row for row in table["rows"] if row["client"] == "claude-code"]
+
+    assert {row["role"] for row in rows} == {
+        "worker",
+        "reviewer",
+        "helper",
+        "evaluator",
+    }
+    assert all(row["gate"]["status"] == "observed" for row in rows)
+    assert all(not item["blocking_cells"] for item in projected.values())
+    assert all(item["gate_accepted"] is True for item in projected.values())
+
+
+def test_claude_row_stale_on_identity_change():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    worker = next(
+        row
+        for row in table["rows"]
+        if (row["client"], row["role"]) == ("claude-code", "worker")
+    )
+    worker["stale"] = False
+
+    fresh = project_role_capabilities(table)["claude-code"]["worker"]
+    assert fresh["stale"] is False
+    assert fresh["accepted"] is True
+
+    worker["cells"]["identity"]["value"]["sha256"] = "changed-client-binary"
+    changed = project_role_capabilities(table)["claude-code"]["worker"]
+    assert changed["stale"] is True
+    assert changed["accepted"] is False
+
+
+def test_codex_vibe_rows_still_refused():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)
+
+    for client in ("codex", "vibe"):
+        assert all(not row["accepted"] for row in projected[client].values())
