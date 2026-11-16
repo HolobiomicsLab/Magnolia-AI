@@ -335,7 +335,7 @@ def test_reviewer_configured_repairs_no_executor_empty_retry(tmp_path, monkeypat
 
 
 def test_vibe_reviewer_keeps_memory_lease_across_format_retries(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, request
 ):
     from types import SimpleNamespace
 
@@ -352,6 +352,7 @@ def test_vibe_reviewer_keeps_memory_lease_across_format_retries(
         VibeExecutor._release_prepared_memory_service,
         prepared,
     )
+    request.addfinalizer(executor._memory_service_finalizer.detach)
     monkeypatch.setattr(
         "compchem_memory.harness.memory_service.release_memory_service",
         lambda value: released.append(value) or True,
@@ -362,10 +363,61 @@ def test_vibe_reviewer_keeps_memory_lease_across_format_retries(
     executor.run("repair", tmp_path, tmp_path, stem="reviewer_retry_1")
 
     assert released == []
+    executor.close()
+    executor.close()
+    assert released == [handle]
     del executor
     gc.collect()
     assert released == [handle]
     assert prepared.memory_service_handle is None
+
+
+@pytest.mark.parametrize("ending", ["success", "invalid", "exception", "cancelled"])
+def test_vibe_reviewer_explicitly_releases_lease_at_review_end(tmp_path, monkeypatch, request, ending):
+    from types import SimpleNamespace
+
+    from campaign_runner.executors.contracts import RunOutcome
+    from campaign_runner.executors.vibe import VibeExecutor
+
+    handle, released, calls = object(), [], []
+    executor = object.__new__(VibeExecutor)
+    executor.prepared = SimpleNamespace(memory_service_handle=handle)
+    executor.role = "reviewer"
+    executor._memory_service_finalizer = weakref.finalize(
+        executor, VibeExecutor._release_prepared_memory_service, executor.prepared,
+    )
+    request.addfinalizer(executor._memory_service_finalizer.detach)
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+    monkeypatch.setattr("campaign_runner.reviewers.executor_for", lambda *args: executor)
+
+    def run(self, *args, **kwargs):
+        assert released == []
+        calls.append(kwargs["stem"])
+        if ending == "exception":
+            raise RuntimeError("client failed")
+        text = '{"issues":[],"followups":[]}' if len(calls) == 2 else "invalid"
+        if ending == "invalid":
+            text = "invalid"
+        return WorkerResult(
+            0, False, 0.1, "same", text, "", 0, empty_usage(), 1, [], [],
+            outcome=RunOutcome("cancelled") if ending == "cancelled" else None,
+        )
+
+    monkeypatch.setattr(VibeExecutor, "_run", run)
+    reviewer = Reviewer(binary="unused")
+    if ending in {"exception", "invalid"}:
+        with pytest.raises((RuntimeError, ReviewError)) as captured:
+            reviewer.run("vibe/test", "review", tmp_path, tmp_path, tmp_path)
+        assert captured.value.__traceback__ is not None
+    else:
+        reviewer.run("vibe/test", "review", tmp_path, tmp_path, tmp_path)
+    assert released == [handle]
+    assert executor.prepared.memory_service_handle is None
+    if ending == "success":
+        assert calls == ["reviewer", "reviewer_retry_1"]
 
 
 def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):

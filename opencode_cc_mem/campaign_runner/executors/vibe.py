@@ -241,6 +241,10 @@ class VibeExecutor:
             stem == "reviewer" or stem.startswith("reviewer_retry_")
         )
 
+    def close(self) -> None:
+        """Release the review's service lease once all format attempts have ended."""
+        self._release_memory_service()
+
     def _release_memory_service(self) -> None:
         finalizer = self._memory_service_finalizer
         if finalizer is not None and finalizer.alive:
