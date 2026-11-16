@@ -66,7 +66,19 @@ def delivered_rule_text(text: str, harness: str) -> str:
 
 def hook_command(context: LaunchContext, harness: str, event: str) -> str:
     """The shell command a client runs for one hook event."""
-    command = f"{shlex.quote(context.python)} -m compchem_memory.hook {harness} {event}"
+    runner = (
+        context.root
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+        / "hook"
+        / "runner.py"
+    ).resolve()
+    command = (
+        f"{shlex.quote(context.python)} -I {shlex.quote(str(runner))} "
+        f"{shlex.quote(harness)} {shlex.quote(event)}"
+    )
     if not context.noninteractive or event != "pre-tool":
         return command
     return _required_pre_tool_command(command, harness, REQUIRED_HOOK_TIMEOUT_S)
@@ -87,7 +99,7 @@ def _required_pre_tool_command(command: str, harness: str, timeout_s: int) -> st
     script = _REQUIRED_HOOK_SCRIPT.format(
         fallback=shlex.quote(fallback), command=command, timeout_s=timeout_s
     )
-    return f"sh -c {shlex.quote(script)}"
+    return f"/bin/sh -c {shlex.quote(script)}"
 
 
 def hook_timeout(event: str) -> int:

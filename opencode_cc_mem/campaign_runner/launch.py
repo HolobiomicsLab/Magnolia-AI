@@ -8,7 +8,6 @@ import json
 import os
 import re
 import stat
-import sys
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -17,6 +16,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from compchem_memory.harness.neutral import NeutralConfig
+from compchem_memory.harness.ownership import is_magnolia_hook_command
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_claude import (
     native_artifacts as render_claude_native_artifacts,
@@ -363,6 +363,21 @@ def _require_context(context: ExecContext) -> None:
         raise ExecutorRefused("work directory must be canonical run/work")
     if control_dir != run_dir / "control":
         raise ExecutorRefused("control directory must be canonical run/control")
+    if context.route.client == "claude-code":
+        _refuse_claude_project_settings(context)
+
+
+def _refuse_claude_project_settings(context: ExecContext) -> None:
+    """Bind the absence of settings loaded from Claude's project source."""
+    roots = (context.project_dir, context.run_dir, context.work_dir)
+    for root in roots:
+        assert root is not None
+        for name in ("settings.json", "settings.local.json"):
+            candidate = root / ".claude" / name
+            if candidate.exists() or candidate.is_symlink():
+                raise ExecutorRefused(
+                    f"Claude project settings are not capability-bound: {name}"
+                )
 
 
 def _is_cancelled(cancellation: Any) -> bool:
@@ -570,41 +585,29 @@ def _hook_interpreter_digest(
     requested = Path(context.python_executable)
     if not requested.is_absolute() or Path(selected) != requested:
         raise ExecutorRefused("hook interpreter differs from MAGNOLIA_PYTHON")
-    repository_python = context.installation_root.parent / ".venv" / "bin" / "python3"
+    repository_venv = context.installation_root.parent / ".venv"
+    repository_python = repository_venv / "bin" / "python3"
     inherited = os.environ if context.environment is None else context.environment
     override = inherited.get("MAGNOLIA_PYTHON")
     if override:
         expected = Path(str(override))
-    elif repository_python.exists():
-        expected = repository_python
-    elif _sys_prefix_is_venv() and requested.resolve() == Path(sys.executable).resolve():
-        expected = Path(sys.executable)
     else:
-        raise ExecutorRefused("hook interpreter is not Magnolia's repository venv")
-    if requested.resolve() != expected.resolve():
+        expected = repository_python
+    if not expected.is_absolute() or requested != expected:
         raise ExecutorRefused("hook interpreter differs from Magnolia's resolver selection")
-    if not _is_virtual_environment_python(requested):
-        raise ExecutorRefused("hook interpreter is a bare system Python")
+    if requested.parent.parent != repository_venv:
+        raise ExecutorRefused("hook interpreter is not Magnolia's repository venv")
+    if not (repository_venv / "pyvenv.cfg").is_file():
+        raise ExecutorRefused("hook interpreter repository venv lacks pyvenv.cfg")
+    if not requested.is_file():
+        raise ExecutorRefused("hook interpreter is unavailable")
     rule = {
-        "resolver": "MAGNOLIA_PYTHON-then-repository-venv-v1",
-        "requires_virtual_environment": True,
+        "resolver": "MAGNOLIA_PYTHON-then-repository-venv-v2",
+        "comparison": "lexical-absolute-path",
+        "pyvenv_cfg": "repository/.venv/pyvenv.cfg",
         "bare_system_python": False,
     }
     return _digest(_canonical_bytes(rule))
-
-
-def _sys_prefix_is_venv() -> bool:
-    """Return whether this launch process itself runs from a virtual environment."""
-    return Path(sys.prefix).resolve() != Path(sys.base_prefix).resolve()
-
-
-def _is_virtual_environment_python(path: Path) -> bool:
-    """Recognize the selected venv without binding its machine-specific path."""
-    if _sys_prefix_is_venv() and path.resolve() == Path(sys.executable).resolve():
-        return True
-    if any(parent.name == ".venv" or parent.name.startswith("venv") for parent in path.parents):
-        return True
-    return any((parent / "pyvenv.cfg").is_file() for parent in path.parents)
 
 
 def _hook_source_digest(context: ExecContext) -> str:
@@ -620,8 +623,11 @@ def _hook_source_digest(context: ExecContext) -> str:
     render_common = source_root / "harness" / "render_common.py"
     bodies: list[tuple[str, bytes]] = []
     try:
-        for path in sorted(hook_root.rglob("*.py")):
-            bodies.append((path.relative_to(source_root).as_posix(), path.read_bytes()))
+        for path in sorted(hook_root.rglob("*")):
+            relative = path.relative_to(source_root)
+            if "__pycache__" in relative.parts or not path.is_file():
+                continue
+            bodies.append((relative.as_posix(), path.read_bytes()))
         wrapper_source = render_common.read_text(encoding="utf-8")
     except OSError as exc:
         raise ExecutorRefused("hook source binding is unavailable") from exc
@@ -744,7 +750,7 @@ def _hook_commands_digest(
 def _collect_hook_commands(value: Any, commands: list[str]) -> None:
     if isinstance(value, Mapping):
         command = value.get("command")
-        if isinstance(command, str) and "compchem_memory.hook" in command:
+        if is_magnolia_hook_command(command):
             commands.append(command)
         for item in value.values():
             _collect_hook_commands(item, commands)
@@ -1228,6 +1234,7 @@ def _effective_environment(
         "MAGNOLIA_CONTROL_DIR": str(context.control_dir.resolve()),
         "MAGNOLIA_WORK_DIR": str(context.work_dir.resolve()),
         "MAGNOLIA_PYTHON": context.python_executable,
+        "PYTHONPYCACHEPREFIX": _fresh_pycache_prefix(policy_path.parent),
         "MAGNOLIA_ROOT": str(context.installation_root.parent.resolve()),
         "MAGNOLIA_PROJECT_DIR": str(context.project_dir.resolve()),
         "MAGNOLIA_RULES_DIR": "rules",
@@ -1262,6 +1269,14 @@ def _effective_environment(
         explicit["VIBE_ENABLE_TELEMETRY"] = "false"
     env.update({key: str(value) for key, value in explicit.items()})
     return env
+
+
+def _fresh_pycache_prefix(invocation_dir: Path) -> str:
+    """Return a new run-owned cache path so repository bytecode is never read."""
+    while True:
+        candidate = invocation_dir / f"pycache-{uuid.uuid4().hex}"
+        if not candidate.exists() and not candidate.is_symlink():
+            return str(candidate)
 
 
 def _configuration_identity(

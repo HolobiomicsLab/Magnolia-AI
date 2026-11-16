@@ -160,3 +160,34 @@ re-hashes that same path immediately before each spawn. A small residual TOCTOU 
 between the final hash read and kernel exec; the gate does not claim descriptor-pinned execution.
 Tests use a local fake npm package and a capability projection rebound to its bytes. The installed
 2.1.325 comparison is separate and skips with an explicit reason when that exact package is absent.
+
+## Task CF Round 4 — exact production route and hook provenance
+
+The accepted worker row now binds the exact seven environment-variable names emitted by
+`campaign_runner.cli._memory_route`; adding or removing one changes the `mcp` component and refuses
+the launch. The same production route passes preparation for worker, reviewer, helper and evaluator.
+The Claude argv is unchanged.
+
+Hook-interpreter identity is lexical: the absolute requested path must equal the absolute
+`MAGNOLIA_PYTHON` value when supplied, otherwise the shared resolver's
+`<repository>/.venv/bin/python3`; its venv root must be `<repository>/.venv` and contain
+`pyvenv.cfg`. Resolving symlinks is deliberately not part of this comparison, so a base
+interpreter, another venv on the same base, and an outside symlink all refuse `interpreter`.
+
+Every hook command uses isolated mode and inserts the repository's
+`mcp-servers/compchem-memory/src` before importing `compchem_memory.hook.__main__`. The source
+binding hashes every file in `compchem_memory/hook/` except paths below `__pycache__`, including
+extension modules and data files, plus the required wrapper. Each preparation assigns a fresh,
+run-owned `PYTHONPYCACHEPREFIX`; the isolated command applies it through `sys.pycache_prefix`
+before importing. A repository test proves that an editable-install decoy and an unchecked forged
+source-tree `.pyc` are ignored, while an added `.so` changes the binding.
+
+The live gate had no `.claude/settings.json` or `.claude/settings.local.json`. Their absence is now
+required in the project, run and work roots because `--setting-sources project` is unchanged; a
+present path refuses with its filename. The required-mode wrapper invokes `/bin/sh` absolutely.
+
+M2 remains deferred under the Task 2 ruling: credential variables outside the refused redirect
+families are stripped, not refused. M3 remains a documented residual: the measured final-hash to
+exec window was 14.3 ms median and 18.5 ms maximum (14–19 ms); this change does not claim
+descriptor-pinned execution. M6 remains a note: inherited Claude endpoint/runtime variables cause a
+named refusal, and the stdio memory server receives no provider credential, consistent with W1.
