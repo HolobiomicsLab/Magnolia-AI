@@ -465,3 +465,32 @@ def test_worker_and_reviewer_db_fallback_only_for_opencode(tmp_path, monkeypatch
         "claude-code/sonnet", "review", tmp_path, tmp_path / "attempt", tmp_path
     )
     assert result.usage["input_tokens"] == 7.0
+
+
+@pytest.mark.parametrize("body_error", [ReviewError("invalid review"), KeyboardInterrupt(), None])
+def test_reviewer_close_failure_preserves_body_exception(tmp_path, monkeypatch, caplog, body_error):
+    closed = []
+    close_error = OSError("lease close failed")
+
+    class Executor:
+        def run(self, *args, **kwargs):
+            if body_error is not None:
+                raise body_error
+            return WorkerResult(
+                0, False, 0.1, "same", '{"issues":[],"followups":[]}', "", 0,
+                empty_usage(), 1, [], [],
+            )
+
+        def close(self):
+            closed.append(True)
+            raise close_error
+
+    monkeypatch.setattr("campaign_runner.reviewers.executor_for", lambda *args: Executor())
+    expected = body_error if body_error is not None else close_error
+    with pytest.raises(type(expected)) as caught:
+        Reviewer(binary="unused").run("vibe/test", "review", tmp_path, tmp_path, tmp_path)
+
+    assert caught.value is expected
+    assert closed == [True]
+    if body_error is not None:
+        assert "lease close failed" in caplog.text

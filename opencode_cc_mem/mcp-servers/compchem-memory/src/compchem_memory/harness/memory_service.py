@@ -489,6 +489,7 @@ def _start_service(
                 if not identity:
                     raise ExecutorRefused("memory service process identity could not be verified")
                 digest = project_digest(project)
+                observed_command = _process_command(process.pid)
                 record = {
                     "pid": process.pid,
                     "port": port,
@@ -498,7 +499,8 @@ def _start_service(
                     "service_identity": service_identity,
                     "token_file": str(token_file),
                     "command": command,
-                    "observed_command": _process_command(process.pid),
+                    "observed_command": observed_command,
+                    "final_command": _final_service_command(command, observed_command),
                     "holders": [holder],
                     "provisional": True,
                 }
@@ -524,12 +526,14 @@ def _start_service(
             if not _holder_is_live(holder):
                 raise ExecutorRefused("memory service holder identity is no longer live")
             record.pop("provisional", None)
+            record.pop("final_command", None)
             _write_record(state, record)
             return _handle(record, project, holder["id"])
         except BaseException:
-            if process is not None:
-                _stop_started_process(process)
-            _remove_state_files(state)
+            with _blocked_startup_signals():
+                if process is not None:
+                    _stop_started_process(process)
+                _remove_state_files(state)
             raise
 
 
@@ -541,6 +545,14 @@ def _startup_signal_handlers() -> Iterator[None]:
     previous = {signum: signal.getsignal(signum) for signum in STARTUP_SIGNALS}
 
     def interrupt(signum: int, frame: Any) -> None:
+        handler = previous[signum]
+        if handler == signal.SIG_IGN:
+            return
+        if callable(handler):
+            handler(signum, frame)
+            return
+        if signum == signal.SIGINT:
+            raise KeyboardInterrupt
         raise SystemExit(128 + signum)
 
     try:
@@ -554,7 +566,7 @@ def _startup_signal_handlers() -> Iterator[None]:
 
 @contextmanager
 def _blocked_startup_signals() -> Iterator[None]:
-    """Defer interruption until the spawned PID has a durable record."""
+    """Defer interruption until startup state is durable or removed."""
     previous = signal.pthread_sigmask(signal.SIG_BLOCK, STARTUP_SIGNALS)
     try:
         yield
@@ -847,6 +859,20 @@ def _listener_owned_by_pid(pid: int, port: int) -> bool:
     return result.returncode == 0 and f"p{pid}" in result.stdout.splitlines()
 
 
+def _final_service_command(
+    command: list[str], observed: tuple[str, ...] | str | None
+) -> tuple[str, ...] | str | None:
+    """Remove the bootstrap, retaining the interpreter's native re-exec name."""
+    if isinstance(observed, tuple):
+        if observed[1:] == ("-c", _UNMASK_AND_EXEC, *command):
+            return (observed[0], *command[1:])
+    elif isinstance(observed, str):
+        bootstrap = " -c " + _UNMASK_AND_EXEC + " " + " ".join(command) + "\n"
+        if observed.endswith(bootstrap):
+            return observed[:-len(bootstrap)] + " " + " ".join(command[1:]) + "\n"
+    return observed
+
+
 def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
     """Require the exact observed argv and canonical project-bound service suffix."""
     try:
@@ -859,14 +885,21 @@ def _full_service_command_matches(record: Mapping[str, Any]) -> bool:
     if project_digest(project) != digest:
         return False
     suffix = ("-m", SERVICE_MODULE, "--project-dir", str(project))
-    if isinstance(recorded, (list, tuple)):
-        recorded = tuple(recorded)
-        bound = len(recorded) >= 5 and recorded[-4:] == suffix
-    elif isinstance(recorded, str):
-        bound = recorded.endswith(" " + " ".join(suffix) + "\n")
-    else:
-        return False
-    return bound and recorded == _process_command(pid)
+    candidates = [recorded]
+    if record.get("provisional") is True:
+        candidates.append(record.get("final_command"))
+    live_command = _process_command(pid)
+    for candidate in candidates:
+        if isinstance(candidate, (list, tuple)):
+            candidate = tuple(candidate)
+            bound = len(candidate) >= 5 and candidate[-4:] == suffix
+        elif isinstance(candidate, str):
+            bound = candidate.endswith(" " + " ".join(suffix) + "\n")
+        else:
+            continue
+        if bound and candidate == live_command:
+            return True
+    return False
 
 
 def _service_process_matches(record: Mapping[str, Any]) -> bool:

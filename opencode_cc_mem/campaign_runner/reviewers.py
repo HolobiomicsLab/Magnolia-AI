@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -22,6 +23,7 @@ from .executors.registry import executor_for
 from .routing import resolve_route
 
 
+LOGGER = logging.getLogger(__name__)
 REVIEW_FORMAT_NOTE = (
     "Your previous answer was not valid review JSON. Return only one JSON "
     "object with keys 'issues' and 'followups'. Every issue must cite existing "
@@ -282,6 +284,7 @@ class Reviewer:
                 resume_from=resume_from,
             )
         executor = executor_for(route, "reviewer", context)
+        review_failed = False
         try:
             usage = empty_usage()
             session_id: str | None = None
@@ -358,10 +361,18 @@ class Reviewer:
                     resume_from=result_resume_from,
                 )
             raise ReviewError("; ".join(errors) if errors else "review failed")
+        except BaseException:
+            review_failed = True
+            raise
         finally:
             close = getattr(executor, "close", None)
             if callable(close):
-                close()
+                try:
+                    close()
+                except BaseException:
+                    if not review_failed:
+                        raise
+                    LOGGER.warning("reviewer executor close failed after review error", exc_info=True)
 
 
     def _resolve_usage(
