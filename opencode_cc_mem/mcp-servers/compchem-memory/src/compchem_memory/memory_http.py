@@ -37,6 +37,7 @@ ACQUIRER_IDENTITY_ENV = "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY"
 DEFAULT_WATCHDOG_SECONDS = 2.0
 DEFAULT_GRACE_SECONDS = 10.0
 DEFAULT_UNKNOWN_LIMIT_SECONDS = 120.0
+DEFAULT_HARD_EXIT_SECONDS = 5.0
 MIN_WATCHDOG_SECONDS = 0.5
 MAX_WATCHDOG_SECONDS = 30.0
 MIN_GRACE_SECONDS = 5.0
@@ -60,8 +61,11 @@ class ServiceWatchdog:
     now: Callable[[], float] = time.monotonic
     started_at: float = field(init=False)
     last_holder_at: float = field(init=False)
-    unknown_since: float | None = field(init=False, default=None)
-    unknown_limit_logged: bool = field(init=False, default=False)
+    holder_unknown_since: dict[str, float] = field(init=False, default_factory=dict)
+    holder_unknown_logged: set[str] = field(init=False, default_factory=set)
+    acquirer_unknown_since: float | None = field(init=False, default=None)
+    acquirer_unknown_logged: bool = field(init=False, default=False)
+    exit_reason: str | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         self.project_dir = self.project_dir.expanduser().resolve()
@@ -78,10 +82,17 @@ class ServiceWatchdog:
         assert state is not None
         with service_state._state_lock(state):
             record = service_state._read_record(state)
-            if record is None or not self._record_names_self(record):
-                return True
+            if record is None:
+                return self._expire("the service record is gone")
+            if not self._record_names_self(record):
+                return self._expire("the service record names another service")
             self._refresh_provisional_record(state, record)
             return self._ownership_expired(record)
+
+    def _expire(self, reason: str) -> bool:
+        self.exit_reason = reason
+        LOGGER.warning("memory service watchdog stopping the service: %s", reason)
+        return True
 
     def remove_owned_state(self) -> bool:
         """Remove only this service's still-current record and bearer token."""
@@ -127,59 +138,111 @@ class ServiceWatchdog:
     def _ownership_expired(self, record: dict[str, Any]) -> bool:
         checked_at = self.now()
         holder_states = self._holder_states(record.get("holders"))
-        if "live" in holder_states:
+        has_live_holder = any(state == "live" for _key, state in holder_states)
+        unknown_holders = [
+            key for key, state in holder_states if state == "unknown"
+        ]
+        current_keys = {key for key, _state in holder_states}
+        for key in tuple(self.holder_unknown_since):
+            if key not in current_keys or key not in unknown_holders:
+                self._clear_holder_unknown(key)
+        if has_live_holder:
             self.last_holder_at = checked_at
-            self._clear_unknown()
-        elif "unknown" in holder_states:
-            if self._unknown_expired(checked_at, "holder"):
-                return True
-        else:
-            self._clear_unknown()
-            if checked_at - self.last_holder_at >= self.grace_seconds:
-                return True
+        unknown_expirations = [
+            self._holder_unknown_expired(key, checked_at) for key in unknown_holders
+        ]
+        holders_unknown_expired = bool(unknown_expirations) and all(
+            unknown_expirations
+        )
+        holders_dead_expired = (
+            not has_live_holder
+            and not unknown_holders
+            and checked_at - self.last_holder_at >= self.grace_seconds
+        )
         provisional_expired = (
             record.get("provisional") is True
             and checked_at - self.started_at >= self.grace_seconds
         )
-        if not provisional_expired:
+        acquirer_expired = False
+        if provisional_expired:
+            acquirer_state = self._acquirer_liveness()
+            if acquirer_state == "dead":
+                acquirer_expired = True
+                self._clear_acquirer_unknown()
+            elif acquirer_state == "unknown":
+                acquirer_expired = self._acquirer_unknown_expired(checked_at)
+            else:
+                self._clear_acquirer_unknown()
+        else:
+            self._clear_acquirer_unknown()
+        # A provisional record never reached readiness: its holders were never
+        # handed the service, so a lost acquirer ends it even if a holder lives.
+        if acquirer_expired:
+            return self._expire(
+                "the provisional record's acquirer is gone or unverifiable"
+            )
+        if has_live_holder:
             return False
-        acquirer_state = self._acquirer_liveness()
-        if acquirer_state == "dead":
-            return True
-        if acquirer_state == "unknown":
-            return self._unknown_expired(checked_at, "acquirer")
+        if holders_unknown_expired:
+            return self._expire("every holder stayed unverifiable past the ceiling")
+        if holders_dead_expired:
+            return self._expire("no live holder remained past the grace period")
         return False
 
-    def _holder_states(self, holders: Any) -> set[str]:
+    def _holder_states(self, holders: Any) -> list[tuple[str, str]]:
         if not isinstance(holders, list):
-            return set()
-        return {
-            service_state._holder_liveness(
-                holder,
-                identity_probe=_process_identity,
-                existence_probe=service_state._process_exists,
+            return []
+        states = []
+        for index, holder in enumerate(holders):
+            if not isinstance(holder, dict):
+                continue
+            key = str(holder.get("id") or f"invalid-{index}")
+            states.append(
+                (
+                    key,
+                    service_state._holder_liveness(
+                        holder,
+                        identity_probe=_process_identity,
+                        existence_probe=service_state._process_exists,
+                    ),
+                )
             )
-            for holder in holders
-            if isinstance(holder, dict)
-        }
+        return states
 
-    def _clear_unknown(self) -> None:
-        self.unknown_since = None
-        self.unknown_limit_logged = False
+    def _clear_holder_unknown(self, key: str) -> None:
+        self.holder_unknown_since.pop(key, None)
+        self.holder_unknown_logged.discard(key)
 
-    def _unknown_expired(self, checked_at: float, subject: str) -> bool:
-        if self.unknown_since is None:
-            self.unknown_since = checked_at
-        if checked_at - self.unknown_since < self.unknown_limit_seconds:
+    def _holder_unknown_expired(self, key: str, checked_at: float) -> bool:
+        unknown_since = self.holder_unknown_since.setdefault(key, checked_at)
+        if checked_at - unknown_since < self.unknown_limit_seconds:
             return False
-        if not self.unknown_limit_logged:
+        if key not in self.holder_unknown_logged:
             LOGGER.warning(
-                "memory service %s identity remained unknown for %.1f seconds; "
+                "memory service holder %s identity remained unknown for %.1f seconds; "
                 "watchdog is failing closed",
-                subject,
+                key,
                 self.unknown_limit_seconds,
             )
-            self.unknown_limit_logged = True
+            self.holder_unknown_logged.add(key)
+        return True
+
+    def _clear_acquirer_unknown(self) -> None:
+        self.acquirer_unknown_since = None
+        self.acquirer_unknown_logged = False
+
+    def _acquirer_unknown_expired(self, checked_at: float) -> bool:
+        if self.acquirer_unknown_since is None:
+            self.acquirer_unknown_since = checked_at
+        if checked_at - self.acquirer_unknown_since < self.unknown_limit_seconds:
+            return False
+        if not self.acquirer_unknown_logged:
+            LOGGER.warning(
+                "memory service acquirer identity remained unknown for %.1f seconds; "
+                "watchdog is failing closed",
+                self.unknown_limit_seconds,
+            )
+            self.acquirer_unknown_logged = True
         return True
 
     def _acquirer_liveness(self) -> str:
@@ -193,7 +256,11 @@ class ServiceWatchdog:
 
 
 def _watchdog_loop(
-    watchdog: ServiceWatchdog, interval: float, stop_event: threading.Event
+    watchdog: ServiceWatchdog,
+    interval: float,
+    stop_event: threading.Event,
+    *,
+    hard_exit_seconds: float | None = None,
 ) -> None:
     """Poll ownership and ask this process to stop without targeting another PID."""
     should_stop = False
@@ -219,6 +286,12 @@ def _watchdog_loop(
         except BaseException:
             LOGGER.exception("memory service watchdog could not remove its owned state")
     signal.raise_signal(signal.SIGTERM)
+    if hard_exit_seconds is not None and not stop_event.wait(hard_exit_seconds):
+        LOGGER.error(
+            "memory service did not stop within %.1f seconds; forcing self-exit",
+            hard_exit_seconds,
+        )
+        os._exit(1)
 
 
 def _seconds_from_env(
@@ -354,6 +427,14 @@ def main(argv: list[str] | None = None) -> None:
     bound = Path(os.environ.get("MAGNOLIA_PROJECT_DIR", "")).expanduser().resolve()
     if args.project_dir.expanduser().resolve() != bound:
         raise RuntimeError("memory HTTP service project argument differs from its binding")
+    supplied_state = args.state_dir.expanduser()
+    canonical_state = supplied_state.resolve()
+    expected_state = service_state.private_state_dir(bound)
+    if supplied_state != canonical_state or canonical_state != expected_state:
+        raise RuntimeError(
+            "memory HTTP service state directory must be the canonical "
+            "~/.magnolia/services/<project-digest> path"
+        )
     token = os.environ.get(TOKEN_ENV, "")
     port = int(os.environ.get("MAGNOLIA_MEMORY_SERVICE_PORT", "0"))
     if port <= 0:
@@ -395,6 +476,7 @@ def main(argv: list[str] | None = None) -> None:
     watcher = threading.Thread(
         target=_watchdog_loop,
         args=(watchdog, interval, stop_event),
+        kwargs={"hard_exit_seconds": DEFAULT_HARD_EXIT_SECONDS},
         name="magnolia-memory-watchdog",
         daemon=True,
     )

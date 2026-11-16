@@ -145,6 +145,83 @@ def test_service_stays_while_holder_alive(tmp_path, monkeypatch):
     assert watchdog.should_exit() is False
 
 
+def test_acquirer_unknown_ceiling_fires_even_while_holder_is_live(
+    tmp_path, monkeypatch, caplog
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"id": "holder", "pid": 4200, "process_identity": "ps:4200:holder"}
+    _watchdog_record(project, holders=[holder], provisional=True)
+    identities = {4101: "ps:4101:service", 4200: "ps:4200:holder"}
+    monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    monkeypatch.setattr(
+        memory_service,
+        "_process_exists",
+        lambda pid: None if pid == 4100 else pid in identities,
+    )
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: None)
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+    watchdog.unknown_limit_seconds = 10.0
+
+    assert watchdog.should_exit() is False
+    clock[0] = 5.0
+    assert watchdog.should_exit() is False
+    clock[0] = 14.0
+    assert watchdog.should_exit() is False
+    clock[0] = 15.0
+    with caplog.at_level("WARNING", logger=memory_http.LOGGER.name):
+        assert watchdog.should_exit() is True
+    assert "acquirer" in (watchdog.exit_reason or "")
+    assert "stopping the service" in caplog.text
+
+
+@pytest.mark.parametrize("provisional", [True, False])
+def test_dead_acquirer_ends_only_provisional_service_with_live_holder(
+    tmp_path, monkeypatch, provisional
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    holder = {"id": "holder", "pid": 4200, "process_identity": "ps:4200:holder"}
+    _watchdog_record(project, holders=[holder], provisional=provisional)
+    identities = {4101: "ps:4101:service", 4200: "ps:4200:holder"}
+    monkeypatch.setattr(memory_http, "_process_identity", identities.get)
+    monkeypatch.setattr(
+        memory_service, "_process_exists", lambda pid: pid in identities
+    )
+    monkeypatch.setattr(memory_service, "_process_command", lambda pid: None)
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+
+    assert watchdog.should_exit() is False
+    clock[0] = 5.0
+    assert watchdog.should_exit() is provisional
+
+
+def test_each_unknown_holder_gets_its_own_ceiling(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    holders = [
+        {"id": "first", "pid": 4200, "process_identity": "ps:4200:first"},
+        {"id": "second", "pid": 4300, "process_identity": "ps:4300:second"},
+    ]
+    _watchdog_record(project, holders=holders)
+    monkeypatch.setattr(
+        memory_http,
+        "_process_identity",
+        lambda pid: "ps:4101:service" if pid == 4101 else None,
+    )
+    monkeypatch.setattr(memory_service, "_process_exists", lambda pid: None)
+    clock = [0.0]
+    watchdog = _watchdog(project, clock)
+    watchdog.unknown_limit_seconds = 10.0
+
+    assert watchdog.should_exit() is False
+    assert watchdog.holder_unknown_since == {"first": 0.0, "second": 0.0}
+    clock[0] = 10.0
+    assert watchdog.should_exit() is True
+
+
 def test_service_exits_after_last_holder_dies_and_grace(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()
@@ -195,6 +272,73 @@ def test_watchdog_never_signals_other_processes(monkeypatch):
 
     assert raised == [signal.SIGTERM]
     assert removed == [True]
+
+
+def test_watchdog_forces_self_exit_after_graceful_shutdown_deadline(monkeypatch):
+    raised = []
+    forced = []
+
+    class StopEvent:
+        def wait(self, interval):
+            return False
+
+        def is_set(self):
+            return False
+
+    class Watchdog:
+        def should_exit(self):
+            return True
+
+    class ForcedExit(Exception):
+        pass
+
+    monkeypatch.setattr(memory_http.signal, "raise_signal", raised.append)
+
+    def force_exit(code):
+        forced.append(code)
+        raise ForcedExit
+
+    monkeypatch.setattr(memory_http.os, "_exit", force_exit)
+
+    with pytest.raises(ForcedExit):
+        memory_http._watchdog_loop(
+            Watchdog(), 0.01, StopEvent(), hard_exit_seconds=0.01
+        )
+
+    assert raised == [signal.SIGTERM]
+    assert forced == [1]
+
+
+def test_memory_http_refuses_noncanonical_state_dir_without_side_effects(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir(mode=0o755)
+    unrelated.chmod(0o755)
+    wrong_state = unrelated / memory_service.project_digest(project)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(project))
+    monkeypatch.setenv(memory_http.TOKEN_ENV, "token")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_SERVICE_PORT", "43101")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_SERVICE_IDENTITY", "service-id")
+    monkeypatch.setenv(memory_http.ACQUIRER_PID_ENV, "4100")
+    monkeypatch.setenv(memory_http.ACQUIRER_IDENTITY_ENV, "ps:4100:acquirer")
+    monkeypatch.setattr(memory_http, "_process_identity", lambda pid: "ps:4101:service")
+    monkeypatch.setattr(
+        memory_http,
+        "build_server",
+        lambda token: pytest.fail("server built before state-dir validation"),
+    )
+
+    with pytest.raises(RuntimeError, match="state directory"):
+        memory_http.main(
+            ["--project-dir", str(project), "--state-dir", str(wrong_state)]
+        )
+
+    assert unrelated.stat().st_mode & 0o777 == 0o755
+    assert not wrong_state.exists()
 
 
 def test_watchdog_wait_failure_takes_service_down(monkeypatch):
