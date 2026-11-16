@@ -15,6 +15,7 @@ import pytest
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.codex import (
     CodexExecutor,
+    REQUIRED_FEATURES,
     RESTRICTED_FEATURES,
     _relevant_owner_config,
     parse_codex_stream,
@@ -393,7 +394,11 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
         "view_image",
     ):
         assert ["--disable", feature] in pairs
-    for feature in ("untrusted_as_tool_output", "write_stdin_approval"):
+    for feature in (
+        "untrusted_as_tool_output",
+        "write_stdin_approval",
+        *REQUIRED_FEATURES,
+    ):
         assert feature not in RESTRICTED_FEATURES
         assert ["--enable", feature] in pairs
     assert ["--enable", "skip_host_skill_discovery"] in pairs
@@ -1152,6 +1157,10 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["--trust"],
         ["--search"],
         ["-a", "on-request"],
+        ["-aon-request"],
+        ["-a=on-request"],
+        ["--ask-for-approval", "on-request"],
+        ["--ask-for-approval=on-request"],
         ["--remote", "http://127.0.0.1:9999"],
         ["--ignore-rules"],
         ["-p", "owner"],
@@ -1178,6 +1187,13 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["--enable", "computer_use"],
         ["--enable=computer_use"],
         ["--disable", "untrusted_as_tool_output"],
+        ["-c", "features.untrusted_as_tool_output=false"],
+        ["--disable", "write_stdin_approval"],
+        ["-c", "features.write_stdin_approval=false"],
+        ["--disable", "hooks"],
+        ["--disable=guardian_approval"],
+        ["-c", "features.hooks=false"],
+        ["-c", "features.guardian_approval=false"],
         ["-mother-model", "-c", 'model="gpt-test"'],
         ["-sread-only", "-c", 'sandbox_mode="danger-full-access"'],
     ),

@@ -111,6 +111,14 @@ def test_read_server_requires_explicit_canonical_cwd(tmp_path, monkeypatch):
             control_dir=str(tmp_path / "control"),
         )
 
+    loaded = ReadServer.from_policy_file(
+        policy,
+        cwd=project.resolve(),
+        control_dir=str(tmp_path / "control"),
+    )
+    with pytest.raises(ReadRefused, match="canonical cwd"):
+        ReadServer(loaded.policy, cwd=Path("."))
+
 
 def test_read_server_refuses_policy_digest_mismatch(tmp_path):
     project = tmp_path / "project"
@@ -218,6 +226,64 @@ def test_read_server_refuses_binary_reads_and_counts_search_skips(tmp_path):
     ]
     assert result["truncated"] is True
     assert "binary files skipped: 2" in result["reason"]
+
+
+def test_read_server_offset_cannot_skip_binary_prefix(tmp_path):
+    server, project, _outside = _server(tmp_path)
+    (project / "binary-prefix.txt").write_bytes(b"hidden\x00data\nvisible tail\n")
+
+    with pytest.raises(ReadRefused, match="binary"):
+        server.read_file("binary-prefix.txt", offset=1, limit=1)
+
+    result = server.search("visible", "binary-prefix.txt")
+    assert result["matches"] == []
+    assert result["reason"] == "binary files skipped: 1"
+
+
+def test_read_server_late_nul_within_read_cap_matches_search(tmp_path):
+    server, project, _outside = _server(tmp_path)
+    (project / "late-binary.txt").write_bytes(
+        b"visible first page\n" + b"text\n" * 20 + b"late\x00nul\n"
+    )
+
+    with pytest.raises(ReadRefused, match="binary"):
+        server.read_file("late-binary.txt", limit=1)
+
+    result = server.search("visible", "late-binary.txt")
+    assert result["matches"] == []
+    assert result["reason"] == "binary files skipped: 1"
+
+
+def test_read_server_stdio_refuses_missing_project_dir(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    policy = _policy(tmp_path / "policy.json", project)
+    runner = (
+        Path(__file__).parents[2]
+        / "src"
+        / "compchem_memory"
+        / "hook"
+        / "runner.py"
+    )
+    result = subprocess.run(
+        [os.sys.executable, "-I", str(runner), "--read-server"],
+        cwd=project,
+        env={
+            "HOME": str(tmp_path / "home"),
+            "MAGNOLIA_HOOK_POLICY": str(policy),
+            "MAGNOLIA_HOOK_POLICY_SHA256": hashlib.sha256(
+                policy.read_bytes()
+            ).hexdigest(),
+            "MAGNOLIA_CONTROL_DIR": str(tmp_path / "control"),
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert "explicit canonical cwd is required" in result.stderr
 
 
 def test_read_server_proves_file_count_deadline_and_read_byte_caps(

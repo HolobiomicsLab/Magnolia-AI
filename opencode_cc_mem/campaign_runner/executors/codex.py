@@ -40,6 +40,7 @@ FORBIDDEN_FLAGS = frozenset({
     "--dangerously-skip-permissions",
     "--auto-approve",
     "--approve-for-me",
+    "--ask-for-approval",
     "--full-auto",
     "--ignore-rules",
     "--remote",
@@ -51,6 +52,10 @@ FORBIDDEN_FLAGS = frozenset({
 PROTECTIVE_FEATURES = (
     "untrusted_as_tool_output",
     "write_stdin_approval",
+)
+REQUIRED_FEATURES = (
+    "hooks",
+    "guardian_approval",
 )
 RESTRICTED_FEATURES = (
     "agent_message_board",
@@ -546,7 +551,7 @@ class CodexExecutor:
         if self.role in {"worker", "reviewer"}:
             for feature in RESTRICTED_FEATURES:
                 argv.extend(["--disable", feature])
-            for feature in PROTECTIVE_FEATURES:
+            for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES):
                 argv.extend(["--enable", feature])
             argv.extend(["--enable", "skip_host_skill_discovery"])
         else:
@@ -1048,7 +1053,11 @@ def _relevant_owner_config(
 ) -> dict[str, Any]:
     """Return execution-relevant owner settings with shell values one-way hashed."""
     relevant: dict[str, Any] = {}
-    pinned_features = set((*RESTRICTED_FEATURES, *PROTECTIVE_FEATURES)) | {
+    pinned_features = set((
+        *RESTRICTED_FEATURES,
+        *PROTECTIVE_FEATURES,
+        *REQUIRED_FEATURES,
+    )) | {
         "apps",
         "skip_host_skill_discovery",
     }
@@ -1148,6 +1157,8 @@ def _validate_final_argv(argv: list[str]) -> None:
     for index, value in enumerate(options):
         if any(value == flag or value.startswith(flag + "=") for flag in FORBIDDEN_FLAGS):
             raise WorkerError("forbidden Codex launch flag")
+        if value.startswith("-a") and not value.startswith("--"):
+            raise WorkerError("forbidden Codex launch flag")
         if (
             value in {"-p", "--profile"}
             or value.startswith("--profile=")
@@ -1211,7 +1222,10 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
         "approval_policy": "never",
         "features": {
             **{feature: False for feature in (*RESTRICTED_FEATURES, "apps")},
-            **{feature: True for feature in PROTECTIVE_FEATURES},
+            **{
+                feature: True
+                for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES)
+            },
             "skip_host_skill_discovery": True,
         },
         "notify": [],
@@ -1234,7 +1248,7 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
     }
     for feature in (*RESTRICTED_FEATURES, "apps"):
         pinned[f"features.{feature}"] = False
-    for feature in PROTECTIVE_FEATURES:
+    for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES):
         pinned[f"features.{feature}"] = True
     pinned["features.skip_host_skill_discovery"] = True
     for index, value in enumerate(options):

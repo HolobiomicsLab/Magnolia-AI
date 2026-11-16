@@ -835,7 +835,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -941,7 +941,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -1047,7 +1047,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -1153,7 +1153,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
