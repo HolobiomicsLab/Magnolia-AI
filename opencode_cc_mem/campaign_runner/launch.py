@@ -64,6 +64,10 @@ CLAUDE_BASE_ENV = frozenset(
         "LANG",
         "TERM",
         "PATH",
+        "XDG_STATE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
         "CLAUDE_CODE_OAUTH_TOKEN",
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -585,29 +589,29 @@ def _required_policy_env_names(launch_env: Mapping[str, str]) -> list[str]:
 def _hook_interpreter_digest(
     context: ExecContext, launch_env: Mapping[str, str]
 ) -> str:
-    """Validate Magnolia's selected venv interpreter and bind its selection rule."""
+    """Bind an exact explicit interpreter or the repository's configured venv."""
     selected = launch_env.get("MAGNOLIA_PYTHON")
     if not selected or not context.python_executable:
         raise ExecutorRefused("hook interpreter is missing Magnolia's selection")
     requested = Path(context.python_executable)
-    if not requested.is_absolute() or Path(selected) != requested:
+    if not requested.is_absolute() or selected != context.python_executable:
         raise ExecutorRefused("hook interpreter differs from MAGNOLIA_PYTHON")
     repository_venv = context.installation_root.parent / ".venv"
     inherited = os.environ if context.environment is None else context.environment
-    expected = Path(resolve_python(context.installation_root, inherited))
-    if not expected.is_absolute() or requested != expected:
-        raise ExecutorRefused("hook interpreter differs from Magnolia's resolver selection")
-    if requested.parent.parent != repository_venv:
-        raise ExecutorRefused("hook interpreter is not Magnolia's repository venv")
-    if not (repository_venv / "pyvenv.cfg").is_file():
-        raise ExecutorRefused("hook interpreter repository venv lacks pyvenv.cfg")
-    if not requested.is_file():
-        raise ExecutorRefused("hook interpreter is unavailable")
+    if context.python_executable != inherited.get("MAGNOLIA_PYTHON"):
+        if context.python_executable != str(repository_venv / "bin" / "python3"):
+            raise ExecutorRefused("hook interpreter is neither MAGNOLIA_PYTHON nor repository venv")
+        if not (repository_venv / "pyvenv.cfg").is_file():
+            raise ExecutorRefused("hook interpreter repository venv lacks pyvenv.cfg")
+    if not requested.is_file() or not os.access(requested, os.X_OK):
+        raise ExecutorRefused("hook interpreter is unavailable or not executable")
     rule = {
-        "resolver": "MAGNOLIA_PYTHON-then-repository-venv-v2",
+        "resolver": "MAGNOLIA_PYTHON-or-repository-venv-v3",
         "comparison": "lexical-absolute-path",
+        "override": "absolute-existing-executable-as-given",
+        "repository_python": "repository/.venv/bin/python3",
         "pyvenv_cfg": "repository/.venv/pyvenv.cfg",
-        "bare_system_python": False,
+        "bare_system_python": "explicit-override-only",
     }
     return _digest(_canonical_bytes(rule))
 
@@ -769,7 +773,12 @@ def _normalize_identity_value(
     if isinstance(value, list):
         return [_normalize_identity_value(item, replacements) for item in value]
     if isinstance(value, str):
-        if key == "command" and (parsed := parse_hook_command(value)) is not None:
+        python_executable = next(
+            (path for path, name in replacements if name == "{python_executable}"), None
+        )
+        if key == "command" and (parsed := parse_hook_command(
+            value, python_executable=python_executable
+        )) is not None:
             tokens, wrapped = parsed
             command = shlex.join([_replace_identity_text(token, replacements) for token in tokens])
             if wrapped:

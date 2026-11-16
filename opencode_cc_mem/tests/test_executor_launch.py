@@ -198,6 +198,8 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         "helper": 25,
         "evaluator": 1,
     }[role]
+    if role == "helper":
+        (project / "docs").mkdir(exist_ok=True)
     values = {
         "route": route,
         "role": role,
@@ -218,6 +220,8 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         "environment": {"PATH": os.environ.get("PATH", "")},
         "role_cap": 30 if role == "worker" else role_cap,
         "governor_cap": 60,
+        "required_capabilities": ("native_read",) if role == "helper" else (),
+        "capability_read_roots": (project / "docs",) if role == "helper" else (),
     }
     values.update(changes)
     return ExecContext(**values)
@@ -1009,6 +1013,54 @@ def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, rol
     prepare_launch(replace(context, memory_service=route))
 
 
+@pytest.mark.parametrize(
+    ("role", "tag", "tools"),
+    (
+        ("worker", "W1", ("Read", "Glob", "Grep", "Edit", "Write")),
+        ("reviewer", "R1", ("Read", "Glob", "Grep")),
+        ("helper", "H1", ("Read",)),
+        ("evaluator", "E1", ()),
+    ),
+)
+def test_claude_bound_role_matches_live_tool_shape(tmp_path, role, tag, tools):
+    context = _production_claude_context(tmp_path, role=role)
+    executor = executor_for(context.route, role, context)
+    argv = executor._argv("offline shape check", None, executor.max_turns)
+    policy = json.loads((executor.prepared.invocation_dir / "policy.json").read_text())
+    expected = context.role_capabilities["claude-code"][role]["capabilities"]
+    assert policy["effective_capabilities"] == expected
+    if role in {"helper", "evaluator"}:
+        assert argv[argv.index("--tools") + 1] == ",".join(tools)
+        observed = json.loads(
+            (ROOT / "tests/fixtures/executors/claude/live-gate" / tag / "04-stream-init.json").read_text()
+        )
+        assert observed["tools"] == list(tools)
+        assert observed["mcp_servers"] == []
+    else:
+        assert "--tools" not in argv
+    if tools:
+        mcp = [name.replace("mcp:", "mcp__").replace(".", "__") for name in expected if name.startswith("mcp:")]
+        assert argv[argv.index("--allowedTools") + 1:] == [*tools, *mcp]
+    else:
+        assert "--allowedTools" not in argv
+        assert executor.max_turns == 1
+    read_roots = [] if role == "evaluator" else [str(context.project_dir)]
+    if role == "helper":
+        read_roots = [str(context.project_dir / "docs")]
+    assert policy["canonical_read_roots"] == read_roots
+    mcp_config = json.loads((executor.prepared.invocation_dir / "claude-mcp.json").read_text())
+    assert list(mcp_config["mcpServers"]) == (["compchem-memory"] if role == "worker" else [])
+
+
+def test_claude_no_tools_helper_refuses_observed_read_binding(tmp_path):
+    context = _production_claude_context(
+        tmp_path, required_capabilities=(), capability_read_roots=()
+    )
+
+    with pytest.raises(ExecutorRefused, match="identity mismatch: settings"):
+        prepare_launch(context)
+
+
 @pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
 def test_bound_identity_matches_two_independent_installations(tmp_path, monkeypatch, role):
     from campaign_runner import launch as module
@@ -1155,15 +1207,16 @@ def test_launch_refuses_unselected_hook_interpreter(tmp_path):
     context = _production_claude_context(
         tmp_path,
         python_executable="/usr/bin/python3",
-        environment={"PATH": os.environ.get("PATH", ""), "MAGNOLIA_PYTHON": "/usr/bin/python3"},
+        environment={"PATH": os.environ.get("PATH", ""), "MAGNOLIA_PYTHON": "/selected/bin/python3"},
     )
 
     with pytest.raises(ExecutorRefused, match="hook interpreter"):
         prepare_launch(context)
 
 
+@pytest.mark.parametrize("selection", (None, "same-target-different-path"))
 @pytest.mark.parametrize("kind", ("base", "other-venv", "outside-symlink"))
-def test_hook_interpreter_identity_is_lexical_and_repository_bound(tmp_path, kind):
+def test_hook_interpreter_refuses_unselected_paths(tmp_path, kind, selection):
     if kind == "base":
         interpreter = Path(sys.executable).resolve()
     elif kind == "other-venv":
@@ -1179,11 +1232,69 @@ def test_hook_interpreter_identity_is_lexical_and_repository_bound(tmp_path, kin
         python_executable=str(interpreter),
         environment={
             "PATH": os.environ.get("PATH", ""),
-            "MAGNOLIA_PYTHON": str(interpreter),
+            **({"MAGNOLIA_PYTHON": sys.executable} if selection is not None else {}),
         },
     )
 
     with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("selection", (None, "/selected/bin/python3"))
+def test_hook_interpreter_accepts_repository_venv_with_any_override(tmp_path, selection):
+    environment = {"MAGNOLIA_PYTHON": selection} if selection is not None else {}
+    context = _production_claude_context(tmp_path, role="worker", environment=environment)
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_PYTHON"] == context.python_executable
+
+
+@pytest.mark.parametrize("kind", ("venv", "base", "symlink"))
+def test_hook_interpreter_accepts_exact_explicit_override(tmp_path, kind):
+    interpreter = Path(sys.executable)
+    if kind == "base":
+        interpreter = interpreter.resolve()
+    elif kind == "symlink":
+        interpreter = tmp_path / "selected python"
+        interpreter.symlink_to(sys.executable)
+    context = _production_claude_context(
+        tmp_path, role="worker", python_executable=str(interpreter),
+        environment={"MAGNOLIA_PYTHON": str(interpreter)},
+    )
+    context = replace(context, memory_service=_memory_route(context.route, str(interpreter)))
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_PYTHON"] == str(interpreter)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    assert str(interpreter) in settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+
+
+@pytest.mark.parametrize("kind", ("relative", "missing", "not-executable", "directory"))
+def test_hook_interpreter_refuses_invalid_override(tmp_path, kind):
+    interpreter = tmp_path / "selected-python"
+    if kind == "relative":
+        interpreter = Path("relative/bin/python3")
+    elif kind == "not-executable":
+        interpreter.write_text("#!/bin/sh\nexit 0\n")
+        interpreter.chmod(0o644)
+    elif kind == "directory":
+        interpreter.mkdir()
+    context = _production_claude_context(
+        tmp_path, python_executable=str(interpreter),
+        environment={"MAGNOLIA_PYTHON": str(interpreter)},
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+def test_hook_interpreter_repository_venv_requires_config(tmp_path):
+    context = _production_claude_context(tmp_path)
+    (context.installation_root.parent / ".venv/pyvenv.cfg").unlink()
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter.*pyvenv.cfg"):
         prepare_launch(context)
 
 
@@ -1290,6 +1401,7 @@ def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
         "CLAUDE_CODE_OAUTH_TOKEN": "subscription",
         "HTTPS_PROXY": "http://proxy.example",
         "SSL_CERT_FILE": "/certs/ca.pem",
+        **{f"XDG_{name}_HOME": str(tmp_path / name.lower()) for name in ("STATE", "CONFIG", "CACHE", "DATA")},
     }
     launch = prepare_launch(
         _production_claude_context(tmp_path, environment={**allowed, "IGNORED": "x"})
@@ -1305,6 +1417,33 @@ def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
         )
         with pytest.raises(ExecutorRefused, match=name):
             prepare_launch(context)
+
+
+@pytest.mark.parametrize("source", ("environment", "renderer_env"))
+def test_claude_xdg_state_home_reaches_hook(tmp_path, source):
+    home = tmp_path / "home"
+    home.mkdir()
+    state = tmp_path / "xdg-state"
+    environment = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    renderer_env = {}
+    (environment if source == "environment" else renderer_env)["XDG_STATE_HOME"] = str(state)
+    context = _context(
+        tmp_path, python_executable=sys.executable,
+        environment=environment, renderer_env=renderer_env,
+    )
+    launch = prepare_launch(context)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps({"session_id": "xdg-check", "cwd": str(context.project_dir), "source": "startup"}),
+        text=True, capture_output=True, cwd=context.project_dir, env=dict(launch.env), timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    binding = state / "magnolia/bindings/claude-xdg-check.json"
+    assert binding.is_file(), (result.stdout, result.stderr)
+    assert not (home / ".local/state/magnolia/bindings").exists()
 
 
 @pytest.mark.parametrize("name", ("settings.json", "settings.local.json"))
