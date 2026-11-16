@@ -85,7 +85,7 @@ def project_role_capabilities(table: Mapping[str, Any]) -> dict[str, Any]:
         allowed_actions = _observed_value(cells["allowed_actions"], [])
         if isinstance(allowed_actions, Mapping):
             allowed_actions = allowed_actions.get("capabilities", [])
-        projected[row["client"]][row["role"]] = {
+        role_projection = {
             "accepted": gate_accepted and not stale,
             "gate_accepted": gate_accepted,
             "stale": stale,
@@ -103,6 +103,10 @@ def project_role_capabilities(table: Mapping[str, Any]) -> dict[str, Any]:
                 *[f"{name}: {cells[name]['status']}" for name in blocking],
             ],
         }
+        launch_identity = _project_launch_identity(row)
+        if launch_identity is not None:
+            role_projection["launch_identity"] = launch_identity
+        projected[row["client"]][row["role"]] = role_projection
     return projected
 
 
@@ -215,3 +219,26 @@ def _row_is_stale(row: Mapping[str, Any]) -> bool:
     if bound_identity is None:
         return False
     return bound_identity != row["cells"]["identity"].get("value")
+
+
+def _project_launch_identity(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    gate_value = row["gate"].get("value")
+    if not isinstance(gate_value, Mapping):
+        return None
+    binding = gate_value.get("configuration_binding")
+    if not isinstance(binding, Mapping) or not isinstance(
+        binding.get("components"), Mapping
+    ):
+        return None
+    identity = row["cells"]["identity"].get("value")
+    if not isinstance(identity, Mapping):
+        return None
+    components = dict(binding["components"])
+    components.update(
+        client_version=identity.get("version"),
+        client_sha256=identity.get("sha256"),
+    )
+    return {
+        "schema_version": "magnolia-normalized-launch-identity-v1",
+        "components": components,
+    }

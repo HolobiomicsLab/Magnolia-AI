@@ -161,7 +161,10 @@ def _context(
         "trusted": True,
         "stale": False,
         "identity": "pending",
-        "discovery_dir": str(project.resolve()),
+        "discovery_dir": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config",
+        },
         "capabilities": list(capabilities),
         "model_isolation": {
             "accepted": True,

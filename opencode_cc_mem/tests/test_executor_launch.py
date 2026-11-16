@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import shutil
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from campaign_runner.executors import ExecContext, ExecutorRefused
+from campaign_runner.executors.capabilities import load_role_capabilities
 from campaign_runner.launch import configuration_identity, prepare_launch
 from campaign_runner.routing import ResolvedRoute
 from compchem_memory.harness import RENDERERS
@@ -86,7 +88,10 @@ def _context(
         "trusted": True,
         "stale": False,
         "identity": "pending",
-        "discovery_dir": str(project.resolve()),
+        "discovery_dir": {
+            "scope": "launch-project",
+            "configuration": "run-owned settings",
+        },
         "capabilities": sorted(capabilities),
         "model_isolation": {
             "accepted": True,
@@ -121,6 +126,50 @@ def _context(
 
 def _artifact_text(launch):
     return "\n".join(path.read_text(encoding="utf-8") for path in launch.files)
+
+
+def _production_claude_context(tmp_path, *, role="helper", project_name="project", **changes):
+    project = tmp_path / project_name
+    run = tmp_path / f"run-{project_name}-{role}"
+    project.mkdir(exist_ok=True)
+    (run / "control").mkdir(parents=True, exist_ok=True)
+    (run / "work").mkdir(exist_ok=True)
+    capabilities = load_role_capabilities()
+    route = ResolvedRoute(
+        "claude-code", "haiku", "claude-haiku", "claude-code", role, "test"
+    )
+    role_cap = {
+        "worker": 25,
+        "reviewer": 8,
+        "helper": 25,
+        "evaluator": 1,
+    }[role]
+    values = {
+        "route": route,
+        "role": role,
+        "installation_root": ROOT,
+        "workspace_root": tmp_path,
+        "project_identity": f"identity-{project_name}",
+        "project_dir": project,
+        "run_dir": run,
+        "control_dir": run / "control",
+        "work_dir": run / "work",
+        "python_executable": sys.executable,
+        "tools_port": 8123,
+        "setup": {"memory_enabled": True},
+        "memory_service": {
+            "transport": "http",
+            "url": "http://127.0.0.1:8765/mcp",
+        },
+        "invocation_id": f"{role}-{project_name}",
+        "launch_argv": ("claude",),
+        "role_capabilities": capabilities,
+        "environment": {"PATH": os.environ.get("PATH", "")},
+        "role_cap": role_cap,
+        "governor_cap": 60,
+    }
+    values.update(changes)
+    return ExecContext(**values)
 
 
 def test_required_role_env_wins(tmp_path):
@@ -860,6 +909,73 @@ def test_discovered_configuration_must_match_evidence_identity(tmp_path, client)
 
     with pytest.raises(ExecutorRefused, match="configuration identity"):
         prepare_launch(context)
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_launch_accepts_claude_rows_in_any_project(tmp_path, role):
+    launches = [
+        prepare_launch(
+            _production_claude_context(tmp_path, role=role, project_name=name)
+        )
+        for name in ("alpha", "beta")
+    ]
+
+    assert all(launch.discovery_dir == launch.discovery_dir.resolve() for launch in launches)
+    assert launches[0].discovery_dir != launches[1].discovery_dir
+
+
+def test_launch_refuses_on_binary_drift(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "client_sha256"
+    ] = "0" * 64
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="client_sha256"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_on_rendered_shape_drift(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "settings"
+    ] = "0" * 64
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="settings"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_non_launch_project_scope(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["discovery_dir"] = {
+        "scope": "probe-project"
+    }
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="launch-project"):
+        prepare_launch(context)
+
+
+def test_resume_rechecks_identity(tmp_path):
+    context = _production_claude_context(tmp_path)
+    first = prepare_launch(context)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "client_version"
+    ] = "different-version"
+
+    with pytest.raises(ExecutorRefused, match="client_version"):
+        prepare_launch(
+            replace(
+                context,
+                role_capabilities=capabilities,
+                resume_from=first.invocation_dir,
+            )
+        )
 
 
 def test_project_configuration_change_invalidates_evidence(tmp_path):

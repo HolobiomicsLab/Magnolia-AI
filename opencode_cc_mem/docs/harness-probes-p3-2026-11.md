@@ -122,3 +122,21 @@ For every role, `settings.json`, `mcp.json`, `claude-settings.json`, `claude-mcp
 `policy.json`, hook commands, caps and tool surfaces were byte-identical. The worker retained the
 same stdio memory route. The only difference was the expected added environment name
 `MAGNOLIA_HOOK_POLICY_SHA256`, accepted as Task 8b's policy-digest strengthening. No client was run.
+
+## Task CF Round 2 — launch-side identity binding
+
+At base HEAD `a6439a5`, `launch.py` now accepts only a structured `discovery_dir` whose scope is
+`launch-project`; it derives the concrete real path from the launch context. Before both first
+launch and resume it recomputes and compares named components for client version, executable
+SHA-256, normalized settings, normalized MCP payload, native files, normalized policy body/schema,
+hook commands and required policy environment-variable names. Project, run, control, work and
+invocation paths are normalized out of that evidence identity, while the existing concrete
+invocation/session capability identity remains project-bound.
+
+The offline production-shaped recheck resolved `claude` through the same PATH lookup used by the
+governed process, then canonicalized it to
+`~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`.
+Installed package metadata reports `2.1.325`; the real executable SHA-256 is
+`84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2`. No client process was
+started. All four production-shaped role renders reproduced their bound components in two distinct
+temporary projects, so the Claude stale flags are cleared. Codex and Vibe remain refused.
