@@ -118,6 +118,16 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
     if route.client != "opencode":
         if not _capable(context, route.client, role):
             raise ExecutorRefused(f"{route.client} lacks accepted {role} role capability")
+        if route.client == "codex" and role in {"worker", "reviewer"}:
+            raise ExecutorRefused(
+                "D2: Codex worker/reviewer refused because the full read, shell, "
+                "code-mode and confined-edit gate failed"
+            )
+        if route.client == "vibe" and role == "worker":
+            raise ExecutorRefused(
+                "D4: Vibe worker refused because resume, hook-crash and the full "
+                "denial matrix are not observed"
+            )
         if route.client == "claude-code":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
             from campaign_runner.roles import load_role
@@ -139,6 +149,67 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 timeout_seconds=context.timeout_seconds,
                 governance=context.governance,
                 resume_permitted=context.resume_from is not None,
+            )
+        if route.client == "codex":
+            from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
+            from campaign_runner.roles import load_role
+
+            from .codex import CodexExecutor, require_codex_trust
+
+            if role not in {"helper", "evaluator"}:
+                raise ExecutorRefused("D2: Codex campaign roles remain refused")
+            if not route.model:
+                raise ExecutorRefused("Codex requires an explicit selected model")
+            if context.required_capabilities:
+                raise ExecutorRefused("Codex helper/evaluator contract is no-tools")
+            if context.project_dir is None:
+                raise ExecutorRefused("Codex requires a canonical project directory")
+            require_codex_trust(context.project_dir, context.setup)
+            prepared = prepare_launch(context)
+            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+            effective_cap = _effective_cap(context, default_cap)
+            if effective_cap is None:
+                raise ExecutorRefused("Codex requires a positive supervising cap")
+            return CodexExecutor(
+                prepared=prepared,
+                model=route.model,
+                role=role,
+                max_turns=effective_cap,
+                timeout_seconds=context.timeout_seconds,
+                governance=context.governance,
+                resume_permitted=context.resume_from is not None,
+                reasoning_effort=str(context.setup.get("codex_reasoning_effort", "low")),
+            )
+        if route.client == "vibe":
+            from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
+            from campaign_runner.roles import load_role
+
+            from .vibe import VibeExecutor, require_vibe_project_source, require_vibe_trust
+
+            if not route.model:
+                raise ExecutorRefused("Vibe requires an explicit selected model")
+            if context.project_dir is None:
+                raise ExecutorRefused("Vibe requires a canonical project directory")
+            require_vibe_trust(context.project_dir, context.setup)
+            require_vibe_project_source(context.project_dir, route.model)
+            prepared = prepare_launch(context)
+            default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
+            effective_cap = _effective_cap(context, default_cap)
+            if effective_cap is None:
+                raise ExecutorRefused("Vibe requires a positive effective cap")
+            price = context.setup.get("max_price")
+            if price is not None and (
+                isinstance(price, bool) or not isinstance(price, (int, float)) or price <= 0
+            ):
+                raise ExecutorRefused("Vibe max_price must be a positive number")
+            return VibeExecutor(
+                prepared=prepared,
+                model=route.model,
+                role=role,
+                max_turns=effective_cap,
+                timeout_seconds=context.timeout_seconds,
+                governance=context.governance,
+                max_price=float(price) if price is not None else None,
             )
         raise ExecutorRefused(f"{route.client} {role} executor is not implemented in this task")
     if role == "service":
