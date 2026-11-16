@@ -737,21 +737,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "usage_semantics": {
-          "status": "observed",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
-          "value": {
-            "source": "export.json",
-            "counters": [
-              "input_tokens",
-              "output_tokens",
-              "cached_input_tokens",
-              "total_tokens"
-            ],
-            "scope": [
-              "parent",
-              "subagent"
-            ]
-          }
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -831,21 +819,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "usage_semantics": {
-          "status": "observed",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
-          "value": {
-            "source": "export.json",
-            "counters": [
-              "input_tokens",
-              "output_tokens",
-              "cached_input_tokens",
-              "total_tokens"
-            ],
-            "scope": [
-              "parent",
-              "subagent"
-            ]
-          }
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -925,21 +901,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "usage_semantics": {
-          "status": "observed",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
-          "value": {
-            "source": "export.json",
-            "counters": [
-              "input_tokens",
-              "output_tokens",
-              "cached_input_tokens",
-              "total_tokens"
-            ],
-            "scope": [
-              "parent",
-              "subagent"
-            ]
-          }
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -1019,21 +983,9 @@
           "note": "awaits live Task 0 (owner's go)"
         },
         "usage_semantics": {
-          "status": "observed",
-          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json",
-          "value": {
-            "source": "export.json",
-            "counters": [
-              "input_tokens",
-              "output_tokens",
-              "cached_input_tokens",
-              "total_tokens"
-            ],
-            "scope": [
-              "parent",
-              "subagent"
-            ]
-          }
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
         },
         "quota_evidence": {
           "status": "synthetic-only",

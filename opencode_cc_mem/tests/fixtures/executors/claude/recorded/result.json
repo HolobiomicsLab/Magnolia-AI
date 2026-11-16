@@ -1,12 +1,60 @@
 {
   "synthetic": false,
   "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/claude/parent/27-result-stream-line.json",
+  "dropped_keys": [
+    "api_error_status",
+    "duration_api_ms",
+    "duration_ms",
+    "fast_mode_disabled_reason",
+    "fast_mode_state",
+    "first_content_frame_ms",
+    "input_attachments_detail",
+    "message_normalization_detail",
+    "permission_denials",
+    "process_turn_index",
+    "queued_turn_count",
+    "request_build_detail",
+    "result",
+    "result_index",
+    "safety_stops",
+    "session_id",
+    "stop_reason",
+    "subagent_stats",
+    "time_to_request_cpu_ms",
+    "time_to_request_loop_lag_ms",
+    "time_to_request_major_faults",
+    "time_to_request_ms",
+    "time_to_request_phases_ms",
+    "tool_schema_build_detail",
+    "total_cost_usd",
+    "ttft_ms",
+    "ttft_stream_ms",
+    "turn_start_resume_kind",
+    "uuid"
+  ],
   "type": "result",
   "subtype": "success",
   "is_error": false,
   "num_turns": 4,
   "terminal_reason": "completed",
-  "modelUsage": "<dropped by P0 scrubber>",
-  "usage": "<dropped by P0 scrubber>"
+  "modelUsage": "<dropped>",
+  "model_usage_since_last_result": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputtoks": 23575,
+      "cacheCreationEphemeral5mInputtoks": 35831,
+      "cacheCreationInputtoks": 59406,
+      "cacheReadInputtoks": 275732,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.012490295,
+      "inputtoks": 16,
+      "maxOutputtoks": 128000,
+      "outputtoks": 1075,
+      "provider": "firstParty",
+      "thinkingtoks": 444,
+      "webSearchRequests": 0
+    }
+  },
+  "usage": "<dropped>"
 }
-

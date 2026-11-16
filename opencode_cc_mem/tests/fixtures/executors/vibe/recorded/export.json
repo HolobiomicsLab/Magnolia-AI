@@ -1,6 +1,17 @@
 {
   "synthetic": false,
   "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/vibe/parent/20-export.json",
+  "dropped_keys": [
+    "subagents[0].agent_type",
+    "subagents[0].parent_session_id",
+    "subagents[0].pricing_fallback",
+    "subagents[0].pricing_model",
+    "subagents[0].root_session_id",
+    "subagents[0].session_id",
+    "subagents[0].spawn_action_id",
+    "subagents[0].spawn_call_id",
+    "subagents[1]"
+  ],
   "outcome": "finished",
   "stop_reason": null,
   "error": null,
@@ -11,7 +22,7 @@
     "cached_input_tokens": 102528,
     "total_tokens": 133865
   },
-  "cost_usd": 0,
+  "cost_usd": 0.0,
   "steps": 7,
   "limits": {
     "max_turns": 8,
@@ -30,11 +41,10 @@
         "cached_input_tokens": 17280,
         "total_tokens": 37656
       },
-      "cost_usd": 0,
+      "cost_usd": 0.0,
       "steps": 2
     }
   ],
   "vibe_version": "3.1.2",
   "schema_version": 1
 }
-
