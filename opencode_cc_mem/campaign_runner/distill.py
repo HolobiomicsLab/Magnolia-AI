@@ -101,11 +101,17 @@ def drain_queue(
     from compchem_memory.transcript_source import SessionRef
 
     sessions: list[tuple[SessionRef, str | dict[str, str]]] = []
+    recorded_unavailable: list[Any] = []
     for record in records:
         neutral_values = record.get("sessions", [])
         legacy_values = record.get("session_ids", [])
-        if not isinstance(neutral_values, list) or not isinstance(legacy_values, list):
+        unavailable_values = record.get("unavailable", [])
+        if not all(
+            isinstance(values, list)
+            for values in (neutral_values, legacy_values, unavailable_values)
+        ):
             raise DistillError("distill queue sessions must be arrays")
+        recorded_unavailable.extend(unavailable_values)
         for value in neutral_values:
             if not isinstance(value, Mapping):
                 raise DistillError("distill queue session must be an object")
@@ -131,7 +137,7 @@ def drain_queue(
     if limit is not None:
         sessions = sessions[:limit]
     completed: list[Any] = []
-    unavailable: list[Any] = []
+    unavailable: list[Any] = list(recorded_unavailable)
     for session, display in sessions:
         result = distill_session_transcript(
             str(project / ".magnolia"),

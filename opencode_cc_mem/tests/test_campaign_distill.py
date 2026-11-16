@@ -124,3 +124,37 @@ def test_same_session_id_different_harness_not_collapsed(tmp_path, monkeypatch):
     )
     drain_queue(control.parent, project, tmp_path / "db", exporter=lambda sid: {})
     assert seen == ["claude-same", "vibe-same"]
+
+
+def test_missing_identity_is_reported_unavailable_without_opencode_fallback(
+    tmp_path, monkeypatch
+):
+    from compchem_memory import opencode_ingest
+
+    project = tmp_path / "project"
+    control = project / "runs" / "campaign" / "control"
+    control.mkdir(parents=True)
+    (project / ".magnolia").mkdir()
+    unavailable = {
+        "harness": "claude-code",
+        "session_id": "unknown-session",
+        "reason": "missing_session_identity",
+    }
+    (control / "distill-queue.jsonl").write_text(
+        json.dumps({"sessions": [], "session_ids": [], "unavailable": [unavailable]})
+        + "\n"
+    )
+    calls = []
+    monkeypatch.setattr(
+        opencode_ingest,
+        "distill_session_transcript",
+        lambda *args, **kwargs: calls.append(args) or None,
+    )
+
+    result = drain_queue(
+        control.parent, project, tmp_path / "db", exporter=lambda session_id: {}
+    )
+
+    assert calls == []
+    assert result["sessions"] == 0
+    assert result["unavailable"] == [unavailable]

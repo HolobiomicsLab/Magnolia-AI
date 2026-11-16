@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from .accounting import read_session_usage
-from .executors.contracts import SessionIdentity
+from .executors.contracts import ResumeArtifact, SessionIdentity
 from .gates import check_outputs, render_argv, run_gate, write_receipt
 from .jobs import JobController, JobIntegrityError, JobStatus
 from .lease import (
@@ -58,6 +58,7 @@ class ReviewExecutor(Protocol):
         attempt_dir: Path,
         run_dir: Path,
         control: ProcessControl | None = None,
+        resume_artifact: ResumeArtifact | None = None,
     ) -> ReviewResult:
         ...
 
@@ -99,6 +100,14 @@ def _session_ref_dict(identity: Mapping[str, Any], session_id: str) -> dict[str,
     )
     ref = restored.transcript_ref()
     return {"harness": ref.harness, "session_id": ref.session_id, "key": ref.key}
+
+
+def _resume_artifact_dict(
+    artifact: ResumeArtifact | None,
+) -> dict[str, str] | None:
+    if artifact is None:
+        return None
+    return {item.name: getattr(artifact, item.name) for item in fields(artifact)}
 
 
 @dataclass
@@ -180,7 +189,20 @@ class CampaignRunner:
                     actions.append("awaiting startup approval")
                     break
                 try:
-                    state = self._begin_stage(state)
+                    resumed = state.resumed_from_quota
+                    resume_session = (
+                        self._checkpoint_session_id(resumed)
+                        if resumed is not None
+                        and resumed.suspended_phase == "pre-worker"
+                        else None
+                    )
+                    state = self._begin_stage(
+                        state,
+                        resume_session=resume_session,
+                        resume_artifact=(
+                            resumed.resume_artifact if resumed is not None else None
+                        ),
+                    )
                 except CampaignBusyError as exc:
                     actions.append(f"busy: {exc}")
                     break
@@ -192,6 +214,7 @@ class CampaignRunner:
                     stage = self.protocol.stage(state.stage)
                     lease = None
                     try:
+                        self._reconcile_resumed_lease(stage.id, state.attempt)
                         lease = AttemptLease.acquire(
                             self.store.run_dir, stage.id, state.attempt
                         )
@@ -206,6 +229,7 @@ class CampaignRunner:
                                 if resumed.session_identity
                                 else self._checkpoint_session_id(resumed)
                             ),
+                            resume_artifact=resumed.resume_artifact,
                         )
                     except CampaignBusyError as exc:
                         actions.append(f"busy: {exc}")
@@ -502,6 +526,10 @@ class CampaignRunner:
     ) -> None:
         sessions: list[dict[str, str]] = []
         legacy_session_ids: list[str] = []
+        unavailable: list[dict[str, str]] = []
+        worker_client = resolve_route(
+            "worker", {"worker": {"model": self._worker_model(stage)}}
+        ).client
         worker_result = self._attempt_dir(stage, attempt) / "worker_result.json"
         if worker_result.is_file():
             try:
@@ -512,8 +540,16 @@ class CampaignRunner:
             identity = data.get("session_identity")
             if isinstance(identity, Mapping) and identity.get("client") and session:
                 sessions.append(_session_ref_dict(identity, str(session)))
-            elif session:
+            elif session and worker_client == "opencode":
                 legacy_session_ids.append(str(session))
+            elif session:
+                unavailable.append(
+                    {
+                        "harness": worker_client,
+                        "session_id": str(session),
+                        "reason": "missing_session_identity",
+                    }
+                )
         if review and review.session_id:
             if review.session_identity is not None:
                 sessions.append(
@@ -523,8 +559,20 @@ class CampaignRunner:
                     )
                 )
             else:
-                legacy_session_ids.append(review.session_id)
-        if not sessions and not legacy_session_ids:
+                reviewer_client = resolve_route(
+                    "reviewer", {"reviewer": {"model": review.model}}
+                ).client
+                if reviewer_client == "opencode":
+                    legacy_session_ids.append(review.session_id)
+                else:
+                    unavailable.append(
+                        {
+                            "harness": reviewer_client,
+                            "session_id": review.session_id,
+                            "reason": "missing_session_identity",
+                        }
+                    )
+        if not sessions and not legacy_session_ids and not unavailable:
             return
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -532,6 +580,7 @@ class CampaignRunner:
             "attempt": attempt,
             "sessions": list({item["key"]: item for item in sessions}.values()),
             "session_ids": sorted(set(legacy_session_ids)),
+            "unavailable": unavailable,
         }
         self.store.distill_queue_path.parent.mkdir(parents=True, exist_ok=True)
         with self.store.distill_queue_path.open("a", encoding="utf-8") as handle:
@@ -549,6 +598,7 @@ class CampaignRunner:
         session_identity: Any = None,
         result_ref: str | None = None,
         retry_cursor: int | None = None,
+        resume_artifact: ResumeArtifact | None = None,
     ) -> CampaignState:
         """Persist one typed quota outcome without entering repair handling."""
         governor = self.config.quota_governor
@@ -562,9 +612,15 @@ class CampaignRunner:
         if key is None:
             raise RunnerError("quota outcome has no subscription key")
         waiting = governor.quota_wait(key)
+        limit = outcome.limit
+        if (
+            (waiting is None or waiting.hold_id is None)
+            and limit is not None
+            and hasattr(governor, "checkpoint_limit")
+        ):
+            waiting = governor.checkpoint_limit(key, limit)
         if waiting is None or waiting.hold_id is None:
             raise RunnerError("quota outcome has no durable hold generation")
-        limit = outcome.limit
         checkpoint = QuotaWait(
             reason=limit.reason if limit is not None else "quota",
             subscription_key=key,
@@ -577,6 +633,7 @@ class CampaignRunner:
             session_identity=session_identity,
             result_ref=result_ref,
             retry_cursor=retry_cursor,
+            resume_artifact=resume_artifact,
         )
         return self.store.wait_for_quota(checkpoint)
 
@@ -587,7 +644,9 @@ class CampaignRunner:
             return state
         waiting = governor.quota_wait(checkpoint.subscription_key)
         if waiting is None or waiting.hold_id is None:
-            return state
+            return self.store.manual_resume_quota(
+                self.config.clock(), checkpoint.hold_id
+            ).state
         if (waiting.hold_id, waiting.reset_at) == (
             checkpoint.hold_id,
             checkpoint.reset_at,
@@ -605,6 +664,7 @@ class CampaignRunner:
             checkpoint.session_identity,
             checkpoint.result_ref,
             checkpoint.retry_cursor,
+            checkpoint.resume_artifact,
         )
         return self.store.refresh_quota_wait(refreshed)
 
@@ -649,6 +709,44 @@ class CampaignRunner:
         session_id = value.get("session_id") if isinstance(value, Mapping) else None
         return session_id if isinstance(session_id, str) and session_id else None
 
+    def _reconcile_resumed_lease(self, stage: str, attempt: int) -> None:
+        """Remove only a provably ended lease from a crashed resumed worker."""
+        lease = read_lease(self.store.run_dir, stage, attempt)
+        if lease is None:
+            return
+        hostname = lease.get("hostname")
+        owner_pid = lease.get("owner_pid")
+        if (
+            not isinstance(hostname, str)
+            or not hostname
+            or hostname != os.uname().nodename
+            or isinstance(owner_pid, bool)
+        ):
+            raise CampaignBusyError(f"attempt lease owner is unknown: {stage}/{attempt}")
+        try:
+            parsed_owner_pid = int(owner_pid)
+        except (TypeError, ValueError) as exc:
+            raise CampaignBusyError(
+                f"attempt lease owner is unknown: {stage}/{attempt}"
+            ) from exc
+        if parsed_owner_pid <= 0 or owner_is_alive(lease):
+            raise CampaignBusyError(
+                f"attempt lease is still active or unknown: {stage}/{attempt}"
+            )
+        for key in ("worker_pid", "worker_pgid"):
+            try:
+                if int(lease.get(key) or 0) > 0:
+                    raise CampaignBusyError(
+                        f"attempt worker liveness is unknown: {stage}/{attempt}"
+                    )
+            except (TypeError, ValueError) as exc:
+                raise CampaignBusyError(
+                    f"attempt worker liveness is unknown: {stage}/{attempt}"
+                ) from exc
+        path = self.store.leases_dir / f"{stage}-{attempt}.json"
+        if read_lease(self.store.run_dir, stage, attempt) == lease:
+            path.unlink(missing_ok=True)
+
     def _process_control(self, lease: AttemptLease) -> ProcessControl:
         return ProcessControl(
             should_stop=self._process_stop_reason,
@@ -674,7 +772,13 @@ class CampaignRunner:
             return f"campaign state changed to {current.state}"
         return self._budget_exceeded(current)
 
-    def _begin_stage(self, state: CampaignState) -> CampaignState:
+    def _begin_stage(
+        self,
+        state: CampaignState,
+        *,
+        resume_session: str | None = None,
+        resume_artifact: ResumeArtifact | None = None,
+    ) -> CampaignState:
         stage = self.protocol.stage(state.stage)
         attempt = state.attempt + 1
         if stage.type == "human":
@@ -711,7 +815,13 @@ class CampaignRunner:
             lease.release()
             raise
         try:
-            return self._execute_stage(stage, attempt, lease)
+            return self._execute_stage(
+                stage,
+                attempt,
+                lease,
+                resume_session=resume_session,
+                resume_artifact=resume_artifact,
+            )
         finally:
             lease.release()
 
@@ -720,6 +830,9 @@ class CampaignRunner:
         stage: Stage,
         attempt: int,
         lease: AttemptLease,
+        *,
+        resume_session: str | None = None,
+        resume_artifact: ResumeArtifact | None = None,
     ) -> CampaignState:
         attempt_dir = self._attempt_dir(stage, attempt)
         attempt_dir.mkdir(parents=True, exist_ok=True)
@@ -730,7 +843,15 @@ class CampaignRunner:
         if stage.type == "script":
             return self._execute_script(stage, attempt, attempt_dir, control)
         if stage.type == "opencode":
-            return self._execute_worker(stage, attempt, attempt_dir, control, lease)
+            return self._execute_worker(
+                stage,
+                attempt,
+                attempt_dir,
+                control,
+                lease,
+                resume_session=resume_session,
+                resume_artifact=resume_artifact,
+            )
         if stage.type == "job":
             stop_reason = self._stop_requested_reason(self.store.load())
             if stop_reason:
@@ -839,15 +960,21 @@ class CampaignRunner:
         control: ProcessControl,
         lease: AttemptLease,
         resume_session: str | None = None,
+        resume_artifact: ResumeArtifact | None = None,
     ) -> CampaignState:
+        previous_result = self._read_worker_result(attempt_dir)
         try:
             prompt = self._worker_prompt(stage, attempt)
         except Exception as exc:
             return self._fail_before_validation(stage, attempt, f"prompt error: {exc}")
         model = self._worker_model(stage)
         timeout = stage.timeout_seconds or self.protocol.worker.timeout_seconds
+        route = resolve_route("worker", {"worker": {"model": model}})
         try:
             executor = self.config.worker_factory(model, timeout)
+            executor = self._resume_executor(
+                executor, resume_artifact, route.client
+            )
             result = executor.run(
                 prompt,
                 cwd=self.store.run_dir,
@@ -860,21 +987,24 @@ class CampaignRunner:
             return self._fail_before_validation(stage, attempt, f"worker failed: {exc}")
         lease.update_session(result.session_id)
         session_identity = getattr(result, "session_identity", None)
+        result_resume_artifact = getattr(result, "resume_artifact", None)
+        recorded_usage = self._record_worker_usage(
+            result, route.client, previous_result
+        )
         write_receipt(
             attempt_dir / "worker_result.json",
             {
                 "session_id": result.session_id,
                 "session_identity": _session_identity_dict(session_identity),
+                "resume_artifact": _resume_artifact_dict(result_resume_artifact),
                 "returncode": result.returncode,
                 "timed_out": result.timed_out,
                 "attempts": result.attempts,
                 "tool_calls": result.tool_calls,
-                "usage": result.usage,
+                "usage": recorded_usage,
                 "errors": result.errors,
             },
         )
-        route = resolve_route("worker", {"worker": {"model": model}})
-        self._record_worker_usage(result, route.client)
         if result.outcome is not None and result.outcome.kind == "quota":
             phase = "pre-worker" if result.attempts == 0 else "worker"
             checkpoint_attempt = attempt - 1 if phase == "pre-worker" else attempt
@@ -888,6 +1018,7 @@ class CampaignRunner:
                 result_ref=str(
                     (attempt_dir / "worker_result.json").relative_to(self.store.run_dir)
                 ),
+                resume_artifact=result_resume_artifact or resume_artifact,
             )
         if result.stopped_reason:
             return self._finish_stopped(stage, attempt, result.stopped_reason, "stop")
@@ -955,6 +1086,18 @@ class CampaignRunner:
                         )
                     ),
                     retry_cursor=review.attempts,
+                    resume_artifact=review.resume_artifact,
+                )
+            if review.outcome is not None and review.outcome.kind != "success":
+                return self._finish_gate_failure(
+                    stage,
+                    attempt,
+                    attempt_dir,
+                    [
+                        "reviewer did not return a valid review: "
+                        f"{review.outcome.kind}"
+                    ],
+                    review=review,
                 )
             if review.stopped_reason:
                 return self._finish_stopped(
@@ -1065,13 +1208,17 @@ class CampaignRunner:
         if not worker_report.is_file():
             worker_report = artifact_paths[-1] if artifact_paths else self.store.run_dir
         prompt = build_review_prompt(artifact_paths, worker_report, stage.id)
+        review_kwargs: dict[str, Any] = {"control": control}
+        resumed = self.store.load().resumed_from_quota
+        if resumed is not None and resumed.suspended_phase == "reviewer":
+            review_kwargs["resume_artifact"] = resumed.resume_artifact
         result = self.config.reviewer.run(
             model,
             prompt,
             self.store.run_dir,
             attempt_dir,
             self.store.run_dir,
-            control=control,
+            **review_kwargs,
         )
         self._record_usage(result.usage, f"reviewer usage for {stage.id}/{attempt}")
         write_receipt(
@@ -1082,6 +1229,7 @@ class CampaignRunner:
                 "followups": result.followups,
                 "session_id": result.session_id,
                 "session_identity": _session_identity_dict(result.session_identity),
+                "resume_artifact": _resume_artifact_dict(result.resume_artifact),
             },
         )
         return result
@@ -1301,6 +1449,9 @@ class CampaignRunner:
                     "session_identity": _session_identity_dict(
                         review.session_identity
                     ),
+                    "resume_artifact": _resume_artifact_dict(
+                        review.resume_artifact
+                    ),
                 }
                 if review is not None
                 else None
@@ -1372,15 +1523,67 @@ class CampaignRunner:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(redact_structure(record), sort_keys=True) + "\n")
 
-    def _record_worker_usage(self, result: WorkerResult, client: str = "opencode") -> None:
-        usage = result.usage
+    def _read_worker_result(self, attempt_dir: Path) -> dict[str, Any]:
+        path = attempt_dir / "worker_result.json"
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _resume_executor(
+        executor: WorkerExecutor,
+        artifact: ResumeArtifact | None,
+        expected_client: str,
+    ) -> WorkerExecutor:
+        if artifact is None:
+            return executor
+        if artifact.client != expected_client:
+            raise RunnerError("resume artifact belongs to another client")
+        if not is_dataclass(executor):
+            raise RunnerError("resumable executor must be a dataclass")
+        names = {item.name for item in fields(executor)}
+        if "resume_artifact" not in names:
+            raise RunnerError("executor does not accept its resume artifact")
+        changes: dict[str, Any] = {"resume_artifact": artifact}
+        if "resume_permitted" in names:
+            changes["resume_permitted"] = True
+        return replace(executor, **changes)
+
+    def _record_worker_usage(
+        self,
+        result: WorkerResult,
+        client: str = "opencode",
+        previous: Mapping[str, Any] | None = None,
+    ) -> dict[str, float]:
+        usage = dict(result.usage)
+        delta = usage
         if client == "opencode" and self.config.usage_db and result.session_id:
             database_usage = read_session_usage(self.config.usage_db, result.session_id)
             if sum(
                 database_usage[key] for key in ("input_tokens", "output_tokens", "reasoning_tokens")
             ) > 0:
                 usage = database_usage
-        self._record_usage(usage, "worker usage")
+                delta = self._usage_since_previous(database_usage, result, previous)
+        self._record_usage(delta, "worker usage")
+        return usage
+
+    @staticmethod
+    def _usage_since_previous(
+        usage: Mapping[str, float],
+        result: WorkerResult,
+        previous: Mapping[str, Any] | None,
+    ) -> dict[str, float]:
+        if not previous or previous.get("session_id") != result.session_id:
+            return dict(usage)
+        baseline = previous.get("usage")
+        if not isinstance(baseline, Mapping):
+            return dict(usage)
+        return {
+            key: max(0.0, float(value) - float(baseline.get(key, 0) or 0))
+            for key, value in usage.items()
+        }
 
     def _record_usage(self, usage: Mapping[str, float], reason: str) -> None:
         delta = {

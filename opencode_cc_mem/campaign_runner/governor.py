@@ -19,7 +19,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
-from .executors.contracts import RunOutcome, SessionIdentity, UsageRecord
+from .executors.contracts import LimitInfo, RunOutcome, SessionIdentity, UsageRecord
 from .routing import ResolvedRoute
 
 
@@ -320,6 +320,33 @@ class Governor:
                 str(current["generation"]),
             )
 
+    def checkpoint_limit(self, key: str, limit: LimitInfo) -> QuotaWaiting:
+        """Persist a typed client limit as a shared durable quota generation."""
+        now = self._now()
+        reset_at = limit.reset_at
+        if limit.reason == "daily_limit" and reset_at is None:
+            reset_at = _next_daily_reset(now)
+            limit.reset_at = reset_at
+        observed = {
+            "reason": limit.reason,
+            "reset_at": reset_at.isoformat() if reset_at else None,
+            "observed_at": now.isoformat(),
+            "generation": limit.hold_id or uuid.uuid4().hex,
+        }
+        with self._locked() as state:
+            current = state["cooldowns"].get(key)
+            stored = _merge_cooldown(current, observed)
+            state["cooldowns"][key] = stored
+        limit.hold_id = str(stored["generation"])
+        reset = stored.get("reset_at")
+        return QuotaWaiting(
+            key,
+            "campaign",
+            "quota",
+            _parse_time(reset) if reset else None,
+            limit.hold_id,
+        )
+
     def wait(
         self,
         waiting: QuotaWaiting,
@@ -439,10 +466,11 @@ class Governor:
         cooldown = state["cooldowns"].get(key)
         if cooldown:
             reset = cooldown.get("reset_at")
+            reason = str(cooldown.get("reason") or "quota")
             return QuotaWaiting(
                 key,
                 request.invocation_id,
-                "quota",
+                reason if reason == "daily_limit" else "quota",
                 _parse_time(reset) if reset else None,
                 str(cooldown["generation"]),
             )
@@ -456,8 +484,22 @@ class Governor:
         )
         reserved = sum(_parse_time(item["reserved_at"]).date() == today for item in active)
         if completed + reserved >= self.policy.max_runs_per_day:
-            reset = datetime.combine(today + timedelta(days=1), time.min, timezone.utc)
-            return QuotaWaiting(key, request.invocation_id, "daily_limit", reset)
+            reset = _next_daily_reset(now)
+            hold = {
+                "reason": "daily_limit",
+                "reset_at": reset.isoformat(),
+                "observed_at": now.isoformat(),
+                "generation": uuid.uuid4().hex,
+            }
+            stored = _merge_cooldown(state["cooldowns"].get(key), hold)
+            state["cooldowns"][key] = stored
+            return QuotaWaiting(
+                key,
+                request.invocation_id,
+                "daily_limit",
+                _parse_time(stored["reset_at"]),
+                str(stored["generation"]),
+            )
         starts = [_parse_time(item["started_at"] or item["reserved_at"]) for item in active]
         starts.extend(
             _parse_time(row["started_at"])
@@ -824,6 +866,10 @@ def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("governor clock must return a timezone-aware datetime")
     return value.astimezone(timezone.utc)
+
+
+def _next_daily_reset(now: datetime) -> datetime:
+    return datetime.combine(now.date() + timedelta(days=1), time.min, timezone.utc)
 
 
 def _parse_time(value: str | None) -> datetime:
