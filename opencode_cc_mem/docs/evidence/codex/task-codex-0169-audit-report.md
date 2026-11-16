@@ -190,4 +190,69 @@ The explicit `MAGNOLIA_PROJECT_DIR` read-server binding changed only the worker/
 
 The final source and independent-copy results are identical: memory `2002 passed, 16 skipped`; campaign `949 passed, 2 skipped, 14 failed`, limited to the established five daemon expectations, two sandbox-denied process-group cases, five sandbox/loopback service cases, and two phase-1 assumptions. The focused modified campaign files passed `321 passed, 1 skipped` and the focused read-server/isolation selection passed `20 passed`.
 
+## Gate 3 finding: code mode is required (2026-11-17)
+
+The live gate at snapshot `6e4a157` failed for worker and reviewer because their
+argv disabled `code_mode_host`. The 0.169.0 catalog reports every available model
+as `tool_mode: "code_mode_only"`; with the host disabled, the client said
+`Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed`
+and the allowed MCP reads disappeared with every other inner tool. The outer
+`exec` failed in the client router, so no PreToolUse event reached Magnolia. This
+is a functional failure, not evidence that the policy denied the attempted work.
+
+Worker and reviewer now explicitly enable both `code_mode_host` and
+`code_mode_host_grpc`. The latter is retained because the installed 0.169.0
+package ships the host and separate gRPC/legacy remote-session transports, while
+the offline feature inventory reports both host flags as stable and on. Disabling
+`code_mode_host_grpc` offline leaves `code_mode_host=true`, which proves the flags
+are independently configurable but does not prove that the next live 0.169.0
+session will select a working fallback. Enabling the installed default is therefore
+the fail-closed choice for the next gate.
+
+The surface-widening variants remain disabled. Offline 0.169.0 accepts each
+disable independently while leaving the host enabled:
+
+```text
+code_mode_only_strict_3p_tools  under development  false
+code_mode_tool_search           under development  false
+incremental_exec_tools          under development  false
+incremental_tools               stable             false
+incremental_tools_legacy        stable             false
+incremental_tools_legacy_gcp    stable             false
+```
+
+The 0.169.0 host-disabled diagnostic names only `code_mode_host` (plus the host
+installation) as the requirement for `exec`; the optional flags above are
+independently accepted delivery/search variants, not host prerequisites. They
+therefore stay off pending the live gate. The earlier x10–x12 runs separately
+found that an enabled JavaScript host had no file-system, process or network API
+of its own. Every external effect went through an inner `tools.*` call; x5
+established that those inner calls reach PreToolUse. `code_mode_host_output_truncation`
+stays at the client's stable default because it changes output handling rather
+than tool reachability.
+
+The final-argv validator is now role-aware. A later `--disable code_mode_host`
+or equivalent feature override is refused for worker/reviewer, while the existing
+helper/evaluator host disable and all prior bypass checks remain intact.
+
+Configuration identities recomputed from the modified source are unchanged,
+because the role's rendered files and policy bytes did not change; argv is a
+separate live-gate cell:
+
+- worker: `a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb` -> same;
+- reviewer: `21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f` -> same.
+
+All Codex capability rows remain `refused`. The next gate must re-verify on
+0.169.0 that the enabled host starts, allowed inner reads/worker edits succeed,
+forbidden effects are denied by the production hook, and the runtime still has no
+independent file-system, process or network path.
+
+Verification on the final source: the Codex executor file passed `142` tests;
+executor/launch/capability selection passed `332` with `1` skip. Memory passed
+`2022` with `16` skips both in place and from an independent rsync copy. Campaign
+tests produced the same result in both locations: `980 passed, 2 skipped, 14 failed`,
+limited to the established five daemon expectations, two sandbox-denied process-group
+cases, five sandbox/loopback service cases and two phase-1 assumptions. No modified
+Codex test failed.
+
 

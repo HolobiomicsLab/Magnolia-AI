@@ -57,6 +57,10 @@ REQUIRED_FEATURES = (
     "hooks",
     "guardian_approval",
 )
+CODE_MODE_FEATURES = (
+    "code_mode_host",
+    "code_mode_host_grpc",
+)
 RESTRICTED_FEATURES = (
     "agent_message_board",
     "agent_message_board_mcp",
@@ -72,8 +76,6 @@ RESTRICTED_FEATURES = (
     "browser_use_external",
     "browser_use_full_cdp_access",
     "cli_daybreak",
-    "code_mode_host",
-    "code_mode_host_grpc",
     "code_mode_only_strict_3p_tools",
     "code_mode_tool_search",
     "codex_apps_mcp_2026_07_28",
@@ -464,7 +466,7 @@ class CodexExecutor:
                 with admission or _NoAdmission():
                     argv = self._argv(current_prompt, session_id)
                     self._verify_client_bytes()
-                    _validate_final_argv(argv)
+                    _validate_final_argv(argv, role=self.role)
                     process = run_process(
                         argv,
                         cwd,
@@ -551,7 +553,11 @@ class CodexExecutor:
         if self.role in {"worker", "reviewer"}:
             for feature in RESTRICTED_FEATURES:
                 argv.extend(["--disable", feature])
-            for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES):
+            for feature in (
+                *PROTECTIVE_FEATURES,
+                *REQUIRED_FEATURES,
+                *CODE_MODE_FEATURES,
+            ):
                 argv.extend(["--enable", feature])
             argv.extend(["--enable", "skip_host_skill_discovery"])
         else:
@@ -1057,6 +1063,7 @@ def _relevant_owner_config(
         *RESTRICTED_FEATURES,
         *PROTECTIVE_FEATURES,
         *REQUIRED_FEATURES,
+        *CODE_MODE_FEATURES,
     )) | {
         "apps",
         "skip_host_skill_discovery",
@@ -1149,11 +1156,11 @@ def _hashed_shell_environment_set(policy: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_final_argv(argv: list[str]) -> None:
+def _validate_final_argv(argv: list[str], *, role: str) -> None:
     """Reject bypasses in the exact argv that is about to be spawned."""
     option_end = argv.index("--") if "--" in argv else len(argv)
     options = argv[:option_end]
-    pinned = _pinned_config_values(options)
+    pinned = _pinned_config_values(options, role=role)
     for index, value in enumerate(options):
         if any(value == flag or value.startswith(flag + "=") for flag in FORBIDDEN_FLAGS):
             raise WorkerError("forbidden Codex launch flag")
@@ -1210,7 +1217,7 @@ def _validate_config_override(
         raise WorkerError(f"forbidden Codex launch pinned override: {normalized}")
 
 
-def _pinned_config_values(options: list[str]) -> dict[str, Any]:
+def _pinned_config_values(options: list[str], *, role: str) -> dict[str, Any]:
     shell_policy = {
         "inherit": "none",
         "ignore_default_excludes": False,
@@ -1225,6 +1232,10 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
             **{
                 feature: True
                 for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES)
+            },
+            **{
+                feature: role in {"worker", "reviewer"}
+                for feature in CODE_MODE_FEATURES
             },
             "skip_host_skill_discovery": True,
         },
@@ -1250,6 +1261,8 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
         pinned[f"features.{feature}"] = False
     for feature in (*PROTECTIVE_FEATURES, *REQUIRED_FEATURES):
         pinned[f"features.{feature}"] = True
+    for feature in CODE_MODE_FEATURES:
+        pinned[f"features.{feature}"] = role in {"worker", "reviewer"}
     pinned["features.skip_host_skill_discovery"] = True
     for index, value in enumerate(options):
         model = _option_value_at(options, index, short="-m", long="--model")
