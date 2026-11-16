@@ -305,3 +305,14 @@ def test_missing_brief_is_refused(tmp_path):
     store = CampaignStore(tmp_path / "run")
     with pytest.raises(StateError, match="brief does not exist"):
         store.initialize(protocol, tmp_path / "missing.md")
+
+
+def test_legacy_state_without_quota_wait_loads(tmp_path):
+    store, state, _, _ = make_store(tmp_path)
+    payload = state.to_dict()
+    payload.pop("quota_wait", None)
+    store.campaign_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = store.load()
+
+    assert loaded.quota_wait is None
