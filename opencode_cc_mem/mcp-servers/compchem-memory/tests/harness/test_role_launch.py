@@ -512,6 +512,36 @@ def test_runner_keeps_standard_library_before_repository_source(tmp_path, module
     lines = result.stdout.splitlines()
     assert not Path(lines[0]).is_relative_to(source)
     search = lines[1:]
-    source_index = search.index(str(source))
-    assert source_index > 0
-    assert all(index > source_index for index, path in enumerate(search) if Path(path).name in {"site-packages", "dist-packages"})
+    assert str(source) not in search
+    assert any(
+        Path(path).name in {"site-packages", "dist-packages"}
+        for path in search
+    )
+
+
+def test_runner_never_puts_repository_source_on_sys_path(tmp_path):
+    runner = _runner_tree(tmp_path / "repo")
+    source = runner.parents[2]
+    marker = "SHADOW_MODULE_RAN"
+    for module in ("_winapi", "nt", "json"):
+        (source / f"{module}.py").write_text(
+            f"print({marker!r} + ':{module}')\n", encoding="utf-8"
+        )
+    (runner.parent / "__main__.py").write_text(
+        "import importlib, sys\n"
+        "def main():\n"
+        "    for name in ('_winapi', 'nt', 'json'):\n"
+        "        sys.modules.pop(name, None)\n"
+        "        try:\n"
+        "            importlib.import_module(name)\n"
+        "        except ImportError:\n"
+        "            pass\n"
+        "    print(*sys.path, sep=chr(10))\n",
+        encoding="utf-8",
+    )
+
+    result = _run_isolated_runner(runner, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert marker not in result.stdout
+    assert str(source) not in result.stdout.splitlines()

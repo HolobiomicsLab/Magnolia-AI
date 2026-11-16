@@ -30,6 +30,7 @@ REQUIRED_DIGEST_ENV = "MAGNOLIA_HOOK_POLICY_SHA256"
 REQUIRED_SCHEMA = "magnolia-role-v1"
 BROAD_SEARCH_MAX_ENTRIES = 10_000
 BROAD_SEARCH_MAX_SECONDS = 1.0
+_CASE_INSENSITIVE_FILESYSTEMS: dict[int, bool] = {}
 
 
 @dataclass(frozen=True)
@@ -110,11 +111,12 @@ def _read_required(
     read_roots = _required_roots(payload, "canonical_read_roots")
     edit_roots = _required_roots(payload, "edit_roots")
     protected_edit_roots = [policy_path.resolve(strict=False).parent]
-    if control_dir is not None:
-        control_path = Path(control_dir)
-        if not control_path.is_absolute():
-            raise ValueError("required hook control directory must be absolute")
-        protected_edit_roots.append(control_path.resolve(strict=False))
+    if not control_dir:
+        raise ValueError("required hook control directory is missing")
+    control_path = Path(control_dir)
+    if not control_path.is_absolute():
+        raise ValueError("required hook control directory must be absolute")
+    protected_edit_roots.append(control_path.resolve(strict=False))
     return RequiredPolicy(
         role=role,
         read_roots=read_roots,
@@ -260,11 +262,52 @@ def _within_protected_edit_root(
     raw = value if os.path.isabs(value) else os.path.join(cwd, value)
     candidates = (Path(os.path.abspath(raw)), Path(os.path.realpath(raw)))
     roots = tuple(root.resolve(strict=False) for root in protected_roots)
-    return any(
-        candidate == root or candidate.is_relative_to(root)
-        for candidate in candidates
-        for root in roots
-    )
+    return any(_same_or_within(candidate, root) for candidate in candidates for root in roots)
+
+
+def _same_or_within(candidate: Path, root: Path) -> bool:
+    is_insensitive = _filesystem_is_case_insensitive(root)
+    candidate_text = _normalized_path(candidate, is_insensitive)
+    root_text = _normalized_path(root, is_insensitive)
+    try:
+        return os.path.commonpath((candidate_text, root_text)) == root_text
+    except ValueError:
+        return False
+
+
+def _normalized_path(path: Path, is_case_insensitive: bool) -> str:
+    normalized = os.path.normcase(os.path.normpath(str(path)))
+    return normalized.casefold() if is_case_insensitive else normalized
+
+
+def _filesystem_is_case_insensitive(path: Path) -> bool:
+    """Probe case semantics once per filesystem device without writing files."""
+    anchor = path
+    while not anchor.exists() and anchor != anchor.parent:
+        anchor = anchor.parent
+    try:
+        device = anchor.stat().st_dev
+    except OSError:
+        return os.path.normcase("A") == os.path.normcase("a")
+    cached = _CASE_INSENSITIVE_FILESYSTEMS.get(device)
+    if cached is not None:
+        return cached
+    result = _probe_case_insensitive(anchor)
+    _CASE_INSENSITIVE_FILESYSTEMS[device] = result
+    return result
+
+
+def _probe_case_insensitive(anchor: Path) -> bool:
+    for candidate in (anchor, *anchor.parents):
+        name = candidate.name
+        if not name or not any(character.isalpha() for character in name):
+            continue
+        variant = candidate.with_name(name.swapcase())
+        try:
+            return os.path.samefile(candidate, variant)
+        except OSError:
+            return False
+    return os.path.normcase("A") == os.path.normcase("a")
 
 
 def read_target_allowed(

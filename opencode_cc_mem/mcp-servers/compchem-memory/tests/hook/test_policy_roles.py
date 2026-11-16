@@ -466,7 +466,66 @@ def test_edit_targets_never_include_control_or_policy_directory(tmp_path):
     assert decide(allowed, env) is None
 
 
+def test_protected_edit_roots_follow_case_insensitive_filesystem_semantics(tmp_path):
+    project = tmp_path / "project"
+    work = project / "work"
+    control = project / "control"
+    policy_dir = project / "policy-store"
+    work.mkdir(parents=True)
+    control.mkdir()
+    policy_dir.mkdir()
+    control_variant = control.with_name(control.name.swapcase())
+    policy_variant = policy_dir.with_name(policy_dir.name.swapcase())
+    try:
+        is_case_insensitive = (
+            os.path.samefile(control, control_variant)
+            and os.path.samefile(policy_dir, policy_variant)
+        )
+    except OSError:
+        is_case_insensitive = False
+    if not is_case_insensitive:
+        pytest.skip("filesystem is case-sensitive; case-variant aliases do not exist")
+    policy_path = policy_dir / "policy.json"
+    env = _write_policy(policy_path, project, work, edit_roots=[str(project)])
+    env["MAGNOLIA_CONTROL_DIR"] = str(control)
+
+    for target in (
+        control_variant / "approvals" / "a.json",
+        policy_variant / "replacement.json",
+    ):
+        event = _event(
+            project,
+            "native_edit",
+            ToolTarget(str(target), "edit"),
+            raw_name="apply_patch",
+        )
+        assert decide(event, env) is not None
+
+
+@pytest.mark.parametrize("control_dir", (None, "relative/control"))
+def test_required_policy_denies_missing_or_relative_control_dir(
+    tmp_path, control_dir
+):
+    project = tmp_path / "project"
+    work = project / "work"
+    work.mkdir(parents=True)
+    env = _write_policy(tmp_path / "policy.json", project, work)
+    if control_dir is None:
+        env.pop("MAGNOLIA_CONTROL_DIR")
+    else:
+        env["MAGNOLIA_CONTROL_DIR"] = control_dir
+    event = _event(
+        project,
+        "native_edit",
+        ToolTarget(str(work / "allowed.txt"), "edit"),
+        raw_name="apply_patch",
+    )
+
+    assert decide(event, env) is not None
+
+
 def test_policy_escalation_chain_stops_at_policy_rewrite(tmp_path):
+    apply_patch = _offline_apply_patch_binary()
     project = tmp_path / "project"
     run = project / "runs" / "r1"
     work = run / "work"
@@ -497,10 +556,32 @@ def test_policy_escalation_chain_stops_at_policy_rewrite(tmp_path):
         "+{\"edit_roots\": [\".\"]}\n"
         "*** End Patch\n"
     )
+    allowed = (
+        "*** Begin Patch\n"
+        "*** Add File: runs/r1/work/probe.txt\n"
+        "+applied\n"
+        "*** End Patch\n"
+    )
 
+    assert decision(allowed) is None
+    subprocess.run(
+        [apply_patch, allowed],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": str(tmp_path),
+            "CODEX_HOME": str(tmp_path / "codex-home"),
+        },
+    )
+    assert (work / "probe.txt").read_bytes() == b"applied\n"
     assert decision(direct) is not None
     assert decision(malicious) is not None
-    assert policy_path.read_bytes() == original_policy
+    policy_after = policy_path.read_bytes()
+    assert policy_after == original_policy
     assert decision(direct) is not None
     assert source.read_text(encoding="utf-8") == "orig\n"
 
@@ -513,11 +594,9 @@ def _snapshot_files(root: Path) -> dict[str, bytes]:
     }
 
 
-@pytest.mark.skipif(shutil.which("apply_patch") is None, reason="offline apply_patch unavailable")
 def test_offline_apply_patch_variants_are_denied_or_match_decoded_targets(tmp_path):
     """Differentially check every re-review separator/path exploit class."""
-    apply_patch = shutil.which("apply_patch")
-    assert apply_patch is not None
+    apply_patch = _offline_apply_patch_binary()
     separators = ("\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
     patches = [
         f"*** Begin Patch\n*** Add File: work/x{sep}../../../keep.txt\n+pwned\n*** End Patch\n"
@@ -611,3 +690,18 @@ def test_offline_apply_patch_variants_are_denied_or_match_decoded_targets(tmp_pa
         assert blocked or changed <= decoded
 
     assert escaped_writes > 0
+
+
+def _offline_apply_patch_binary() -> str:
+    configured = os.environ.get("MAGNOLIA_APPLY_PATCH_BINARY")
+    if not configured:
+        pytest.skip(
+            "offline differential unavailable: set MAGNOLIA_APPLY_PATCH_BINARY "
+            "to an absolute Codex apply_patch binary"
+        )
+    path = Path(configured)
+    if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
+        pytest.fail(
+            "MAGNOLIA_APPLY_PATCH_BINARY must name an absolute executable file"
+        )
+    return str(path)

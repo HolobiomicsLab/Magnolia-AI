@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 
@@ -16,18 +17,34 @@ def _repository_source() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(runner)))
 
 
+def _load_repository_package(source: str) -> None:
+    """Load compchem_memory by package path without exposing sibling modules."""
+    package_dir = os.path.join(source, "compchem_memory")
+    spec = importlib.util.spec_from_file_location(
+        "compchem_memory",
+        os.path.join(package_dir, "__init__.py"),
+        submodule_search_locations=[package_dir],
+    )
+    if spec is None or spec.loader is None:
+        raise SystemExit("Magnolia hook package could not be loaded from repository source")
+    package = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = package
+    try:
+        spec.loader.exec_module(package)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
+
+
 def main() -> None:
     """Pin imports and bytecode to the repository-owned hook runtime."""
     source = _repository_source()
     prefix = os.environ.get("PYTHONPYCACHEPREFIX")
     if prefix:
         sys.pycache_prefix = prefix
-    site_index = next(
-        (index for index, path in enumerate(sys.path)
-         if os.path.basename(path) in {"site-packages", "dist-packages"}),
-        len(sys.path),
-    )
-    sys.path.insert(max(1, site_index), source)
+    repository = os.path.realpath(source)
+    sys.path[:] = [path for path in sys.path if os.path.realpath(path) != repository]
+    _load_repository_package(source)
     from compchem_memory.hook.__main__ import main as hook_main
 
     hook_main()
