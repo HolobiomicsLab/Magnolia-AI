@@ -1401,13 +1401,18 @@ def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
         "CLAUDE_CODE_OAUTH_TOKEN": "subscription",
         "HTTPS_PROXY": "http://proxy.example",
         "SSL_CERT_FILE": "/certs/ca.pem",
-        **{f"XDG_{name}_HOME": str(tmp_path / name.lower()) for name in ("STATE", "CONFIG", "CACHE", "DATA")},
+        "XDG_STATE_HOME": str(tmp_path / "state"),
+    }
+    dropped = {
+        "IGNORED": "x",
+        **{f"XDG_{name}_HOME": str(tmp_path / name.lower()) for name in ("CONFIG", "CACHE", "DATA")},
     }
     launch = prepare_launch(
-        _production_claude_context(tmp_path, environment={**allowed, "IGNORED": "x"})
+        _production_claude_context(tmp_path, environment={**allowed, **dropped})
     )
     assert all(launch.env[name] == value for name, value in allowed.items())
-    assert "IGNORED" not in launch.env
+    assert not set(dropped) & set(launch.env)
+
 
     for name in ("ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "NODE_OPTIONS"):
         context = _production_claude_context(
@@ -1632,3 +1637,12 @@ def test_daemon_help_does_not_require_pyyaml(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout.lower()
+
+
+def test_claude_relative_xdg_state_home_is_refused(tmp_path):
+    context = _production_claude_context(
+        tmp_path,
+        environment={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "XDG_STATE_HOME": "work"},
+    )
+    with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
+        prepare_launch(context)

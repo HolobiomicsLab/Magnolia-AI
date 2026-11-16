@@ -64,10 +64,9 @@ CLAUDE_BASE_ENV = frozenset(
         "LANG",
         "TERM",
         "PATH",
+        # Only the state location the gate observed and Magnolia's hook reads; XDG_CONFIG_HOME
+        # would also relocate Claude's profile store (API base URL, credentials), so it is dropped.
         "XDG_STATE_HOME",
-        "XDG_CONFIG_HOME",
-        "XDG_CACHE_HOME",
-        "XDG_DATA_HOME",
         "CLAUDE_CODE_OAUTH_TOKEN",
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -1241,6 +1240,11 @@ def _effective_environment(
             raise ExecutorRefused(
                 "Claude client environment changes endpoint/runtime: "
                 + ", ".join(redirecting)
+            )
+        state_home = {**inherited, **context.renderer_env}.get("XDG_STATE_HOME")
+        if state_home is not None and not os.path.isabs(str(state_home)):
+            raise ExecutorRefused(
+                "Claude client environment has a relative XDG_STATE_HOME; use an absolute path"
             )
         service_names = context.memory_service.get("env_vars", ())
         if not isinstance(service_names, (list, tuple)):
