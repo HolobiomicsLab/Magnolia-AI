@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from functools import partial
 import json
 from collections.abc import Mapping
 from typing import Any
@@ -28,6 +29,7 @@ from compchem_memory.harness.render_common import (
 )
 
 HARNESS = "codex"
+_owns_entry = partial(owned, client=HARNESS)
 EVENTS = {
     "SessionStart": "session-start",
     "UserPromptSubmit": "prompt",
@@ -66,7 +68,7 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     validate_project_paths((hooks_path, config_path), context.project_dir)
     conflicts: list[str] = []
     content, found = merged_json(
-        hooks_path, owned, {"hooks": _hooks(context)}, strip_owned_hooks
+        hooks_path, _owns_entry, {"hooks": _hooks(context)}, strip_owned_hooks
     )
     files[hooks_path] = content
     conflicts += found
@@ -82,7 +84,7 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
         )
     content, found, original = merged_toml(
         config_path,
-        owned,
+        _owns_entry,
         magnolia,
         lambda current: _reconcile_transport_fields(current, servers),
     )
@@ -136,7 +138,7 @@ def _reconcile_transport_fields(current: dict, rendered: dict) -> dict:
     servers = dict(existing)
     for name, replacement in rendered.items():
         entry = servers.get(name)
-        if not isinstance(entry, dict) or not owned("server", name, entry):
+        if not isinstance(entry, dict) or not _owns_entry("server", name, entry):
             continue
         obsolete = _STDIO_FIELDS if "url" in replacement else _HTTP_FIELDS | {
             field for field in ("env", "env_vars") if field not in replacement

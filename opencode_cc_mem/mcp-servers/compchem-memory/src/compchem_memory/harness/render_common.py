@@ -67,14 +67,14 @@ def delivered_rule_text(text: str, harness: str) -> str:
 def hook_command(context: LaunchContext, harness: str, event: str) -> str:
     """The shell command a client runs for one hook event."""
     runner = (
-        context.root
+        context.root.resolve()
         / "mcp-servers"
         / "compchem-memory"
         / "src"
         / "compchem_memory"
         / "hook"
         / "runner.py"
-    ).resolve()
+    )
     command = (
         f"{shlex.quote(context.python)} -I {shlex.quote(str(runner))} "
         f"{shlex.quote(harness)} {shlex.quote(event)}"

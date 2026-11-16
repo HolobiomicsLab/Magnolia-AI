@@ -158,7 +158,7 @@ def test_codex_preserves_member_entries_and_is_idempotent(make_render):
         '[mcp_servers.compchem-memory]\ncommand = "stale"\n', encoding="utf-8",
     )
     member_hook = {"hooks": [{"type": "command", "command": "member-hook"}]}
-    stale = {"hooks": [{"type": "command", "command": "py -m compchem_memory.hook codex old"}]}
+    stale = {"hooks": [{"type": "command", "command": "py -m compchem_memory.hook codex pre-tool"}]}
     (folder / "hooks.json").write_text(
         json.dumps({"hooks": {"PreToolUse": [member_hook, stale], "Notify": [member_hook]}}),
         encoding="utf-8",

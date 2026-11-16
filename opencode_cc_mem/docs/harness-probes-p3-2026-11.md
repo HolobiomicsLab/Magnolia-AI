@@ -191,3 +191,46 @@ families are stripped, not refused. M3 remains a documented residual: the measur
 exec window was 14.3 ms median and 18.5 ms maximum (14–19 ms); this change does not claim
 descriptor-pinned execution. M6 remains a note: inherited Claude endpoint/runtime variables cause a
 named refusal, and the stdio memory server receives no provider credential, consistent with W1.
+
+## Task CF Round 6 — portable binding and exact hook ownership
+
+The runner command keeps the repository-relative path below the installation root without
+resolving that file into another checkout. Normalized identity parses and re-quotes hook
+arguments after replacing installation, interpreter and invocation paths with placeholders;
+shell quoting caused by spaces in a checkout path therefore cannot change the binding.
+Concrete paths remain in the session capability identity. The production test installation
+copies the package instead of symlinking it to the development checkout.
+
+All four role bindings were recomputed offline from production-shaped launches in two independent
+installations, including one with spaces in its path. Only `native_files`, `hook_command` and
+`hook_source` changed; client identity, MCP route, policy, cap rule, interpreter selection rule
+and required policy environment names did not. The new `native_files` digest starts `ebc893c5`
+for worker and `d7e1c87d` for the other roles; `hook_command` starts `50995faf`, and `hook_source`
+starts `98fd3966`. Codex and Vibe rows remain unchanged and refused.
+
+Hook ownership requires a complete shell-parsed command: one Python interpreter, either
+`-m compchem_memory.hook` or `-I <installation>/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py`,
+then the renderer's client and a known event. The exact required `/bin/sh -c` pre-tool wrapper
+is also recognized, including quoted paths. Extra tokens, compound commands, unknown events,
+other clients and a `magnolia-` name alone do not establish ownership. Member commands survive
+re-rendering; complete legacy commands migrate once, including those in mixed matcher groups.
+The existing merge callbacks currently select the client from the native entry shape. Passing
+each renderer's `HARNESS` explicitly is prepared as a separate, unapplied scope-extension patch;
+see `task-cf-report.md` Round 6 for that pending dependency and the conflicting old test assertion.
+
+The isolated runner refuses a symlinked file or ancestor and refuses paths outside the expected
+source layout. Repository source is inserted after the standard library and before site-packages,
+never at index zero. The stdlib-shadow regressions cover `json`, `typing`, `re`, `pathlib`,
+`fractions` and `statistics`, alongside the existing editable-install and forged-bytecode checks.
+The repository venv remains a trust boundary: its `.pth` startup code runs under `-I` before
+the runner, and the venv itself can be a symlink.
+
+The worker's seven-name stdio route is unchanged. Its model/provider environment variables are
+always defined (empty when unset), so Claude expansion cannot pass literal `${...}` values to
+the memory server. The campaign CLI and launch validation share the same lexical interpreter
+resolver instead of inheriting the CLI's `sys.executable` path.
+
+Deferred M1: imports outside `compchem_memory/hook/`, including the parent `__init__.py` and
+`atomic_io`, remain unbound. The stdio memory server's import route and the prior M2/M3/M5/M6
+notes are unchanged. This round is offline evidence only; the changed hook runtime still needs
+the separately authorized live Claude re-run described in the re-review packet.
