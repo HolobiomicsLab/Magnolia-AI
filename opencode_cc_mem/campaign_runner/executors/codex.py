@@ -41,6 +41,7 @@ FORBIDDEN_FLAGS = frozenset({
     "--approve-for-me",
     "--full-auto",
     "--trust",
+    "--yolo",
 })
 RESTRICTED_FEATURES = (
     "browser_use",
@@ -60,16 +61,29 @@ ISOLATION_OVERRIDES = (
     "sandbox_workspace_write.writable_roots=[]",
     'shell_environment_policy={inherit="none",ignore_default_excludes=false,'
     'exclude=[],set={},include_only=[]}',
+    "shell_environment_policy.experimental_use_profile=false",
 )
-PINNED_OWNER_KEYS = frozenset({
+COMMON_PINNED_OWNER_KEYS = frozenset({
     "approval_policy",
     "model",
     "model_reasoning_effort",
     "notify",
     "sandbox_mode",
+})
+ISOLATION_PINNED_OWNER_KEYS = frozenset({
     "sandbox_workspace_write",
     "shell_environment_policy",
     "web_search",
+})
+BUILTIN_PROVIDER_IDS = frozenset({"openai", "ollama", "lmstudio"})
+NONEXECUTING_OWNER_KEYS = frozenset({
+    "desktop",
+    "marketplaces",
+    "mcp_servers",
+    "notice",
+    "plugins",
+    "projects",
+    "tui",
 })
 BARE_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+")
 PLUGIN_CONFIG_KEY = re.compile(r"[A-Za-z0-9_-]+(?:@[A-Za-z0-9_-]+)?")
@@ -467,11 +481,14 @@ class CodexExecutor:
         """Re-parse owner config before spawn and bind its relevant settings."""
         path = self.user_config_path or Path.home() / ".codex" / "config.toml"
         payload = _read_codex_config(path)
-        _refuse_owner_redirects(payload)
+        _refuse_owner_redirects(
+            payload,
+            protected_env_names=frozenset(self.prepared.env),
+        )
         self._disable_overrides = tuple(
             self._discovered_disable_overrides(owner_payload=payload)
         )
-        relevant = _relevant_owner_config(payload)
+        relevant = _relevant_owner_config(payload, role=self.role)
         body = json.dumps(
             relevant, sort_keys=True, separators=(",", ":"), default=str
         ).encode()
@@ -815,11 +832,18 @@ def _read_codex_config(path: Path) -> Mapping[str, Any]:
     return payload
 
 
-def _refuse_owner_redirects(payload: Mapping[str, Any]) -> None:
+def _refuse_owner_redirects(
+    payload: Mapping[str, Any],
+    *,
+    protected_env_names: frozenset[str] = frozenset(),
+) -> None:
     """Reject owner settings that can redirect endpoints or credentials."""
     redirect = _redirect_key(payload)
     if redirect is not None:
         raise ExecutorRefused(f"Codex owner config redirects {redirect}")
+    shell_key = _unsafe_shell_environment_key(payload, protected_env_names)
+    if shell_key is not None:
+        raise ExecutorRefused(f"Codex owner config redirects {shell_key}")
     profiles = payload.get("profiles")
     if not isinstance(profiles, Mapping):
         return
@@ -837,7 +861,11 @@ def _redirect_key(payload: Mapping[str, Any]) -> str | None:
     for raw_key, value in payload.items():
         key = str(raw_key).casefold().replace("-", "_")
         if key == "model_providers":
-            return str(raw_key)
+            if not isinstance(value, Mapping):
+                return str(raw_key)
+            for provider_id in value:
+                if str(provider_id).casefold() in BUILTIN_PROVIDER_IDS:
+                    return f"{raw_key}.{provider_id}"
         if key == "model_provider" and (
             not isinstance(value, str) or value.casefold() != "openai"
         ):
@@ -845,6 +873,61 @@ def _redirect_key(payload: Mapping[str, Any]) -> str | None:
         if _is_base_url_key(key):
             return str(raw_key)
     return None
+
+
+def _unsafe_shell_environment_key(
+    payload: Mapping[str, Any], protected_env_names: frozenset[str]
+) -> str | None:
+    """Return the first owner shell-policy key that can alter governed execution."""
+    raw_name, policy = _normalized_entry(payload, "shell_environment_policy")
+    if raw_name is None or not isinstance(policy, Mapping):
+        return None
+    filters_name, filters = _normalized_entry(policy, "filters")
+    if filters_name is not None and filters:
+        return f"{raw_name}.{filters_name}"
+    set_name, entries = _normalized_entry(policy, "set")
+    if set_name is None:
+        return None
+    if not isinstance(entries, Mapping):
+        return f"{raw_name}.{set_name}"
+    protected = {name.casefold() for name in protected_env_names}
+    for name in entries:
+        if _is_protected_environment_name(str(name), protected):
+            return f"{raw_name}.{set_name}.{name}"
+    return None
+
+
+def _normalized_entry(
+    payload: Mapping[str, Any], wanted: str
+) -> tuple[str | None, Any]:
+    for raw_key, value in payload.items():
+        if str(raw_key).casefold().replace("-", "_") == wanted:
+            return str(raw_key), value
+    return None, None
+
+
+def _is_protected_environment_name(name: str, protected: set[str]) -> bool:
+    normalized = name.casefold()
+    upper = name.upper()
+    if normalized in protected:
+        return True
+    if any(token in upper for token in (
+        "KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "AUTH",
+    )):
+        return True
+    if upper.endswith(("_BASE_URL", "_BASE_URI", "_ENDPOINT", "_API_BASE")):
+        return True
+    if upper == "NO_PROXY" or upper.endswith("_PROXY"):
+        return True
+    if (
+        upper == "PATH"
+        or upper.startswith(("LD_", "DYLD_", "PYTHON"))
+        or upper in {"NODE_OPTIONS", "NODE_PATH"}
+    ):
+        return True
+    return upper == "HOME" or upper.startswith(
+        ("XDG_", "CODEX_", "CLAUDE_", "VIBE_", "OPENCODE_", "MAGNOLIA_")
+    )
 
 
 def _is_base_url_key(key: str) -> bool:
@@ -855,18 +938,44 @@ def _is_base_url_key(key: str) -> bool:
     )
 
 
-def _relevant_owner_config(payload: Mapping[str, Any]) -> dict[str, Any]:
+def _relevant_owner_config(
+    payload: Mapping[str, Any], *, role: str
+) -> dict[str, Any]:
+    """Return execution-relevant owner settings with shell values one-way hashed."""
     relevant: dict[str, Any] = {}
     pinned_features = set(RESTRICTED_FEATURES) | {
         "apps",
         "skip_host_skill_discovery",
     }
+    pinned_owner_keys = set(COMMON_PINNED_OWNER_KEYS)
+    if role in {"worker", "reviewer"}:
+        pinned_owner_keys.update(ISOLATION_PINNED_OWNER_KEYS)
     for raw_key, value in payload.items():
         key = str(raw_key)
         normalized = key.casefold().replace("-", "_")
-        if normalized in PINNED_OWNER_KEYS:
+        if normalized in NONEXECUTING_OWNER_KEYS:
             continue
-        if normalized == "features" and isinstance(value, Mapping):
+        if normalized in pinned_owner_keys:
+            if (
+                normalized == "shell_environment_policy"
+                and isinstance(value, Mapping)
+            ):
+                hashed_set = _hashed_shell_environment_set(value)
+                if hashed_set:
+                    relevant[key] = {"set": hashed_set}
+            continue
+        if normalized == "hooks" and isinstance(value, Mapping):
+            remaining_hooks = {
+                str(name): setting
+                for name, setting in value.items()
+                if str(name).casefold().replace("-", "_") != "state"
+            }
+            if remaining_hooks:
+                relevant[key] = remaining_hooks
+            continue
+        if normalized == "features" and isinstance(value, Mapping) and role in {
+            "worker", "reviewer",
+        }:
             remaining = {
                 str(name): setting
                 for name, setting in value.items()
@@ -875,9 +984,24 @@ def _relevant_owner_config(payload: Mapping[str, Any]) -> dict[str, Any]:
             if remaining:
                 relevant[key] = remaining
             continue
+        if normalized == "shell_environment_policy" and isinstance(value, Mapping):
+            shell_policy = dict(value)
+            if any(
+                str(name).casefold().replace("-", "_") == "set"
+                for name in shell_policy
+            ):
+                for name in tuple(shell_policy):
+                    if str(name).casefold().replace("-", "_") == "set":
+                        shell_policy[name] = _hashed_shell_environment_set(value)
+                        break
+            relevant[key] = shell_policy
+            continue
+        if normalized == "model_providers" and isinstance(value, Mapping):
+            relevant[key] = sorted(str(name) for name in value)
+            continue
         if normalized == "profiles" and isinstance(value, Mapping):
             relevant[key] = {
-                str(name): _relevant_owner_config(profile)
+                str(name): _relevant_owner_config(profile, role=role)
                 if isinstance(profile, Mapping) else profile
                 for name, profile in value.items()
             }
@@ -886,42 +1010,133 @@ def _relevant_owner_config(payload: Mapping[str, Any]) -> dict[str, Any]:
     return relevant
 
 
+def _hashed_shell_environment_set(policy: Mapping[str, Any]) -> dict[str, Any]:
+    _raw_name, entries = _normalized_entry(policy, "set")
+    if not isinstance(entries, Mapping):
+        return {}
+    return {
+        str(name): {
+            "sha256": hashlib.sha256(str(value).encode()).hexdigest(),
+        }
+        for name, value in entries.items()
+    }
+
+
 def _validate_final_argv(argv: list[str]) -> None:
     """Reject bypasses in the exact argv that is about to be spawned."""
     option_end = argv.index("--") if "--" in argv else len(argv)
     options = argv[:option_end]
+    pinned = _pinned_config_values(options)
     for index, value in enumerate(options):
         if any(value == flag or value.startswith(flag + "=") for flag in FORBIDDEN_FLAGS):
             raise WorkerError("forbidden Codex launch flag")
+        if (
+            value in {"-p", "--profile"}
+            or value.startswith("--profile=")
+            or (value.startswith("-p") and value != "-p")
+        ):
+            raise WorkerError("forbidden Codex launch profile")
+        if value == "--add-dir" or value.startswith("--add-dir="):
+            raise WorkerError("forbidden Codex launch add-dir")
         if value in {"-s", "--sandbox"} and index + 1 < len(options):
             if options[index + 1] == "danger-full-access":
                 raise WorkerError("forbidden Codex launch sandbox")
         if value.startswith("--sandbox=") and value.split("=", 1)[1] == "danger-full-access":
             raise WorkerError("forbidden Codex launch sandbox")
+        if value.startswith("-s=") and value[3:] == "danger-full-access":
+            raise WorkerError("forbidden Codex launch sandbox")
+        if value.startswith("-s") and not value.startswith("-s="):
+            if value[2:] == "danger-full-access":
+                raise WorkerError("forbidden Codex launch sandbox")
         if value in {"-c", "--config"} and index + 1 < len(options):
-            _validate_config_override(options[index + 1])
+            _validate_config_override(options[index + 1], pinned)
         elif value.startswith("--config="):
-            _validate_config_override(value.split("=", 1)[1])
+            _validate_config_override(value.split("=", 1)[1], pinned)
+        if value == "--enable" and index + 1 < len(options):
+            _validate_feature_switch(options[index + 1], True, pinned)
+        elif value.startswith("--enable="):
+            _validate_feature_switch(value.split("=", 1)[1], True, pinned)
 
 
-def _validate_config_override(override: str) -> None:
-    key, separator, _raw_value = override.partition("=")
+def _validate_config_override(
+    override: str, pinned: Mapping[str, Any]
+) -> None:
+    key, separator, raw_value = override.partition("=")
     if not separator:
         raise WorkerError("forbidden Codex launch config override")
     normalized = key.strip().casefold().replace("-", "_")
     segments = normalized.split(".")
     if any(segment.startswith("dangerously_") for segment in segments):
         raise WorkerError("forbidden Codex launch config bypass")
-    if normalized == "sandbox_mode":
-        raise WorkerError("forbidden Codex launch sandbox override")
-    if normalized != "approval_policy":
+    if normalized.startswith("shell_environment_policy.") and normalized not in pinned:
+        raise WorkerError(f"forbidden Codex launch pinned override: {normalized}")
+    if normalized not in pinned:
         return
+    if _config_value(raw_value) != pinned[normalized]:
+        raise WorkerError(f"forbidden Codex launch pinned override: {normalized}")
+
+
+def _pinned_config_values(options: list[str]) -> dict[str, Any]:
+    shell_policy = {
+        "inherit": "none",
+        "ignore_default_excludes": False,
+        "exclude": [],
+        "set": {},
+        "include_only": [],
+    }
+    pinned: dict[str, Any] = {
+        "approval_policy": "never",
+        "features": {
+            **{feature: False for feature in (*RESTRICTED_FEATURES, "apps")},
+            "skip_host_skill_discovery": True,
+        },
+        "notify": [],
+        "network_access": False,
+        "sandbox_workspace_write": {
+            "network_access": False,
+            "writable_roots": [],
+        },
+        "sandbox_workspace_write.network_access": False,
+        "sandbox_workspace_write.writable_roots": [],
+        "shell_environment_policy": shell_policy,
+        "shell_environment_policy.inherit": "none",
+        "shell_environment_policy.ignore_default_excludes": False,
+        "shell_environment_policy.exclude": [],
+        "shell_environment_policy.set": {},
+        "shell_environment_policy.include_only": [],
+        "shell_environment_policy.filters": {},
+        "shell_environment_policy.experimental_use_profile": False,
+        "web_search": "disabled",
+    }
+    for feature in (*RESTRICTED_FEATURES, "apps"):
+        pinned[f"features.{feature}"] = False
+    pinned["features.skip_host_skill_discovery"] = True
+    for index, value in enumerate(options[:-1]):
+        if value in {"-m", "--model"}:
+            pinned["model"] = options[index + 1]
+        elif value in {"-s", "--sandbox"}:
+            pinned["sandbox_mode"] = options[index + 1]
+        elif value in {"-c", "--config"}:
+            key, separator, raw_value = options[index + 1].partition("=")
+            normalized = key.strip().casefold().replace("-", "_")
+            if separator and normalized == "model_reasoning_effort":
+                pinned.setdefault(normalized, _config_value(raw_value))
+    return pinned
+
+
+def _validate_feature_switch(
+    feature: str, enabled: bool, pinned: Mapping[str, Any]
+) -> None:
+    normalized = f"features.{feature.casefold().replace('-', '_')}"
+    if normalized in pinned and pinned[normalized] is not enabled:
+        raise WorkerError(f"forbidden Codex launch feature override: {feature}")
+
+
+def _config_value(raw_value: str) -> Any:
     try:
-        approval = tomllib.loads(override).get("approval_policy")
-    except tomllib.TOMLDecodeError as exc:
-        raise WorkerError("forbidden Codex launch approval override") from exc
-    if approval != "never":
-        raise WorkerError("forbidden Codex launch approval override")
+        return tomllib.loads(f"value={raw_value}")["value"]
+    except tomllib.TOMLDecodeError:
+        return raw_value.strip()
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -971,7 +1186,25 @@ def _hook_key(source: str, event_name: str, group_index: int, hook_index: int) -
 
 def _binding_record_matches(record: Any, expected: Mapping[str, str]) -> bool:
     identity = record.get("identity") if isinstance(record, Mapping) else None
-    return isinstance(identity, Mapping) and binding_identity_matches(identity, expected)
+    if not isinstance(identity, Mapping):
+        return False
+    stored_digest = identity.get("owner_config_digest")
+    expected_digest = expected.get("owner_config_digest")
+    if not (_is_sha256(stored_digest) and _is_sha256(expected_digest)):
+        return False
+    stored_comparable = dict(identity)
+    expected_comparable = dict(expected)
+    stored_comparable.pop("owner_config_digest")
+    expected_comparable.pop("owner_config_digest")
+    return binding_identity_matches(stored_comparable, expected_comparable)
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _pid_is_running(pid: int | None) -> bool:
