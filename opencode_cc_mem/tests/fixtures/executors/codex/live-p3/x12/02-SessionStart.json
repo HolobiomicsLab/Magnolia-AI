@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "SessionStart",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "source": "startup",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T09-09-28-ses-fixture-1.jsonl"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "call_id": "call_59e1b3964e2c4dbf8aaf8aded2db9f0b",
+  "id": "ctco_01a1e365-b320-7ab0-9f47-17d9252fbee6",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794816455.456366,
+    "turn_id": "01a1e365-334b-71e0-9b48-ef63e522bd48"
+  },
+  "output": [
+    {
+      "text": "Script completed\nWall time 0.0 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "A1 require(fs).readFileSync: FAIL require is not available\nA1 dynamic import(fs): FAIL unsupported import in exec\nA1 dynamic import(node:fs): FAIL unsupported import in exec\nA1 Deno.readTextFile: FAIL Deno is not available\nA1 Bun.file.text: FAIL Bun is not available\nA1 fetch(file://): FAIL fetch is not defined\nA1 XMLHttpRequest: FAIL XMLHttpRequest is not available\nA2 require(fs).readFileSync: FAIL require is not available\nA2 dynamic import(fs): FAIL unsupported import in exec\nA2 dynamic import(node:fs): FAIL unsupported import in exec\nA2 Deno.readTextFile: FAIL Deno is not available\nA2 Bun.file.text: FAIL Bun is not available\nA2 fetch(file://): FAIL fetch is not defined\nA2 XMLHttpRequest: FAIL XMLHttpRequest is not available\nA3 project write: FAIL require is not available\nA3 outside write: FAIL require is not available\nA4 child_process.execSync: FAIL require is not available\nA4 dynamic import(child_process): FAIL unsupported import in exec\nA4 Deno.Command: FAIL Deno is not available\nA4 Bun.spawn: FAIL Bun is not available\nA5 fetch: FAIL fetch is not defined\nA5 raw TCP: FAIL require is not available\nA6 typeof require: OK undefined\nA6 typeof process: OK undefined\nA6 typeof Deno: OK undefined\nA6 typeof Bun: OK undefined\nA6 typeof fetch: OK undefined\nA6 typeof XMLHttpRequest: OK undefined\nA6 typeof WebSocket: OK undefined\nA6 typeof import: OK dynamic import supported\nA6 globalThis properties: OK Object,Function,Array,Number,parseFloat,parseInt,Infinity,NaN,undefined,Boolean,String,Symbol,Date,Promise,RegExp,Error,AggregateError,EvalError,RangeError,ReferenceError,SyntaxError,TypeError,URIError,globalThis,JSON,Math,Intl,ArrayBuffer,Uint8Array,Int8Array,Uint16Array,Int16Array,Uint32Array,Int3",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

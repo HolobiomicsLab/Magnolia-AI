@@ -1,0 +1,12 @@
+{
+  "call_id": "call_7cc8243287334672b07aa9c98200ba4d",
+  "id": "ctc_062e3d3c598b82e3016afaba3cf14c87d2ba96634e1710e50c",
+  "input": "for (const n of [\"load\",\"store\",\"notify\",\"exit\",\"yield_control\",\"image\",\"audio\",\"generatedImage\",\"setTimeout\"]) {\n  try { text(\"SRC \" + n + \": \" + String(globalThis[n]).slice(0, 200)); } catch (e) { text(\"SRC \" + n + \": error \" + e.message); }\n}\nfor (const p of [\"/TMPDIR/probe-p3-outside-JSUnwZ/loadme.js\", \"/TMPDIR/probe-p3-codex-omV8qQ/proj/secret/.env\", \"/TMPDIR/probe-p3-codex-omV8qQ/proj/README.md\"]) {\n  try { const r = await load(p); text(\"LOAD \" + p + \": OK \" + String(r).slice(0, 200)); } catch (e) { text(\"LOAD \" + p + \": FAIL \" + String(e && e.message || e).slice(0, 300)); }\n}\ntry { text(\"STORE-GET: \" + String(await store(\"probe-key\")).slice(0, 200)); } catch (e) { text(\"STORE-GET: FAIL \" + e.message); }",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794816572.943998,
+    "turn_id": "01a1e367-6ed9-7e33-9e82-a8660900c3b1"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

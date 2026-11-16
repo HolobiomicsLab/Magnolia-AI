@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "GLOBALS(76): ALL_TOOLS,AggregateError,Array,ArrayBuffer,AsyncDisposableStack,BigInt,BigInt64Array,BigUint64Array,Boolean,DataView,Date,DisposableStack,Error,EvalError,FinalizationRegistry,Float16Array,Float32Array,Float64Array,Function,Infinity,Int16Array,Int32Array,Int8Array,Intl,Iterator,JSON,Map,Math,NaN,Number,Object,Promise,Proxy,RangeError,ReferenceError,Reflect,RegExp,Set,String,SuppressedError,Symbol,SyntaxError,TypeError,URIError,Uint16Array,Uint32Array,Uint8Array,Uint8ClampedArray,WeakMap,WeakRef,WeakSet,audio,clearTimeout,decodeURI,decodeURIComponent,encodeURI,encodeURIComponent,escape,eval,exit,generatedImage,globalThis,image,isFinite,isNaN,load,notify,parseFloat,parseInt,setTimeout,store,text,tools,undefined,unescape,yield_control\nTYPEOF tools: object\nTYPEOF ALL_TOOLS: object\nTYPEOF text: function\nTYPEOF console: undefined\nTYPEOF setTimeout: function\nTYPEOF WebAssembly: undefined\nTYPEOF SharedArrayBuffer: undefined\nTYPEOF Atomics: undefined\nTYPEOF eval: function\nTYPEOF Function: function\nTYPEOF load: function\nTYPEOF read: undefined\nTYPEOF readFile: undefined\nTYPEOF readline: undefined\nTYPEOF print: undefined\nTYPEOF os: undefined\nTYPEOF std: undefined\nTYPEOF scriptArgs: undefined\nTYPEOF import.meta: n/a\nTOOLS: apply_patch,create_goal,exec_command,get_goal,image_gen__imagegen,list_mcp_resource_templates,list_mcp_resources,<195 mcp__codex_apps__* connected-app tools elided>,mcp__probe__echo,mcp__probe__shell,mcp__probe__unlisted,multi_agent_v1__close_agent,multi_agent_v1__resume_agent,multi_agent_v1__send_input,multi_agent_v1__spawn_agent,multi_agent_v1__wait_agent,read_mcp_resource,request_plugin_install,update_goal,view_image,web__run,write_stdin\nFUNCTION-CTOR: undefined\nEVAL: 2\nIMPORT-FILE: error undefined",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T09-08-06-ses-fixture-1.jsonl",
+    "turn_id": "01a1e366-2b3c-71f3-8002-5f3af652afd7"
+  }
+}

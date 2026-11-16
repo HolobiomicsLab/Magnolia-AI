@@ -1,0 +1,12 @@
+{
+  "call_id": "call_74a31ad9eab74a489d0da5f619adce50",
+  "id": "ctc_0611fdb49c93447e016afab9ea5f6c87d2bfcb764920808a6c",
+  "input": "const names = Object.getOwnPropertyNames(globalThis).sort();\ntext(\"GLOBALS(\" + names.length + \"): \" + names.join(\",\"));\nfor (const n of [\"tools\",\"ALL_TOOLS\",\"text\",\"console\",\"setTimeout\",\"WebAssembly\",\"SharedArrayBuffer\",\"Atomics\",\"eval\",\"Function\",\"load\",\"read\",\"readFile\",\"readline\",\"print\",\"os\",\"std\",\"scriptArgs\",\"import.meta\"]) {\n  let t; try { t = n === \"import.meta\" ? \"n/a\" : typeof globalThis[n]; } catch (e) { t = \"error \" + e.message; }\n  text(\"TYPEOF \" + n + \": \" + t);\n}\ntry { text(\"TOOLS: \" + Object.keys(globalThis.tools || {}).sort().join(\",\")); } catch (e) { text(\"TOOLS: error \" + e.message); }\ntry { const f = new Function(\"return typeof require\"); text(\"FUNCTION-CTOR: \" + f()); } catch (e) { text(\"FUNCTION-CTOR: error \" + e.message); }\ntry { text(\"EVAL: \" + eval(\"1+1\")); } catch (e) { text(\"EVAL: error \" + e.message); }\ntry { const m = await import(\"/TMPDIR/probe-p3-codex-omV8qQ/proj/README.md\"); text(\"IMPORT-FILE: \" + JSON.stringify(m)); } catch (e) { text(\"IMPORT-FILE: error \" + e.message); }",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794816490.3748112,
+    "turn_id": "01a1e366-2b3c-71f3-8002-5f3af652afd7"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

@@ -1,6 +1,6 @@
 """Reduce Plan 3 Task 0 live probe logs to bounded fixtures, then scrub them.
 
-Usage: extract_live_p3.py <claude_root> <codex_root> <vibe_root> <fixtures_root> [codex_rollout.jsonl] [x9_rollout.jsonl]
+Usage: extract_live_p3.py <claude_root> <codex_root> <vibe_root> <fixtures_root> [codex_rollout.jsonl] [x9_rollout.jsonl] [tag=rollout.jsonl ...]
 
 Each root is a run_probes_p3.sh RUNROOT. For every run tag it writes, under
 <fixtures_root>/<client>/live-p3/<tag>/:
@@ -139,11 +139,24 @@ def run_meta(root, tag, client):
             "synthetic": False}
 
 
+def collapse_app_tools(o):
+    """The account's connected-app tool names (mcp__codex_apps__*) are owner data: keep only a count."""
+    if isinstance(o, dict):
+        return {k: collapse_app_tools(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [collapse_app_tools(v) for v in o]
+    if isinstance(o, str) and "mcp__codex_apps__" in o:
+        n = len(re.findall(r"mcp__codex_apps__[A-Za-z0-9_]+", o))
+        o = re.sub(r"mcp__codex_apps__[A-Za-z0-9_]+(,mcp__codex_apps__[A-Za-z0-9_]+)*",
+                   f"<{n} mcp__codex_apps__* connected-app tools elided>", o)
+    return o
+
+
 def write_all(out_dir, items, stage):
     os.makedirs(out_dir, exist_ok=True)
     for i, (name, obj) in enumerate(items, 1):
         raw = os.path.join(stage, f"{i:02d}.json")
-        json.dump(obj, open(raw, "w"), indent=1)
+        json.dump(collapse_app_tools(obj), open(raw, "w"), indent=1)
         dst = os.path.join(out_dir, f"{i:02d}-{safe(name)}.json")
         subprocess.run([sys.executable, f"{HERE}/make_fixtures.py", "--scrub-json", raw, dst], check=True)
 
@@ -152,8 +165,12 @@ def main():
     croot, xroot, vroot, out = sys.argv[1:5]
     rollout = sys.argv[5] if len(sys.argv) > 5 else None
     rollouts = [("x5", "x5-rollout-code-mode", rollout)]
-    if len(sys.argv) > 6:
-        rollouts.append(("x9", "x9-rollout-code-mode-host-disabled", sys.argv[6]))
+    for extra in sys.argv[6:]:
+        if "=" in extra:  # tag=path
+            t, path = extra.split("=", 1)
+            rollouts.append((t, f"{t}-rollout-code-mode", path))
+        else:  # legacy positional: the x9 rollout
+            rollouts.append(("x9", "x9-rollout-code-mode-host-disabled", extra))
     stage = tempfile.mkdtemp()
     plan = [("claude", croot, claude_stream), ("codex", xroot, codex_stream), ("vibe", vroot, vibe_stream)]
     for client, root, stream in plan:

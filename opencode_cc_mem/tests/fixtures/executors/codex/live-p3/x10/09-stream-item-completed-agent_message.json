@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "I\u2019ll run the single requested code-mode probe and report its complete stdout.",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}
