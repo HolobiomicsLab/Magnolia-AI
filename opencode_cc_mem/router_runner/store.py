@@ -125,6 +125,18 @@ CREATE TABLE IF NOT EXISTS eval_decisions (
     evaluator TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS eval_waiters (
+    waiter_id TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    context TEXT NOT NULL,
+    subscription_key TEXT NOT NULL,
+    hold_id TEXT,
+    reset_at TEXT,
+    route_model TEXT,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS findings (
     finding_id TEXT PRIMARY KEY,
     work_item_id TEXT NOT NULL,
@@ -225,6 +237,42 @@ class ControlStore:
             (new, now, work_item_id, expected),
         )
         return cur.rowcount == 1
+
+    def claim_eval_waiter(self, waiter_id: str, now: str) -> dict | None:
+        """Atomically claim one pending evaluator continuation exactly once."""
+        with self.tx():
+            row = self.get("eval_waiters", "waiter_id", waiter_id)
+            if row is None or row["state"] != "pending":
+                return None
+            changed = self.conn.execute(
+                "UPDATE eval_waiters SET state = 'running', updated_at = ? "
+                "WHERE waiter_id = ? AND state = 'pending'",
+                (now, waiter_id),
+            )
+            return row if changed.rowcount == 1 else None
+
+    def set_eval_waiter_state(
+        self,
+        waiter_id: str,
+        state: str,
+        now: str,
+        *,
+        hold_id: str | None = None,
+        reset_at: str | None = None,
+    ) -> None:
+        """Persist a waiter transition without changing its private input."""
+        self.update(
+            "eval_waiters",
+            "waiter_id",
+            waiter_id,
+            {
+                "state": state,
+                "hold_id": hold_id,
+                "reset_at": reset_at,
+                "updated_at": now,
+            },
+        )
+        self.conn.commit()
 
 
 def dumps(obj: dict) -> str:

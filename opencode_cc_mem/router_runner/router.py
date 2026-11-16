@@ -20,10 +20,12 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .evaluator import (
     EvalDecision,
+    EvalQuotaWait,
     confidence_threshold,
     make_evaluator,
 )
@@ -117,6 +119,7 @@ class RouteReply:
     work_item_id: str | None = None
     detail: str = ""
     flags: list[str] = field(default_factory=list)
+    waiter_id: str | None = None
 
 
 class Router:
@@ -165,6 +168,8 @@ class Router:
 
         # No explicit project: try the LLM Eval (Jev or generative fallback).
         decision = self._eval(text)
+        if isinstance(decision, EvalQuotaWait):
+            return self._waiting_reply(decision, flags)
         if decision is not None:
             return self._apply_eval(decision, text, flags)
         candidates = [p for p in self.registry if p != "demo"]
@@ -174,17 +179,113 @@ class Router:
 
     # ---------- internals ----------
 
-    def _eval(self, text: str) -> EvalDecision | None:
+    def _eval(self, text: str) -> EvalDecision | EvalQuotaWait | None:
         if self.evaluator is None or not self.evaluator.available():
             return None
-        context = {
+        context = self._eval_context()
+        result = self.evaluator.evaluate(text, context)
+        if isinstance(result, EvalQuotaWait):
+            self._store_eval_waiter(text, context, result)
+            return result
+        if result is not None:
+            self.engine.record_eval_decision(text, result)
+        return result
+
+    def _eval_context(self) -> dict:
+        return {
             "projects": sorted(self.registry),
             "last_project": getattr(self, "_last_project", None),
         }
-        decision = self.evaluator.evaluate(text, context)
-        if decision is not None:
-            self.engine.record_eval_decision(text, decision)
-        return decision
+
+    def _store_eval_waiter(
+        self, text: str, context: dict, waiting: EvalQuotaWait
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        route_model = getattr(self.evaluator, "model", None)
+        with self.engine.store.tx():
+            self.engine.store.insert(
+                "eval_waiters",
+                {
+                    "waiter_id": waiting.waiter_id,
+                    "text": text,
+                    "context": json.dumps(context, sort_keys=True),
+                    "subscription_key": waiting.subscription_key,
+                    "hold_id": waiting.hold_id,
+                    "reset_at": waiting.reset_at,
+                    "route_model": route_model,
+                    "state": "pending",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+
+    @staticmethod
+    def _waiting_reply(waiting: EvalQuotaWait, flags: list[str]) -> RouteReply:
+        reset = f" until {waiting.reset_at}" if waiting.reset_at else ""
+        return RouteReply(
+            "waiting_quota",
+            detail=f"evaluator waiting for {waiting.reason}{reset}",
+            flags=flags,
+            waiter_id=waiting.waiter_id,
+        )
+
+    def resume_evaluation(self, waiter_id: str, manual: bool = False) -> RouteReply:
+        """Resume one stored evaluator action after observing its exact hold."""
+        row = self.engine.store.get("eval_waiters", "waiter_id", waiter_id)
+        if row is None or row["state"] != "pending":
+            return RouteReply("unavailable", detail="evaluation waiter is not pending")
+        if self.evaluator is None or not self.evaluator.available():
+            return RouteReply("unavailable", detail="evaluator route is unavailable")
+        context = self._eval_context()
+        stored_context = json.loads(row["context"])
+        if stored_context != context:
+            return RouteReply("unavailable", detail="evaluator routing context changed")
+        if row["route_model"] != getattr(self.evaluator, "model", None):
+            return RouteReply("unavailable", detail="evaluator route changed")
+        hold = self.evaluator.quota_wait(row["subscription_key"], waiter_id)
+        if hold is not None:
+            if row["hold_id"] is not None and hold.hold_id != row["hold_id"]:
+                return RouteReply("unavailable", detail="evaluator quota hold changed")
+            if not manual:
+                return self._waiting_reply(
+                    EvalQuotaWait(
+                        waiter_id,
+                        hold.key,
+                        hold.reason,
+                        hold.reset_at.isoformat() if hold.reset_at else None,
+                        hold.hold_id,
+                    ),
+                    [],
+                )
+            if not self.evaluator.release_hold(hold.key, hold.hold_id):
+                return RouteReply("unavailable", detail="evaluator quota hold changed")
+        now = datetime.now(timezone.utc).isoformat()
+        claimed = self.engine.store.claim_eval_waiter(waiter_id, now)
+        if claimed is None:
+            return RouteReply("unavailable", detail="evaluation waiter is not pending")
+        result = self.evaluator.evaluate(
+            claimed["text"], context, waiter_id=waiter_id
+        )
+        if isinstance(result, EvalQuotaWait):
+            self.engine.store.set_eval_waiter_state(
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=result.hold_id,
+                reset_at=result.reset_at,
+            )
+            return self._waiting_reply(result, [])
+        if result is None:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id, "unavailable", datetime.now(timezone.utc).isoformat()
+            )
+            return RouteReply("unavailable", detail="evaluator produced no decision")
+        self.engine.record_eval_decision(claimed["text"], result)
+        self.engine.store.set_eval_waiter_state(
+            waiter_id, "completed", datetime.now(timezone.utc).isoformat()
+        )
+        flags = ["untrusted_text"] if INJECTION.search(claimed["text"]) else []
+        return self._apply_eval(result, claimed["text"], flags)
 
     def _apply_eval(self, decision: EvalDecision, text: str, flags: list[str]) -> RouteReply:
         if decision.confidence < confidence_threshold():

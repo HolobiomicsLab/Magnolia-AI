@@ -556,6 +556,7 @@ def router_chat(db: str, registry: dict | None = None) -> int:
             "kind": reply.kind,
             "project": reply.project,
             "work_item_id": reply.work_item_id,
+            "waiter_id": reply.waiter_id,
             "detail": reply.detail,
             "flags": reply.flags,
         }, indent=2))
@@ -565,7 +566,7 @@ def router_chat(db: str, registry: dict | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "demo-dreaming", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "demo-dreaming", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat", "resume-eval"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "run":
@@ -580,6 +581,8 @@ def main() -> int:
             p.add_argument("letter", type=Path)
         if name in ("approve", "execute", "context", "follow-up"):
             p.add_argument("work_item_id")
+        if name == "resume-eval":
+            p.add_argument("waiter_id")
         if name == "approve":
             p.add_argument("nonce")
         if name == "follow-up":
@@ -644,6 +647,21 @@ def main() -> int:
     if args.command == "router-chat":
         from .router import load_registry
         return router_chat(args.db, registry=load_registry())
+    if args.command == "resume-eval":
+        from .router import load_registry, router_from_db
+
+        reply = router_from_db(args.db, registry=load_registry()).resume_evaluation(
+            args.waiter_id, manual=True
+        )
+        print(json.dumps({
+            "kind": reply.kind,
+            "project": reply.project,
+            "work_item_id": reply.work_item_id,
+            "waiter_id": reply.waiter_id,
+            "detail": reply.detail,
+            "flags": reply.flags,
+        }, indent=2))
+        return 0 if reply.kind not in {"unavailable", "rejected"} else 2
     return 1
 
 
