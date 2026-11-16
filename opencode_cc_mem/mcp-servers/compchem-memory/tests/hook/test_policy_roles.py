@@ -7,6 +7,7 @@ from pathlib import Path
 
 from compchem_memory.hook.adapters import claude
 from compchem_memory.hook.events import HookEvent, ToolCall, ToolTarget
+from compchem_memory.hook import policy
 from compchem_memory.hook.policy import decide
 
 
@@ -75,11 +76,18 @@ def test_role_policy_all_targets(tmp_path):
     clean.mkdir()
     outside.mkdir()
     secret.mkdir()
+    nested_secret = project / "conf.env.d" / "sub"
+    nested_secret.mkdir(parents=True)
     (project / "allowed.txt").write_text("ok", encoding="utf-8")
     (project / ".env").write_text("secret", encoding="utf-8")
     (outside / "outside.txt").write_text("no", encoding="utf-8")
     (secret / "token.txt").write_text("no", encoding="utf-8")
+    (nested_secret / "key").write_text("no", encoding="utf-8")
     (project / "alias").symlink_to(secret, target_is_directory=True)
+    outside_parent = outside / "inner"
+    outside_parent.mkdir()
+    (outside / "loot.txt").write_text("no", encoding="utf-8")
+    (project / "link-out").symlink_to(outside_parent, target_is_directory=True)
     env = _write_policy(tmp_path / "policy.json", project, work)
 
     allowed = (
@@ -97,7 +105,11 @@ def test_role_policy_all_targets(tmp_path):
 
     denied = (
         _event(project, "native_read", ToolTarget(".env", "read")),
+        _event(project, "native_read", ToolTarget(".ENV", "read")),
+        _event(project, "native_read", ToolTarget("conf.env.d/sub/key", "read")),
+        _event(project, "native_read", ToolTarget("~/.ssh/id_rsa", "read")),
         _event(project, "native_read", ToolTarget("alias/token.txt", "read")),
+        _event(project, "native_read", ToolTarget("link-out/../loot.txt", "read")),
         _event(work, "native_read", ToolTarget("../../../outside/outside.txt", "read")),
         _event(project, "native_read", ToolTarget(str(outside / "new" / "file"), "read")),
         _event(
@@ -159,7 +171,46 @@ def test_role_policy_all_targets(tmp_path):
         "pre-tool",
     )
     assert narrowed_search is not None
-    assert decide(narrowed_search, env) is None
+    assert decide(narrowed_search, env) is not None
+
+    unsafe_searches = (
+        {"tool_name": "Grep", "tool_input": {"glob": "{.env,*.py}"}},
+        {"tool_name": "Grep", "tool_input": {"glob": "**/sub/**"}},
+        {"tool_name": "Glob", "tool_input": {"pattern": "../outside/**"}},
+        {"tool_name": "Glob", "tool_input": {"pattern": str(outside / "*")}},
+        {"tool_name": "Grep", "tool_input": {"path": str(project), "glob": "*.txt"}},
+    )
+    for search in unsafe_searches:
+        parsed = claude.parse(
+            {
+                "session_id": "session",
+                "cwd": str(project),
+                "hook_event_name": "PreToolUse",
+                **search,
+            },
+            "pre-tool",
+        )
+        assert parsed is not None
+        assert decide(parsed, env) is not None
+
+
+def test_broad_search_scan_bound_denies(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    work = project / "work"
+    work.mkdir(parents=True)
+    for index in range(3):
+        (project / f"allowed-{index}.txt").write_text("ok", encoding="utf-8")
+    env = _write_policy(tmp_path / "policy.json", project, work)
+    monkeypatch.setattr(policy, "BROAD_SEARCH_MAX_ENTRIES", 2)
+
+    event = _event(
+        project,
+        "native_grep",
+        ToolTarget(str(project), "search", broad=True),
+        raw_name="Grep",
+    )
+
+    assert decide(event, env) is not None
 
 
 def test_campaign_mcp_shell_member_tool_delegation_and_inner_call_denied(tmp_path):

@@ -1,10 +1,17 @@
-"""Optional shell compatibility and required campaign-role enforcement."""
+"""Hook policy for interactive compatibility and required campaign roles.
+
+Interactive mode retains the historical fail-open policy-file behavior. Required
+mode validates the complete role policy and denies malformed or unsafe tool calls.
+"""
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
+import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -18,6 +25,8 @@ REASON = (
 REQUIRED_REASON = "Magnolia required role policy denied this operation."
 REQUIRED_ENV = "MAGNOLIA_HOOK_POLICY_REQUIRED"
 REQUIRED_SCHEMA = "magnolia-role-v1"
+BROAD_SEARCH_MAX_ENTRIES = 10_000
+BROAD_SEARCH_MAX_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -177,10 +186,11 @@ def _path_forms_allowed(
     roots: tuple[Path, ...],
     policy: RequiredPolicy,
 ) -> bool:
-    if not value or "\x00" in value:
+    if not value or "\x00" in value or value.startswith("~"):
         return False
-    requested = Path(os.path.abspath(value if os.path.isabs(value) else os.path.join(cwd, value)))
-    resolved = requested.resolve(strict=False)
+    raw = value if os.path.isabs(value) else os.path.join(cwd, value)
+    requested = Path(os.path.abspath(raw))
+    resolved = Path(os.path.realpath(raw))
     if any(_matches_denied(path, policy.deny_patterns) for path in (requested, resolved)):
         return False
     lexical_roots = tuple(Path(os.path.abspath(str(root))) for root in roots)
@@ -196,7 +206,37 @@ def _within_any(path: Path, roots: tuple[Path, ...]) -> bool:
 
 
 def _matches_denied(path: Path, patterns: tuple[str, ...]) -> bool:
-    return any(path.match(pattern) for pattern in patterns)
+    path_parts = tuple(
+        part.casefold() for part in path.as_posix().split("/") if part
+    )
+    return any(_recursive_glob(path_parts, pattern) for pattern in patterns)
+
+
+def _recursive_glob(path_parts: tuple[str, ...], pattern: str) -> bool:
+    """Match case-folded segments with recursive ``**`` at any relative depth."""
+    normalised = pattern.replace("\\", "/").casefold()
+    pattern_parts = tuple(part for part in normalised.split("/") if part)
+    if not pattern_parts:
+        return False
+
+    @lru_cache(maxsize=None)
+    def matches(path_index: int, pattern_index: int) -> bool:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+        token = pattern_parts[pattern_index]
+        if token == "**":
+            return matches(path_index, pattern_index + 1) or (
+                path_index < len(path_parts)
+                and matches(path_index + 1, pattern_index)
+            )
+        return (
+            path_index < len(path_parts)
+            and fnmatch.fnmatchcase(path_parts[path_index], token)
+            and matches(path_index + 1, pattern_index + 1)
+        )
+
+    starts = (0,) if normalised.startswith("/") else range(len(path_parts) + 1)
+    return any(matches(start, 0) for start in starts)
 
 
 def _broad_search_allowed(
@@ -205,8 +245,13 @@ def _broad_search_allowed(
     roots: tuple[Path, ...],
     policy: RequiredPolicy,
 ) -> bool:
-    if set(policy.deny_patterns).issubset(target.exclusions):
+    if not policy.deny_patterns and set(policy.deny_patterns).issubset(target.exclusions):
         return True
+    if any(
+        _unsafe_search_pattern(pattern, cwd, policy)
+        for pattern in target.inclusions
+    ):
+        return False
     root = Path(target.path)
     root = root if root.is_absolute() else Path(cwd) / root
     root = root.resolve(strict=False)
@@ -214,48 +259,75 @@ def _broad_search_allowed(
         return True
     if not root.is_dir():
         return True
+    started = time.monotonic()
+    resolved_roots = tuple(path.resolve(strict=False) for path in roots)
     try:
-        return all(
-            _search_entry_allowed(path, root, target, roots, policy)
-            for path in root.rglob("*")
-        )
-    except OSError:
+        for count, path in enumerate(root.rglob("*"), start=1):
+            if (
+                count > BROAD_SEARCH_MAX_ENTRIES
+                or time.monotonic() - started > BROAD_SEARCH_MAX_SECONDS
+            ):
+                return False
+            if not _search_entry_allowed(path, resolved_roots, policy):
+                return False
+        return True
+    except (OSError, RuntimeError):
         return False
 
 
 def _search_entry_allowed(
     path: Path,
-    search_root: Path,
-    target: ToolTarget,
-    roots: tuple[Path, ...],
+    resolved_roots: tuple[Path, ...],
     policy: RequiredPolicy,
 ) -> bool:
     resolved = path.resolve(strict=False)
-    escapes = path.is_symlink() and not _within_any(
-        resolved, tuple(root.resolve() for root in roots)
-    )
+    escapes = path.is_symlink() and not _within_any(resolved, resolved_roots)
     denied = any(
         _matches_denied(candidate, policy.deny_patterns)
         for candidate in (path, resolved)
     )
-    if not escapes and not denied:
-        return True
-    relative = path.relative_to(search_root)
-    return not _search_includes(relative, target.inclusions, target.exclusions)
+    return not escapes and not denied
 
 
-def _search_includes(
-    path: Path, inclusions: tuple[str, ...], exclusions: tuple[str, ...]
+def _unsafe_search_pattern(
+    pattern: str,
+    cwd: str,
+    policy: RequiredPolicy,
 ) -> bool:
-    included = not inclusions or any(_glob_matches(path, pattern) for pattern in inclusions)
-    excluded = any(_glob_matches(path, pattern) for pattern in exclusions)
-    return included and not excluded
-
-
-def _glob_matches(path: Path, pattern: str) -> bool:
-    if path.match(pattern):
+    """Reject patterns whose client-side path interpretation can escape."""
+    parts = _safe_search_parts(pattern)
+    if parts is None:
         return True
-    return pattern.startswith("**/") and path.match(pattern.removeprefix("**/"))
+    literal_parts = _literal_search_root(parts)
+    effective_root = os.path.join(cwd, *literal_parts) if literal_parts else cwd
+    return not _path_forms_allowed(effective_root, cwd, policy.read_roots, policy)
+
+
+def _safe_search_parts(pattern: str) -> tuple[str, ...] | None:
+    """Return relative pattern segments, or ``None`` for unsafe forms."""
+    parts = tuple(
+        part for part in pattern.replace("\\", "/").split("/")
+        if part not in {"", "."}
+    )
+    if (
+        not pattern
+        or pattern.startswith("~")
+        or os.path.isabs(pattern)
+        or (len(pattern) > 2 and pattern[1] == ":" and pattern[2] in "/\\")
+        or ".." in parts
+    ):
+        return None
+    return parts
+
+
+def _literal_search_root(parts: tuple[str, ...]) -> tuple[str, ...]:
+    """Return the literal directory prefix before the first glob token."""
+    literal_parts = []
+    for part in parts:
+        if any(marker in part for marker in "*?[]{}"):
+            break
+        literal_parts.append(part)
+    return tuple(literal_parts)
 
 
 def decide(event: HookEvent, env: Mapping[str, str]) -> Block | None:
