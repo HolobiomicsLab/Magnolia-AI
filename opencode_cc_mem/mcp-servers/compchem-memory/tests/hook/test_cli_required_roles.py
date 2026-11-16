@@ -249,3 +249,40 @@ def test_optional_interactive_shell_policy_unchanged(tmp_path):
         input=json.dumps(shell), capture_output=True, text=True, timeout=30, env=env,
     )
     assert json.loads(denied.stdout)["decision"] == "deny"
+
+
+@pytest.mark.parametrize("event_name", ("turn-end", "agent-end", "session-end"))
+@pytest.mark.parametrize("harness", ("claude", "codex", "vibe"))
+def test_required_non_tool_parse_failure_is_silent(
+    tmp_path, harness, event_name
+):
+    env = dict(os.environ)
+    env.update(
+        HOME=str(tmp_path / "home"),
+        XDG_STATE_HOME=str(tmp_path / "state"),
+        MAGNOLIA_HOOK_POLICY_REQUIRED="1",
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "compchem_memory.hook", harness, event_name],
+        input="not json", capture_output=True, text=True, timeout=30, env=env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_required_toolsearch_is_silent(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    policy_path = _policy(tmp_path / "policy.json", project)
+    payload = {
+        "session_id": "fixture",
+        "cwd": str(project),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {"query": "memory", "max_results": 5},
+    }
+
+    result = _run("claude", json.dumps(payload), tmp_path, policy_path)
+
+    assert result.returncode == 0
+    assert result.stdout == ""

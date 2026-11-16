@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -6,7 +8,11 @@ import pytest
 from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
-from compchem_memory.harness.render_common import harness_dir, policy_files
+from compchem_memory.harness.render_common import (
+    _required_pre_tool_command,
+    harness_dir,
+    policy_files,
+)
 
 
 def test_noninteractive_policy_is_run_owned_and_required(tmp_path):
@@ -145,3 +151,78 @@ def test_noninteractive_role_env_all_three_clients(
         forbidden in " ".join(launch.argv) + text
         for forbidden in ("--trust", "--dangerously", "bypass")
     )
+
+
+def _pre_tool_command(launch, project, policy_path, client):
+    if client == "claude":
+        settings = json.loads(launch.files[policy_path.parent / "settings.json"])
+        return settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    if client == "codex":
+        hooks = json.loads(launch.files[project / ".codex/hooks.json"])
+        return hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    import tomllib
+
+    hooks = tomllib.loads(launch.files[project / ".vibe/hooks.toml"].decode())["hooks"]
+    return next(hook["command"] for hook in hooks if hook["name"] == "magnolia-pre-tool")
+
+
+@pytest.mark.parametrize("client", ("claude", "codex", "vibe"))
+@pytest.mark.parametrize("failure", ("missing-interpreter", "import-failure"))
+def test_noninteractive_pre_tool_hook_failure_blocks(
+    tmp_path, client, failure
+):
+    project = tmp_path / "project"
+    control = tmp_path / "run" / "control"
+    interpreter = tmp_path / "missing-python"
+    if failure == "import-failure":
+        interpreter.write_text(
+            "#!/bin/sh\necho 'No module named compchem_memory' >&2\nexit 1\n",
+            encoding="utf-8",
+        )
+        interpreter.chmod(0o755)
+    context = LaunchContext(
+        root=tmp_path,
+        project="project-id",
+        project_dir=project,
+        python=str(interpreter),
+        tools_port=8123,
+        model="selected-model",
+        setup={},
+        run_dir=tmp_path / "run",
+        control_dir=control,
+        work_dir=tmp_path / "run" / "work",
+        role="reviewer",
+        invocation_id=f"{client}-reviewer",
+        noninteractive=True,
+        role_policy={"role": "reviewer", "mcp_tool_allowlist": []},
+    )
+    launch = RENDERERS[client](NeutralConfig([], frozenset({"bash"})), context)
+    policy_path = control / "executors" / f"{client}-reviewer" / "policy.json"
+    command = _pre_tool_command(launch, project, policy_path, client)
+    env = dict(os.environ)
+    env.update(launch.env)
+
+    result = subprocess.run(
+        ["sh", "-c", command],
+        input="{}", capture_output=True, text=True, timeout=10, env=env,
+    )
+
+    payload = json.loads(result.stdout)
+    if client == "vibe":
+        assert payload["decision"] == "deny"
+    else:
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert result.returncode == 0
+
+
+def test_noninteractive_pre_tool_hook_timeout_blocks():
+    command = _required_pre_tool_command("sleep 5", "claude", timeout_s=1)
+
+    result = subprocess.run(
+        ["sh", "-c", command],
+        input="{}", capture_output=True, text=True, timeout=4,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert result.returncode == 0
