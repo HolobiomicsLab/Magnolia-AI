@@ -1093,12 +1093,14 @@ fi
 # NUL-terminated. Exit 2 = client binary missing, 1 = other failure; either
 # way it printed one stderr line and no daemon has run yet.
 ARGV=()
+CLIENT_ENV=()
 if [ "$HARNESS" != "opencode" ]; then
     LAUNCH_MODEL="${MODEL_FLAG:-$(setup_get_json "models.$HARNESS")}"
     LAUNCH_OUT="$(mktemp "${TMPDIR:-/tmp}/magnolia-launch.XXXXXX")"
     trap 'rm -f "$LAUNCH_OUT"' EXIT
     LAUNCH_ARGS=(launch --harness "$HARNESS" --root "$OPENCODE_DIR" --project "$PROJECT"
-                 --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT")
+                 --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT"
+                 --holder-pid "$$")
     [ -z "$LAUNCH_MODEL" ] || LAUNCH_ARGS+=(--model "$LAUNCH_MODEL")
     LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
     LAUNCH_RC=0
@@ -1113,20 +1115,21 @@ if [ "$HARNESS" != "opencode" ]; then
         if [ "$in_env" = "0" ]; then
             if [ -z "$item" ]; then in_env=1; else ARGV+=("$item"); fi
         else
-            export "$item"
+            case "$item" in
+                MAGNOLIA_MEMORY_SERVICE_TOKEN=*)
+                    CLIENT_ENV+=("$item")
+                    unset MAGNOLIA_MEMORY_SERVICE_TOKEN
+                    ;;
+                MAGNOLIA_MEMORY_SERVICE_HANDLE=*)
+                    MAGNOLIA_MEMORY_SERVICE_HANDLE="${item#*=}"
+                    ;;
+                *) export "$item" ;;
+            esac
         fi
     done <"$LAUNCH_OUT"
     if [ "${#ARGV[@]}" -eq 0 ]; then
         echo "error: $CLIENT_NAME launch command came back empty" >&2
         exit 1
-    fi
-    if [ "$HARNESS" = "vibe" ]; then
-        # The HTTP memory service was started with these values already. Keep
-        # provider credentials out of Vibe and its minimal MCP environment.
-        unset MAGNOLIA_LLM_API_KEY DEEPSEEK_API_KEY ANTHROPIC_API_KEY
-        unset MAGNOLIA_OPENAI_API_KEY OPENAI_API_KEY
-        unset KIMI_PLAN_MAGNOLIA_API_KEY KIMI_API_KEY OPENROUTER_API_KEY
-        unset MAGNOLIA_MISTRAL_API_KEY MISTRAL_API_KEY ZHIPU_API_KEY ZAI_API_KEY
     fi
 fi
 
@@ -1202,7 +1205,27 @@ if [ "$HARNESS" != "opencode" ]; then
     }
     trap cleanup_memory_service EXIT
     CLIENT_RC=0
-    "${ARGV[@]}" || CLIENT_RC=$?
+    if [ "$HARNESS" = "vibe" ]; then
+        if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
+            env -u MAGNOLIA_LLM_API_KEY -u DEEPSEEK_API_KEY -u ANTHROPIC_API_KEY \
+                -u MAGNOLIA_OPENAI_API_KEY -u OPENAI_API_KEY \
+                -u KIMI_PLAN_MAGNOLIA_API_KEY -u KIMI_API_KEY -u OPENROUTER_API_KEY \
+                -u MAGNOLIA_MISTRAL_API_KEY -u MISTRAL_API_KEY -u ZHIPU_API_KEY \
+                -u ZAI_API_KEY "${CLIENT_ENV[@]}" "${ARGV[@]}" || CLIENT_RC=$?
+        else
+            env -u MAGNOLIA_LLM_API_KEY -u DEEPSEEK_API_KEY -u ANTHROPIC_API_KEY \
+                -u MAGNOLIA_OPENAI_API_KEY -u OPENAI_API_KEY \
+                -u KIMI_PLAN_MAGNOLIA_API_KEY -u KIMI_API_KEY -u OPENROUTER_API_KEY \
+                -u MAGNOLIA_MISTRAL_API_KEY -u MISTRAL_API_KEY -u ZHIPU_API_KEY \
+                -u ZAI_API_KEY "${ARGV[@]}" || CLIENT_RC=$?
+        fi
+    else
+        if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
+            env "${CLIENT_ENV[@]}" "${ARGV[@]}" || CLIENT_RC=$?
+        else
+            "${ARGV[@]}" || CLIENT_RC=$?
+        fi
+    fi
     exit "$CLIENT_RC"
 fi
 MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"

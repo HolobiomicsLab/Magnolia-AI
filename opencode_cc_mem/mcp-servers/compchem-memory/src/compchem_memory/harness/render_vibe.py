@@ -136,8 +136,9 @@ def _servers(neutral: NeutralConfig, context: LaunchContext) -> list[dict]:
             route = context.memory_service or {}
             authorization = route.get("authorization_env")
             if server.name == "compchem-memory" and isinstance(authorization, str):
-                entry["headers"] = {
-                    "Authorization": f"Bearer ${{{authorization}}}"
+                entry["auth"] = {
+                    "type": "static",
+                    "api_key_env": authorization,
                 }
         else:
             command, args = split_command(server)

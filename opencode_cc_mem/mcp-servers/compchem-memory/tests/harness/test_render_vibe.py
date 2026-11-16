@@ -1,4 +1,6 @@
 import tomllib
+import json
+from pathlib import Path
 
 from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.render_vibe import render
@@ -44,6 +46,43 @@ def test_vibe_mcp_timeout_is_660(make_render):
     assert memory["args"] == ["-m", "compchem_memory.server"]
     assert config["active_model"] == "devstral"
     assert config["disabled_tools"] == ["file_system.bash"]
+
+
+def test_vibe_http_memory_uses_native_api_key_env_auth(make_render, monkeypatch):
+    neutral, context = make_render(model="devstral")
+    context.memory_service = {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    for server in neutral.servers:
+        if server.name == "compchem-memory":
+            server.kind = "remote"
+            server.command = None
+            server.url = context.memory_service["url"]
+    rendered = _config(render(neutral, context), context)["mcp_servers"]
+    memory = next(server for server in rendered if server["name"] == "compchem-memory")
+
+    assert memory["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert "headers" not in memory
+    assert "${" not in repr(memory)
+
+    monkeypatch.setenv("MAGNOLIA_MEMORY_SERVICE_TOKEN", "recorded-token")
+    try:
+        from vibe.core.config.models import MCPHttp
+    except ImportError:
+        fixture = Path(__file__).parents[1] / "fixtures" / "vibe_http_auth.json"
+        assert json.loads(fixture.read_text(encoding="utf-8")) == {
+            "input": memory["auth"],
+            "expected_headers": {"Authorization": "Bearer recorded-token"},
+        }
+    else:
+        assert MCPHttp.model_validate(memory).http_headers() == {
+            "Authorization": "Bearer recorded-token"
+        }
 
 
 def test_vibe_without_model_does_not_pin_active_model(make_render):

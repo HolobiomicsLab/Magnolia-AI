@@ -46,6 +46,11 @@ def _all_observed_table(tmp_path):
             if name != "identity":
                 cell["value"] = copy.deepcopy(values[name])
         row["cells"]["quota_evidence"] = {"status": "unknown", "artifact": None}
+        if "http_api_key_env" in row["cells"]:
+            row["cells"]["http_api_key_env"] = {
+                "status": "unknown",
+                "artifact": None,
+            }
         row["gate"] = {
             "status": "observed",
             "artifact": evidence.name,

@@ -264,6 +264,26 @@ def test_vibe_no_trust_bypass_and_required_policy_env(tmp_path):
     assert "VIBE_DISABLE_TELEMETRY" not in executor.prepared.env
 
 
+def test_vibe_releases_managed_memory_after_client_exit(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    executor = executor_for(context.route, "reviewer", context)
+    handle = object()
+    object.__setattr__(executor.prepared, "memory_service_handle", handle)
+    released = []
+    sentinel = object()
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+    monkeypatch.setattr(VibeExecutor, "_run", lambda self, *args, **kwargs: sentinel)
+
+    result = executor.run("prompt", tmp_path, tmp_path / "attempt")
+
+    assert result is sentinel
+    assert released == [handle]
+    assert executor.prepared.memory_service_handle is None
+
+
 def test_vibe_worker_edits_require_D4_and_gate():
     route = ResolvedRoute("vibe", "model", "family", "vibe", "worker", "test")
     context = ExecContext(

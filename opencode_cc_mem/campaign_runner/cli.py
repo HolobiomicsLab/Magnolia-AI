@@ -32,6 +32,26 @@ from .workers import InvocationGovernance, WorkerExecutor
 _ROOT = Path(__file__).resolve().parents[1]
 
 
+def _memory_setup(root: Path = _ROOT) -> dict[str, Any]:
+    """Load the installation's memory provider selection for managed Vibe HTTP."""
+    path = root / ".magnolia" / "llm-setup.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _memory_route(route: ResolvedRoute) -> dict[str, str]:
+    """Return a managed Vibe route; retain existing routes for other clients."""
+    if route.client == "vibe":
+        return {"transport": "managed"}
+    return {
+        "transport": "http",
+        "url": os.environ.get("MAGNOLIA_MEMORY_URL", "http://127.0.0.1:8765/mcp"),
+    }
+
+
 def _print_state(state: CampaignState) -> None:
     print(json.dumps(state.to_dict(), indent=2, sort_keys=True))
 
@@ -299,6 +319,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         "MAGNOLIA_PROJECT_DIR": str(project_dir),
         "MAGNOLIA_ROOT": str(project_dir.parents[1]),
     }
+    memory_setup = _memory_setup()
     routes = resolve_campaign_routes(protocol, require_reviewers=True)
     service_roles = opencode_service_roles(routes)
     governor = Governor()
@@ -348,13 +369,8 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             project_identity=project_digest,
             python_executable=sys.executable,
             tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
-            setup={},
-            memory_service={
-                "transport": "http",
-                "url": os.environ.get(
-                    "MAGNOLIA_MEMORY_URL", "http://127.0.0.1:8765/mcp"
-                ),
-            },
+            setup=memory_setup,
+            memory_service=_memory_route(route),
             invocation_id=uuid.uuid4().hex,
             launch_argv=(client_binary,),
             environment=environment,

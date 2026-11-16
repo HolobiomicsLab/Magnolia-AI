@@ -8,9 +8,10 @@ import os
 import re
 import stat
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
+from types import SimpleNamespace
 from typing import Any, Mapping
 
 from compchem_memory.harness.neutral import NeutralConfig
@@ -91,10 +92,27 @@ class PreparedLaunch:
     policy_digest: str
     config_digest: str
     required_capability_identity: str
+    memory_service_handle: Any = None
 
 
 def prepare_launch(context: ExecContext) -> PreparedLaunch:
     """Validate capability evidence and materialize one isolated launch contract."""
+    evidence_context = context
+    context, handle = _acquire_managed_memory_service(context)
+    try:
+        return _prepare_launch(context, evidence_context=evidence_context if handle else None)
+    except Exception:
+        if handle is not None:
+            from compchem_memory.harness.memory_service import release_memory_service
+
+            release_memory_service(handle)
+        raise
+
+
+def _prepare_launch(
+    context: ExecContext, *, evidence_context: ExecContext | None = None
+) -> PreparedLaunch:
+    """Prepare after any managed service has been acquired."""
     _require_context(context)
     route = context.route
     assert route is not None
@@ -121,7 +139,12 @@ def prepare_launch(context: ExecContext) -> PreparedLaunch:
     config_digest = _configuration_identity(
         context, settings_body, mcp_body, native_bodies
     )
-    if evidence["identity"] != config_digest:
+    expected_evidence_identity = (
+        configuration_identity(evidence_context)
+        if evidence_context is not None
+        else config_digest
+    )
+    if evidence["identity"] != expected_evidence_identity:
         raise ExecutorRefused(
             "capability configuration identity does not match discovered configuration"
         )
@@ -180,6 +203,15 @@ def configuration_identity(context: ExecContext) -> str:
     """Return the digest of configuration this client launch will discover."""
     if context.route is None:
         raise ExecutorRefused("configuration identity requires a resolved route")
+    if context.memory_service.get("transport") == "managed":
+        context = replace(
+            context,
+            memory_service={
+                "transport": "http",
+                "url": "http://127.0.0.1:0/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            },
+        )
     policy = load_role(ROLE_CONFIG_NAMES[context.role])
     required = _required_capabilities(policy, context)
     settings = _json_bytes(_settings_payload(context, policy, required))
@@ -188,6 +220,37 @@ def configuration_identity(context: ExecContext) -> str:
     invocation_name = context.invocation_id or "configuration-identity"
     native = _client_native_artifacts(context, Path(invocation_name), mcp_payload)
     return _configuration_identity(context, settings, mcp, native)
+
+
+def _acquire_managed_memory_service(
+    context: ExecContext,
+) -> tuple[ExecContext, Any | None]:
+    """Acquire a per-project service for a Vibe role that uses memory tools."""
+    if (
+        context.route is None
+        or context.route.client != "vibe"
+        or context.role not in {"worker", "reviewer"}
+        or context.memory_service.get("transport") != "managed"
+    ):
+        return context, None
+    if context.project_dir is None or not context.python_executable:
+        raise ExecutorRefused("managed Vibe memory requires a project and Python")
+    from compchem_memory.harness.memory_service import ensure_memory_service
+
+    handle = ensure_memory_service(
+        SimpleNamespace(
+            project_dir=context.project_dir,
+            python=context.python_executable,
+            setup=dict(context.setup),
+            environment={
+                **os.environ,
+                **({} if context.environment is None else dict(context.environment)),
+            },
+            holder_pid=os.getpid(),
+        )
+    )
+    route = {**handle.route(), "_handle": handle}
+    return replace(context, memory_service=route), handle
 
 
 def _require_context(context: ExecContext) -> None:
@@ -578,8 +641,9 @@ def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
         }
         authorization = service.get("authorization_env")
         if isinstance(authorization, str):
-            entry["headers"] = {
-                "Authorization": f"Bearer ${{{authorization}}}"
+            entry["auth"] = {
+                "type": "static",
+                "api_key_env": authorization,
             }
     else:
         args = service.get("args", ())
@@ -975,6 +1039,7 @@ def _prepared(
         policy_digest=policy_digest,
         config_digest=config_digest,
         required_capability_identity=capability_identity,
+        memory_service_handle=context.memory_service.get("_handle"),
     )
 
 
