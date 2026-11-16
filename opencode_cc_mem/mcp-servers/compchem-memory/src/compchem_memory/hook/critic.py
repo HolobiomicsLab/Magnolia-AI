@@ -431,6 +431,7 @@ def _verdict_row(
     upstream_provider: str | None,
     usage: dict | None,
     quality_floor_dropped: bool,
+    turn_id: str | None = None,
 ) -> dict:
     severity = verdict.get("severity") if verdict.get("severity") is not None else "none"
     claims = verdict.get("unsupported_claims")
@@ -444,13 +445,32 @@ def _verdict_row(
         "upstream_provider": upstream_provider,
         "usage": usage,
         "quality_floor_dropped": quality_floor_dropped,
+        "turn_id": turn_id,
     }
+
+
+def _has_verdict(path: Path, harness: str, turn_id: str | None) -> bool:
+    """Return whether this harness turn already has a durable verdict."""
+    if turn_id is None:
+        return False
+    return any(
+        row.get("harness") == harness and row.get("turn_id") == turn_id
+        for row in read_turns(path)
+    )
 
 
 def _save_notice(paths: ProjectPaths, harness: str, session_id: str, row: dict) -> None:
     if not row["flag"]:
         return
     notice = f"⚠ ({row['severity']}) {str(row['why'])[:140]}"
+    if harness == "opencode":
+        from compchem_memory.job_notices import push_job_notice
+
+        push_job_notice(
+            str(paths.project_dir), run_id=session_id,
+            tool=f"claim-audit: {str(row['why'])[:80]}",
+            state=str(row["severity"]), category="warning",
+        )
     with SessionState.open(paths.store, harness, session_id) as state:
         notices = state.data.get("unshown_notices")
         if not isinstance(notices, list):
@@ -486,8 +506,11 @@ def run_critic(
         )
         if len(report) < MIN_REPORT_CHARS or (route := resolve_route("critic")) is None:
             return
-        result = _judge(route, report, trace_text)
         out_dir = paths.store / "claim-critic"
+        verdict_path = out_dir / f"{safe_component(session_id)}.jsonl"
+        if _has_verdict(verdict_path, harness, turn_id):
+            return
+        result = _judge(route, report, trace_text)
         if result.error or not result.text:
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, result))
             return
@@ -505,8 +528,9 @@ def run_critic(
             result.upstream_provider,
             result.usage,
             result.quality_floor_dropped,
+            turn_id,
         )
-        _append_jsonl(out_dir / f"{safe_component(session_id)}.jsonl", row)
+        _append_jsonl(verdict_path, row)
         _save_notice(paths, harness, session_id, row)
     except Exception:  # noqa: BLE001 - a hook failure must never break the client
         return
