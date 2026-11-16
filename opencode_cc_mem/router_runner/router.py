@@ -16,6 +16,7 @@ Robustness contract:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -180,10 +181,8 @@ class Router:
     # ---------- internals ----------
 
     def _eval(self, text: str) -> EvalDecision | EvalQuotaWait | None:
-        if self.evaluator is None or not self.evaluator.available():
-            return None
         context = self._eval_context()
-        result = self.evaluator.evaluate(text, context)
+        result = self._evaluate_once(text, context)
         if isinstance(result, EvalQuotaWait):
             self._store_eval_waiter(text, context, result)
             return result
@@ -197,18 +196,59 @@ class Router:
             "last_project": getattr(self, "_last_project", None),
         }
 
+    def _evaluate_once(
+        self,
+        text: str,
+        context: dict,
+        *,
+        waiter_id: str | None = None,
+        availability_checked: bool = False,
+    ) -> EvalDecision | EvalQuotaWait | None:
+        if self.evaluator is None:
+            return None
+        if not availability_checked and not self.evaluator.available():
+            return None
+        kwargs = {"waiter_id": waiter_id} if waiter_id is not None else {}
+        if getattr(self.evaluator, "supports_availability_checked", False):
+            kwargs["availability_checked"] = True
+        return self.evaluator.evaluate(text, context, **kwargs)
+
+    def _route_identity(self) -> dict:
+        identity = getattr(self.evaluator, "route_identity", None)
+        if callable(identity):
+            return identity()
+        return {"model": getattr(self.evaluator, "model", None)}
+
+    def _registry_digest(self) -> str:
+        encoded = json.dumps(
+            self.registry, sort_keys=True, separators=(",", ":"), default=str
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _waiter_binding(self, text: str, context: dict) -> dict:
+        return {
+            "route_identity": self._route_identity(),
+            "project_registry_digest": self._registry_digest(),
+            "pending_input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "project": context.get("last_project"),
+        }
+
     def _store_eval_waiter(
         self, text: str, context: dict, waiting: EvalQuotaWait
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         route_model = getattr(self.evaluator, "model", None)
+        persisted_context = {
+            "evaluation": context,
+            "binding": self._waiter_binding(text, context),
+        }
         with self.engine.store.tx():
             self.engine.store.insert(
                 "eval_waiters",
                 {
                     "waiter_id": waiting.waiter_id,
                     "text": text,
-                    "context": json.dumps(context, sort_keys=True),
+                    "context": json.dumps(persisted_context, sort_keys=True),
                     "subscription_key": waiting.subscription_key,
                     "hold_id": waiting.hold_id,
                     "reset_at": waiting.reset_at,
@@ -234,14 +274,24 @@ class Router:
         row = self.engine.store.get("eval_waiters", "waiter_id", waiter_id)
         if row is None or row["state"] != "pending":
             return RouteReply("unavailable", detail="evaluation waiter is not pending")
+        try:
+            persisted = json.loads(row["context"])
+            context = persisted["evaluation"]
+            binding = persisted["binding"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            return RouteReply("unavailable", detail="evaluator waiter binding is invalid")
+        if binding.get("route_identity") != self._route_identity():
+            return RouteReply("unavailable", detail="evaluator route changed")
+        if binding.get("project_registry_digest") != self._registry_digest():
+            return RouteReply("unavailable", detail="evaluator project registry changed")
+        input_digest = hashlib.sha256(row["text"].encode("utf-8")).hexdigest()
+        if binding.get("pending_input_digest") != input_digest:
+            return RouteReply("unavailable", detail="evaluator pending input changed")
+        project = binding.get("project")
+        if project is not None and project not in self.registry:
+            return RouteReply("unavailable", detail="evaluator project registry changed")
         if self.evaluator is None or not self.evaluator.available():
             return RouteReply("unavailable", detail="evaluator route is unavailable")
-        context = self._eval_context()
-        stored_context = json.loads(row["context"])
-        if stored_context != context:
-            return RouteReply("unavailable", detail="evaluator routing context changed")
-        if row["route_model"] != getattr(self.evaluator, "model", None):
-            return RouteReply("unavailable", detail="evaluator route changed")
         hold = self.evaluator.quota_wait(row["subscription_key"], waiter_id)
         if hold is not None:
             if row["hold_id"] is not None and hold.hold_id != row["hold_id"]:
@@ -263,9 +313,18 @@ class Router:
         claimed = self.engine.store.claim_eval_waiter(waiter_id, now)
         if claimed is None:
             return RouteReply("unavailable", detail="evaluation waiter is not pending")
-        result = self.evaluator.evaluate(
-            claimed["text"], context, waiter_id=waiter_id
-        )
+        try:
+            result = self._evaluate_once(
+                claimed["text"],
+                context,
+                waiter_id=waiter_id,
+                availability_checked=True,
+            )
+        except Exception:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id, "pending", datetime.now(timezone.utc).isoformat()
+            )
+            return RouteReply("unavailable", detail="evaluator resume failed; waiter remains pending")
         if isinstance(result, EvalQuotaWait):
             self.engine.store.set_eval_waiter_state(
                 waiter_id,
@@ -281,10 +340,13 @@ class Router:
             )
             return RouteReply("unavailable", detail="evaluator produced no decision")
         self.engine.record_eval_decision(claimed["text"], result)
-        self.engine.store.set_eval_waiter_state(
-            waiter_id, "completed", datetime.now(timezone.utc).isoformat()
-        )
         flags = ["untrusted_text"] if INJECTION.search(claimed["text"]) else []
+        self.engine.store.set_eval_waiter_state(
+            waiter_id,
+            "completed",
+            datetime.now(timezone.utc).isoformat(),
+            clear_input=True,
+        )
         return self._apply_eval(result, claimed["text"], flags)
 
     def _apply_eval(self, decision: EvalDecision, text: str, flags: list[str]) -> RouteReply:

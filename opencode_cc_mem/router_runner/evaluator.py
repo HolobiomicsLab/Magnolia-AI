@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,7 +36,7 @@ from campaign_runner.executors.contracts import (
     UsageRecord,
 )
 from campaign_runner.executors.opencode import OpenCodeEvaluatorExecutor
-from campaign_runner.executors.registry import ExecutorRefused, executor_for
+from campaign_runner.executors.registry import executor_for
 from campaign_runner.governor import (
     Admission,
     AdmissionRequest,
@@ -44,6 +45,7 @@ from campaign_runner.governor import (
     _process_start_token,
 )
 from campaign_runner.process import ProcessControl, run_process
+from campaign_runner.roles import load_role
 from campaign_runner.routing import resolve_route
 
 # The memory server's llm.py lives in a different package tree; load it by path.
@@ -64,7 +66,6 @@ EVALUATOR_SYSTEM_PROMPT = (
     "means follow up an existing Work Item; stop means stop it; ignore "
     "means no action. Never invent project names not present in context."
 )
-_SUBPROCESS_RUN = subprocess.run
 _QUOTA_TEXT = ("rate limit", "quota", "session limit", "weekly limit", "usage limit")
 
 
@@ -138,18 +139,32 @@ def _catalog_has_model(model: str) -> bool:
         return False
 
 
-def _executable_available(value: str) -> bool:
-    """Return whether a real or synthetically patched client resolves."""
-    if subprocess.run is not _SUBPROCESS_RUN:
-        return True
+def _executable_available(
+    value: str, which: Callable[[str], str | None] = shutil.which
+) -> bool:
+    """Return whether a client path resolves through an injectable lookup."""
     path = Path(value).expanduser()
-    return path.is_file() if path.is_absolute() else shutil.which(value) is not None
+    return path.is_file() if path.is_absolute() else which(value) is not None
+
+
+def _capability_accepted(
+    capabilities: Mapping[str, Any], client: str, role: str
+) -> bool:
+    """Read one projected capability row without preparing a launch."""
+    client_roles = capabilities.get(client)
+    if not isinstance(client_roles, Mapping):
+        return False
+    evidence = client_roles.get(role, False)
+    if isinstance(evidence, Mapping):
+        return evidence.get("accepted") is True
+    return evidence is True
 
 
 class GenerativeEvaluator:
     """Dispatch subscription routes through the registry, retaining API fallback."""
 
     kind = "generative"
+    supports_availability_checked = True
 
     def __init__(
         self,
@@ -159,6 +174,7 @@ class GenerativeEvaluator:
         governor_factory: Callable[[], Governor] | None = None,
         project_dir: str | Path | None = None,
         role_capabilities: Mapping[str, Any] | None = None,
+        executable_available: Callable[[str], bool] | None = None,
     ):
         self.model = model or os.environ.get("MAGNOLIA_EVAL_MODEL")
         self.governor = governor
@@ -167,15 +183,37 @@ class GenerativeEvaluator:
             project_dir or os.environ.get("MAGNOLIA_PROJECT_DIR") or Path.cwd()
         ).resolve()
         self.role_capabilities = role_capabilities
+        self._executable_available = executable_available or _executable_available
 
     def available(self) -> bool:
         if not self._uses_client():
             return llm.is_llm_available()
         try:
-            self._executor()
-            return True
-        except (ExecutorRefused, OSError, RuntimeError, ValueError):
+            route = resolve_route("evaluator", {"model": self.model})
+            load_role("evaluator")
+            if not self._executable_available(self._binary(route.client)):
+                return False
+            if route.client == "opencode":
+                return True
+            capabilities = (
+                self.role_capabilities
+                if self.role_capabilities is not None
+                else load_role_capabilities()
+            )
+            return _capability_accepted(capabilities, route.client, "evaluator")
+        except (OSError, RuntimeError, ValueError):
             return False
+
+    def route_identity(self) -> dict[str, str | None]:
+        """Return the durable evaluator route binding without launch side effects."""
+        route = resolve_route("evaluator", {"model": self.model})
+        return {
+            "client": route.client,
+            "model": route.model,
+            "subscription_key": route.subscription_key,
+            "role": route.role,
+            "project_dir": str(self.project_dir),
+        }
 
     def _uses_client(self) -> bool:
         model = self.model or ""
@@ -198,8 +236,6 @@ class GenerativeEvaluator:
 
     def _execution_context(self, route) -> ExecContext:
         binary = self._binary(route.client)
-        if not _executable_available(binary):
-            raise ExecutorRefused(f"{route.client} evaluator executable is unavailable")
         root = Path(__file__).resolve().parents[1]
         project_digest = hashlib.sha256(str(self.project_dir).encode()).hexdigest()
         capabilities = (
@@ -235,7 +271,7 @@ class GenerativeEvaluator:
             installation_root=root,
             workspace_root=self.project_dir.parent,
             project_identity=project_digest,
-            python_executable=os.environ.get("PYTHON", os.sys.executable),
+            python_executable=os.environ.get("PYTHON", sys.executable),
             setup={},
             required_capabilities=(),
             invocation_id=uuid.uuid4().hex,
@@ -283,8 +319,9 @@ class GenerativeEvaluator:
         context: dict | None = None,
         *,
         waiter_id: str | None = None,
+        availability_checked: bool = False,
     ) -> EvalDecision | EvalQuotaWait | None:
-        if not self.available():
+        if not availability_checked and not self.available():
             return None
         if self._uses_client():
             outcome = self._call_client(text, context or {}, waiter_id)
@@ -540,8 +577,14 @@ class JevEvaluator(GenerativeEvaluator):
     def available(self) -> bool:
         return bool(self.jev_model) and bool(self._api_key())
 
-    def evaluate(self, text: str, context: dict | None = None) -> EvalDecision | None:
-        if not self.available():
+    def evaluate(
+        self,
+        text: str,
+        context: dict | None = None,
+        *,
+        availability_checked: bool = False,
+    ) -> EvalDecision | None:
+        if not availability_checked and not self.available():
             return None
         projects = (context or {}).get("projects", [])
         project_criteria = {p: p for p in projects} or None

@@ -227,13 +227,14 @@ def test_evaluator_each_client_route_without_api_key(monkeypatch, tmp_path):
         "is_llm_available",
         lambda: (_ for _ in ()).throw(AssertionError("API availability is unrelated")),
     )
-    seen = []
-
-    def fake_executor(route, role, context):
-        seen.append((route.client, route.model, role, context.role_cap))
-        return _ClientExecutor()
-
-    monkeypatch.setattr(evaluator_module, "executor_for", fake_executor)
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("availability must not construct an executor")
+        ),
+    )
+    checked = []
     for model in (
         "claude-code/claude-haiku-5-5",
         "codex/gpt-5.6-luna",
@@ -244,14 +245,70 @@ def test_evaluator_each_client_route_without_api_key(monkeypatch, tmp_path):
             model,
             project_dir=tmp_path,
             role_capabilities=_accepted_evaluator_capabilities(),
+            executable_available=lambda path: checked.append(path) or True,
         )
         assert evaluator.available() is True
-    assert [row[:3] for row in seen] == [
-        ("claude-code", "claude-haiku-5-5", "evaluator"),
-        ("codex", "gpt-5.6-luna", "evaluator"),
-        ("vibe", "devstral-2", "evaluator"),
-        ("opencode", "opencode-go/deepseek-v4.1-flash", "evaluator"),
-    ]
+    assert len(checked) == 4
+    assert not (tmp_path / ".magnolia").exists()
+
+
+def test_evaluator_availability_is_pure_and_checked_once(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    executor = _ClientExecutor()
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args: (_ for _ in ()).throw(
+            AssertionError("availability must not prepare a launch")
+        ),
+    )
+    checks = []
+    pure = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        governor_factory=lambda: (_ for _ in ()).throw(
+            AssertionError("availability must not acquire a governor or memory service")
+        ),
+        project_dir=tmp_path,
+        role_capabilities=_accepted_evaluator_capabilities(),
+        executable_available=lambda _path: True,
+    )
+    assert pure.available() is True
+    assert not (tmp_path / ".magnolia").exists()
+
+    monkeypatch.setattr(evaluator_module, "executor_for", lambda *args: executor)
+    evaluator = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        project_dir=tmp_path,
+        role_capabilities=_accepted_evaluator_capabilities(),
+        executable_available=lambda path: checks.append(path) or True,
+    )
+    router = make_router(tmp_path, evaluator=evaluator)
+
+    assert router.say("triage this").kind == "ignored"
+    assert len(checks) == 1
+    assert executor.calls
+
+
+def test_evaluator_refused_capability_is_unavailable(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("refused capability must not fall back to OpenCode")
+        ),
+    )
+    evaluator = GenerativeEvaluator(
+        "codex/gpt-5.6-luna",
+        project_dir=tmp_path,
+        role_capabilities={"codex": {"evaluator": {"accepted": False}}},
+        executable_available=lambda _path: True,
+    )
+
+    assert evaluator.available() is False
+    assert evaluator.evaluate("triage this", {"projects": ["proj_a"]}) is None
 
 
 def test_evaluator_selected_model_and_no_tools_one_turn(monkeypatch, tmp_path):
@@ -266,6 +323,7 @@ def test_evaluator_selected_model_and_no_tools_one_turn(monkeypatch, tmp_path):
 
     monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     monkeypatch.setattr(evaluator_module, "executor_for", fake_executor)
+    monkeypatch.delenv("PYTHON", raising=False)
     evaluator = GenerativeEvaluator(
         "claude-code/claude-haiku-5-5",
         project_dir=tmp_path,
@@ -276,7 +334,21 @@ def test_evaluator_selected_model_and_no_tools_one_turn(monkeypatch, tmp_path):
     assert captured["role"] == "evaluator"
     assert captured["context"].role_cap == 1
     assert captured["context"].required_capabilities == ()
+    assert captured["context"].python_executable == sys.executable
     assert executor.calls[0][1]["retries"] == 0
+
+
+def test_executable_probe_uses_injected_lookup(monkeypatch):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(evaluator_module.subprocess, "run", lambda *args, **kwargs: None)
+
+    assert evaluator_module._executable_available(
+        "missing-client", which=lambda _name: None
+    ) is False
+    assert evaluator_module._executable_available(
+        "fixture-client", which=lambda name: f"/bin/{name}"
+    ) is True
 
 
 def test_evaluator_api_fallback_unchanged(monkeypatch):
@@ -360,7 +432,10 @@ def test_go_generative_path_receives_system_prompt_and_closed_stdin(monkeypatch)
         seen["stdin"] = kwargs.get("stdin")
         return Out()
 
+    from router_runner import evaluator as evaluator_module
+
     monkeypatch.setattr("router_runner.evaluator.subprocess.run", fake_run)
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     decision = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {})
 
     assert decision is not None
@@ -390,7 +465,10 @@ def test_go_generative_path_rejects_invalid_action(monkeypatch):
         stdout = '{"action":"launch","confidence":0.9,"reason":"x"}'
         stderr = ""
 
+    from router_runner import evaluator as evaluator_module
+
     monkeypatch.setattr("router_runner.evaluator.subprocess.run", lambda *a, **k: Out())
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     assert GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {}) is None
 
 
