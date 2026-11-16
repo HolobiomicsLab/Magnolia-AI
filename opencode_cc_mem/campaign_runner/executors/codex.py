@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
 FORBIDDEN_FLAGS = frozenset({
+    "--cyber-access-program",
     "--dangerously-bypass-approvals-and-sandbox",
     "--dangerously-bypass-hook-trust",
     "--dangerously-skip-permissions",
@@ -44,16 +45,80 @@ FORBIDDEN_FLAGS = frozenset({
     "--yolo",
 })
 RESTRICTED_FEATURES = (
+    "agent_message_board",
+    "agent_message_board_mcp",
+    "analytics_plan_history",
+    "api_key_cyber_access_programs",
+    "api_key_model_discovery",
+    "apps_early_resource_discovery",
+    "async_compaction",
+    "async_compaction_root_only",
+    "bedrock_setup_wizard",
     "browser_use",
+    "browser_annotation_api",
     "browser_use_external",
     "browser_use_full_cdp_access",
+    "cli_daybreak",
     "code_mode_host",
+    "code_mode_host_grpc",
+    "code_mode_only_strict_3p_tools",
+    "code_mode_tool_search",
+    "codex_apps_mcp_2026_07_28",
+    "command_sessions_world_state",
     "computer_use",
+    "daemon_auto_start",
+    "daybreak_program_propagation",
+    "deferred_tool_world_state",
+    "executor_capability_discovery",
+    "executor_capability_discovery_v2",
+    "gateway_setup_wizard",
+    "gcp_setup_wizard",
     "goals",
+    "guardian_conversation_history_tools",
+    "guardian_denial_reconsideration",
+    "guardian_include_additional_context",
+    "guardian_native_multi_agent_history",
+    "guardian_recorded_items",
+    "guardian_reuse_parent_compaction",
+    "guardian_root_handoff_context",
+    "guardian_trust_orchestrator_connectors",
+    "guardianv2_decisions_comparison",
+    "guardianv3",
+    "hosted_search_policy",
     "image_generation",
+    "image_generation_animation",
     "in_app_browser",
+    "in_app_voice",
+    "incremental_exec_tools",
+    "incremental_tools",
+    "incremental_tools_legacy",
+    "incremental_tools_legacy_gcp",
+    "login_shell_package_path",
+    "mcp_connection_sharing",
+    "mcp_lazy_stdio_startup",
+    "mcp_oauth_refresh_coordination",
+    "mcp_tool_list_changed",
+    "model_catalog_in_context",
     "multi_agent",
+    "multi_agent_v2_dynamic_tools",
+    "multi_env_copy_file",
+    "output_token_replay",
+    "prediction_preserve_parent_tools",
+    "prefer_mxc",
+    "reasoning_effort_override",
+    "retain_client_tool_outputs",
+    "runtime_agent_instances",
+    "send_message_to_user_async",
+    "skill_catalog_deltas",
     "standalone_web_search",
+    "subagent_default_context_limits",
+    "subagent_thread_environments",
+    "system_proxy_fallback",
+    "unified_image_budget",
+    "untrusted_as_tool_output",
+    "use_xaa",
+    "wake_on_agent_messages",
+    "write_stdin_approval",
 )
 ISOLATION_OVERRIDES = (
     'web_search="disabled"',
@@ -78,6 +143,7 @@ ISOLATION_PINNED_OWNER_KEYS = frozenset({
 BUILTIN_PROVIDER_IDS = frozenset({
     "amazon-bedrock",
     "amazon-bedrock-runtime",
+    "gcp",
     "lmstudio",
     "ollama",
     "openai",
@@ -1088,12 +1154,9 @@ def _validate_final_argv(argv: list[str]) -> None:
         if value.startswith("-s") and not value.startswith("-s="):
             if value[2:] == "danger-full-access":
                 raise WorkerError("forbidden Codex launch sandbox")
-        if value in {"-c", "--config"} and index + 1 < len(options):
-            _validate_config_override(options[index + 1], pinned)
-        elif value.startswith("--config="):
-            _validate_config_override(value.split("=", 1)[1], pinned)
-        elif value.startswith("-c") and len(value) > 2:
-            _validate_config_override(value[2:].removeprefix("="), pinned)
+        override = _config_override_at(options, index)
+        if override is not None:
+            _validate_config_override(override, pinned)
         if value == "--enable" and index + 1 < len(options):
             _validate_feature_switch(options[index + 1], True, pinned)
         elif value.startswith("--enable="):
@@ -1153,17 +1216,33 @@ def _pinned_config_values(options: list[str]) -> dict[str, Any]:
     for feature in (*RESTRICTED_FEATURES, "apps"):
         pinned[f"features.{feature}"] = False
     pinned["features.skip_host_skill_discovery"] = True
-    for index, value in enumerate(options[:-1]):
+    for index, value in enumerate(options):
         if value in {"-m", "--model"}:
-            pinned["model"] = options[index + 1]
+            if index + 1 < len(options):
+                pinned["model"] = options[index + 1]
         elif value in {"-s", "--sandbox"}:
-            pinned["sandbox_mode"] = options[index + 1]
-        elif value in {"-c", "--config"}:
-            key, separator, raw_value = options[index + 1].partition("=")
-            normalized = key.strip().casefold().replace("-", "_")
-            if separator and normalized == "model_reasoning_effort":
-                pinned.setdefault(normalized, _config_value(raw_value))
+            if index + 1 < len(options):
+                pinned["sandbox_mode"] = options[index + 1]
+        override = _config_override_at(options, index)
+        if override is None:
+            continue
+        key, separator, raw_value = override.partition("=")
+        normalized = key.strip().casefold().replace("-", "_")
+        if separator and normalized == "model_reasoning_effort":
+            pinned.setdefault(normalized, _config_value(raw_value))
     return pinned
+
+
+def _config_override_at(options: list[str], index: int) -> str | None:
+    """Return one separated or glued Codex config override."""
+    value = options[index]
+    if value in {"-c", "--config"}:
+        return options[index + 1] if index + 1 < len(options) else None
+    if value.startswith("--config="):
+        return value.split("=", 1)[1]
+    if value.startswith("-c") and len(value) > 2:
+        return value[2:].removeprefix("=")
+    return None
 
 
 def _validate_feature_switch(

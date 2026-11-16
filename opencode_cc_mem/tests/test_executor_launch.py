@@ -1419,6 +1419,28 @@ def test_launch_binds_policy_env_names_from_effective_environment(tmp_path, monk
         prepare_launch(context)
 
 
+def test_explicit_child_environment_keys_are_protected_from_their_source(
+    tmp_path, monkeypatch
+):
+    context = _context(tmp_path, client="codex")
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._base_explicit_environment
+
+    def with_future_name(*args, **kwargs):
+        explicit = original(*args, **kwargs)
+        explicit["COMPCHEM_FUTURE_CONTRACT"] = "bound"
+        return explicit
+
+    monkeypatch.setattr(
+        launch_module, "_base_explicit_environment", with_future_name
+    )
+    launch = prepare_launch(context)
+
+    assert launch.env["COMPCHEM_FUTURE_CONTRACT"] == "bound"
+    assert "COMPCHEM_FUTURE_CONTRACT" in launch.protected_env_names
+
+
 def test_launch_refuses_renamed_policy_environment_name(tmp_path, monkeypatch):
     context = _production_claude_context(tmp_path)
     from campaign_runner import launch as launch_module

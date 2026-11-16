@@ -8,7 +8,8 @@
       "opencode_cc_mem/docs/harness-probes-2026-11.md",
       "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
       "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
-      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md"
+      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+      ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md"
     ]
   },
   "note": "Claude live role gates are accepted and launch-bound to the real client plus normalized project-independent rendered components. Codex and Vibe remain refused.",
@@ -804,13 +805,13 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
@@ -834,11 +835,11 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           }
         },
         "argv": {
@@ -910,13 +911,13 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
@@ -940,11 +941,11 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           }
         },
         "argv": {
@@ -1016,13 +1017,13 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
@@ -1046,11 +1047,11 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           }
         },
         "argv": {
@@ -1122,13 +1123,13 @@
       "stale": false,
       "gate": {
         "status": "refused",
-        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-livefix-report.md",
+        "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
         "value": {
           "decision": "refused-awaiting-live-rerun",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
@@ -1152,11 +1153,11 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": ".superpowers/sdd/harness-neutral-agents-plan-p3/task-codex-0169-audit-report.md",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex",
-            "version": "0.154.0",
-            "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           }
         },
         "argv": {
