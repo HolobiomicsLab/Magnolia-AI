@@ -193,6 +193,20 @@ def _log_error(
         pass
 
 
+def _log_after_emission(
+    error: Exception,
+    harness: str,
+    event_name: str,
+    event: Any,
+    env: Mapping[str, str],
+) -> None:
+    """Log after required denial delivery without changing its result."""
+    try:
+        _log_error(error, harness, event_name, event, env)
+    except Exception:  # noqa: BLE001 - diagnostics cannot override a delivered denial
+        pass
+
+
 def _required_failure_event(harness: str, event_name: str, raw: Any = None):
     """Build the minimum event needed for a native required denial."""
     from compchem_memory.hook.events import HookEvent, ToolCall
@@ -220,6 +234,7 @@ def _render_required_failure(
     event_name: str,
     env: Mapping[str, str],
     raw: Any = None,
+    diagnostic: Exception | None = None,
 ) -> int:
     """Emit a native denial, or a nonzero hook failure if emission is impossible."""
     if event_name != "pre-tool":
@@ -239,6 +254,8 @@ def _render_required_failure(
         _write_rendered(rendered, None, event, env)
     except Exception:  # noqa: BLE001 - failed emission cannot be an exit-0 pass
         return 2
+    if diagnostic is not None:
+        _log_after_emission(diagnostic, harness, event_name, event, env)
     _record_denied(event, REQUIRED_REASON, env)
     return rendered.exit_code
 
@@ -271,14 +288,19 @@ def _render_recovered_policy(adapter: Any, event: Any, env: Mapping[str, str]) -
     """Render a recovered policy block, returning zero when no denial can be emitted."""
     if event is None:
         return 0
-    response = _policy_response(event, env)
+    response, diagnostic = _policy_response(event, env)
     if response.block is None:
         return 0
-    return _render_policy_block(adapter, event, response, env)
+    return _render_policy_block(adapter, event, response, env, diagnostic=diagnostic)
 
 
 def _render_policy_block(
-    adapter: Any, event: Any, response: Any, env: Mapping[str, str]
+    adapter: Any,
+    event: Any,
+    response: Any,
+    env: Mapping[str, str],
+    *,
+    diagnostic: Exception | None = None,
 ) -> int:
     """Write a known denial immediately, before optional hook side effects."""
     is_required = env.get("MAGNOLIA_HOOK_POLICY_REQUIRED") == "1"
@@ -296,6 +318,8 @@ def _render_policy_block(
         if not is_required:
             _log_error(error, event.harness, event.event, event, env)
         return 2 if is_required else rendered.exit_code
+    if is_required and diagnostic is not None:
+        _log_after_emission(diagnostic, event.harness, event.event, event, env)
     _record_denied(event, response.block.reason, env)
     return rendered.exit_code
 
@@ -315,7 +339,7 @@ def _record_denied(event: Any, reason: str, env: Mapping[str, str]) -> None:
         _log_error(error, event.harness, event.event, event, env)
 
 
-def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
+def _policy_response(event: Any, env: Mapping[str, str]) -> tuple[Any, Exception | None]:
     """Evaluate policy independently, failing closed for configured shell calls."""
     from compchem_memory.hook.events import Block, HookResponse, canonical_tool
     from compchem_memory.hook.policy import (
@@ -326,10 +350,10 @@ def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
     )
 
     try:
-        return HookResponse(block=decide(event, env))
+        return HookResponse(block=decide(event, env)), None
     except Exception as error:  # noqa: BLE001 - configured bash policy fails closed
         if required_mode(env):
-            return HookResponse(block=Block(REQUIRED_REASON))
+            return HookResponse(block=Block(REQUIRED_REASON)), error
         _log_error(error, event.harness, event.event, event, env)
         is_bash = (
             event.event == "pre-tool"
@@ -337,7 +361,7 @@ def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
             and canonical_tool(event.tool.raw_name) == (None, "bash")
         )
         block = Block(REASON) if env.get("MAGNOLIA_HOOK_POLICY") and is_bash else None
-        return HookResponse(block=block)
+        return HookResponse(block=block), None
 
 
 def main() -> None:
@@ -368,10 +392,13 @@ def main() -> None:
     except Exception as error:  # noqa: BLE001 - required input failures deny natively
         if is_required:
             code = _render_required_failure(
-                adapter, harness, event_name, os.environ, locals().get("raw")
+                adapter,
+                harness,
+                event_name,
+                os.environ,
+                locals().get("raw"),
+                diagnostic=error,
             )
-            if code == 0 and event_name == "pre-tool":
-                _log_error(error, harness, event_name, event, os.environ)
             os._exit(code)
         _log_error(error, harness, event_name, event, os.environ)
         os._exit(0)
@@ -379,9 +406,14 @@ def main() -> None:
         event = adapter.parse({**raw, "harness": harness}, event_name)
     except Exception as error:  # noqa: BLE001 - recover only a configured pre-tool policy
         if is_required:
-            code = _render_required_failure(adapter, harness, event_name, os.environ, raw)
-            if code == 0 and event_name == "pre-tool":
-                _log_error(error, harness, event_name, event, os.environ)
+            code = _render_required_failure(
+                adapter,
+                harness,
+                event_name,
+                os.environ,
+                raw,
+                diagnostic=error,
+            )
             os._exit(code)
         _log_error(error, harness, event_name, event, os.environ)
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
@@ -391,12 +423,24 @@ def main() -> None:
             if raw.get("tool_name") in {"ToolSearch", "SubagentHandback"}:
                 os._exit(0)
             os._exit(
-                _render_required_failure(adapter, harness, event_name, os.environ, raw)
+                _render_required_failure(
+                    adapter,
+                    harness,
+                    event_name,
+                    os.environ,
+                    raw,
+                    diagnostic=ValueError("adapter returned no event"),
+                )
             )
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
         # An ignored event is an error only when the policy blocks its tool
         # (e.g. not for Claude's ToolSearch events).
-        if recovered is not None and _policy_response(recovered, os.environ).block is not None:
+        recovered_response, _ = (
+            _policy_response(recovered, os.environ)
+            if recovered is not None
+            else (None, None)
+        )
+        if recovered_response is not None and recovered_response.block is not None:
             _log_error(
                 ValueError("adapter returned no event for configured pre-tool policy"),
                 harness,
@@ -406,9 +450,17 @@ def main() -> None:
             )
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
 
-    policy_response = _policy_response(event, os.environ)
+    policy_response, policy_diagnostic = _policy_response(event, os.environ)
     if policy_response.block is not None:
-        os._exit(_render_policy_block(adapter, event, policy_response, os.environ))
+        os._exit(
+            _render_policy_block(
+                adapter,
+                event,
+                policy_response,
+                os.environ,
+                diagnostic=policy_diagnostic,
+            )
+        )
     try:
         from compchem_memory.hook.dispatch import handle
 

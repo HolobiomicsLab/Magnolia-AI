@@ -23,11 +23,13 @@ _OTHER_CLIENTS = re.compile(
 _REQUIRED_HOOK_SCRIPT = """
 fallback={fallback}
 block() {{ printf '%s\\n' "$fallback"; }}
+exec 3<&0 || {{ block; exit $?; }}
 out=$(mktemp "${{TMPDIR:-/tmp}}/magnolia-hook.XXXXXX") || {{ block; exit $?; }}
 cleanup() {{ rm -f "$out"; }}
 trap cleanup 0
-{command} >"$out" &
+{command} <&3 3<&- >"$out" &
 hook_pid=$!
+exec 3<&-
 (
   elapsed=0
   while kill -0 "$hook_pid" 2>/dev/null; do

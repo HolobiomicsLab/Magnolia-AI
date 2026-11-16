@@ -186,7 +186,7 @@ def _path_forms_allowed(
     roots: tuple[Path, ...],
     policy: RequiredPolicy,
 ) -> bool:
-    if not value or "\x00" in value or value.startswith("~"):
+    if not value or "\x00" in value or value.startswith(("~", "$")):
         return False
     raw = value if os.path.isabs(value) else os.path.join(cwd, value)
     requested = Path(os.path.abspath(raw))
@@ -305,13 +305,15 @@ def _unsafe_search_pattern(
 
 def _safe_search_parts(pattern: str) -> tuple[str, ...] | None:
     """Return relative pattern segments, or ``None`` for unsafe forms."""
+    if any(marker in pattern for marker in "{}[]\\"):
+        return None
     parts = tuple(
         part for part in pattern.replace("\\", "/").split("/")
         if part not in {"", "."}
     )
     if (
         not pattern
-        or pattern.startswith("~")
+        or pattern.startswith(("~", "$"))
         or os.path.isabs(pattern)
         or (len(pattern) > 2 and pattern[1] == ":" and pattern[2] in "/\\")
         or ".." in parts
