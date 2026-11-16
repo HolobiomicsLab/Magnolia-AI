@@ -77,11 +77,18 @@ process.stdout.write(JSON.stringify({
 """
 
 
-def _run_plugin(plugin: str, driver_body: str, tmp_path: Path, *args: Path, env=None) -> str:
+def _run_plugin(
+    plugin: str,
+    driver_body: str,
+    tmp_path: Path,
+    *args: Path,
+    env=None,
+    plugin_dir: Path = PLUGIN_DIR,
+) -> str:
     driver = tmp_path / f"{plugin}.driver.mjs"
     driver.write_text(driver_body, encoding="utf-8")
     completed = subprocess.run(
-        [NODE, str(driver), (PLUGIN_DIR / plugin).as_uri(), *map(str, args)],
+        [NODE, str(driver), (plugin_dir / plugin).as_uri(), *map(str, args)],
         capture_output=True,
         text=True,
         timeout=60,
@@ -190,6 +197,60 @@ def test_job_notice_uses_configured_isolated_python(tmp_path):
     assert argv_log.read_text(encoding="utf-8").splitlines()[0] == "-I"
     assert not imported.exists()
     assert not fallback_used.exists()
+
+
+@pytest.mark.parametrize("with_venv", [True, False], ids=["installation-venv", "path-fallback"])
+def test_job_notice_python_fallbacks_remain_isolated(tmp_path, with_venv):
+    """Use the installation venv before the documented PATH fallback."""
+    project = tmp_path / "project"
+    _write_notice(
+        project,
+        json.dumps({"tool": "dock", "state": "completed", "category": "success", "run_id": "r1"})
+        + "\n",
+    )
+    installation = tmp_path / "installation"
+    plugin_dir = installation / ".opencode" / "plugins"
+    plugin_dir.mkdir(parents=True)
+    shutil.copy2(PLUGIN_DIR / "magnolia-job-notify.ts", plugin_dir)
+
+    path_log = tmp_path / "path-python.argv"
+    path_python = tmp_path / "bin" / "python3"
+    path_python.parent.mkdir()
+    path_python.write_text(
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$@\" > {shlex.quote(str(path_log))}\n"
+        f"exec {shlex.quote(sys.executable)} \"$@\"\n",
+        encoding="utf-8",
+    )
+    path_python.chmod(0o755)
+
+    venv_log = tmp_path / "venv-python.argv"
+    if with_venv:
+        venv_python = installation / ".venv" / "bin" / "python3"
+        venv_python.parent.mkdir(parents=True)
+        venv_python.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$@\" > {shlex.quote(str(venv_log))}\n"
+            f"exec {shlex.quote(sys.executable)} \"$@\"\n",
+            encoding="utf-8",
+        )
+        venv_python.chmod(0o755)
+
+    result = json.loads(
+        _run_plugin(
+            "magnolia-job-notify.ts",
+            JOB_NOTICE_DRIVER,
+            tmp_path,
+            project,
+            env={"MAGNOLIA_PYTHON": "", "PATH": str(path_python.parent)},
+            plugin_dir=plugin_dir,
+        )
+    )
+
+    assert result["system"] == ["[Magnolia job notices]\n✅ dock finished (completed) — run …r1"]
+    selected_log = venv_log if with_venv else path_log
+    assert selected_log.read_text(encoding="utf-8").splitlines()[0] == "-I"
+    assert path_log.exists() is not with_venv
 
 
 def test_malformed_only_queue_skips_python_and_preserves_hook_owned_lines(tmp_path):

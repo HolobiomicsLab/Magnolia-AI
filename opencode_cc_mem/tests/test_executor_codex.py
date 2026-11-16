@@ -681,6 +681,40 @@ def test_codex_refuses_forged_resume_session_without_starting_client(tmp_path):
     assert len(_calls(state)) == 1
 
 
+def test_codex_resumes_legacy_binding_without_client_key(tmp_path):
+    """Bindings written before 3250939 retain their same-client resume path."""
+    first_stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    resumed_stream = _jsonl(tmp_path / "resumed.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "again"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 15}},
+    ])
+    binary, config, state = _stub(tmp_path, [first_stream, resumed_stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    executor = executor_for(context.route, "evaluator", context)
+    first = executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+    binding_path = executor.prepared.invocation_dir / "codex-session-bindings.json"
+    payload = json.loads(binding_path.read_text())
+    payload["sessions"]["bound"]["identity"].pop("client")
+    binding_path.write_text(json.dumps(payload))
+    resume_context = replace(
+        context,
+        resume_from=executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "evaluator", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.session_id == "bound"
+    assert "resume" in _calls(state)[1]["argv"]
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
