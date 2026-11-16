@@ -243,3 +243,62 @@ Deferred M1: imports outside `compchem_memory/hook/`, including the parent `__in
 `atomic_io`, remain unbound. The stdio memory server's import route and the prior M2/M3/M5/M6
 notes are unchanged. This round is offline evidence only; the changed hook runtime still needs
 the separately authorized live Claude re-run described in the re-review packet.
+
+## Task CF Round 7 — dry re-run corrections
+
+The dry production preparation against `3b0cbca` exposed three regressions in the
+binding, corrected here on base `ef88349`. This is offline preparation and hook
+execution; no Claude client was started and no new live acceptance is claimed.
+
+The interpreter ruling supersedes Round 4's repository-only restriction. The hook
+interpreter must be an absolute, existing executable and lexically equal either
+to the supplied `MAGNOLIA_PYTHON` value, as given, or to
+`<repository>/.venv/bin/python3` with `<repository>/.venv/pyvenv.cfg`. The repository
+alternative remains valid when the override names another path. Resolving to the
+same binary grants no equivalence: unselected base interpreters, other venvs and
+outside symlinks are refused. An exact explicit override does not require the
+repository venv. Hook normalization uses that exact interpreter spelling, including
+nonstandard filenames and paths with spaces, before replacing it with its semantic
+slot.
+
+The helper row now binds H1's `native_read` over `docs/`. Its observed argv is
+`--tools Read --allowedTools Read`, with no MCP server; a no-tools helper now
+refuses `settings`. Evidence is [H1 argv](../tests/fixtures/executors/claude/live-gate/H1/01-run.json),
+[H1 tool inventory](../tests/fixtures/executors/claude/live-gate/H1/04-stream-init.json)
+and [H1 hook decisions](../tests/fixtures/executors/claude/live-gate/H1/08-hook-transcript.json).
+All four production rows were checked against the observed shapes:
+
+| Row | Observed and reproduced shape | Evidence |
+|---|---|---|
+| W1 worker | Read/Glob/Grep, Edit/Write in work, three allowed memory tools, stdio MCP | [W1 hook transcript](../tests/fixtures/executors/claude/live-gate/W1/15-hook-transcript.json), [live gate](harness-probes-p3-live-2026-11.md#claude-live-role-gate-production-code-02b5f43--16-november-2026) |
+| R1 reviewer | Read/Glob/Grep, project reads, no edits or MCP | [R1 argv](../tests/fixtures/executors/claude/live-gate/R1/01-run.json), [hook transcript](../tests/fixtures/executors/claude/live-gate/R1/14-hook-transcript.json) |
+| H1 helper | Exactly Read, only `docs/`, no MCP | H1 artifacts linked above |
+| E1 evaluator | `--tools ""`, empty MCP, one turn | [E1 argv](../tests/fixtures/executors/claude/live-gate/E1/01-run.json), [tool inventory](../tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json) |
+
+W1's argv was not directly captured by `ps`; the original record derives it from
+the same executor path as W2/W3. The current worker retains the already-bound
+seven-name production `_memory_route()`; the original live gate used its stdio
+wrapper to establish environment expansion and memory calls. This round changes
+neither that route nor the hook-only MCP-allowlist ruling.
+
+The Claude environment allowlist now retains `XDG_STATE_HOME`, `XDG_CONFIG_HOME`,
+`XDG_CACHE_HOME` and `XDG_DATA_HOME` from the parent or renderer. An offline
+SessionStart through the rendered hook verifies that the session binding lands in
+`$XDG_STATE_HOME/magnolia/bindings/`, with no binding under the temporary HOME's
+fallback `.local/state`. These names relocate storage and do not change the
+required-policy environment-name component.
+
+Only these active component digests change (full SHA-256, old → new):
+
+| Component | Old | New |
+|---|---|---|
+| All four Claude rows: `hook_interpreter` | `2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31` | `6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84` |
+| Helper: `settings` | `90609e78600b52d743e2b775c16d691afd37941751d19294ff93ec1c206007fd` | `39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06` |
+| Helper: `policy` | `916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b` | `85125a30f0c1426f797b1f31c52aac42dd1d1401c07dea54ae34d215e6d60c98` |
+
+Candidate components agree in two independent installations, one with spaces.
+Client version/SHA, MCP, native files, hook command, runner/source and required
+environment names are unchanged. Historical live digests are retained; Codex and
+Vibe rows are unchanged and remain refused. The regressions use the real gate,
+and a separate preparation-only probe accepts all four rows against the installed
+Claude `2.1.325` binary without overriding its bound version or SHA.

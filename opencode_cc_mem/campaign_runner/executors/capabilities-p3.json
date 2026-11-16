@@ -47,7 +47,7 @@
               "native_files": "ebc893c59d61c1eb4ef74a634e07b0890b0de8076cb169b09ead0e87efab8998",
               "policy": "e314a49bde7032c89646e4714027f087a42b42eb408f21f3e0d6ea0436b9dbe7",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
-              "hook_interpreter": "2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
               "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
@@ -250,7 +250,7 @@
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
               "policy": "9c10e4ad51a0f1df72c3f61e9d917a6be5f3d40e0e85c67b70f8c01d0e024756",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
-              "hook_interpreter": "2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
               "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
@@ -441,19 +441,19 @@
               "MAGNOLIA_HOOK_POLICY_SHA256"
             ],
             "components": {
-              "settings": "90609e78600b52d743e2b775c16d691afd37941751d19294ff93ec1c206007fd",
+              "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b",
+              "policy": "85125a30f0c1426f797b1f31c52aac42dd1d1401c07dea54ae34d215e6d60c98",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
-              "hook_interpreter": "2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
               "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
         },
-        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
+        "reason": "Live H1 gate passed for native_read over docs/ (--tools Read --allowedTools Read), with no MCP; bound to the real Claude binary plus that normalized launch shape."
       },
       "cells": {
         "identity": {
@@ -479,7 +479,7 @@
             "strict_mcp_config": true,
             "selected_model_flag": "haiku"
           },
-          "note": "Production executor argv observed for this role."
+          "note": "H1/01-run.json records --tools Read --allowedTools Read; H1/04-stream-init.json confirms exactly [Read] and no MCP servers."
         },
         "model_delivery": {
           "status": "observed",
@@ -544,7 +544,7 @@
               "native_read"
             ]
           },
-          "note": "Allowed actions observed with the production required hook."
+          "note": "H1/08-hook-transcript.json observes docs/notes.md allowed and README.md denied; the bound policy grants native_read only over docs/."
         },
         "denied_actions": {
           "status": "observed",
@@ -641,7 +641,7 @@
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
               "policy": "3b50e1c928aab12e50f9255e25fd6c6f47f586714802c578a59759cbc7e5d0be",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
-              "hook_interpreter": "2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
               "hook_source": "2216e08246ad8b11acfb4c2728cf3986278d5bdf8f8c45eee3af0ca2423baede",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
