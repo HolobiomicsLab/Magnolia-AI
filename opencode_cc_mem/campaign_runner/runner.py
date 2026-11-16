@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from .accounting import read_session_usage
+from .executors.contracts import SessionIdentity
 from .gates import check_outputs, render_argv, run_gate, write_receipt
 from .jobs import JobController, JobIntegrityError, JobStatus
 from .lease import (
@@ -21,10 +22,12 @@ from .lease import (
     stop_active_leases,
 )
 from .models import Stage
+from .governor import Governor
 from .process import ProcessControl, run_process
 from .reviewers import ReviewError, ReviewResult, build_review_prompt, choose_reviewer_model
 from .security import redact_paths, redact_structure
-from .state import CampaignBusyError, CampaignState, CampaignStore
+from .routing import resolve_route
+from .state import CampaignBusyError, CampaignState, CampaignStore, QuotaWait
 from .workers import WorkerResult
 
 
@@ -72,6 +75,32 @@ SYSTEM_PROMPT = (
 )
 
 
+def _session_identity_dict(identity: SessionIdentity | None) -> dict[str, Any] | None:
+    if identity is None:
+        return None
+    return {
+        "client": identity.client,
+        "model": identity.model,
+        "session_id": identity.session_id,
+        "project_digest": identity.project_digest,
+        "role": identity.role,
+        "policy_digest": identity.policy_digest,
+    }
+
+
+def _session_ref_dict(identity: Mapping[str, Any], session_id: str) -> dict[str, str]:
+    restored = SessionIdentity(
+        client=str(identity["client"]),
+        model=str(identity["model"]) if identity.get("model") is not None else None,
+        session_id=session_id,
+        project_digest=str(identity.get("project_digest") or "unknown"),
+        role=str(identity.get("role") or "unknown"),
+        policy_digest=str(identity.get("policy_digest") or "unknown"),
+    )
+    ref = restored.transcript_ref()
+    return {"harness": ref.harness, "session_id": ref.session_id, "key": ref.key}
+
+
 @dataclass
 class RunnerConfig:
     worker_factory: WorkerFactory
@@ -81,6 +110,8 @@ class RunnerConfig:
     sleep_seconds: float = 10.0
     distill_on_complete: bool = False
     distill_db: str | None = None
+    quota_governor: Governor | Any | None = None
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
 
 
 class CampaignRunner:
@@ -91,7 +122,7 @@ class CampaignRunner:
         config: RunnerConfig,
     ) -> None:
         self.store = store
-        self.project_dir = Path(project_dir).resolve()
+        self.project_dir = Path(os.path.realpath(project_dir))
         self.config = config
         self.protocol = store.verify_protocol()
         if self.protocol.project != self.project_dir.name:
@@ -126,13 +157,23 @@ class CampaignRunner:
                 break
             if self._pause_file().exists():
                 self._pause_file().unlink(missing_ok=True)
-                if state.state in {"queued", "running", "waiting_job", "validating"}:
+                if state.state in {
+                    "queued", "running", "waiting_job", "validating", "waiting_quota"
+                }:
                     try:
                         state = self.store.pause("operator pause file present")
                         actions.append("paused")
                     except Exception as exc:
                         actions.append(f"pause failed: {exc}")
                 break
+            if state.state == "waiting_quota":
+                state = self._refresh_quota_wait(state)
+                state = self.store.resume_if_quota_ready(self.config.clock())
+                if state.state == "waiting_quota":
+                    actions.append("waiting for quota")
+                    break
+                actions.append(f"quota resumed:{state.state}")
+                continue
             if state.state == "queued":
                 if not self.store.start_approved():
                     self._write_start_request()
@@ -146,6 +187,34 @@ class CampaignRunner:
                 actions.append(f"stage:{state.stage}:{state.state}")
                 continue
             if state.state == "running":
+                resumed = state.resumed_from_quota
+                if resumed is not None and resumed.suspended_phase == "worker":
+                    stage = self.protocol.stage(state.stage)
+                    lease = None
+                    try:
+                        lease = AttemptLease.acquire(
+                            self.store.run_dir, stage.id, state.attempt
+                        )
+                        state = self._execute_worker(
+                            stage,
+                            state.attempt,
+                            self._attempt_dir(stage, state.attempt),
+                            self._process_control(lease),
+                            lease,
+                            resume_session=(
+                                resumed.session_identity.session_id
+                                if resumed.session_identity
+                                else self._checkpoint_session_id(resumed)
+                            ),
+                        )
+                    except CampaignBusyError as exc:
+                        actions.append(f"busy: {exc}")
+                        break
+                    finally:
+                        if lease is not None:
+                            lease.release()
+                    actions.append(f"worker resumed:{state.state}")
+                    continue
                 try:
                     state = self._recover_running(state)
                 except CampaignBusyError as exc:
@@ -398,7 +467,7 @@ class CampaignRunner:
             current = self.store.load()
             if current.state == "running":
                 return self.store.transition("paused", reason)
-            if current.state in {"queued", "waiting_job", "validating"}:
+            if current.state in {"queued", "waiting_job", "validating", "waiting_quota"}:
                 return self.store.pause(reason)
             return current
         cancel_errors = self._cancel_active_jobs(reason)
@@ -407,7 +476,9 @@ class CampaignRunner:
             return current
         if cancel_errors:
             return self.store.fail(f"{reason}; cancellation errors: {cancel_errors}")
-        if current.state in {"queued", "running", "waiting_job", "validating", "waiting_human"}:
+        if current.state in {
+            "queued", "running", "waiting_job", "validating", "waiting_quota", "waiting_human"
+        }:
             return self.store.halt(reason)
         return current
 
@@ -429,7 +500,8 @@ class CampaignRunner:
         attempt: int,
         review: ReviewResult | None,
     ) -> None:
-        session_ids: list[str] = []
+        sessions: list[dict[str, str]] = []
+        legacy_session_ids: list[str] = []
         worker_result = self._attempt_dir(stage, attempt) / "worker_result.json"
         if worker_result.is_file():
             try:
@@ -437,29 +509,145 @@ class CampaignRunner:
             except (OSError, json.JSONDecodeError):
                 data = {}
             session = data.get("session_id")
-            if session:
-                session_ids.append(str(session))
+            identity = data.get("session_identity")
+            if isinstance(identity, Mapping) and identity.get("client") and session:
+                sessions.append(_session_ref_dict(identity, str(session)))
+            elif session:
+                legacy_session_ids.append(str(session))
         if review and review.session_id:
-            session_ids.append(review.session_id)
-        if not session_ids:
+            if review.session_identity is not None:
+                sessions.append(
+                    _session_ref_dict(
+                        _session_identity_dict(review.session_identity) or {},
+                        review.session_id,
+                    )
+                )
+            else:
+                legacy_session_ids.append(review.session_id)
+        if not sessions and not legacy_session_ids:
             return
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "stage": stage.id,
             "attempt": attempt,
-            "session_ids": sorted(set(session_ids)),
+            "sessions": list({item["key"]: item for item in sessions}.values()),
+            "session_ids": sorted(set(legacy_session_ids)),
         }
         self.store.distill_queue_path.parent.mkdir(parents=True, exist_ok=True)
         with self.store.distill_queue_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
             handle.flush()
 
+    def _wait_for_quota(
+        self,
+        outcome: Any,
+        model: str,
+        phase: str,
+        stage: Stage,
+        attempt: int,
+        *,
+        session_identity: Any = None,
+        result_ref: str | None = None,
+        retry_cursor: int | None = None,
+    ) -> CampaignState:
+        """Persist one typed quota outcome without entering repair handling."""
+        governor = self.config.quota_governor
+        if governor is None:
+            raise RunnerError("quota outcome requires campaign governor state")
+        route = resolve_route("worker" if phase != "reviewer" else "reviewer", {
+            "worker": {"model": model},
+            "reviewer": {"model": model},
+        })
+        key = route.subscription_key
+        if key is None:
+            raise RunnerError("quota outcome has no subscription key")
+        waiting = governor.quota_wait(key)
+        if waiting is None or waiting.hold_id is None:
+            raise RunnerError("quota outcome has no durable hold generation")
+        limit = outcome.limit
+        checkpoint = QuotaWait(
+            reason=limit.reason if limit is not None else "quota",
+            subscription_key=key,
+            observed_at=self.config.clock(),
+            hold_id=waiting.hold_id,
+            reset_at=waiting.reset_at,
+            suspended_phase=phase,
+            stage=stage.id,
+            attempt=attempt,
+            session_identity=session_identity,
+            result_ref=result_ref,
+            retry_cursor=retry_cursor,
+        )
+        return self.store.wait_for_quota(checkpoint)
+
+    def _refresh_quota_wait(self, state: CampaignState) -> CampaignState:
+        checkpoint = state.quota_wait
+        governor = self.config.quota_governor
+        if checkpoint is None or governor is None:
+            return state
+        waiting = governor.quota_wait(checkpoint.subscription_key)
+        if waiting is None or waiting.hold_id is None:
+            return state
+        if (waiting.hold_id, waiting.reset_at) == (
+            checkpoint.hold_id,
+            checkpoint.reset_at,
+        ):
+            return state
+        refreshed = QuotaWait(
+            checkpoint.reason,
+            checkpoint.subscription_key,
+            self.config.clock(),
+            waiting.hold_id,
+            waiting.reset_at,
+            checkpoint.suspended_phase,
+            checkpoint.stage,
+            checkpoint.attempt,
+            checkpoint.session_identity,
+            checkpoint.result_ref,
+            checkpoint.retry_cursor,
+        )
+        return self.store.refresh_quota_wait(refreshed)
+
+    def resume_quota(self, *, manual: bool = False) -> CampaignState:
+        """Resume a due or generation-matched manually cleared quota hold."""
+        state = self.store.load()
+        checkpoint = state.quota_wait
+        if state.state != "waiting_quota" or checkpoint is None:
+            return state
+        if not manual:
+            return self.store.resume_if_quota_ready(self.config.clock())
+        governor = self.config.quota_governor
+        if governor is None:
+            raise RunnerError("manual quota resume requires campaign governor")
+        if not governor.resume_key(
+            checkpoint.subscription_key,
+            expected_hold=checkpoint.hold_id,
+        ):
+            return state
+        return self.store.manual_resume_quota(
+            self.config.clock(), checkpoint.hold_id
+        ).state
+
     def _worker_model(self, stage: Stage) -> str:
         if stage.model:
             return stage.model
         if stage.hard and self.protocol.worker.hard_stage_model:
             return self.protocol.worker.hard_stage_model
-        return self.protocol.worker.model
+        if self.protocol.worker.model:
+            return self.protocol.worker.model
+        raise RunnerError(f"stage {stage.id} has no resolved worker model")
+
+    def _checkpoint_session_id(self, checkpoint: QuotaWait) -> str | None:
+        if checkpoint.result_ref is None:
+            return None
+        path = (self.store.run_dir / checkpoint.result_ref).resolve()
+        try:
+            path.relative_to(self.store.run_dir.resolve())
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError, json.JSONDecodeError):
+            return None
+        session_id = value.get("session_id") if isinstance(value, Mapping) else None
+        return session_id if isinstance(session_id, str) and session_id else None
 
     def _process_control(self, lease: AttemptLease) -> ProcessControl:
         return ProcessControl(
@@ -650,6 +838,7 @@ class CampaignRunner:
         attempt_dir: Path,
         control: ProcessControl,
         lease: AttemptLease,
+        resume_session: str | None = None,
     ) -> CampaignState:
         try:
             prompt = self._worker_prompt(stage, attempt)
@@ -664,15 +853,18 @@ class CampaignRunner:
                 cwd=self.store.run_dir,
                 attempt_dir=attempt_dir,
                 stem="worker",
+                resume_session=resume_session,
                 control=control,
             )
         except Exception as exc:
             return self._fail_before_validation(stage, attempt, f"worker failed: {exc}")
         lease.update_session(result.session_id)
+        session_identity = getattr(result, "session_identity", None)
         write_receipt(
             attempt_dir / "worker_result.json",
             {
                 "session_id": result.session_id,
+                "session_identity": _session_identity_dict(session_identity),
                 "returncode": result.returncode,
                 "timed_out": result.timed_out,
                 "attempts": result.attempts,
@@ -681,7 +873,22 @@ class CampaignRunner:
                 "errors": result.errors,
             },
         )
-        self._record_worker_usage(result)
+        route = resolve_route("worker", {"worker": {"model": model}})
+        self._record_worker_usage(result, route.client)
+        if result.outcome is not None and result.outcome.kind == "quota":
+            phase = "pre-worker" if result.attempts == 0 else "worker"
+            checkpoint_attempt = attempt - 1 if phase == "pre-worker" else attempt
+            return self._wait_for_quota(
+                result.outcome,
+                model,
+                phase,
+                stage,
+                checkpoint_attempt,
+                session_identity=session_identity,
+                result_ref=str(
+                    (attempt_dir / "worker_result.json").relative_to(self.store.run_dir)
+                ),
+            )
         if result.stopped_reason:
             return self._finish_stopped(stage, attempt, result.stopped_reason, "stop")
         if result.timed_out:
@@ -733,6 +940,21 @@ class CampaignRunner:
             except Exception as exc:
                 return self._finish_gate_failure(
                     stage, attempt, attempt_dir, [f"review failed: {exc}"], review=None
+                )
+            if review.outcome is not None and review.outcome.kind == "quota":
+                return self._wait_for_quota(
+                    review.outcome,
+                    review.model,
+                    "reviewer",
+                    stage,
+                    attempt,
+                    session_identity=review.session_identity,
+                    result_ref=str(
+                        (attempt_dir / "worker_result.json").relative_to(
+                            self.store.run_dir
+                        )
+                    ),
+                    retry_cursor=review.attempts,
                 )
             if review.stopped_reason:
                 return self._finish_stopped(
@@ -859,6 +1081,7 @@ class CampaignRunner:
                 "issues": result.issues,
                 "followups": result.followups,
                 "session_id": result.session_id,
+                "session_identity": _session_identity_dict(result.session_identity),
             },
         )
         return result
@@ -1075,6 +1298,9 @@ class CampaignRunner:
                     "issues": review.issues,
                     "followups": review.followups,
                     "session_id": review.session_id,
+                    "session_identity": _session_identity_dict(
+                        review.session_identity
+                    ),
                 }
                 if review is not None
                 else None
@@ -1146,9 +1372,9 @@ class CampaignRunner:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(redact_structure(record), sort_keys=True) + "\n")
 
-    def _record_worker_usage(self, result: WorkerResult) -> None:
+    def _record_worker_usage(self, result: WorkerResult, client: str = "opencode") -> None:
         usage = result.usage
-        if self.config.usage_db and result.session_id:
+        if client == "opencode" and self.config.usage_db and result.session_id:
             database_usage = read_session_usage(self.config.usage_db, result.session_id)
             if sum(
                 database_usage[key] for key in ("input_tokens", "output_tokens", "reasoning_tokens")
@@ -1157,7 +1383,13 @@ class CampaignRunner:
         self._record_usage(usage, "worker usage")
 
     def _record_usage(self, usage: Mapping[str, float], reason: str) -> None:
-        delta = {key: float(value) for key, value in usage.items() if float(value) != 0}
+        delta = {
+            key: float(value)
+            for key, value in usage.items()
+            if isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and float(value) != 0
+        }
         if delta:
             self.store.update_usage(delta, reason)
 

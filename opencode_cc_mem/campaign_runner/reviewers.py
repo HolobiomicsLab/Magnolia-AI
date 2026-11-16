@@ -6,13 +6,13 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .accounting import read_session_usage
 from .process import ProcessControl
 from .security import SecurityError, ensure_within
-from .workers import InvocationGovernance, OpenCodeExecutor, empty_usage
-from .executors.contracts import ExecContext, RunOutcome
+from .workers import InvocationGovernance, empty_usage
+from .executors.contracts import ExecContext, RunOutcome, SessionIdentity
 from .executors.registry import executor_for
 from .routing import resolve_route
 
@@ -57,6 +57,7 @@ class ReviewResult:
     model: str = ""
     stopped_reason: str | None = None
     outcome: RunOutcome | None = None
+    session_identity: SessionIdentity | None = None
 
 
 def model_family(model: str) -> str:
@@ -216,6 +217,7 @@ class Reviewer:
     max_retries: int = 1
     max_steps: int = 8
     governance: InvocationGovernance | None = None
+    context_factory: Callable[[Any, Path, Path], ExecContext] | None = None
 
     def run(
         self,
@@ -227,10 +229,10 @@ class Reviewer:
         control: ProcessControl | None = None,
     ) -> ReviewResult:
         route = resolve_route("reviewer", {"reviewer": {"model": model}})
-        executor = executor_for(
-            route,
-            "reviewer",
-            ExecContext(
+        context = (
+            self.context_factory(route, cwd, attempt_dir)
+            if self.context_factory is not None
+            else ExecContext(
                 route=route,
                 role="reviewer",
                 project_dir=cwd,
@@ -243,9 +245,9 @@ class Reviewer:
                 agent=self.agent,
                 environment=self.environment,
                 governance=self.governance,
-            ),
+            )
         )
-        assert isinstance(executor, OpenCodeExecutor)
+        executor = executor_for(route, "reviewer", context)
         usage = empty_usage()
         session_id: str | None = None
         current_prompt = prompt
@@ -265,17 +267,32 @@ class Reviewer:
             _merge_usage(usage, result.usage)
             if result.session_id:
                 session_id = result.session_id
+            session_identity = getattr(result, "session_identity", None)
+            if result.outcome is not None and result.outcome.overrides_repair:
+                return ReviewResult(
+                    issues=[],
+                    followups=[],
+                    raw_text=result.final_text,
+                    session_id=session_id,
+                    usage=self._resolve_usage(route.client, session_id, usage),
+                    attempts=attempts,
+                    model=model,
+                    stopped_reason=result.stopped_reason,
+                    outcome=result.outcome,
+                    session_identity=session_identity,
+                )
             if result.stopped_reason:
                 return ReviewResult(
                     issues=[],
                     followups=[],
                     raw_text=result.final_text,
                     session_id=session_id,
-                    usage=self._resolve_usage(session_id, usage),
+                    usage=self._resolve_usage(route.client, session_id, usage),
                     attempts=attempts,
                     model=model,
                     stopped_reason=result.stopped_reason,
                     outcome=result.outcome,
+                    session_identity=session_identity,
                 )
             try:
                 issues, followups = validate_review(_extract_json(result.final_text), run_dir)
@@ -290,18 +307,20 @@ class Reviewer:
                 followups=followups,
                 raw_text=result.final_text,
                 session_id=session_id,
-                usage=self._resolve_usage(session_id, usage),
+                usage=self._resolve_usage(route.client, session_id, usage),
                 attempts=attempts,
                 model=model,
+                session_identity=session_identity,
             )
         raise ReviewError("; ".join(errors) if errors else "review failed")
 
     def _resolve_usage(
         self,
+        client: str,
         session_id: str | None,
         fallback: Mapping[str, float],
     ) -> dict[str, float]:
-        if self.db_path and session_id:
+        if client == "opencode" and self.db_path and session_id:
             usage = read_session_usage(self.db_path, session_id)
             tokens = (
                 usage["input_tokens"]

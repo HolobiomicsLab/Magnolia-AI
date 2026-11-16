@@ -150,6 +150,15 @@ class CampaignStateChangedError(CampaignBusyError):
     """Raised when a runner's loaded state is no longer current."""
 
 
+@dataclass(frozen=True)
+class QuotaResumeResult:
+    """Typed disposition for an operator quota-resume request."""
+
+    state: "CampaignState"
+    resumed: bool
+    reason: str
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -778,15 +787,22 @@ class CampaignStore:
         resolved_attempt = state.attempt if attempt is None else attempt
         if resolved_attempt < 0:
             raise StateError("attempt must be >= 0")
+        if state.quota_wait is not None and (
+            resolved_stage,
+            resolved_attempt,
+        ) != (state.quota_wait.stage, state.quota_wait.attempt):
+            raise StateError("cannot change stage or attempt while quota is held")
         event = self._new_event(state, target, reason, resolved_stage, resolved_attempt)
         if target == "paused":
             event["paused_from"] = state.state
-        clear_paused_quota = (
+        clear_quota = (
+            state.quota_wait is not None and target in {"halted", "failed"}
+        ) or (
             state.state == "paused"
             and state.paused_from == "waiting_quota"
             and target != "waiting_quota"
         )
-        if clear_paused_quota:
+        if clear_quota:
             event["quota_wait_after"] = None
         if state.resumed_from_quota is not None:
             event["quota_resumed_from"] = None
@@ -796,7 +812,7 @@ class CampaignStore:
             state.paused_from = str(event["paused_from"])
         state.stage = resolved_stage
         state.attempt = resolved_attempt
-        if clear_paused_quota:
+        if clear_quota:
             state.quota_wait = None
         state.resumed_from_quota = None
         state.updated_at = str(event["ts"])
@@ -810,12 +826,21 @@ class CampaignStore:
         with self.lock():
             state = self.load()
             expected_state = QUOTA_PHASE_STATES[checkpoint.suspended_phase]
-            if state.state != expected_state:
+            prelaunch_rollback = (
+                checkpoint.suspended_phase == "pre-worker"
+                and state.state == "running"
+                and checkpoint.stage == state.stage
+                and checkpoint.attempt == state.attempt - 1
+            )
+            if state.state != expected_state and not prelaunch_rollback:
                 raise StateError(
                     f"quota phase '{checkpoint.suspended_phase}' requires "
                     f"state '{expected_state}', found '{state.state}'"
                 )
-            if (checkpoint.stage, checkpoint.attempt) != (state.stage, state.attempt):
+            if not prelaunch_rollback and (
+                checkpoint.stage,
+                checkpoint.attempt,
+            ) != (state.stage, state.attempt):
                 raise StateError(
                     "quota checkpoint stage and attempt must match campaign state"
                 )
@@ -823,8 +848,8 @@ class CampaignStore:
                 state,
                 "waiting_quota",
                 checkpoint.reason,
-                state.stage,
-                state.attempt,
+                checkpoint.stage,
+                checkpoint.attempt,
             )
             event["quota_hold_id"] = checkpoint.hold_id
             event["quota_wait_after"] = checkpoint.to_dict()
@@ -832,8 +857,38 @@ class CampaignStore:
                 event["quota_resumed_from"] = None
             self._append_event_locked(event)
             state.state = "waiting_quota"
+            state.stage = checkpoint.stage
+            state.attempt = checkpoint.attempt
             state.quota_wait = checkpoint
             state.resumed_from_quota = None
+            state.updated_at = str(event["ts"])
+            self.save(state)
+            return state
+
+    def refresh_quota_wait(self, checkpoint: QuotaWait) -> CampaignState:
+        """Replace the current quota generation/reset without leaving its phase."""
+        with self.lock():
+            state = self.load()
+            if state.state != "waiting_quota" or state.quota_wait is None:
+                raise StateError("quota refresh requires waiting_quota")
+            current = state.quota_wait
+            if (checkpoint.stage, checkpoint.attempt, checkpoint.suspended_phase) != (
+                current.stage,
+                current.attempt,
+                current.suspended_phase,
+            ):
+                raise StateError("quota refresh cannot change continuation identity")
+            event = self._new_event(
+                state,
+                "waiting_quota",
+                "quota hold refreshed",
+                state.stage,
+                state.attempt,
+            )
+            event["quota_hold_id"] = checkpoint.hold_id
+            event["quota_wait_after"] = checkpoint.to_dict()
+            self._append_event_locked(event)
+            state.quota_wait = checkpoint
             state.updated_at = str(event["ts"])
             self.save(state)
             return state
@@ -896,6 +951,20 @@ class CampaignStore:
         with self.lock():
             state = self.load()
             return self._add_usage_locked(state, delta, reason)
+
+    def manual_resume_quota(
+        self, now: datetime, expected_hold_id: str
+    ) -> QuotaResumeResult:
+        """Return a typed mismatch/resume result for an operator request."""
+        state = self.load()
+        if state.state != "waiting_quota" or state.quota_wait is None:
+            return QuotaResumeResult(state, False, "not_waiting")
+        if state.quota_wait.hold_id != expected_hold_id:
+            return QuotaResumeResult(state, False, "hold_mismatch")
+        resumed = self.resume_if_quota_ready(
+            now, manual=True, expected_hold_id=expected_hold_id
+        )
+        return QuotaResumeResult(resumed, True, "resumed")
 
     def _add_usage_locked(
         self,
