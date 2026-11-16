@@ -29,6 +29,11 @@ import re
 
 import httpx
 
+from campaign_runner.executors.contracts import ExecContext
+from campaign_runner.executors.opencode import OpenCodeEvaluatorExecutor
+from campaign_runner.executors.registry import executor_for
+from campaign_runner.routing import resolve_route
+
 # The memory server's llm.py lives in a different package tree; load it by path.
 _LLM_PATH = (
     Path(__file__).resolve().parents[1] / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory" / "llm.py"
@@ -74,12 +79,20 @@ def _catalog_has_model(model: str) -> bool:
         "~/.local/share/magnolia-v2/bin/opencode"))
     db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
     try:
-        out = subprocess.run(
-            # --standalone: see _call_go_model.
-            [v2, "--standalone", "api", "get", "/api/model"],
-            env={**os.environ, "OPENCODE_DB": db},
-            capture_output=True, text=True, timeout=15, check=False,
+        route = resolve_route("evaluator", {"model": model})
+        executor = executor_for(
+            route,
+            "evaluator",
+            ExecContext(
+                route=route,
+                role="evaluator",
+                timeout_seconds=15,
+                opencode_binary=v2,
+                opencode_db=db,
+            ),
         )
+        assert isinstance(executor, OpenCodeEvaluatorExecutor)
+        out = executor.catalog(environment=os.environ, timeout_seconds=15)
         if out.returncode != 0:
             return False
         data = json.loads(out.stdout or "{}")
@@ -126,12 +139,20 @@ class GenerativeEvaluator:
         # environment, so the OPENCODE_DB set here would be ignored once it
         # runs. --standalone gives this one-shot call its own private server.
         try:
-            out = subprocess.run(
-                [binary, "--standalone", "run", "--model", model, prompt],
-                env={**os.environ, "OPENCODE_DB": db},
-                stdin=subprocess.DEVNULL,
-                capture_output=True, text=True, timeout=90, check=False,
+            route = resolve_route("evaluator", {"model": model})
+            executor = executor_for(
+                route,
+                "evaluator",
+                ExecContext(
+                    route=route,
+                    role="evaluator",
+                    timeout_seconds=90,
+                    opencode_binary=binary,
+                    opencode_db=db,
+                ),
             )
+            assert isinstance(executor, OpenCodeEvaluatorExecutor)
+            out = executor.run(prompt, environment=os.environ, timeout_seconds=90)
         except Exception:
             return None
         if out.returncode != 0:

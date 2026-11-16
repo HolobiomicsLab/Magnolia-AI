@@ -307,3 +307,46 @@ def test_catalog_check_is_standalone(monkeypatch):
     assert _catalog_has_model("jev-1.13-free") is True
     cmd, _env = seen[0]
     assert cmd == ["/opt/oc/bin/opencode", "--standalone", "api", "get", "/api/model"]
+
+
+def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    calls = []
+
+    class Out:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs["env"]))
+        if "/api/model" in argv:
+            return Out('{"data":[{"id":"jev-1.13-free"}]}')
+        return Out(
+            '> build · model\nnoise\n'
+            '{"action":"accept","project":"proj_a","confidence":0.92,'
+            '"reason":"dock","meta":{"nested":true}}\ntrailer'
+        )
+
+    monkeypatch.setattr(evaluator_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2_BIN", str(tmp_path / "opencode"))
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    monkeypatch.setattr(evaluator_module.subprocess, "run", fake_run)
+    decision = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate(
+        "dock", {"projects": ["proj_a"]}
+    )
+    assert decision is not None and decision.action == "accept"
+    assert evaluator_module._catalog_has_model("jev-1.13-free") is True
+    snapshot = __import__("json").loads(
+        (Path(__file__).parent / "snapshots" / "opencode" / "evaluator.json").read_text()
+    )
+    observed = {
+        "run_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[0][0]],
+        "catalog_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[1][0]],
+        "environment_keys": sorted(calls[0][1]),
+        "agent_file_bytes": None,
+    }
+    assert observed == snapshot

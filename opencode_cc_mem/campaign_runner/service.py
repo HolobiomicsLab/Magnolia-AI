@@ -125,6 +125,22 @@ def _config_digest(config_content: str | None) -> str | None:
     return hashlib.sha256(config_content.encode("utf-8")).hexdigest()
 
 
+def _agent_steps(config_content: str | None) -> dict[str, int]:
+    try:
+        config = json.loads(config_content or "{}")
+    except json.JSONDecodeError:
+        return {}
+    agents = config.get("agents") if isinstance(config, dict) else None
+    if not isinstance(agents, dict):
+        return {}
+    steps = {}
+    for name, value in agents.items():
+        cap = value.get("steps") if isinstance(value, dict) else None
+        if isinstance(cap, int) and not isinstance(cap, bool) and cap > 0:
+            steps[str(name)] = cap
+    return steps
+
+
 def merge_agent_steps(config_content: str | None, steps: dict[str, int]) -> str:
     """OPENCODE_CONFIG_CONTENT with `agents.<name>.steps` set for each agent.
 
@@ -276,6 +292,7 @@ def ensure_service(
     }
     if digest is not None:
         record["config_sha256"] = digest
+        record["agent_steps"] = _agent_steps(config_content)
     _write_service(project, record)
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:

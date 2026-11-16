@@ -257,6 +257,61 @@ def test_handle_task_overwrites_stale_reply(tmp_path):
     assert "STALE" not in body
 
 
+def test_helper_recipe_final_answer_continuation_and_stale_recovery(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    original_run_once = d._run_once
+    state = {"done": {}, "lanes": {"literature": {"session_id": "ses_stale"}}}
+    d.save_state(root, state)
+    calls = []
+    replies = [
+        _parsed("", sid=None, rc=2).copy() | {"stderr_tail": "stale session"},
+        _parsed("still working", sid="ses_fresh"),
+        _parsed("FINAL ANSWER: complete", sid="ses_fresh"),
+    ]
+
+    def fake_once(model, project_dir, env, timeout_s, extra_args, run_log, **kwargs):
+        calls.append((model, list(extra_args), sorted(env), kwargs["binary"]))
+        return replies[len(calls) - 1]
+
+    monkeypatch.setattr(d, "_run_once", fake_once)
+    monkeypatch.setattr(d, "_render_project_config", lambda *args: None)
+    monkeypatch.setattr(d, "_ensure_tools_daemon", lambda *args: None)
+    output = d.default_runner("literature", "/project", root, "PROMPT", 60)
+
+    assert output == "FINAL ANSWER: complete"
+    assert calls[0][1] == ["--session", "ses_stale", "PROMPT"]
+    assert calls[1][1] == ["PROMPT"]
+    assert calls[2][1] == ["--session", "ses_fresh", d.RESUME_NOTE]
+    assert d.load_state(root)["lanes"]["literature"]["session_id"] == "ses_fresh"
+
+    captured = {}
+
+    class Out:
+        returncode = 0
+        stdout = _evt("text", sid="ses_fresh", text="FINAL ANSWER: complete")
+        stderr = ""
+
+    def fake_subprocess_run(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs["env"]
+        return Out()
+
+    monkeypatch.setattr(d.subprocess, "run", fake_subprocess_run)
+    original_run_once(
+        "provider/model", "/project", {"BASE_ENV": "ignored"}, 60,
+        ["PROMPT"], None, binary=str(tmp_path / "opencode"),
+    )
+    snapshot = json.loads(
+        (Path(__file__).resolve().parent / "snapshots" / "opencode" / "helper.json").read_text()
+    )
+    observed = {
+        "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in captured["argv"]],
+        "environment_keys": sorted(captured["env"]),
+        "agent_file_bytes": None,
+    }
+    assert observed == snapshot
+
+
 # ---------------------------------------------------------------------------
 # Registry, wait_for, scheduled sweeps (2026-10-07)
 # ---------------------------------------------------------------------------

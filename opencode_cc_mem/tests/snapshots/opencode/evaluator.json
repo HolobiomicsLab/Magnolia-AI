@@ -1,0 +1,23 @@
+{
+  "run_argv": [
+    "@@TMP@@/opencode",
+    "--standalone",
+    "run",
+    "--model",
+    "opencode-go/deepseek-v4.1-flash",
+    "\n\n{\"message\": \"dock\", \"context\": {\"projects\": [\"proj_a\"]}}"
+  ],
+  "catalog_argv": [
+    "@@TMP@@/opencode",
+    "--standalone",
+    "api",
+    "get",
+    "/api/model"
+  ],
+  "environment_keys": [
+    "BASE_ENV",
+    "MAGNOLIA_OPENCODE_V2_BIN",
+    "OPENCODE_DB"
+  ],
+  "agent_file_bytes": null
+}

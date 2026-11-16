@@ -302,10 +302,30 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
     Returns parse_run_events output plus "rc" and "stderr_tail"; appends
     the raw events to run_log so failures stay diagnosable (the daemon
     previously discarded stderr — 2026-09-29 0-byte run was undiagnosable)."""
-    proc = subprocess.run(
-        [binary, "run", "--model", model, "--format", "json", *extra_args],
-        cwd=project_dir, env=env, timeout=timeout_s,
-        capture_output=True, text=True,
+    from campaign_runner.executors.contracts import ExecContext
+    from campaign_runner.executors.opencode import OpenCodeHelperExecutor
+    from campaign_runner.executors.registry import executor_for
+    from campaign_runner.routing import resolve_route
+
+    route = resolve_route("helper", {"agent": {"json": {"model": model}}})
+    executor = executor_for(
+        route,
+        "helper",
+        ExecContext(
+            route=route,
+            role="helper",
+            project_dir=Path(project_dir),
+            timeout_seconds=timeout_s,
+            opencode_binary=binary,
+            environment=env,
+        ),
+    )
+    assert isinstance(executor, OpenCodeHelperExecutor)
+    proc = executor.run(
+        extra_args,
+        cwd=project_dir,
+        environment=env,
+        timeout_seconds=timeout_s,
     )
     parsed = parse_run_events(proc.stdout or "")
     parsed["rc"] = proc.returncode

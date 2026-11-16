@@ -8,7 +8,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from campaign_runner.workers import OpenCodeExecutor, parse_run_events  # noqa: E402
+from campaign_runner import workers as workers_module  # noqa: E402
+from campaign_runner.process import ProcessOutcome  # noqa: E402
+from campaign_runner.workers import (  # noqa: E402
+    EMPTY_OUTPUT_NOTE,
+    OpenCodeExecutor,
+    parse_run_events,
+)
 
 
 FAKE = r'''#!/usr/bin/env python3
@@ -234,3 +240,100 @@ def test_executor_returns_error_lines(tmp_path):
     result = executor.run("do work", tmp_path, tmp_path / "attempt")
     assert result.final_text == "partial"
     assert result.errors == [{"type": "provider.no-route", "message": "no route"}]
+
+
+def _successful_process(stdout_path, stderr_path, *, text="DONE", session="ses_pin"):
+    events = [
+        {"type": "step_start", "sessionID": session, "part": {"type": "step-start"}},
+        {"type": "error", "sessionID": session, "error": {"type": "pinned.error"}},
+    ]
+    if text:
+        events.append({
+            "type": "text",
+            "sessionID": session,
+            "part": {"type": "text", "messageID": "m1", "text": text},
+        })
+    stdout_path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+    stderr_path.write_text("")
+    return ProcessOutcome(0, False, 0.25, stdout_path, stderr_path)
+
+
+def test_opencode_campaign_argv_env_and_agent_bytes(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_process(**kwargs):
+        captured.update(kwargs)
+        return _successful_process(kwargs["stdout_path"], kwargs["stderr_path"])
+
+    monkeypatch.setattr(workers_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setattr(workers_module, "run_process", fake_run_process)
+    executor = OpenCodeExecutor(
+        binary=str(tmp_path / "opencode"),
+        model="opencode-go/deepseek-v4.1-flash",
+        agent="campaign-worker",
+        server_url="http://127.0.0.1:4111",
+        db_path=str(tmp_path / "opencode.db"),
+        environment={"RECIPE_EXTRA": "ignored"},
+        timeout_seconds=37,
+    )
+    result = executor.run("PINNED PROMPT", tmp_path, tmp_path / "attempt")
+    snapshot = json.loads(
+        (ROOT / "tests" / "snapshots" / "opencode" / "campaign-worker.json").read_text()
+    )
+    observed = {
+        "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in captured["argv"]],
+        "environment_keys": sorted(captured["env"]),
+        "agent_file_bytes": (
+            ROOT / ".opencode" / "agents" / "campaign-worker.md"
+        ).read_bytes().decode("utf-8"),
+    }
+    assert observed == snapshot
+    assert result.errors == [{"type": "pinned.error"}]
+
+
+def test_opencode_parser_result_and_error_shapes():
+    body = "\n".join([
+        "not json",
+        "[]",
+        json.dumps({"type": "error", "sessionID": "s1", "error": "plain"}),
+        json.dumps({
+            "type": "text",
+            "sessionID": "s1",
+            "part": {"type": "text", "messageID": "m1", "text": "partial"},
+        }),
+    ])
+    parsed = parse_run_events(body)
+    assert parsed.parse_errors == 2
+    assert parsed.errors == [{"message": "plain"}]
+    assert parsed.final_text == "partial"
+    assert parsed.all_text == "partial"
+    assert parsed.usage_observed is False
+
+
+def test_worker_three_attempts_same_session(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_process(**kwargs):
+        calls.append(kwargs["argv"])
+        text = "" if len(calls) < 3 else "DONE"
+        return _successful_process(
+            kwargs["stdout_path"], kwargs["stderr_path"], text=text
+        )
+
+    monkeypatch.setattr(workers_module, "run_process", fake_run_process)
+    result = OpenCodeExecutor(
+        binary="opencode",
+        model="provider/model",
+        agent="campaign-worker",
+    ).run("ORIGINAL", tmp_path, tmp_path / "attempt")
+
+    assert result.attempts == 3
+    assert result.session_id == "ses_pin"
+    assert [call[-1] for call in calls] == [
+        "ORIGINAL",
+        EMPTY_OUTPUT_NOTE,
+        EMPTY_OUTPUT_NOTE,
+    ]
+    assert all(
+        call[call.index("--session") + 1] == "ses_pin" for call in calls[1:]
+    )
