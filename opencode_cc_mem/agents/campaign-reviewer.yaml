@@ -10,8 +10,6 @@ read_deny_patterns:
   - "**/.magnolia/campaign-service.json"
   - "**/.magnolia/campaign-service.log"
   - "**/.magnolia/services/**"
-opencode_omitted_read_deny_patterns:
-  - "**/.magnolia/services/**"
 edit_roots: []
 allowed_native_capabilities:
   - native_read

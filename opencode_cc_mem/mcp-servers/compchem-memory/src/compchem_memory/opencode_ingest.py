@@ -580,14 +580,13 @@ def _write_progress(
 
 
 def _retry_blocked(
-    rec: dict | None, fingerprint: dict[str, int] | None = None,
+    rec: dict | None, fingerprint: dict[str, Any] | None = None,
 ) -> bool:
     """Return whether persisted extraction backoff blocks this sweep."""
-    from compchem_memory.extraction_retry import retry_is_due
+    from compchem_memory.extraction_retry import retry_for_activity, retry_is_due
 
     retry = rec.get("retry") if isinstance(rec, dict) else None
-    if isinstance(retry, dict) and retry.get("fingerprint") != fingerprint:
-        return False
+    retry = retry_for_activity(retry, fingerprint)
     return isinstance(retry, dict) and not retry_is_due(retry)
 
 
@@ -610,15 +609,14 @@ def _record_failed_retry(
     rec_path: Path,
     rec: dict | None,
     *,
-    fingerprint: dict[str, int] | None,
+    fingerprint: dict[str, Any] | None,
     closed: bool | None,
 ) -> dict[str, Any] | None:
     """Persist one failed attempt if this session's progress is unchanged."""
-    from compchem_memory.extraction_retry import next_retry
+    from compchem_memory.extraction_retry import next_retry, retry_for_activity
 
     prior_retry = rec.get("retry") if rec else None
-    if isinstance(prior_retry, dict) and prior_retry.get("fingerprint") != fingerprint:
-        prior_retry = None
+    prior_retry = retry_for_activity(prior_retry, fingerprint)
     retry = next_retry(prior_retry, fingerprint=fingerprint)
     with project_writer_lease(store):
         if _read_progress(rec_path) != rec:
@@ -634,6 +632,39 @@ def _record_failed_retry(
             retry=retry,
         )
     return retry
+
+
+def _dialogue_activity_fingerprint(export: dict) -> dict[str, Any]:
+    """Describe native dialogue growth without retaining transcript content."""
+    messages = export.get("messages") or []
+    fingerprint: dict[str, Any] = {"message_count": len(messages)}
+    export_info = export.get("info") if isinstance(export.get("info"), dict) else {}
+    session_time = export_info.get("time")
+    if isinstance(session_time, dict):
+        last_update = session_time.get("updated")
+    else:
+        last_update = export_info.get("updated")
+    if not messages:
+        if last_update is not None:
+            fingerprint["last_update"] = str(last_update)
+        return fingerprint
+    last = messages[-1] if isinstance(messages[-1], dict) else {}
+    last_info = last.get("info") if isinstance(last.get("info"), dict) else {}
+    last_id = last_info.get("id") or last.get("id")
+    if last_id is not None:
+        fingerprint["last_message_id"] = str(last_id)
+    message_time = last.get("time") or last_info.get("time")
+    if last_update is None and isinstance(message_time, dict):
+        last_update = (
+            message_time.get("updated")
+            or message_time.get("completed")
+            or message_time.get("created")
+        )
+    elif last_update is None:
+        last_update = last.get("updated") or last_info.get("updated") or message_time
+    if last_update is not None:
+        fingerprint["last_update"] = str(last_update)
+    return fingerprint
 
 
 def _session_exporter(
@@ -708,6 +739,16 @@ def distill_session_transcript(
     )
 
     fingerprint = hook_transcript_fingerprint(store, ref)
+    export = None
+    retry = rec.get("retry") if isinstance(rec, dict) else None
+    if (
+        ref.sealable
+        and isinstance(retry, dict)
+        and retry.get("exhausted") is True
+    ):
+        export = export_session_ref(ref)
+        if export is not None:
+            fingerprint = _dialogue_activity_fingerprint(export)
     if commit and force_retry:
         rec = _clear_failed_retry(store, rec_path, rec)
     if commit and _retry_blocked(rec, fingerprint):
@@ -722,9 +763,11 @@ def distill_session_transcript(
     if commit and fingerprint_matches(rec, fingerprint):
         return {"status": "committed", "saved": []}
 
-    export = export_session_ref(ref)
+    export = export if export is not None else export_session_ref(ref)
     if export is None:
         return None  # unavailable — let caller fall back
+    if ref.sealable:
+        fingerprint = _dialogue_activity_fingerprint(export)
 
     new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
     if new_msgs:
@@ -783,7 +826,7 @@ def distill_session_transcript(
             new_cursor,
             prior + len(kept),
             done=False,
-            fingerprint=fingerprint,
+            fingerprint=fingerprint if not ref.sealable else None,
             closed=closed,
         )
     return {"status": "committed", "saved": saved}
@@ -852,14 +895,26 @@ def ingest_opencode_sessions(
         is_active = ref.harness == "opencode" and ref.session_id == active_sid
         can_seal = ref.sealable and not is_active
         fingerprint = hook_transcript_fingerprint(store, ref)
+        export = None
+        retry = rec.get("retry") if isinstance(rec, dict) else None
+        if (
+            ref.sealable
+            and isinstance(retry, dict)
+            and retry.get("exhausted") is True
+        ):
+            export = export_session_ref(ref)
+            if export is not None:
+                fingerprint = _dialogue_activity_fingerprint(export)
         if _retry_blocked(rec, fingerprint):
             continue
         if fingerprint_matches(rec, fingerprint):
             continue
 
-        export = export_session_ref(ref)
+        export = export if export is not None else export_session_ref(ref)
         if export is None:
             continue  # export failed — don't advance; retry on a later sweep
+        if ref.sealable:
+            fingerprint = _dialogue_activity_fingerprint(export)
 
         new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
         if not new_msgs:
@@ -951,7 +1006,7 @@ def ingest_opencode_sessions(
                 new_cursor,
                 prior_count + len(kept),
                 done=can_seal,
-                fingerprint=fingerprint,
+                fingerprint=fingerprint if not ref.sealable else None,
                 closed=closed,
             )
 

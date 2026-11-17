@@ -162,6 +162,33 @@ def test_opencode_config_snapshot(tmp_path):
     assert rendered == SNAPSHOT.read_text()
 
 
+@pytest.mark.parametrize(
+    ("setup", "expected"),
+    (
+        (
+            {"routes": {"interactive": "openrouter/deepseek/deepseek-v4.1-flash"}},
+            "openrouter/deepseek/deepseek-v4.1-flash",
+        ),
+        (
+            {"main_model": "opencode/deepseek-v4.1-flash-free"},
+            "opencode/deepseek-v4.1-flash-free",
+        ),
+    ),
+)
+def test_opencode_small_model_matches_selected_route(tmp_path, setup, expected):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, setup)
+
+    proc = run_raw(ws, [PROJECT])
+    assert proc.returncode == 0, proc.stderr
+
+    rendered = json.loads(
+        (ws / "opencode_cc_mem" / "projects" / PROJECT / "opencode.json").read_text()
+    )
+    assert rendered["model"] == expected
+    assert rendered["small_model"] == expected
+
+
 # ---- --harness claude|codex|vibe (Task 9) ---------------------------------
 
 PKG_SRC = OPENCODE_DIR / "mcp-servers" / "compchem-memory" / "src"

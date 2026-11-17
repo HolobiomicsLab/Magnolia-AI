@@ -52,3 +52,19 @@ def next_retry(
     if fingerprint is not None:
         result["fingerprint"] = fingerprint
     return result
+
+
+def retry_for_activity(
+    retry: Mapping[str, Any] | None,
+    fingerprint: Any,
+) -> Mapping[str, Any] | None:
+    """Re-arm only an exhausted retry series after observable new activity."""
+    if not retry:
+        return retry
+    has_new_activity = (
+        fingerprint is not None
+        and retry.get("fingerprint") != fingerprint
+    )
+    if retry.get("exhausted") is True and has_new_activity:
+        return None
+    return retry

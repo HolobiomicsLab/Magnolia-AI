@@ -133,7 +133,10 @@ def _opencode_permissions(policy: RolePolicy) -> list[tuple[str, str, str]]:
     )
     for capability in ("native_glob", "native_grep"):
         if capability in capabilities:
-            permissions.append((capability.removeprefix("native_"), "*", "allow"))
+            action = capability.removeprefix("native_")
+            permissions.append((action, "*", "allow"))
+            if "**/.magnolia/services/**" in policy.read_deny_patterns:
+                permissions.append((action, "**/.magnolia/services/**", "deny"))
     if "native_edit" in capabilities:
         for root in policy.edit_roots:
             permissions.extend(

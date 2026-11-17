@@ -542,7 +542,13 @@ class AutomaticMemoryExtractor:
             return []
         return self._generate_candidates(events) or []
 
-    def commit(self, session_path: Path, project_dir: str) -> list[str] | None:
+    def commit(
+        self,
+        session_path: Path,
+        project_dir: str,
+        *,
+        force_retry: bool = False,
+    ) -> list[str] | None:
         """Compute candidates, persist them, and advance the extraction cursor.
 
         Return saved paths, or ``None`` when provider failure or a concurrent
@@ -554,11 +560,17 @@ class AutomaticMemoryExtractor:
         if not events:
             return []
 
+        if force_retry:
+            with project_writer_lease(project_dir):
+                self._load_state()
+                self.session_retries.pop(session_path.name, None)
+                self._save_state()
+
         fingerprint = hashlib.sha256(session_path.read_bytes()).hexdigest()
         retry = self.session_retries.get(session_path.name)
-        if retry and retry.get("fingerprint") != fingerprint:
-            retry = None
-        from compchem_memory.extraction_retry import retry_is_due
+        from compchem_memory.extraction_retry import retry_for_activity, retry_is_due
+
+        retry = retry_for_activity(retry, fingerprint)
 
         if not retry_is_due(retry):
             return None
@@ -575,9 +587,9 @@ class AutomaticMemoryExtractor:
                 if self._stored_cursor() != cursor_read:
                     return None
                 self._load_state()
-                current_retry = self.session_retries.get(session_path.name)
-                if current_retry and current_retry.get("fingerprint") != fingerprint:
-                    current_retry = None
+                current_retry = retry_for_activity(
+                    self.session_retries.get(session_path.name), fingerprint
+                )
                 retry = next_retry(current_retry, fingerprint=fingerprint)
                 self.session_retries[session_path.name] = retry
                 self._save_state()

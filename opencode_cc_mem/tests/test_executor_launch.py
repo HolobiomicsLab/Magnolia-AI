@@ -1101,9 +1101,44 @@ def test_short_provider_placeholder_does_not_match_inside_launch_text(tmp_path):
     assert "OLLAMA_API_KEY" not in launch.env
 
 
+@pytest.mark.parametrize(
+    "placeholder",
+    ("none", "null", "ollama", "changeme", "dummy", "test", "x" * 32),
+)
+def test_provider_placeholder_value_is_ignored(tmp_path, placeholder):
+    context = _context(
+        tmp_path,
+        launch_argv=(f"/client/{placeholder}/run",),
+        environment={"VENDOR_API_KEY": placeholder},
+    )
+
+    launch = prepare_launch(context)
+
+    assert "VENDOR_API_KEY" not in launch.env
+
+
 @pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
 def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter):
     secret = "sk-ant-SECRET_123"
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp{delimiter}{secret}",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
+def test_real_long_secret_value_still_uses_delimiters(tmp_path, delimiter):
+    secret = "sk-ant-" + "A" * 32
     context = _context(
         tmp_path,
         role="worker",

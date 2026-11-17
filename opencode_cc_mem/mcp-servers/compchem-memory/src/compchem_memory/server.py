@@ -902,7 +902,7 @@ def memory_extract_from_session(
     if not extractor.should_extract(session_path):
         return json.dumps({"status": "threshold_not_met", "extracted": 0})
 
-    saved = extractor.commit(session_path, pd)
+    saved = extractor.commit(session_path, pd, force_retry=True)
     if saved is None:
         return json.dumps({
             "status": "skipped",
@@ -1083,7 +1083,7 @@ def memory_distill_session(
     session_path = Path(log_path)
 
     if commit:
-        saved = extractor.commit(session_path, pd)
+        saved = extractor.commit(session_path, pd, force_retry=True)
         if saved is None:
             return json.dumps(
                 {

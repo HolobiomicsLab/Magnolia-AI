@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 @pytest.fixture
@@ -13,6 +14,7 @@ def project(tmp_path, monkeypatch):
     from compchem_memory.capture import get_session_manager, reset_registry
 
     reset_registry()
+    monkeypatch.setattr(server, "_extractor", None)
     pd = tmp_path / "proj"
     ensure_project_store(str(pd))
     monkeypatch.setattr(server, "PROJECT_DIR", str(pd))
@@ -27,6 +29,7 @@ def project(tmp_path, monkeypatch):
     monkeypatch.setattr(extraction, "is_llm_available", lambda: False)
 
     yield pd
+    monkeypatch.setattr(server, "_extractor", None)
     reset_registry()
 
 
@@ -73,3 +76,26 @@ def test_commit_true_is_ungated(project, monkeypatch):
     payload = json.loads(result)
     assert payload["status"] == "committed"
     assert payload["saved_count"] >= 1
+
+
+def test_manual_tool_event_commit_bypasses_exhausted_automatic_retry(project):
+    from compchem_memory import server
+
+    session = next((project / ".magnolia" / "sessions").glob("*.jsonl"))
+    (project / "extraction-state.yaml").write_text(yaml.safe_dump({
+        "last_cursor": "",
+        "session_retries": {
+            session.name: {
+                "attempts": 5,
+                "next_retry_at": None,
+                "exhausted": True,
+            },
+        },
+    }))
+
+    payload = json.loads(_tool(server)(commit=True, project_dir=str(project)))
+
+    assert payload["status"] == "committed"
+    assert payload["saved_count"] >= 1
+    state = yaml.safe_load((project / "extraction-state.yaml").read_text())
+    assert "session_retries" not in state

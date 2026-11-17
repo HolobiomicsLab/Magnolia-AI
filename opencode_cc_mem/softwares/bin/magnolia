@@ -471,6 +471,8 @@ if setup.get("main_model"):
     cfg["model"] = setup["main_model"]
 if os.environ.get("MAG_INTERACTIVE_MODEL"):
     cfg["model"] = os.environ["MAG_INTERACTIVE_MODEL"]
+if cfg.get("model"):
+    cfg["small_model"] = cfg["model"]
 if mem_on:
     env = cfg["mcp"]["compchem-memory"]["environment"]
     env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
@@ -753,7 +755,7 @@ cmd_memory_retry() {
     src="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
     PYTHONPATH="$OPENCODE_DIR:$src${PYTHONPATH:+:$PYTHONPATH}" \
         "$PYTHON_CMD" -m compchem_memory.retry_cli \
-        --project-dir "$project" "$session"
+        --project-dir "$project" --setup "$LLM_SETUP" "$session"
 }
 
 # Interactive two-step setup (step 2 can also be done later via the agent

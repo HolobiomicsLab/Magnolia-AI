@@ -13,8 +13,8 @@ from campaign_runner.launch import ROLE_CONFIG_NAMES
 
 ROOT = Path(__file__).parents[1]
 BASE_OPENCODE_SHA256 = {
-    "campaign-worker": "8d6b9d64a6e2d2f74c99f2aaeba4f2b59496326fd962e034fc99730147d61c68",
-    "campaign-reviewer": "441b5b4126f23b5c2034e6ed104310936127f4c2db806da9d85804b48123a04c",
+    "campaign-worker": "f0782167d44c4c42233216ad8889cc4e7935509ae1161ce6f9e382c7c5e06a79",
+    "campaign-reviewer": "e2e093c9fa5ed0bbf14e2f18fd6c6345ae47f83e25c82504b6a8a285acef4269",
 }
 
 
@@ -121,12 +121,19 @@ def test_worker_exact_three_memory_reads_reviewer_none():
 
 
 @pytest.mark.parametrize("role", ("campaign-worker", "campaign-reviewer"))
-def test_service_state_deny_is_not_rendered_for_opencode(role):
+def test_service_state_deny_covers_opencode_read_glob_and_grep(role):
     policy = roles.load_role(role)
 
     assert "**/.magnolia/services/**" in policy.read_deny_patterns
-    assert "**/.magnolia/services/**" in policy.opencode_omitted_read_deny_patterns
-    assert b"**/.magnolia/services/**" not in roles.render_opencode(role)
+    rendered = roles.render_opencode(role).decode("utf-8")
+    for action in ("read", "glob", "grep"):
+        assert (
+            f"  - action: {action}\n"
+            '    resource: "**/.magnolia/services/**"\n'
+            "    effect: deny"
+        ) in rendered
+    assert '**/.magnolia/campaign-service.json' in rendered
+    assert '**/.magnolia/campaign-service.log' in rendered
 
 
 @pytest.mark.parametrize(

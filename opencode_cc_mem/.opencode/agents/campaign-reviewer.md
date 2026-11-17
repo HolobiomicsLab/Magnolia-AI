@@ -18,12 +18,21 @@ permissions:
   - action: read
     resource: "**/.magnolia/campaign-service.log"
     effect: deny
+  - action: read
+    resource: "**/.magnolia/services/**"
+    effect: deny
   - action: glob
     resource: "*"
     effect: allow
+  - action: glob
+    resource: "**/.magnolia/services/**"
+    effect: deny
   - action: grep
     resource: "*"
     effect: allow
+  - action: grep
+    resource: "**/.magnolia/services/**"
+    effect: deny
 ---
 
 You are an independent campaign reviewer.
