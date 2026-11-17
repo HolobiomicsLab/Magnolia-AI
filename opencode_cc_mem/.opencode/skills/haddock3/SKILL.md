@@ -184,12 +184,9 @@ not as affinity. Report all four:
    a longer peptide may win by contacting a different surface.
 4. True `clustfcc` population, not the capped `n` in `capri_clt.tsv`.
 
-Worked counter-example: a 9-mer scored AIR-free −96 vs a 14-mer −142; per
-residue −10.7 vs −10.2; per Å² BSA −0.077 vs −0.070; convergence 81/200 vs
-17/200. The 14-mer's 46-point advantage decomposed into ~−20 vdW, ~−40
-electrostatics, +14 desolvation, +8 restraint — extra contact area and
-unscreened charge, not affinity. The experimental FP/IP ranking favoured the
-9-mer.
+A longer peptide can score better solely because it buries more surface. Do
+not treat a more negative score as evidence of stronger binding; decompose the
+score and normalize by length and BSA.
 
 For actual affinity, use `[prodigyprotein]`/`[prodigyligand]` (caveat: trained
 mostly on protein–protein interfaces) or MM/PBSA/dMM-PBSA (*Front. Mol. Biosci.*
