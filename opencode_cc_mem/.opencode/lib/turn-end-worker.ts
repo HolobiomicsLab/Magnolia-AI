@@ -35,19 +35,23 @@ function isProjectRoot(directory: string): boolean {
     existsSync(join(directory, ".magnolia", "boot-context.md"))
 }
 
-function activeProject(directory: string): string | null {
+export function currentProjectName(directory: string): string | null {
+  if (isProjectRoot(directory)) return basename(directory)
   try {
     const name = readFileSync(join(directory, ".magnolia", ".active-project"), "utf8").trim()
-    return name ? join(directory, "projects", name) : null
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(name) ? name : null
   } catch { return null }
 }
 
-function projectPaths(directory: string) {
+function projectPaths(directory: string, frozenProject?: string) {
   const rootMode = isProjectRoot(directory)
   const configured = process.env.MAGNOLIA_PROJECT_DIR
+  const selectedProject = frozenProject ?? currentProjectName(directory)
   const projectDir = rootMode
     ? directory
-    : activeProject(directory) ?? (configured
+    : selectedProject
+      ? join(directory, "projects", selectedProject)
+      : (configured
       ? (configured.startsWith("/") ? configured : join(directory, configured))
       : directory)
   return {
@@ -98,10 +102,11 @@ export function handoffTurnEnd(
   sessionID: string,
   operation: Operation,
   details: Record<string, unknown> = {},
+  frozenProject?: string,
 ): boolean {
   let jobPath = ""
   try {
-    const paths = projectPaths(directory)
+    const paths = projectPaths(directory, frozenProject)
     const workerDir = join(paths.store, "hook-workers")
     mkdirSync(workerDir, { recursive: true })
     const suffix = `${process.pid}-${Date.now()}-${sequence++}`

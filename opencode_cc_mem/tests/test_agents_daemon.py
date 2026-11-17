@@ -331,6 +331,8 @@ def test_helper_recipe_final_answer_continuation_and_stale_recovery(tmp_path, mo
         "timeout_seconds": captured["timeout_seconds"],
         "agent_file_bytes": None,
     }
+    assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
+    observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
     assert observed == snapshot
 
 
@@ -622,6 +624,86 @@ def test_runner_self_heals_stale_session_id(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert "--session" in calls[0] and "--session" not in calls[1]   # fresh retry
     assert d.load_state(root)["lanes"]["xiulian"]["session_id"] == "ses_fresh"
+
+
+def test_successful_claude_answer_cannot_create_quota_hold():
+    event = {
+        "type": "result",
+        "is_error": False,
+        "subtype": "success",
+        "result": "FINAL ANSWER: documented the API rate limit.",
+    }
+
+    assert d._event_quota_outcome(event) is None
+
+
+def test_opencode_helper_executor_receives_governor_and_lane_caps(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from campaign_runner.governor import Policy
+    from campaign_runner.routing import resolve_route
+
+    captured = {}
+    route = resolve_route("helper", {"model": "opencode-go/test"})
+    governor = SimpleNamespace(
+        policy=Policy(max_concurrent=1, max_runs_per_day=10, max_turns_per_run=5),
+        admit=lambda _request: (_ for _ in ()).throw(RuntimeError("stop after context")),
+    )
+    governance = SimpleNamespace(
+        route=route,
+        governor=governor,
+        parent_run_id="helper:test",
+        project_digest="project",
+        role_cap=7,
+    )
+
+    class FakeExecutor:
+        def run(self, *args, **kwargs):
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    def fake_executor_for(_route, _role, context):
+        captured["context"] = context
+        return FakeExecutor()
+
+    monkeypatch.setattr("campaign_runner.executors.registry.executor_for", fake_executor_for)
+    monkeypatch.setattr("campaign_runner.executors.opencode.OpenCodeHelperExecutor", FakeExecutor)
+
+    with pytest.raises(RuntimeError, match="stop after context"):
+        d._run_once(
+            route.model,
+            str(tmp_path),
+            {"MAGNOLIA_ROOT": str(tmp_path)},
+            5,
+            ["prompt"],
+            None,
+            governance=governance,
+            resolved_route=route,
+        )
+
+    context = captured["context"]
+    assert context.role_cap == 7
+    assert context.governor_cap == 5
+    assert context.environment["MAGNOLIA_DOORBELL"] == "0"
+
+
+def test_native_quota_uses_governor_generation():
+    from types import SimpleNamespace
+    from campaign_runner.governor import QuotaWaiting
+    from campaign_runner.routing import resolve_route
+
+    route = resolve_route("helper", {"model": "claude-code/haiku"})
+    waiting = QuotaWaiting(route.subscription_key, "caller", "quota", None, "generation-7")
+    governance = SimpleNamespace(
+        governor=SimpleNamespace(quota_wait=lambda key: waiting),
+    )
+    result = SimpleNamespace(
+        outcome=RunOutcome("quota", LimitInfo("weekly limit", None, "fixture")),
+    )
+
+    translated = d._quota_from_result(route, result, governance)
+
+    assert translated.hold_id == "generation-7"
 
 
 def test_scheduled_sweep_letter_written_once(tmp_path):

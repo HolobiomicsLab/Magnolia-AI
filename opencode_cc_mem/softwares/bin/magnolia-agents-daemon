@@ -509,6 +509,7 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
     route = resolved_route or resolve_route(
         "helper", {"agent": {"json": {"model": model}}}
     )
+    helper_environment = {**env, "MAGNOLIA_DOORBELL": "0"}
     executor = executor_for(
         route,
         "helper",
@@ -517,8 +518,14 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
             role="helper",
             project_dir=Path(project_dir),
             timeout_seconds=timeout_s,
+            role_cap=governance.role_cap if governance is not None else 40,
+            governor_cap=(
+                governance.governor.policy.max_turns_per_run
+                if governance is not None
+                else None
+            ),
             opencode_binary=binary,
-            environment=env,
+            environment=helper_environment,
         ),
     )
     if not isinstance(executor, OpenCodeHelperExecutor):
@@ -527,7 +534,7 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         proc = executor.run(
             extra_args,
             cwd=project_dir,
-            environment=env,
+            environment=helper_environment,
             timeout_seconds=timeout_s,
         )
         stdout = proc.stdout or ""
@@ -582,10 +589,15 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
         stdout_path = attempt_dir / f"opencode-{uuid.uuid4().hex}.jsonl"
         stderr_path = attempt_dir / f"opencode-{uuid.uuid4().hex}.err.log"
         with admission:
+            executor = replace(
+                executor,
+                role_cap=governance.role_cap,
+                governor_cap=admission.effective_cap,
+            )
             process = run_process(
                 executor.argv(extra_args),
                 project_dir,
-                executor.environment_with_cap(env),
+                executor.environment_with_cap(helper_environment),
                 timeout_s,
                 stdout_path,
                 stderr_path,
@@ -651,12 +663,21 @@ def _event_quota_outcome(event):
 
     if not isinstance(event, dict):
         return None
-    event_type = str(event.get("type", "")).lower()
-    is_terminal = event_type in {"error", "turn.failed", "result"}
-    is_terminal = is_terminal or event.get("is_error") is True
-    if not is_terminal:
+    event_type = str(event.get("type", "")).casefold()
+    subtype = str(event.get("subtype", "")).casefold()
+    is_error = event.get("is_error") is True
+    is_failure = event_type in {"error", "turn.failed"}
+    is_failure = is_failure or (
+        event_type == "result" and (is_error or subtype not in {"", "success"})
+    )
+    if not is_failure:
         return None
-    text = json.dumps(event, sort_keys=True).lower()
+    diagnostics = {
+        key: event.get(key)
+        for key in ("type", "subtype", "error", "errors", "message", "code")
+        if event.get(key) is not None
+    }
+    text = json.dumps(diagnostics, sort_keys=True).casefold()
     if not any(
         signal in text
         for signal in (
@@ -1085,16 +1106,17 @@ def _clear_lane_session(root: str, agent: str,
     save_state(root, state)
 
 
-def _quota_from_result(route, result) -> HelperQuotaWaiting | None:
+def _quota_from_result(route, result, governance) -> HelperQuotaWaiting | None:
     """Translate a typed executor quota outcome into daemon wait metadata."""
     outcome = result.outcome
     if outcome is None or outcome.kind != "quota":
         return None
     limit = outcome.limit
+    observed = governance.governor.quota_wait(route.subscription_key)
     return HelperQuotaWaiting(
         route.subscription_key,
-        limit.hold_id if limit else None,
-        limit.reset_at if limit else None,
+        observed.hold_id if observed else (limit.hold_id if limit else None),
+        observed.reset_at if observed else (limit.reset_at if limit else None),
         limit.reason if limit else "quota",
     )
 
@@ -1143,7 +1165,11 @@ def _registered_runner(
             resume_session=session_id,
             retries=0,
         )
-        quota = _quota_from_result(route, result)
+        if result.session_id:
+            _persist_registered_session(
+                root, agent, result, executor, context, session_key
+            )
+        quota = _quota_from_result(route, result, context.governance)
         if quota is not None:
             raise quota
         outcome = result.outcome.kind if result.outcome is not None else None
@@ -1157,10 +1183,6 @@ def _registered_runner(
                 "executor refused the helper invocation",
             )
             raise ExecutorRefused(detail)
-        if result.session_id:
-            _persist_registered_session(
-                root, agent, result, executor, context, session_key
-            )
         marker = is_final_answer(result.final_text)
         narration = result.all_text or result.final_text or narration
         log_line(
@@ -1243,6 +1265,7 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     # location, memory server, and config are per lane.
     env["MAGNOLIA_PROJECT_WORKSPACE"] = "1"
     env["MAGNOLIA_WORKSPACE_ROOT"] = str(Path(root) / "opencode_cc_mem")
+    env["MAGNOLIA_DOORBELL"] = "0"
     if _opencode_bin() != "opencode":
         env.setdefault(
             "OPENCODE_DB",
@@ -1253,12 +1276,15 @@ def default_runner(agent: str, project_dir: str, root: str, prompt: str,
     from campaign_runner.workers import InvocationGovernance
 
     governor = Governor()
+    lane_cap = _lane_config(Path(project_dir)).get("max_turns", 40)
+    if isinstance(lane_cap, bool) or not isinstance(lane_cap, int) or lane_cap < 1:
+        lane_cap = 40
     governance = InvocationGovernance(
         governor,
         route,
         f"helper:{agent}:{uuid.uuid4().hex}",
         _project_digest(project_dir),
-        role_cap=40,
+        role_cap=lane_cap,
     )
     # Legacy letters resume the lane's one session. Always-on letters may name
     # a thread key, which gets an independent session slot in the same file.

@@ -56,7 +56,9 @@
  * routing, sticky sessions, secret scrubbing and usage accounting. Critic
  * prompts have no reused prefix, so they request no cache breakpoint.
  */
-import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import {
+  currentProjectName, eventTurnDetails, handoffTurnEnd,
+} from "../lib/turn-end-worker.ts"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
 
@@ -74,13 +76,26 @@ export default {
   async setup(ctx: any) {
     if (!ENABLED || !ctx?.event?.subscribe) return
     const directory = ctx.location?.directory ?? process.cwd()
+    const projects = new Map<string, string>()
+    // Note (2026-11-17): the service event stream is global. A prompt observed
+    // by this location freezes ownership before any terminal-event handoff.
+    if (ctx?.session?.hook) {
+      await ctx.session.hook("prompt", async (event: any) => {
+        const sid = String(event?.sessionID ?? "")
+        const project = currentProjectName(directory)
+        if (sid && project && !projects.has(sid)) projects.set(sid, project)
+      })
+    }
     const controller = new AbortController()
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
           const sid = sessionID(event)
-          if (isTurnEnd(event) && sid) {
-            handoffTurnEnd(directory, sid, "critic", eventTurnDetails(event))
+          const project = projects.get(sid)
+          if (isTurnEnd(event) && sid && project) {
+            handoffTurnEnd(
+              directory, sid, "critic", eventTurnDetails(event), project,
+            )
           }
         }
       } catch { /* aborted or stream error */ }
@@ -90,12 +105,21 @@ export default {
 
   async server({ directory }: any) {
     if (!ENABLED) return {}
+    const projects = new Map<string, string>()
     return {
+      "chat.message": async (input: any) => {
+        const sid = String(input?.sessionID ?? "")
+        const project = currentProjectName(directory)
+        if (sid && project && !projects.has(sid)) projects.set(sid, project)
+      },
       event: (input: any) => {
         const event = input?.event
         const sid = sessionID(event)
-        if (isTurnEnd(event) && sid) {
-          handoffTurnEnd(directory, sid, "critic", eventTurnDetails(event))
+        const project = projects.get(sid)
+        if (isTurnEnd(event) && sid && project) {
+          handoffTurnEnd(
+            directory, sid, "critic", eventTurnDetails(event), project,
+          )
         }
       },
     }

@@ -558,6 +558,17 @@ setup_nonce() {
     esac
 }
 
+# One noninteractive connectivity turn is still a governed physical invocation.
+setup_probe() {
+    local harness="$1" model="$2" prompt="$3" binary="$4"
+    local -a cmd
+    cmd=("$PYTHON_CMD" -m campaign_runner.helper_admission setup-probe
+         --harness "$harness" --prompt "$prompt" --project "$PROJECT_WORKSPACE"
+         --binary "$binary")
+    [ -z "$model" ] || cmd+=(--model "$model")
+    PYTHONPATH="$OPENCODE_DIR${PYTHONPATH:+:$PYTHONPATH}" "${cmd[@]}"
+}
+
 uppercase_ascii() {
     LC_ALL=C tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 }
@@ -759,11 +770,7 @@ except Exception:
         expected="$(printf '%s' "$nonce" | uppercase_ascii)"
         prompt="Uppercase this token and reply with only the result: $nonce"
         echo "  verifying with one real round-trip (may take ~1 min)…"
-        if command -v timeout >/dev/null 2>&1; then
-            reply="$(timeout 180 opencode run -m "$ans" "$prompt" 2>&1)" || rc=$?
-        else
-            reply="$(opencode run -m "$ans" "$prompt" 2>&1)" || rc=$?
-        fi
+        reply="$(setup_probe opencode "$ans" "$prompt" "$OPENCODE_BIN" 2>&1)" || rc=$?
         if [ "$rc" -eq 0 ] && reply_has_exact_line "$reply" "$expected"; then
             setup_set "main_model=$ans"
             echo "  OK — main model verified."
@@ -832,24 +839,14 @@ setup_run_harness() {
     nonce="$(setup_nonce)"
     expected="$(printf '%s' "$nonce" | uppercase_ascii)"
     prompt="Uppercase this token and reply with only the result: $nonce"
-    local -a cmd
+    local binary
     case "$harness" in
-        claude) cmd=(claude -p "$prompt") ;;
-        codex)  cmd=(codex exec)
-                [ -z "$model" ] || cmd+=(-m "$model")
-                cmd+=("$prompt") ;;
-        vibe)   cmd=(env VIBE_DISABLE_TELEMETRY=true vibe -p "$prompt") ;;
+        claude) binary=claude ;;
+        codex)  binary=codex ;;
+        vibe)   binary=vibe ;;
     esac
-    if [ "$harness" != "codex" ] && [ -n "$model" ]; then
-        cmd+=(--model "$model")
-    fi
-    # `timeout` is GNU coreutils and absent on stock macOS: without it the
-    # check runs unbounded (stdin is /dev/null either way). No dependency added.
-    if command -v timeout >/dev/null 2>&1; then
-        cmd=(timeout 180 "${cmd[@]}")
-    fi
     echo "verifying $harness with one real call (may take ~1 min)…" >&2
-    reply="$("${cmd[@]}" 2>/dev/null </dev/null)" || rc=$?
+    reply="$(setup_probe "$harness" "$model" "$prompt" "$binary")" || rc=$?
     # The transformed answer never appears in the prompt, so echoing cannot pass.
     if [ "$rc" -ne 0 ] || ! reply_has_exact_line "$reply" "$expected"; then
         echo "error: client did not pass the setup check; log in yourself and check the model id." >&2

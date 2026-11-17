@@ -13,6 +13,7 @@ no duplication (idempotency keys on effects).
 
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime, timezone
 
@@ -443,7 +444,14 @@ class ControlEngine:
 
     # ---------- follow-ups and wake-up context ----------
 
-    def follow_up(self, work_item_id: str, actor: str, text: str, work_spec: WorkSpec | None = None) -> dict:
+    def follow_up(
+        self,
+        work_item_id: str,
+        actor: str,
+        text: str,
+        work_spec: WorkSpec | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict:
         """Route a human follow-up.
 
         ACTIVE Work Item: a context-only thread post (no new authority, no new
@@ -454,7 +462,20 @@ class ControlEngine:
         wi = self._get_work_item(work_item_id)
         if wi["state"] in ACTIVE_STATES:
             with self.store.tx():
-                post_id = new_id("post")
+                post_id = (
+                    "post_eval_" + hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]
+                    if idempotency_key
+                    else new_id("post")
+                )
+                existing = self.store.get("thread_posts", "post_id", post_id)
+                if existing is not None:
+                    if (
+                        existing["work_item_id"] != work_item_id
+                        or existing["actor"] != actor
+                        or existing["text"] != text
+                    ):
+                        raise RouterError("follow-up idempotency key collision")
+                    return {"kind": "post", "work_item_id": work_item_id, "post_id": post_id}
                 self.store.insert(
                     "thread_posts",
                     {
@@ -474,7 +495,11 @@ class ControlEngine:
         trigger, _ = self.ingest(
             TriggerSpec(
                 source_id=f"followup:{work_item_id}",
-                source_event_id=new_id("evt"),
+                source_event_id=(
+                    "eval:" + hashlib.sha256(idempotency_key.encode()).hexdigest()
+                    if idempotency_key
+                    else new_id("evt")
+                ),
                 actor=actor,
                 project_hint=wi["project"],
                 payload={"text": text, "parent": work_item_id},
@@ -661,6 +686,34 @@ class ControlEngine:
                     "evaluator": decision.evaluator,
                     "created_at": _now(),
                 },
+            )
+
+    def record_waiter_eval_decision(
+        self, waiter_id: str, text: str, decision, decision_json: str, now: str
+    ) -> None:
+        """Atomically checkpoint one resumed decision and its audit record."""
+        eval_id = "eval_waiter_" + hashlib.sha256(waiter_id.encode()).hexdigest()[:24]
+        with self.store.tx():
+            if self.store.get("eval_decisions", "eval_id", eval_id) is None:
+                self.store.insert(
+                    "eval_decisions",
+                    {
+                        "eval_id": eval_id,
+                        "text": text,
+                        "action": decision.action,
+                        "project": decision.project,
+                        "work_item_id": decision.work_item_id,
+                        "confidence": decision.confidence,
+                        "reason": decision.reason,
+                        "evaluator": decision.evaluator,
+                        "created_at": now,
+                    },
+                )
+            self.store.update(
+                "eval_waiters",
+                "waiter_id",
+                waiter_id,
+                {"decision_json": decision_json, "updated_at": now},
             )
 
     def record_finding(

@@ -11,6 +11,7 @@ rejected by the UNIQUE(source_id, source_event_id) constraint on triggers.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -134,6 +135,10 @@ CREATE TABLE IF NOT EXISTS eval_waiters (
     reset_at TEXT,
     route_model TEXT,
     state TEXT NOT NULL,
+    owner_pid INTEGER,
+    owner_start_token TEXT,
+    decision_json TEXT,
+    reply_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -157,7 +162,22 @@ class ControlStore:
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self._tx_depth = 0
         self.conn.executescript(SCHEMA)
+        self._migrate_eval_waiters()
         self.conn.commit()
+
+    def _migrate_eval_waiters(self) -> None:
+        """Add crash-owner columns to databases created before Plan 3."""
+        columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(eval_waiters)")
+        }
+        for name, kind in (
+            ("owner_pid", "INTEGER"),
+            ("owner_start_token", "TEXT"),
+            ("decision_json", "TEXT"),
+            ("reply_json", "TEXT"),
+        ):
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE eval_waiters ADD COLUMN {name} {kind}")
 
     def close(self) -> None:
         self.conn.close()
@@ -240,14 +260,34 @@ class ControlStore:
 
     def claim_eval_waiter(self, waiter_id: str, now: str) -> dict | None:
         """Atomically claim one pending evaluator continuation exactly once."""
+        from campaign_runner.governor import _pid_gone, _verified_process_start_token
+
+        owner_pid = os.getpid()
+        owner_token = _verified_process_start_token(owner_pid)
         with self.tx():
             row = self.get("eval_waiters", "waiter_id", waiter_id)
-            if row is None or row["state"] != "pending":
+            if row is None:
+                return None
+            if row["state"] == "running":
+                previous_pid = row.get("owner_pid")
+                previous_token = row.get("owner_start_token")
+                if not isinstance(previous_pid, int) or previous_pid <= 0:
+                    return None
+                current_token = _verified_process_start_token(previous_pid)
+                owner_ended = _pid_gone(previous_pid) or (
+                    isinstance(previous_token, str)
+                    and current_token is not None
+                    and current_token != previous_token
+                )
+                if not owner_ended:
+                    return None
+            elif row["state"] != "pending":
                 return None
             changed = self.conn.execute(
-                "UPDATE eval_waiters SET state = 'running', updated_at = ? "
-                "WHERE waiter_id = ? AND state = 'pending'",
-                (now, waiter_id),
+                "UPDATE eval_waiters SET state = 'running', updated_at = ?, "
+                "owner_pid = ?, owner_start_token = ? "
+                "WHERE waiter_id = ? AND state IN ('pending', 'running')",
+                (now, owner_pid, owner_token, waiter_id),
             )
             return row if changed.rowcount == 1 else None
 
@@ -260,6 +300,7 @@ class ControlStore:
         hold_id: str | None = None,
         reset_at: str | None = None,
         clear_input: bool = False,
+        reply_json: str | None = None,
     ) -> None:
         """Persist a waiter transition and optionally erase completed input."""
         changes = {
@@ -267,9 +308,13 @@ class ControlStore:
             "hold_id": hold_id,
             "reset_at": reset_at,
             "updated_at": now,
+            "owner_pid": None,
+            "owner_start_token": None,
         }
         if clear_input:
             changes.update({"text": "", "context": ""})
+        if reply_json is not None:
+            changes["reply_json"] = reply_json
         self.update(
             "eval_waiters",
             "waiter_id",

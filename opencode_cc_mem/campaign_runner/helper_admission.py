@@ -7,12 +7,19 @@ import json
 import os
 import re
 import stat
+import subprocess
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from campaign_runner.executors.contracts import UsageRecord
+from campaign_runner.governor import Admission, AdmissionRequest, Governor, QuotaWaiting
+from campaign_runner.process import ProcessControl, run_process
+from campaign_runner.routing import resolve_route
 
 
 SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
@@ -26,6 +33,23 @@ SCHEDULED_NAME = re.compile(
 HEADER_LINES = 15
 HEADER_BYTES = 16 * 1024
 RECEIPT_SCHEMA = "magnolia-helper-generation-v2"
+_PROBE_CLIENT_PREFIX = {
+    "claude": "claude-code",
+    "codex": "codex",
+    "vibe": "vibe",
+}
+_SETUP_FORBIDDEN_ENV = frozenset({
+    "CLAUDE_CONFIG_DIR",
+    "CODEX_HOME",
+    "VIBE_HOME",
+    "CODEX_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "OPENAI_API_KEY",
+    "MISTRAL_API_KEY",
+    "CODE_MODE_HOST",
+    "CODEX_EXEC_SERVER_URL",
+})
 
 
 class AdmissionRefused(RuntimeError):
@@ -42,6 +66,137 @@ class AdmissionRefused(RuntimeError):
         self.letter = letter
         self.can_mark = can_mark
         super().__init__(reason)
+
+
+def _probe_route(harness: str, model: str | None):
+    """Resolve one setup probe onto the same subscription key as its client."""
+    if harness == "opencode":
+        selected = model or "opencode-go/default"
+    else:
+        prefix = _PROBE_CLIENT_PREFIX.get(harness)
+        if prefix is None:
+            raise AdmissionRefused(f"unsupported setup probe harness: {harness}")
+        selected = f"{prefix}/{model or 'default'}"
+    return resolve_route("evaluator", {"model": selected})
+
+
+def _probe_environment(source: dict[str, str], harness: str) -> dict[str, str]:
+    """Filter billing credentials and config-home overrides from a probe."""
+    environment = {
+        name: value
+        for name, value in source.items()
+        if name not in _SETUP_FORBIDDEN_ENV
+        and not name.upper().endswith(("_API_KEY", "_AUTH_TOKEN"))
+    }
+    environment["MAGNOLIA_DOORBELL"] = "0"
+    if harness == "vibe":
+        environment["VIBE_ENABLE_TELEMETRY"] = "false"
+        environment.pop("VIBE_DISABLE_TELEMETRY", None)
+    return environment
+
+
+def _setup_probe_argv(
+    harness: str, binary: str, model: str | None, prompt: str,
+) -> list[str]:
+    """Build the characterized noninteractive connectivity command."""
+    if harness == "opencode":
+        argv = [binary, "run"]
+        if model:
+            argv.extend(["-m", model])
+        return [*argv, prompt]
+    if harness == "claude":
+        argv = [binary, "-p", prompt]
+        if model:
+            argv.extend(["--model", model])
+        return argv
+    if harness == "codex":
+        argv = [binary, "exec"]
+        if model:
+            argv.extend(["-m", model])
+        return [*argv, prompt]
+    if harness == "vibe":
+        argv = [binary, "-p", prompt]
+        if model:
+            argv.extend(["--model", model])
+        return argv
+    raise AdmissionRefused(f"unsupported setup probe harness: {harness}")
+
+
+def run_setup_probe(
+    harness: str,
+    model: str | None,
+    prompt: str,
+    project_dir: str | Path,
+    binary: str,
+    *,
+    governor: Governor | None = None,
+    environment: dict[str, str] | None = None,
+    timeout_seconds: int = 180,
+) -> subprocess.CompletedProcess[str]:
+    """Run one bounded, receipted connectivity probe with no inherited API key."""
+    route = _probe_route(harness, model)
+    usage_governor = governor or Governor()
+    project = Path(project_dir).resolve()
+    request = AdmissionRequest(
+        route,
+        f"setup-probe:{uuid.uuid4().hex}",
+        "setup-probe",
+        hashlib.sha256(str(project).encode()).hexdigest(),
+        "setup-probe",
+        1,
+    )
+    admitted = usage_governor.admit(request)
+    if isinstance(admitted, QuotaWaiting):
+        raise AdmissionRefused(f"setup probe waiting for {admitted.reason}")
+    assert isinstance(admitted, Admission)
+    child_environment = _probe_environment(
+        dict(os.environ if environment is None else environment), harness,
+    )
+    argv = _setup_probe_argv(harness, binary, model, prompt)
+    with tempfile.TemporaryDirectory(prefix="magnolia-setup-probe-") as temporary:
+        output = Path(temporary) / "stdout"
+        errors = Path(temporary) / "stderr"
+        control = ProcessControl(
+            on_start=lambda pid, pgid: admitted.mark_started(pid=pid, pgid=pgid),
+            hold_before_exec=True,
+        )
+        result = run_process(
+            argv, project, child_environment, timeout_seconds, output, errors, control,
+        )
+        stdout = output.read_text(encoding="utf-8", errors="replace")
+        stderr = errors.read_text(encoding="utf-8", errors="replace")
+        if result.client_started:
+            admitted.release(
+                usage=UsageRecord(turns=1, source="setup-probe"),
+                outcome=result.outcome,
+            )
+        else:
+            admitted.cancel_before_launch()
+        return subprocess.CompletedProcess(argv, result.returncode, stdout, stderr)
+
+
+def _setup_probe_main(argv: list[str]) -> int:
+    """CLI bridge used by the Bash launcher without serializing secrets."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="campaign_runner.helper_admission setup-probe")
+    parser.add_argument("command", choices=("setup-probe",))
+    parser.add_argument("--harness", required=True)
+    parser.add_argument("--model")
+    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--project", required=True, type=Path)
+    parser.add_argument("--binary", required=True)
+    args = parser.parse_args(argv)
+    try:
+        result = run_setup_probe(
+            args.harness, args.model, args.prompt, args.project, args.binary,
+        )
+    except AdmissionRefused as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    return result.returncode
 
 
 @dataclass
@@ -581,3 +736,7 @@ def _reject_symlinks(path: Path, boundary: Path, label: str) -> None:
         current = current / part
         if current.is_symlink():
             raise AdmissionRefused(f"{label} crosses a symlink: {current}")
+
+
+if __name__ == "__main__":
+    raise SystemExit(_setup_probe_main(sys.argv[1:]))

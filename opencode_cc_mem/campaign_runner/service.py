@@ -256,6 +256,7 @@ def ensure_service(
     environment = dict(os.environ)
     environment.update(
         {
+            "MAGNOLIA_DOORBELL": "0",
             "OPENCODE_DB": db_path,
             "OPENCODE_SERVER_PASSWORD": password,
             "OPENCODE_SERVER_USERNAME": "opencode",

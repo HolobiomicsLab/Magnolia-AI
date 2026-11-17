@@ -167,6 +167,26 @@ def _opencode_paths(payload: dict) -> ProjectPaths:
     )
 
 
+def _validate_opencode_session_binding(
+    payload: dict, paths: ProjectPaths, session_id: str,
+) -> None:
+    """Refuse a handoff not bound to this project's recorded session."""
+    project = Path(payload["project_dir"]).resolve()
+    store = Path(payload["store"]).resolve()
+    if store != project / ".magnolia" or paths.store.resolve() != store:
+        raise _RejectPayload("OpenCode project/store binding mismatch")
+    mapping = store / "opencode-sessions.jsonl"
+    try:
+        rows = [json.loads(line) for line in mapping.read_text(encoding="utf-8").splitlines()]
+    except (OSError, json.JSONDecodeError) as error:
+        raise _RejectPayload("OpenCode session binding is unavailable") from error
+    if not any(
+        isinstance(row, dict) and row.get("opencode_session_id") == session_id
+        for row in rows
+    ):
+        raise _RejectPayload("OpenCode session is not owned by this project")
+
+
 def _message_role(message: dict) -> str:
     """Return a role from either OpenCode message family."""
     info = message.get("info") if isinstance(message.get("info"), dict) else {}
@@ -438,6 +458,7 @@ def _run_opencode_payload(
 
     paths = _opencode_paths(payload)
     session_id = str(payload["session_id"])
+    _validate_opencode_session_binding(payload, paths, session_id)
     exported = opencode_ingest.live_session_exporter()(session_id)
     if not isinstance(exported, dict):
         _record_payload_error(job_path, payload, "session export unavailable")

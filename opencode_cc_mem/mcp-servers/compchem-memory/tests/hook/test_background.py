@@ -102,6 +102,9 @@ def test_opencode_worker_finalizes_capture_and_critic_once(tmp_path, monkeypatch
         "session_id": "s1",
         "turn_id": "u1",
     }
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({"opencode_session_id": "s1"}) + "\n", encoding="utf-8",
+    )
     job = folder / "opencode-turn.json"
     job.write_text(json.dumps(payload), encoding="utf-8")
     exported = {"messages": [
@@ -133,6 +136,10 @@ def test_opencode_worker_finalizes_capture_and_critic_once(tmp_path, monkeypatch
 
 
 def _opencode_payload(tmp_path, project, store, session_id, turn_id, operation="critic"):
+    store.mkdir(parents=True, exist_ok=True)
+    mapping = store / "opencode-sessions.jsonl"
+    with mapping.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"opencode_session_id": session_id}) + "\n")
     return {
         **_payload(tmp_path, project, store),
         "harness": "opencode", "operation": operation,

@@ -352,4 +352,6 @@ def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
             for name in ("campaign-worker.md", "campaign-reviewer.md")
         },
     }
+    assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
+    observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
     assert observed == snapshot
