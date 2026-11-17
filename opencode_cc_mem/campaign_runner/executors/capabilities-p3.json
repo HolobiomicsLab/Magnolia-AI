@@ -39,7 +39,7 @@
       "client": "claude-code",
       "role": "worker",
       "role_label": "worker",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
@@ -72,7 +72,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -244,7 +244,7 @@
       "client": "claude-code",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
@@ -277,7 +277,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -443,7 +443,7 @@
       "client": "claude-code",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
@@ -476,7 +476,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -641,7 +641,7 @@
       "client": "claude-code",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
@@ -674,7 +674,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -833,7 +833,7 @@
       "client": "codex",
       "role": "worker",
       "role_label": "worker",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
@@ -912,7 +912,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1107,7 +1107,7 @@
       "client": "codex",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
@@ -1186,7 +1186,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1375,7 +1375,7 @@
       "client": "codex",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
@@ -1411,7 +1411,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1497,7 +1497,7 @@
       "client": "codex",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
@@ -1533,7 +1533,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
+              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }

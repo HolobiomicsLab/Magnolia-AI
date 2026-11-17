@@ -17,6 +17,7 @@ from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.capabilities import (
     load_capability_table,
     load_role_capabilities,
+    project_role_capabilities,
 )
 from campaign_runner.executors.codex import CodexExecutor
 from campaign_runner.launch import (
@@ -75,6 +76,15 @@ WORKER_CAPABILITIES = (
     "mcp:compchem-memory.memory_search",
     "mcp:compchem-memory.memory_get_run_history",
 )
+
+
+def _candidate_role_capabilities():
+    """Enable stale rows only inside the offline live-candidate driver."""
+    table = load_capability_table()
+    for row in table["rows"]:
+        if row["client"] in {"claude-code", "codex"}:
+            row["stale"] = False
+    return project_role_capabilities(table)
 
 
 def _fake_codex_client(tmp_path):
@@ -251,7 +261,7 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         f"home = {Path(sys.executable).resolve().parent}\n",
         encoding="utf-8",
     )
-    capabilities = copy.deepcopy(load_role_capabilities())
+    capabilities = copy.deepcopy(_candidate_role_capabilities())
     identity = capabilities["claude-code"][role]["launch_identity"]["components"]
     identity["client_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
     identity["client_version"] = "2.1.325"

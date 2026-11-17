@@ -323,17 +323,26 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_current_table_accepts_claude_and_codex_campaign_roles():
+def test_changed_claude_and_codex_rows_refuse_until_live_reobservation():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
+    changed_rows = [
+        row for row in table["rows"] if row["client"] in {"claude-code", "codex"}
+    ]
 
     assert set(projected) == {"claude-code", "codex", "vibe"}
+    assert len(changed_rows) == 8
+    assert all(row["stale"] is True for row in changed_rows)
+    assert {
+        row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
+        for row in changed_rows
+    } == {"a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173"}
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
     assert all(role["gate_accepted"] for role in projected["claude-code"].values())
-    assert all(role["accepted"] for role in projected["claude-code"].values())
-    assert all(not role["stale"] for role in projected["claude-code"].values())
+    assert all(not role["accepted"] for role in projected["claude-code"].values())
+    assert all(role["stale"] for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["codex"].values())
     assert all(
@@ -342,7 +351,8 @@ def test_current_table_accepts_claude_and_codex_campaign_roles():
     )
     for role in ("worker", "reviewer"):
         assert projected["codex"][role]["gate_accepted"] is True
-        assert projected["codex"][role]["accepted"] is True
+        assert projected["codex"][role]["accepted"] is False
+        assert projected["codex"][role]["stale"] is True
         assert projected["codex"][role]["blocking_cells"] == []
     for role in ("helper", "evaluator"):
         assert projected["codex"][role]["accepted"] is False
@@ -350,6 +360,20 @@ def test_current_table_accepts_claude_and_codex_campaign_roles():
     assert all(not role["accepted"] for role in projected["vibe"].values())
     assert all(role["blocking_cells"] for role in projected["vibe"].values())
     assert any("D4" in reason for reason in projected["vibe"]["worker"]["reasons"])
+
+
+def test_live_candidate_can_clear_stale_rows_without_changing_recorded_values():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    candidate = copy.deepcopy(table)
+    for row in candidate["rows"]:
+        if row["client"] in {"claude-code", "codex"}:
+            row["stale"] = False
+
+    projected = project_role_capabilities(candidate)
+
+    assert all(role["accepted"] for role in projected["claude-code"].values())
+    assert projected["codex"]["worker"]["accepted"] is True
+    assert projected["codex"]["reviewer"]["accepted"] is True
 
 
 def test_claude_rows_accepted_from_live_gate():
@@ -366,6 +390,8 @@ def test_claude_rows_accepted_from_live_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
+    assert all(item["accepted"] is False for item in projected.values())
+    assert all(item["stale"] is True for item in projected.values())
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
     assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(
@@ -403,7 +429,9 @@ def test_codex_campaign_rows_accepted_from_live_gate():
 
     assert set(rows) == {"worker", "reviewer"}
     assert all(row["gate"]["status"] == "observed" for row in rows.values())
-    assert all(projected["codex"][role]["accepted"] for role in rows)
+    assert all(projected["codex"][role]["gate_accepted"] for role in rows)
+    assert all(not projected["codex"][role]["accepted"] for role in rows)
+    assert all(projected["codex"][role]["stale"] for role in rows)
     assert rows["worker"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
     ] == "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285"

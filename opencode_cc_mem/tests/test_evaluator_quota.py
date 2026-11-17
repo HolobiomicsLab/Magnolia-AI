@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from campaign_runner.routing import resolve_route
 from router_runner import agentd
 from router_runner.evaluator import EvalDecision, GenerativeEvaluator
 from router_runner.router import Router
+from router_runner.store import ControlStore
 
 
 CAPABILITIES = {"claude-code": {"evaluator": {"accepted": True}}}
@@ -398,6 +400,67 @@ def test_crashed_evaluator_claim_is_recoverable(tmp_path, monkeypatch):
     assert resumed.kind == "handoff"
     assert executor.calls == 1
     assert store.get("eval_waiters", "waiter_id", waiter_id)["state"] == "completed"
+
+
+def test_two_concurrent_evaluator_resumers_claim_exactly_once(tmp_path, monkeypatch):
+    database = tmp_path / "claim-race.db"
+    seed = ControlStore(database)
+    with seed.tx():
+        seed.insert(
+            "eval_waiters",
+            {
+                "waiter_id": "waiter-race",
+                "text": "evaluate",
+                "context": "[]",
+                "subscription_key": "claude-code",
+                "hold_id": None,
+                "reset_at": None,
+                "route_model": "claude-code/model",
+                "state": "pending",
+                "owner_pid": None,
+                "owner_start_token": None,
+                "decision_json": None,
+                "reply_json": None,
+                "created_at": "2026-11-17T00:00:00+00:00",
+                "updated_at": "2026-11-17T00:00:00+00:00",
+            },
+        )
+    seed.close()
+    both_read_pending = threading.Barrier(2)
+    original_get = ControlStore.get
+
+    def synchronized_get(store, table, key_col, key):
+        row = original_get(store, table, key_col, key)
+        if table == "eval_waiters" and key == "waiter-race":
+            both_read_pending.wait(timeout=5)
+        return row
+
+    monkeypatch.setattr(ControlStore, "get", synchronized_get)
+    claims: list[bool] = []
+    errors: list[BaseException] = []
+
+    def claim():
+        store = ControlStore(database)
+        try:
+            claims.append(
+                store.claim_eval_waiter("waiter-race", "2026-11-17T00:00:01+00:00")
+                is not None
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            store.close()
+
+    threads = [threading.Thread(target=claim) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    assert claims.count(True) == 1
+    assert claims.count(False) == 1
 
 
 def test_crashed_evaluator_replays_checkpointed_decision_without_second_call(

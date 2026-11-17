@@ -4,7 +4,9 @@ The lease covers only short store critical sections: read-modify-write of
 entries, run records, proposal artifacts, cursors and the version commit. It is
 never held across an LLM, network or long subprocess call; long writers compute
 first, then lease, re-validate what they read and write. Nothing takes it at
-import or server start, and hooks never wait on it.
+import or server start, and hooks never wait on it. The global nested-lock order
+is project writer lease first, then a per-session writer lock. Code that needs
+both must never acquire them in the opposite order.
 """
 
 from __future__ import annotations

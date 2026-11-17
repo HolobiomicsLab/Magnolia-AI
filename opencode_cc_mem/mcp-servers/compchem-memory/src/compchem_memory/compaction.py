@@ -90,8 +90,8 @@ def _replace_if_unchanged(
 ) -> CompactionResult | None:
     """Swap in the compacted log under the project writer lease, unless the log
     changed while it was being compacted (the summary may call an LLM)."""
-    with session_writer_lock(session_path):
-        with project_writer_lease(session_path):
+    with project_writer_lease(session_path):
+        with session_writer_lock(session_path):
             if not fingerprint_unchanged(read_set):
                 print(f"[compaction] {session_path.name} changed during compaction; "
                       "not replaced", file=sys.stderr)

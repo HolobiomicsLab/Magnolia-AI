@@ -676,7 +676,9 @@ def _event_quota_outcome(event):
         return None
     diagnostics = {
         key: event.get(key)
-        for key in ("type", "subtype", "error", "errors", "message", "code")
+        for key in (
+            "type", "subtype", "error", "errors", "message", "code", "result",
+        )
         if event.get(key) is not None
     }
     text = json.dumps(diagnostics, sort_keys=True).casefold()

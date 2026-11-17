@@ -637,6 +637,20 @@ def test_successful_claude_answer_cannot_create_quota_hold():
     assert d._event_quota_outcome(event) is None
 
 
+def test_claude_error_result_text_can_report_quota():
+    event = {
+        "type": "result",
+        "is_error": True,
+        "subtype": "error",
+        "result": "You've hit your weekly limit.",
+    }
+
+    outcome = d._event_quota_outcome(event)
+
+    assert outcome is not None
+    assert outcome.kind == "quota"
+
+
 def test_opencode_helper_executor_receives_governor_and_lane_caps(
     tmp_path, monkeypatch
 ):

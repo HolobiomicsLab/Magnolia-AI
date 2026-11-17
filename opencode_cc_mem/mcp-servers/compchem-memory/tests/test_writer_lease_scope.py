@@ -442,6 +442,91 @@ def test_session_append_waits_for_compaction_swap_and_survives(tmp_path, monkeyp
     assert '"value": "preserved"' in active
 
 
+def test_leased_recording_and_compaction_follow_one_lock_order(tmp_path):
+    project = tmp_path / "project"
+    sessions = project / ".magnolia" / "sessions"
+    sessions.mkdir(parents=True)
+    session = sessions / "active.jsonl"
+    session.write_text(json.dumps({"event_type": "session_start"}) + "\n")
+    recorder_ready = tmp_path / "recorder-ready"
+    compactor_waiting = tmp_path / "compactor-waiting"
+    recorder_script = textwrap.dedent(
+        """
+        import sys, time
+        from pathlib import Path
+        from compchem_memory.tiers.session import SessionManager
+        from compchem_memory.writer_lease import project_writer_lease
+
+        project, sessions, session, ready, waiting = map(Path, sys.argv[1:])
+        manager = SessionManager(sessions, project_id="project", project_dir=str(project))
+        manager._current_session = session
+        manager._current_session_id = session.stem
+        with project_writer_lease(project):
+            ready.write_text("ready")
+            deadline = time.monotonic() + 5
+            while not waiting.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if not waiting.exists():
+                raise RuntimeError("compactor never reached the project lease")
+            manager.record("sentinel", {"value": "preserved"})
+        """
+    )
+    compactor_script = textwrap.dedent(
+        """
+        import contextlib, sys
+        from pathlib import Path
+        from compchem_memory import compaction
+        from compchem_memory.writer_lease import file_fingerprint
+
+        session, waiting = map(Path, sys.argv[1:])
+        original_lease = compaction.project_writer_lease
+
+        @contextlib.contextmanager
+        def announced_lease(path):
+            waiting.write_text("waiting")
+            with original_lease(path):
+                yield
+
+        compaction.project_writer_lease = announced_lease
+        result = compaction.CompactionResult(
+            kept_messages=[], summary="summary", pruned_count=1,
+            tokens_before=10, tokens_after=1,
+        )
+        compaction._replace_if_unchanged(
+            session, file_fingerprint([session]), result,
+        )
+        """
+    )
+    recorder = subprocess.Popen(
+        [
+            PY, "-c", recorder_script, str(project), str(sessions), str(session),
+            str(recorder_ready), str(compactor_waiting),
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    deadline = time.monotonic() + 5
+    while not recorder_ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert recorder_ready.exists(), "leased recorder did not acquire the project lease"
+    compactor = subprocess.Popen(
+        [PY, "-c", compactor_script, str(session), str(compactor_waiting)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        recorder_out, recorder_err = recorder.communicate(timeout=5)
+        compactor_out, compactor_err = compactor.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        recorder.terminate()
+        compactor.terminate()
+        recorder.wait(timeout=5)
+        compactor.wait(timeout=5)
+        pytest.fail("leased recording and compaction deadlocked")
+
+    assert recorder.returncode == 0, (recorder_out, recorder_err)
+    assert compactor.returncode == 0, (compactor_out, compactor_err)
+    assert '"event_type": "sentinel"' in session.read_text(encoding="utf-8")
+
+
 def _staging_finding(staging: Path, name: str, title: str, session: str) -> Path:
     meta = {"title": title, "type": "scientific_finding", "opencode_session_id": session,
             "observed_in_sessions": [session], "tags": [], "tools": [], "confidence": 0.6}
