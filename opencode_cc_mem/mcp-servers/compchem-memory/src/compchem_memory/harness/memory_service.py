@@ -136,6 +136,22 @@ PROVIDER_KEYS = {
     "mistral": ("MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
     "zai": ("ZHIPU_API_KEY", "ZAI_API_KEY"),
 }
+PROVIDER_API_KEY_NAMES = frozenset(
+    {
+        "MAGNOLIA_CRITIC_API_KEY",
+        *(name for names in PROVIDER_KEYS.values() for name in names),
+    }
+)
+
+
+def is_provider_api_key_name(name: str) -> bool:
+    """Return whether an environment name carries a provider API key."""
+    normalized = str(name).upper()
+    return normalized in PROVIDER_API_KEY_NAMES or (
+        normalized.startswith("MAGNOLIA_") and normalized.endswith("_API_KEY")
+    )
+
+
 SERVICE_ROUTE_ENV = frozenset(
     {
         "ANTHROPIC_BASE_URL",
@@ -157,7 +173,7 @@ SERVICE_ROUTE_ENV = frozenset(
         "OPENCODE_DB",
         "OPENROUTER_BASE_URL",
         "ZAI_BASE_URL",
-        *(name for names in PROVIDER_KEYS.values() for name in names),
+        *PROVIDER_API_KEY_NAMES,
     }
 )
 

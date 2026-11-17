@@ -374,7 +374,7 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
         assert result.session_identity.session_id == "vibe-session"
         assert result.resume_artifact.session_id == "vibe-session"
     (call,) = _calls(state)
-    assert call["client_env"] == PASSTHROUGH_ENV
+    assert call["client_env"] == {}
     assert call["telemetry"] == "false"
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
