@@ -1,0 +1,30 @@
+{
+  "schema_version": "magnolia-codex-gate4-policy-v1",
+  "role": "reviewer",
+  "primary_run": {
+    "allowed_read": "worker-owned result file",
+    "edit_decision": "deny",
+    "shell_decision": "deny",
+    "wrong_read_tool_name_reached_router": false
+  },
+  "diagnostic_run": {
+    "purpose": "exercise the omitted allowed read with exact tool names and probe residual catalog tools",
+    "observations": [
+      {"tool": "mcp__magnolia_read__read_file", "target": "allowed documentation file", "decision": "allow", "result": "content returned"},
+      {"tool": "mcp__magnolia_read__list_dir", "target": "worker-owned work directory", "decision": "allow", "result": "listing returned"},
+      {"tool": "list_mcp_resources", "decision": "deny", "result": "PreToolUse row present"},
+      {"tool": "list_mcp_resource_templates", "decision": "deny", "result": "PreToolUse row present"},
+      {"tool": "read_mcp_resource", "decision": "deny", "result": "PreToolUse row present"},
+      {"tool": "multi_agent_v1__spawn_agent", "hook_name": "spawn_agent", "decision": "deny", "result": "no child created"},
+      {"tool": "write_stdin", "decision": "client-error-before-hook", "result": "no process session existed"}
+    ]
+  },
+  "disk_result": {
+    "worker_result_changed_by_reviewer": false,
+    "reviewer_shell_marker_persisted": false,
+    "project_root_edit_persisted": false,
+    "control_edit_persisted": false,
+    "symlink_outside_target_changed": false,
+    "bytecode_in_source_tree": 0
+  }
+}

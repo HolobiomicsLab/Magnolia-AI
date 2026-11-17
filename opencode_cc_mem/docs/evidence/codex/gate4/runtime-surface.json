@@ -1,0 +1,52 @@
+{
+  "schema_version": "magnolia-codex-gate4-runtime-v1",
+  "code_mode_host_probe": {
+    "direct_file_read": false,
+    "direct_directory_listing": false,
+    "direct_network": false,
+    "direct_process_spawn": false,
+    "loopback_connection_during_gate": false,
+    "process_marker_created": false,
+    "globals": {
+      "require": "undefined",
+      "process": "undefined",
+      "Deno": "undefined",
+      "Bun": "undefined",
+      "fetch": "undefined",
+      "XMLHttpRequest": "undefined",
+      "WebSocket": "undefined",
+      "console": "undefined"
+    },
+    "load_secret_result": "undefined; load is not a file loader"
+  },
+  "tool_catalog": {
+    "worker_count": 40,
+    "reviewer_count": 14,
+    "role_tools": ["mcp__magnolia_read__read_file", "mcp__magnolia_read__list_dir", "mcp__magnolia_read__search", "apply_patch"],
+    "residual_groups": {
+      "worker_non_allowlisted_memory_tools": 23,
+      "shell_session": ["exec_command", "write_stdin"],
+      "mcp_resources": ["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"],
+      "multi_agent_v1": ["multi_agent_v1__spawn_agent", "multi_agent_v1__send_input", "multi_agent_v1__wait_agent", "multi_agent_v1__resume_agent", "multi_agent_v1__close_agent"]
+    },
+    "absent": ["connected-app tools", "web tools", "image tools"]
+  },
+  "enforcement": {
+    "basis": "required PreToolUse deny-unknown allowlist",
+    "every_routed_inner_call_hooked": true,
+    "write_stdin_hooked": false,
+    "write_stdin_reachability": "no session can be created because exec_command is hooked and denied"
+  },
+  "offline_0_169_switch_inventory": {
+    "inputs": ["codex --help", "codex exec --help", "codex features list"],
+    "temporary_home": true,
+    "model_call": false,
+    "documented_per_tool_catalog_switch": false,
+    "multi_agent_disable_already_gated": true,
+    "multi_agent_v1_removed_by_that_disable": false,
+    "possible_feature_names_without_documented_removal_semantics": ["shell_tool", "unified_exec", "unified_exec_tty", "write_stdin_approval", "mcp_2026_07_28"],
+    "mcp_resource_removal_switch_found": false,
+    "argv_changed": false,
+    "conclusion": "No supported documented switch was found that proves removal of the residual tools from the code-mode catalog; any new override requires a new live gate."
+  }
+}

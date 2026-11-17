@@ -318,7 +318,7 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_current_table_accepts_claude_and_refuses_codex_vibe():
+def test_current_table_accepts_claude_and_codex_campaign_roles():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
 
@@ -335,12 +335,15 @@ def test_current_table_accepts_claude_and_refuses_codex_vibe():
         role["launch_identity"]["components"]["model"] == "gpt-5.6-luna"
         for role in projected["codex"].values()
     )
-    for client in ("codex", "vibe"):
-        assert all(not role["accepted"] for role in projected[client].values())
-        assert all(role["blocking_cells"] for role in projected[client].values())
-
-    assert any("D2" in reason for reason in projected["codex"]["worker"]["reasons"])
-    assert any("D2" in reason for reason in projected["codex"]["reviewer"]["reasons"])
+    for role in ("worker", "reviewer"):
+        assert projected["codex"][role]["gate_accepted"] is True
+        assert projected["codex"][role]["accepted"] is True
+        assert projected["codex"][role]["blocking_cells"] == []
+    for role in ("helper", "evaluator"):
+        assert projected["codex"][role]["accepted"] is False
+        assert projected["codex"][role]["blocking_cells"]
+    assert all(not role["accepted"] for role in projected["vibe"].values())
+    assert all(role["blocking_cells"] for role in projected["vibe"].values())
     assert any("D4" in reason for reason in projected["vibe"]["worker"]["reasons"])
 
 
@@ -384,23 +387,50 @@ def test_claude_row_stale_on_identity_change():
     assert changed["accepted"] is False
 
 
-def test_codex_vibe_rows_still_refused():
+def test_codex_campaign_rows_accepted_from_live_gate():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)
+    rows = {
+        row["role"]: row
+        for row in table["rows"]
+        if row["client"] == "codex" and row["role"] in {"worker", "reviewer"}
+    }
+
+    assert set(rows) == {"worker", "reviewer"}
+    assert all(row["gate"]["status"] == "observed" for row in rows.values())
+    assert all(projected["codex"][role]["accepted"] for role in rows)
+    assert rows["worker"]["gate"]["value"]["configuration_binding"][
+        "configuration_identity_sha256"
+    ] == "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb"
+    assert rows["reviewer"]["gate"]["value"]["configuration_binding"][
+        "configuration_identity_sha256"
+    ] == "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f"
+
+
+def test_codex_helper_evaluator_and_vibe_rows_still_refused():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
 
-    for client in ("codex", "vibe"):
-        assert all(not row["accepted"] for row in projected[client].values())
+    assert projected["codex"]["helper"]["accepted"] is False
+    assert projected["codex"]["evaluator"]["accepted"] is False
+    assert all(not row["accepted"] for row in projected["vibe"].values())
 
 
-def test_codex_rows_share_their_reaudited_client_identity():
+def test_codex_rows_share_their_reaudited_client_version_and_hash():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     rows = [row for row in table["rows"] if row["client"] == "codex"]
     identities = [row["gate"]["value"]["client_identity"] for row in rows]
 
     assert len(rows) == 4
-    assert all(identity == identities[0] for identity in identities)
     assert all(
-        row["cells"]["identity"]["value"] == identities[0] for row in rows
+        identity["version"] == identities[0]["version"] for identity in identities
     )
-    assert identities[0]["version"] in identities[0]["executable"]
+    assert all(
+        identity["sha256"] == identities[0]["sha256"] for identity in identities
+    )
+    assert all(
+        row["cells"]["identity"]["value"] == identity
+        for row, identity in zip(rows, identities, strict=True)
+    )
+    assert all(identity["version"] in identity["executable"] for identity in identities)
     assert len(identities[0]["sha256"]) == 64

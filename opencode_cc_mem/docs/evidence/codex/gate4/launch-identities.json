@@ -1,0 +1,87 @@
+{
+  "schema_version": "magnolia-codex-gate4-launch-v1",
+  "observed_revision": "abfcaf43e80a24c79c2ec1ee34459affe3b542d7",
+  "current_revision_checked": "167ad97cb990aa372c859a2e6f5a6de248aa047e",
+  "identity_reobservation_pending": false,
+  "client": {
+    "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+    "version": "0.169.0",
+    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+  },
+  "model": "gpt-5.6-luna",
+  "model_catalog_tool_mode": "code_mode_only",
+  "trust": {
+    "source": "persisted project and hook trust",
+    "project_hook_rows": 5,
+    "before_review": "untrusted",
+    "after_review": "trusted",
+    "bypass_flag_used": false
+  },
+  "argv_shape": {
+    "entrypoint": ["codex", "-C", "<project>", "-s", "<role-sandbox>", "-m", "gpt-5.6-luna", "exec", "--json"],
+    "approval_policy": "never",
+    "network_access": false,
+    "web_search": "disabled",
+    "apps_disabled": true,
+    "code_mode_enabled": ["code_mode_host", "code_mode_host_grpc"],
+    "surface_restrictions_include": [
+      "code_mode_only_strict_3p_tools",
+      "code_mode_tool_search",
+      "incremental_exec_tools",
+      "incremental_tools",
+      "multi_agent"
+    ],
+    "prompt_boundary": "-- <prompt>",
+    "forbidden_flag_present": false
+  },
+  "roles": {
+    "worker": {
+      "sandbox": "workspace-write",
+      "effective_max_turns": 30,
+      "configuration_identity_sha256": "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb",
+      "policy_sha256": "891b86d461d44e1c3fedaac18176922de13332228723452a7a7eef1877dae3cd",
+      "components": {
+        "model": "gpt-5.6-luna",
+        "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
+        "mcp": "a38ef3835c5815a8d00937c78cd7e46fdc383c970b1738016a3a32dce6b8bff2",
+        "native_files": "c9029176512f058f08bab775d765e9bd85b0c589e62890fbc6a03ed77b16fd12",
+        "policy": "184ebe313dec2ff61f8f5a2de1f40d5b9731e2e865f87b3a740426bf160b282b",
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "0cb4cea4de901ddec44c639e2ecfac794fdc2ddb85952db708b5c4ba5579b065",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+      }
+    },
+    "reviewer": {
+      "sandbox": "read-only",
+      "effective_max_turns": 8,
+      "configuration_identity_sha256": "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f",
+      "policy_sha256": "0657f5b576c658b8be98d6ec8efcba710d2d5fc25b9e83b1e42efc01050dfb37",
+      "components": {
+        "model": "gpt-5.6-luna",
+        "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
+        "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+        "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
+        "policy": "f619948085b689cdd9695313c347ef5d7ffae36013a0983b686eb2f006f1551f",
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "0cb4cea4de901ddec44c639e2ecfac794fdc2ddb85952db708b5c4ba5579b065",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+      }
+    }
+  },
+  "resume_contract": {
+    "supported": true,
+    "restriction": "same client, project, role, model and configuration identity",
+    "live_resume_call_in_gate4": false
+  },
+  "usage_semantics": {
+    "scope": "physical invocation",
+    "ledger_rows_per_gate_invocation": 1,
+    "source": "codex-exec-json",
+    "completeness": "complete",
+    "counters": ["input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "cache_write_tokens", "cost", "turns"]
+  }
+}
