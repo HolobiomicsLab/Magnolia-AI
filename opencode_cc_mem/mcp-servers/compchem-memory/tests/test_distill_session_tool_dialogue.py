@@ -69,6 +69,73 @@ def test_commit_saves_dialogue_and_advances_cursor(project):
     assert rec["cursor"] == "m1"
 
 
+def test_commit_refuses_dialogue_retry_when_llm_route_is_unavailable(
+    project, monkeypatch,
+):
+    from compchem_memory import opencode_ingest as oi
+    from compchem_memory import server
+
+    marker = project / ".magnolia" / "opencode-distilled" / "ses_live.json"
+    marker.parent.mkdir(parents=True)
+    initial_progress = {
+        "cursor": None,
+        "candidates": 0,
+        "done": False,
+        "retry": {"attempts": 5, "next_retry_at": None, "exhausted": True},
+    }
+    marker.write_text(json.dumps(initial_progress) + "\n")
+    distiller_calls = []
+    monkeypatch.setattr(server, "is_llm_available", lambda: False)
+    monkeypatch.setattr(oi, "is_llm_available", lambda: False, raising=False)
+    monkeypatch.setattr(
+        oi, "_default_distiller", lambda text: distiller_calls.append(text) or [],
+    )
+
+    payload = json.loads(_tool(server)(commit=True, project_dir=str(project)))
+
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "configured memory LLM is unavailable"
+    assert payload["retry"] is False
+    assert payload["source"] == "dialogue"
+    assert distiller_calls == []
+    assert json.loads(marker.read_text()) == initial_progress
+    assert list((project / ".magnolia" / "staging").glob("*.md")) == []
+
+
+def test_commit_respects_dialogue_active_retry_backoff(project, monkeypatch):
+    from compchem_memory import opencode_ingest as oi
+    from compchem_memory import server
+
+    scheduled_at = "2099-01-02T03:04:05+00:00"
+    marker = project / ".magnolia" / "opencode-distilled" / "ses_live.json"
+    marker.parent.mkdir(parents=True)
+    initial_progress = {
+        "cursor": None,
+        "candidates": 0,
+        "done": False,
+        "retry": {
+            "attempts": 2,
+            "next_retry_at": scheduled_at,
+            "exhausted": False,
+        },
+    }
+    marker.write_text(json.dumps(initial_progress) + "\n")
+    distiller_calls = []
+    monkeypatch.setattr(
+        oi, "_default_distiller", lambda text: distiller_calls.append(text) or [],
+    )
+
+    payload = json.loads(_tool(server)(commit=True, project_dir=str(project)))
+
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == f"extraction retry scheduled at {scheduled_at}"
+    assert payload["retry"] is False
+    assert payload["next_retry_at"] == scheduled_at
+    assert payload["source"] == "dialogue"
+    assert distiller_calls == []
+    assert json.loads(marker.read_text()) == initial_progress
+
+
 def test_hook_session_uses_dialogue_distillation_without_opencode(tmp_path, monkeypatch):
     from compchem_memory import opencode_ingest as oi
     from compchem_memory import server

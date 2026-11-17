@@ -2020,7 +2020,9 @@ def _reject_forbidden_data(
         raise ExecutorRefused("forbidden client environment name in launch contract")
     for name, value in provider_values:
         if any(
-            _contains_value(destination, value, is_path=False)
+            _contains_value(
+                destination, value, is_path=False, is_credential=True
+            )
             for destination in destinations
         ):
             raise ExecutorRefused(
@@ -2028,7 +2030,12 @@ def _reject_forbidden_data(
                 f"{name} provider credential leaked"
             )
     if any(
-        _contains_value(destination, value, is_path=name in FORBIDDEN_PATH_ENV)
+        _contains_value(
+            destination,
+            value,
+            is_path=name in FORBIDDEN_PATH_ENV,
+            is_credential=_is_credential_name(name),
+        )
         for destination in destinations
         for name, value in values
     ):
@@ -2041,12 +2048,27 @@ def _contains_token(destination: str, token: str) -> bool:
     ) is not None
 
 
-def _contains_value(destination: str, value: str, *, is_path: bool) -> bool:
+def _is_credential_name(name: str) -> bool:
+    """Return whether a name describes a secret-like credential value."""
+    normalized = name.upper()
+    return (
+        normalized.endswith(("KEY", "TOKEN", "SECRET", "PASSWORD"))
+        or "CREDENTIAL" in normalized
+    )
+
+
+def _contains_value(
+    destination: str,
+    value: str,
+    *,
+    is_path: bool,
+    is_credential: bool = False,
+) -> bool:
     """Find a complete secret token without mistaking path prefixes for values."""
     normalized = value.strip().lower()
     placeholders = {"none", "null", "ollama", "changeme", "dummy", "test"}
     is_repeated_x = normalized and set(normalized) <= {"x", ".", "-", "_", "…"}
-    if not is_path and (
+    if is_credential and not is_path and (
         len(value) < 16 or normalized in placeholders or is_repeated_x
     ):
         return False

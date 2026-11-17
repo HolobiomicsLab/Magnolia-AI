@@ -53,6 +53,13 @@ _SECRET_PATTERNS = [
 ]
 
 
+def is_llm_available() -> bool:
+    """Resolve LLM availability without creating an import cycle."""
+    from compchem_memory.llm import is_llm_available as route_is_available
+
+    return route_is_available()
+
+
 def _redact_json_field(match: re.Match[str]) -> str:
     quote = match.group("quote")
     return f"{match.group('prefix')}{quote}[REDACTED_SECRET]{quote}"
@@ -710,6 +717,7 @@ def distill_session_transcript(
     exporter: Callable[[str], Optional[dict]] | None = None,
     distiller: Callable[[str], list[dict[str, Any]]] | None = None,
     force_retry: bool = False,
+    llm_available: bool | None = None,
 ) -> dict[str, Any] | None:
     """Distil ONE session's new (post-cursor) dialogue, for the manual tool.
 
@@ -731,6 +739,22 @@ def distill_session_transcript(
     rec_path = store / "opencode-distilled" / f"{ref.key}.json"
     rec = _read_progress(rec_path)
     cursor = rec.get("cursor") if rec else None
+    retry = rec.get("retry") if isinstance(rec, dict) else None
+    route_available = (
+        is_llm_available() if llm_available is None else llm_available
+    )
+    if (
+        commit
+        and force_retry
+        and isinstance(retry, dict)
+        and not route_available
+    ):
+        return {
+            "status": "skipped",
+            "reason": "configured memory LLM is unavailable",
+            "retry": False,
+            "saved": [],
+        }
 
     from compchem_memory.transcript_source import (
         fingerprint_matches,
@@ -740,7 +764,6 @@ def distill_session_transcript(
 
     fingerprint = hook_transcript_fingerprint(store, ref)
     export = None
-    retry = rec.get("retry") if isinstance(rec, dict) else None
     if (
         ref.sealable
         and isinstance(retry, dict)
@@ -749,15 +772,29 @@ def distill_session_transcript(
         export = export_session_ref(ref)
         if export is not None:
             fingerprint = _dialogue_activity_fingerprint(export)
-    if commit and force_retry:
+    if (
+        commit
+        and force_retry
+        and isinstance(retry, dict)
+        and retry.get("exhausted") is True
+    ):
         rec = _clear_failed_retry(store, rec_path, rec)
     if commit and _retry_blocked(rec, fingerprint):
         retry = rec.get("retry", {})
+        scheduled_at = retry.get("next_retry_at")
+        forced_backoff = force_retry and not retry.get("exhausted", False)
         return {
             "status": "skipped",
-            "reason": "extraction retry backoff" if not retry.get("exhausted") else "extraction retry cap reached",
-            "retry": not retry.get("exhausted", False),
+            "reason": (
+                f"extraction retry scheduled at {scheduled_at}"
+                if forced_backoff
+                else "extraction retry backoff"
+                if not retry.get("exhausted")
+                else "extraction retry cap reached"
+            ),
+            "retry": False if forced_backoff else not retry.get("exhausted", False),
             "exhausted": retry.get("exhausted", False),
+            **({"next_retry_at": scheduled_at} if forced_backoff else {}),
             "saved": [],
         }
     if commit and fingerprint_matches(rec, fingerprint):

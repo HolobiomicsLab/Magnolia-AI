@@ -467,6 +467,7 @@ def test_manual_dialogue_distill_bypasses_exhausted_retry(tmp_path: Path) -> Non
     result = opencode_ingest.distill_session_transcript(
         str(store), "session", commit=True, force_retry=True,
         exporter=lambda _sid: export, distiller=lambda _text: [],
+        llm_available=True,
     )
 
     assert result == {"status": "committed", "saved": []}
