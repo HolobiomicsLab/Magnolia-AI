@@ -58,6 +58,7 @@ const MAX_OUTPUT_CHARS_OLD = 500    // tighter cap for older non-evidence tools
 const MAX_OUTPUT_CHARS_EVIDENCE = 0  // uncapped for tools that carry evidence (0 = no cap)
 const MAX_TRACE_CHARS = 80000        // total trace cap (larger: full-session scope)
 const MIN_REPORT_CHARS = 200         // skip trivial turns (acks, one-liners)
+const JUDGE_TIMEOUT_MS = 60_000       // matches compchem_memory.llm.call_route
 
 // Tools whose full output the judge needs to see (project memory, run history, etc.)
 const EVIDENCE_TOOLS = new Set([
@@ -193,7 +194,17 @@ async function judge(route: JudgeRoute, report: string, traceText: string): Prom
       ...(route.provider === "deepseek" || route.provider === "zai" ? { thinking: { type: "disabled" } } : {}),
     }
   }
-  const res = await fetch(route.url, { method: "POST", headers, body: JSON.stringify(body) })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS)
+  const res = await (async () => {
+    try {
+      return await fetch(route.url, {
+        method: "POST", headers, body: JSON.stringify(body), signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+  })()
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
   const data: any = await res.json()
   const text = route.schema === "anthropic"
