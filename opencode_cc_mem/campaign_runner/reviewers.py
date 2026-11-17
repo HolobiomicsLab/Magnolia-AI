@@ -28,10 +28,15 @@ _FOLLOWUPS_SHAPE = (
     '"followups":[{"observation":"...","proposed_test":"...",'
     '"estimated_core_hours":0,"reason":"..."}]'
 )
+_EVIDENCE_PATH_RULE = (
+    "Evidence paths must be inside the run directory; project-only and other "
+    "outside paths are invalid."
+)
 REVIEW_FORMAT_NOTE = (
     "Your previous answer was not valid review JSON. Return only one JSON "
     "object with keys 'issues' and 'followups'. Every issue must cite existing "
-    "file paths in 'evidence'. Every followups item must be an object with exactly "
+    f"file paths in 'evidence'. {_EVIDENCE_PATH_RULE} Every followups item must "
+    "be an object with exactly "
     "the keys observation, proposed_test, estimated_core_hours, and reason; never "
     "put free text directly in followups. Use an empty followups array when there "
     f"are no follow-ups. Exact followups shape: {_FOLLOWUPS_SHAPE}"
@@ -120,6 +125,7 @@ def build_review_prompt(
         "Find claims that exceed the evidence, contradictions, missing controls, "
         "alternative explanations, and bounded follow-up tests.\n"
         "Every issue must cite existing file paths in 'evidence'.\n"
+        f"{_EVIDENCE_PATH_RULE}\n"
         "Every followups item must be an object with exactly the keys observation, "
         "proposed_test, estimated_core_hours, and reason; never put free text "
         "directly in followups. Use an empty followups array when there are no "

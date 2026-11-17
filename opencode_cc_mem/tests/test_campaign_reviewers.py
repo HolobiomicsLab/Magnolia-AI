@@ -101,6 +101,16 @@ def test_review_prompt_states_exact_followups_shape(tmp_path):
     assert exact_shape in REVIEW_FORMAT_NOTE
 
 
+def test_review_prompt_limits_evidence_to_run_directory(tmp_path):
+    prompt = build_review_prompt(
+        [tmp_path / "work" / "out.md"], tmp_path / "report.md", "analyze"
+    )
+
+    evidence_rule = "Evidence paths must be inside the run directory"
+    assert evidence_rule in prompt
+    assert evidence_rule in REVIEW_FORMAT_NOTE
+
+
 def test_validate_review_requires_evidence_paths(tmp_path):
     (tmp_path / "work").mkdir()
     (tmp_path / "work" / "out.md").write_text("evidence")

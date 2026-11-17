@@ -1,0 +1,818 @@
+{
+  "candidate": {
+    "claude-code/evaluator": {
+      "argv": [
+        "claude.exe",
+        "-p",
+        "<prompt>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "claude-settings.json",
+        "--mcp-config",
+        "claude-mcp.json",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "1",
+        "--model",
+        "haiku",
+        "--tools",
+        ""
+      ],
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "config_digest": "679f489b423484b00ed1152cef42d35a7fa4168984c38b24ca4046051346c355",
+      "executor": "ClaudeCodeExecutor",
+      "max_turns": 1,
+      "memory_service": {},
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "claude-code/helper": {
+      "argv": [
+        "claude.exe",
+        "-p",
+        "<prompt>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "claude-settings.json",
+        "--mcp-config",
+        "claude-mcp.json",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "40",
+        "--model",
+        "haiku",
+        "--tools",
+        "Read",
+        "--allowedTools",
+        "Read"
+      ],
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "config_digest": "fd404e4d02e9b07e35f1e2d842bc8ca3cbdd6256c69df672b7aca950c1444835",
+      "executor": "ClaudeCodeExecutor",
+      "max_turns": 40,
+      "memory_service": {},
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "claude-code/reviewer": {
+      "argv": [
+        "claude.exe",
+        "-p",
+        "<prompt>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "claude-settings.json",
+        "--mcp-config",
+        "claude-mcp.json",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "8",
+        "--model",
+        "haiku",
+        "--allowedTools",
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "config_digest": "918c31c33a2fda287d9b8bbef9e76c8fd85649a2af5f09e33500102c4603a550",
+      "executor": "ClaudeCodeExecutor",
+      "max_turns": 8,
+      "memory_service": {},
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "claude-code/worker": {
+      "argv": [
+        "claude.exe",
+        "-p",
+        "<prompt>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "claude-settings.json",
+        "--mcp-config",
+        "claude-mcp.json",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "30",
+        "--model",
+        "haiku",
+        "--allowedTools",
+        "Read",
+        "Glob",
+        "Grep",
+        "Edit",
+        "Write",
+        "mcp__compchem-memory__memory_get_context",
+        "mcp__compchem-memory__memory_search",
+        "mcp__compchem-memory__memory_get_run_history"
+      ],
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "config_digest": "1f8c5f2a79fc9a015c5f27c1cb91930a828d611c369481aeb010060f4b56b389",
+      "executor": "ClaudeCodeExecutor",
+      "max_turns": 30,
+      "memory_service": {},
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "codex/evaluator": {
+      "error": "ExecutorRefused: codex lacks accepted evaluator role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [
+          "argv",
+          "model_delivery",
+          "discovery_dir",
+          "trust",
+          "hook_policy_digest",
+          "native_schemas",
+          "allowed_actions",
+          "denied_actions",
+          "resume",
+          "caps",
+          "usage_semantics"
+        ],
+        "gate_accepted": false,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/helper": {
+      "error": "ExecutorRefused: codex lacks accepted helper role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [
+          "argv",
+          "model_delivery",
+          "discovery_dir",
+          "trust",
+          "hook_policy_digest",
+          "native_schemas",
+          "allowed_actions",
+          "denied_actions",
+          "resume",
+          "caps",
+          "usage_semantics"
+        ],
+        "gate_accepted": false,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/reviewer": {
+      "error": "ExecutorRefused: D2: Codex reviewer lacks accepted capability projection evidence",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/worker": {
+      "error": "ExecutorRefused: D2: Codex worker lacks accepted capability projection evidence",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    }
+  },
+  "candidate_ident": {
+    "evaluator": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534"
+      },
+      "configuration_identity": "679f489b423484b00ed1152cef42d35a7fa4168984c38b24ca4046051346c355",
+      "mismatch": {}
+    },
+    "helper": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06"
+      },
+      "configuration_identity": "fd404e4d02e9b07e35f1e2d842bc8ca3cbdd6256c69df672b7aca950c1444835",
+      "mismatch": {}
+    },
+    "helper-no-tools": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "fdea459409d46c2a4916ff8eea7523cf6d974182c4d86209a1c72aa4bcaa3842",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "90609e78600b52d743e2b775c16d691afd37941751d19294ff93ec1c206007fd"
+      },
+      "configuration_identity": "a9ca5f2e39ed3736a0b1a358ea0e74a425866964bcee6f37c8b9606212029763",
+      "mismatch": {
+        "policy": {
+          "observed": "fdea459409d46c2a4916ff8eea7523cf6d974182c4d86209a1c72aa4bcaa3842",
+          "row": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d"
+        },
+        "settings": {
+          "observed": "90609e78600b52d743e2b775c16d691afd37941751d19294ff93ec1c206007fd",
+          "row": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06"
+        }
+      }
+    },
+    "reviewer": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6"
+      },
+      "configuration_identity": "918c31c33a2fda287d9b8bbef9e76c8fd85649a2af5f09e33500102c4603a550",
+      "mismatch": {}
+    },
+    "worker": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+        "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517"
+      },
+      "configuration_identity": "4dbaded1fe1dbe55fb31daa8d72555dcfb7ea14efb630fdfd773c8a1c6cf7322",
+      "mismatch": {}
+    },
+    "worker-stdio-memory": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+        "client_version": "2.1.326",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+        "mcp": "1819a866791146d33eb5d31da5858b8b5432f588dcd242368946931ee75dd775",
+        "native_files": "5c8860ad883fa3ebb4ebe7a569685ddc885d770d10a02ab6b9a8b065234240ee",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517"
+      },
+      "configuration_identity": "7416431904d9b497fe6d886252e2a65eaabd2ee49b1fc2626a8c037239d78c7b",
+      "mismatch": {
+        "mcp": {
+          "observed": "1819a866791146d33eb5d31da5858b8b5432f588dcd242368946931ee75dd775",
+          "row": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d"
+        },
+        "native_files": {
+          "observed": "5c8860ad883fa3ebb4ebe7a569685ddc885d770d10a02ab6b9a8b065234240ee",
+          "row": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8"
+        }
+      }
+    }
+  },
+  "opencode": {
+    "evaluator": {
+      "executor": "OpenCodeEvaluatorExecutor",
+      "result": "accepted",
+      "route": [
+        "opencode",
+        "opencode/deepseek-v4.1-flash-free",
+        "opencode:opencode"
+      ]
+    },
+    "helper": {
+      "executor": "OpenCodeHelperExecutor",
+      "result": "accepted",
+      "route": [
+        "opencode",
+        "opencode/deepseek-v4.1-flash-free",
+        "opencode:opencode"
+      ]
+    },
+    "reviewer": {
+      "executor": "OpenCodeExecutor",
+      "result": "accepted",
+      "route": [
+        "opencode",
+        "opencode/glm-5.3-flash-free",
+        "opencode:opencode"
+      ]
+    },
+    "worker": {
+      "executor": "OpenCodeExecutor",
+      "result": "accepted",
+      "route": [
+        "opencode",
+        "opencode/deepseek-v4.1-flash-free",
+        "opencode:opencode"
+      ]
+    }
+  },
+  "production": {
+    "claude-code/evaluator": {
+      "error": "ExecutorRefused: claude-code lacks accepted evaluator role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "claude-code/helper": {
+      "error": "ExecutorRefused: claude-code lacks accepted helper role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "claude-code/reviewer": {
+      "error": "ExecutorRefused: claude-code lacks accepted reviewer role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "claude-code/worker": {
+      "error": "ExecutorRefused: claude-code lacks accepted worker role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/evaluator": {
+      "error": "ExecutorRefused: codex lacks accepted evaluator role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [
+          "argv",
+          "model_delivery",
+          "discovery_dir",
+          "trust",
+          "hook_policy_digest",
+          "native_schemas",
+          "allowed_actions",
+          "denied_actions",
+          "resume",
+          "caps",
+          "usage_semantics"
+        ],
+        "gate_accepted": false,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/helper": {
+      "error": "ExecutorRefused: codex lacks accepted helper role capability",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [
+          "argv",
+          "model_delivery",
+          "discovery_dir",
+          "trust",
+          "hook_policy_digest",
+          "native_schemas",
+          "allowed_actions",
+          "denied_actions",
+          "resume",
+          "caps",
+          "usage_semantics"
+        ],
+        "gate_accepted": false,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/reviewer": {
+      "error": "ExecutorRefused: D2: Codex reviewer lacks accepted capability projection evidence",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    },
+    "codex/worker": {
+      "error": "ExecutorRefused: D2: Codex worker lacks accepted capability projection evidence",
+      "projection": {
+        "accepted": false,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": true
+      },
+      "result": "refused"
+    }
+  }
+}

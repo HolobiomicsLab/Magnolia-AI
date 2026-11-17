@@ -1,0 +1,38 @@
+{
+  "opencode-control": {
+    "reviewer": {
+      "work": [
+        "opencode",
+        "opencode/glm-5.3-flash-free",
+        "glm",
+        "opencode:opencode"
+      ]
+    },
+    "worker": {
+      "work": [
+        "opencode",
+        "opencode/deepseek-v4.1-flash-free",
+        "deepseek",
+        "opencode:opencode"
+      ]
+    }
+  },
+  "opencode-reviewer-only": {
+    "reviewer": {
+      "work": [
+        "opencode",
+        "opencode/deepseek-v4.1-flash-free",
+        "deepseek",
+        "opencode:opencode"
+      ]
+    },
+    "worker": {
+      "work": [
+        "claude-code",
+        "haiku",
+        "haiku",
+        "claude-code"
+      ]
+    }
+  }
+}

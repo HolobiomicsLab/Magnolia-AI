@@ -1,0 +1,317 @@
+{
+  "events": [
+    {
+      "attempt": 0,
+      "campaign": "harness-p3-opencode-control",
+      "from": null,
+      "initial": {
+        "attempt": 0,
+        "brief_sha256": "4a8b7d7ef388457b2387f6c1cc51e2b21dcb3ed6fb4064c5773b21067f0141fe",
+        "created_at": "2026-11-17T08:28:33.084998+00:00",
+        "job_core_hours": {},
+        "jobs": {},
+        "memory_state": {
+          "entries_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "entry_count": 0
+        },
+        "paused_from": null,
+        "protocol_id": "harness-p3-opencode-control",
+        "protocol_sha256": "54c2df10dec801c98a6dadf2276c36bd27324420f494e99e49e3fa4eb3a1e91f",
+        "quota_wait": null,
+        "resumed_from_quota": null,
+        "schema": 1,
+        "stage": "work",
+        "state": "queued",
+        "updated_at": "2026-11-17T08:28:33.084998+00:00",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "core_hours": 0,
+          "cost_usd": 0,
+          "human_minutes": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0
+        }
+      },
+      "reason": "campaign initialized",
+      "schema": 1,
+      "seq": 1,
+      "stage": "work",
+      "to": "queued",
+      "ts": "2026-11-17T08:28:33.084998+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-opencode-control",
+      "from": "queued",
+      "reason": "start stage work",
+      "schema": 1,
+      "seq": 2,
+      "stage": "work",
+      "to": "running",
+      "ts": "2026-11-17T08:28:45.682230+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-opencode-control",
+      "from": "running",
+      "reason": "worker usage",
+      "schema": 1,
+      "seq": 3,
+      "stage": "work",
+      "to": "running",
+      "ts": "2026-11-17T08:29:10.653915+00:00",
+      "usage_after": {
+        "cache_read_tokens": 44288.0,
+        "cache_write_tokens": 0,
+        "core_hours": 0,
+        "cost_usd": 0,
+        "human_minutes": 0,
+        "input_tokens": 8564.0,
+        "output_tokens": 1252.0,
+        "reasoning_tokens": 203.0
+      }
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-opencode-control",
+      "from": "running",
+      "reason": "worker work completed",
+      "schema": 1,
+      "seq": 4,
+      "stage": "work",
+      "to": "validating",
+      "ts": "2026-11-17T08:29:10.655459+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-opencode-control",
+      "from": "validating",
+      "reason": "reviewer usage for work/1",
+      "schema": 1,
+      "seq": 5,
+      "stage": "work",
+      "to": "validating",
+      "ts": "2026-11-17T08:29:21.222077+00:00",
+      "usage_after": {
+        "cache_read_tokens": 44288.0,
+        "cache_write_tokens": 0,
+        "core_hours": 0,
+        "cost_usd": 0,
+        "human_minutes": 0,
+        "input_tokens": 13953.0,
+        "output_tokens": 1324.0,
+        "reasoning_tokens": 628.0
+      }
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-opencode-control",
+      "from": "validating",
+      "quota_hold_id": "309bdee7498341e0850e4cb6057ba76c",
+      "quota_wait_after": {
+        "attempt": 1,
+        "hold_id": "309bdee7498341e0850e4cb6057ba76c",
+        "observed_at": "2026-11-17T08:29:21.223461+00:00",
+        "reason": "provider rate or quota limit",
+        "reset_at": null,
+        "result_ref": "attempts/work/001/reviewer.json",
+        "resume_artifact": null,
+        "resume_from": null,
+        "retry_cursor": 0,
+        "session_identity": null,
+        "stage": "work",
+        "subscription_key": "opencode:opencode",
+        "suspended_phase": "reviewer"
+      },
+      "reason": "provider rate or quota limit",
+      "schema": 1,
+      "seq": 6,
+      "stage": "work",
+      "to": "waiting_quota",
+      "ts": "2026-11-17T08:29:21.223811+00:00"
+    }
+  ],
+  "final_state": {
+    "attempt": 1,
+    "brief_sha256": "4a8b7d7ef388457b2387f6c1cc51e2b21dcb3ed6fb4064c5773b21067f0141fe",
+    "created_at": "2026-11-17T08:28:33.084998+00:00",
+    "job_core_hours": {},
+    "jobs": {},
+    "memory_state": {
+      "entries_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entry_count": 0
+    },
+    "paused_from": null,
+    "protocol_id": "harness-p3-opencode-control",
+    "protocol_sha256": "54c2df10dec801c98a6dadf2276c36bd27324420f494e99e49e3fa4eb3a1e91f",
+    "quota_wait": {
+      "attempt": 1,
+      "hold_id": "309bdee7498341e0850e4cb6057ba76c",
+      "observed_at": "2026-11-17T08:29:21.223461+00:00",
+      "reason": "provider rate or quota limit",
+      "reset_at": null,
+      "result_ref": "attempts/work/001/reviewer.json",
+      "resume_artifact": null,
+      "resume_from": null,
+      "retry_cursor": 0,
+      "session_identity": null,
+      "stage": "work",
+      "subscription_key": "opencode:opencode",
+      "suspended_phase": "reviewer"
+    },
+    "resumed_from_quota": null,
+    "schema": 1,
+    "stage": "work",
+    "state": "waiting_quota",
+    "updated_at": "2026-11-17T08:29:21.223811+00:00",
+    "usage": {
+      "cache_read_tokens": 44288.0,
+      "cache_write_tokens": 0,
+      "core_hours": 0,
+      "cost_usd": 0,
+      "human_minutes": 0,
+      "input_tokens": 13953.0,
+      "output_tokens": 1324.0,
+      "reasoning_tokens": 628.0
+    }
+  },
+  "reviewer_events": [
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control/work/result.txt"
+      },
+      "status": "completed",
+      "tool": "read",
+      "type": "tool"
+    },
+    {
+      "error_type": "provider.free-limit",
+      "message": "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+      "retryAfterMs": 55839000,
+      "status": 429,
+      "type": "error"
+    }
+  ],
+  "reviewer_result": {
+    "attempts": 1,
+    "followups": [],
+    "issues": [],
+    "model": "opencode/glm-5.3-flash-free",
+    "resume_artifact": null,
+    "retry_cursor": 0,
+    "session_id": "<session>",
+    "session_identity": null,
+    "usage": {
+      "cache_read_tokens": 0.0,
+      "cache_write_tokens": 0.0,
+      "cost_usd": 0.0,
+      "input_tokens": 5389.0,
+      "output_tokens": 72.0,
+      "reasoning_tokens": 425.0
+    }
+  },
+  "run_dir_files": [
+    ".magnolia/action-retrieval.jsonl",
+    ".magnolia/auto-retrieval.jsonl",
+    "attempts/work/001/reviewer.json",
+    "attempts/work/001/reviewer_1.err.log",
+    "attempts/work/001/reviewer_1.jsonl",
+    "attempts/work/001/reviewer_final.md",
+    "attempts/work/001/worker_1.err.log",
+    "attempts/work/001/worker_1.jsonl",
+    "attempts/work/001/worker_final.md",
+    "attempts/work/001/worker_result.json",
+    "control/.lock",
+    "control/approvals/start.json",
+    "control/brief.md",
+    "control/campaign.json",
+    "control/events.jsonl",
+    "control/jobs.json",
+    "control/prompts/prompt.md",
+    "control/protocol.json",
+    "work/result.txt"
+  ],
+  "stage_receipt_present": false,
+  "work_result_txt": "RESULT: 42\n",
+  "worker_final_md": "## Stage result \u2014 work (attempt 1)\n\n**Complete.** Stage executed exactly as assigned.\n\n**Inputs read**\n- Brief: `runs/opencode-control/control/brief.md` \u2014 \"Read docs/notes.md. Write one line to work/result.txt stating the synthetic answer found in docs/notes.md, prefixed with `RESULT:`.\"\n- Source: `projects/harness-p3-acceptance/docs/notes.md` \u2014 line 3: \"ALLOWED: synthetic note for the live 2a gate. The answer to the synthetic question is 42.\"\n\n**Output written (only file modified)**\n- `runs/opencode-control/work/result.txt`:\n  ```\n  RESULT: 42\n  ```\n\n**Verification**\n- File re-read after write; content is exactly the single line `RESULT: 42` (with trailing newline).\n- No other file was created or modified. Nothing under `secret/` or any `.env` file was read, opened, or listed.\n- No control files, gates, budgets, protocols, or approvals were touched; the rest of the run directory (`control/`, `reports/`, `attempts/`, `.magnolia/`) was left untouched.\n\n**Scope caveat / honest limits**\n- This is a synthetic acceptance harness answer, not a scientific result. The only claim supported by measured evidence is that the specified string was transcribed from `docs/notes.md` into the required output path.\n- No `compchem-memory` tools were exposed in this session, so the mandated `memory_get_context` gate call could not be made; no memory writes, promotions, or reviews were attempted either.",
+  "worker_result": {
+    "attempts": 1,
+    "errors": [],
+    "resume_artifact": null,
+    "returncode": 0,
+    "session_id": "<session>",
+    "session_identity": null,
+    "timed_out": false,
+    "tool_calls": 8,
+    "usage": {
+      "cache_read_tokens": 44288.0,
+      "cache_write_tokens": 0.0,
+      "cost_usd": 0.0,
+      "input_tokens": 8564.0,
+      "output_tokens": 1252.0,
+      "reasoning_tokens": 203.0
+    }
+  },
+  "worker_tool_calls": [
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control"
+      },
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control/control/brief.md"
+      },
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance"
+      },
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance",
+        "pattern": "**/notes.md"
+      },
+      "status": "completed",
+      "tool": "glob"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+      },
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control/work"
+      },
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "input": {
+        "content": "<11 chars>",
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control/work/result.txt"
+      },
+      "status": "completed",
+      "tool": "write"
+    },
+    {
+      "input": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/opencode-control/work/result.txt"
+      },
+      "status": "completed",
+      "tool": "read"
+    }
+  ]
+}

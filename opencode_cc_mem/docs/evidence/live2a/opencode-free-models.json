@@ -1,0 +1,17 @@
+{
+  "command": "opencode models --standalone (env -i, gate XDG, no auth)",
+  "models": [
+    "opencode/beam-free",
+    "opencode/big-pickle",
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/flint-40b-free",
+    "opencode/glm-5.3-flash-free",
+    "opencode/iceman-free",
+    "opencode/inkling-2-small-free",
+    "opencode/longcat-2.5-free",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/minimax-m3.1-flash-free",
+    "opencode/nemotron-3.5-lightning-free",
+    "opencode/nemotron-3.5-super-vl-free"
+  ]
+}

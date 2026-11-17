@@ -323,7 +323,7 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_changed_claude_and_codex_rows_refuse_until_live_reobservation():
+def test_live2a_accepts_claude_while_codex_remains_stale():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
     changed_rows = [
@@ -332,7 +332,9 @@ def test_changed_claude_and_codex_rows_refuse_until_live_reobservation():
 
     assert set(projected) == {"claude-code", "codex", "vibe"}
     assert len(changed_rows) == 8
-    assert all(row["stale"] is True for row in changed_rows)
+    assert all(
+        row["stale"] is (row["client"] == "codex") for row in changed_rows
+    )
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
@@ -341,8 +343,8 @@ def test_changed_claude_and_codex_rows_refuse_until_live_reobservation():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
     assert all(role["gate_accepted"] for role in projected["claude-code"].values())
-    assert all(not role["accepted"] for role in projected["claude-code"].values())
-    assert all(role["stale"] for role in projected["claude-code"].values())
+    assert all(role["accepted"] for role in projected["claude-code"].values())
+    assert all(not role["stale"] for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["codex"].values())
     assert all(
@@ -376,7 +378,7 @@ def test_live_candidate_can_clear_stale_rows_without_changing_recorded_values():
     assert projected["codex"]["reviewer"]["accepted"] is True
 
 
-def test_claude_rows_accepted_from_live_gate():
+def test_claude_rows_accepted_from_live2a_gate():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)["claude-code"]
     rows = [row for row in table["rows"] if row["client"] == "claude-code"]
@@ -390,8 +392,14 @@ def test_claude_rows_accepted_from_live_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
-    assert all(item["accepted"] is False for item in projected.values())
-    assert all(item["stale"] is True for item in projected.values())
+    assert all(item["accepted"] is True for item in projected.values())
+    assert all(item["stale"] is False for item in projected.values())
+    assert all(
+        row["gate"]["artifact"] == "opencode_cc_mem/docs/evidence/live2a/README.md"
+        for row in rows
+    )
+    reviewer = next(row for row in rows if row["role"] == "reviewer")
+    assert "evidence-path rule fixed by F-L3" in reviewer["notes"][-1]
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
     assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(

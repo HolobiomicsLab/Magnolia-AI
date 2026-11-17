@@ -1,0 +1,82 @@
+[
+  {
+    "actual_work": {
+      "pgid": 93890,
+      "pid": 93890,
+      "process_start_token": "ps:93890:Tue Nov 17 08:28:45 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "opencode",
+    "effective_cap": 30,
+    "ended_at": "2026-11-17T08:29:10.641125+00:00",
+    "invocation_id": "campaign:harness-p3-opencode-control:opencode-control:worker:1:4acdc3d8d67f4d1086c91c2777582b52",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "campaign:harness-p3-opencode-control:opencode-control",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:28:45.687313+00:00",
+    "resolved_model": "opencode/deepseek-v4.1-flash-free",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": null,
+    "started_at": "2026-11-17T08:28:45.706349+00:00",
+    "subscription_key": "opencode:opencode",
+    "usage": {
+      "cache_write_tokens": 0.0,
+      "cached_tokens": 44288.0,
+      "completeness": "complete",
+      "cost": 0.0,
+      "duration_seconds": null,
+      "input_tokens": 8564.0,
+      "output_tokens": 1252.0,
+      "reasoning_tokens": 203.0,
+      "source": "opencode-usage-v1",
+      "turns": null
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 95818,
+      "pid": 95818,
+      "process_start_token": "ps:95818:Tue Nov 17 08:29:15 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "opencode",
+    "effective_cap": 8,
+    "ended_at": "2026-11-17T08:29:21.218778+00:00",
+    "invocation_id": "campaign:harness-p3-opencode-control:opencode-control:reviewer:1:ea41b59a40e344dcb558e5ed15b81cc1",
+    "outcome": {
+      "kind": "quota",
+      "limit": {
+        "evidence_source": "opencode structured terminal error",
+        "reason": "provider rate or quota limit",
+        "reset_at": null
+      }
+    },
+    "parent_run_id": "campaign:harness-p3-opencode-control:opencode-control",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:29:15.739637+00:00",
+    "resolved_model": "opencode/glm-5.3-flash-free",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": null,
+    "started_at": "2026-11-17T08:29:15.756341+00:00",
+    "subscription_key": "opencode:opencode",
+    "usage": {
+      "cache_write_tokens": 0.0,
+      "cached_tokens": 0.0,
+      "completeness": "complete",
+      "cost": 0.0,
+      "duration_seconds": null,
+      "input_tokens": 5389.0,
+      "output_tokens": 72.0,
+      "reasoning_tokens": 425.0,
+      "source": "opencode-usage-v1",
+      "turns": null
+    }
+  }
+]

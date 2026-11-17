@@ -1,0 +1,11 @@
+[
+  "claude --version (session env, NOT env -i; output discarded) at 09:19:20 during baseline",
+  "opencode --version (env -i, gate XDG) at 09:25:22",
+  "opencode auth list (env -i, gate XDG) at 09:25:22",
+  "opencode models opencode (env -i, gate XDG) at 09:25:22",
+  "(the two launches above failed at argument parsing: 'auth list' and 'models opencode' passed as one arg)",
+  "opencode auth list (env -i, gate XDG) at 09:25:50",
+  "opencode models opencode (env -i, gate XDG) at 09:25:50",
+  "(auth list failed: tried to start a managed background service; port 49374 held by pre-existing PID 61561 'opencode serve --service', started 07:31:57 during the first 2a attempt; models failed at arg parsing)",
+  "opencode models --standalone (env -i, gate XDG) at 09:26:14"
+]
