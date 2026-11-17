@@ -811,3 +811,117 @@ def test_vibe_refuses_each_project_native_drift(tmp_path, damage):
 
     with pytest.raises(ExecutorRefused, match="project.*Vibe|Vibe.*project|selected model"):
         executor_for(context.route, "reviewer", context)
+
+
+def test_vibe_memory_released_once_after_worker_exit(tmp_path, monkeypatch):
+    """The worker gate (D4) refuses construction, so release is exercised directly."""
+    prepared = type("Prepared", (), {"memory_service_handle": object()})()
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    VibeExecutor._release_prepared_memory_service(prepared)
+    VibeExecutor._release_prepared_memory_service(prepared)
+
+    assert len(released) == 1
+    assert prepared.memory_service_handle is None
+
+
+def test_vibe_memory_released_after_prepare_or_validation_refusal(tmp_path, monkeypatch):
+    from campaign_runner.launch import prepare_launch
+
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o644)
+    handle = type(
+        "Handle",
+        (),
+        {
+            "route": lambda self: {
+                "transport": "http",
+                "url": "http://127.0.0.1:43101/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            }
+        },
+    )()
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+    base = _context(tmp_path)
+    worker = "mcp:compchem-memory.memory_get_context"
+    context = replace(
+        base,
+        role="worker",
+        memory_service={"transport": "managed"},
+        role_capabilities={
+            "vibe": {
+                "worker": {
+                    **base.role_capabilities["vibe"]["reviewer"],
+                    "capabilities": [
+                        "native_read", "native_glob", "native_grep",
+                        "native_edit", worker,
+                        "mcp:compchem-memory.memory_search",
+                        "mcp:compchem-memory.memory_get_run_history",
+                    ],
+                    "vibe_memory": True,
+                }
+            }
+        },
+    )
+    context = replace(context, role_capabilities={
+        "vibe": {"worker": {**context.role_capabilities["vibe"]["worker"],
+                            "identity": configuration_identity(context)}}})
+
+    with pytest.raises(ExecutorRefused, match="0600"):
+        prepare_launch(context)
+
+    assert released == [handle]
+
+    token_file.chmod(0o600)
+    launch = prepare_launch(context)
+    prepared = replace(launch, memory_service_handle=handle)
+    released.clear()
+    with pytest.raises(ExecutorRefused, match="D4"):
+        VibeExecutor(
+            prepared=prepared,
+            model="selected-model",
+            role="worker",
+            max_turns=8,
+        )
+    assert released == [handle]
+
+
+def test_vibe_memory_reviewer_lease_survives_repairs_then_close_releases_once(
+    tmp_path, monkeypatch
+):
+    context = _context(tmp_path)
+    executor = executor_for(context.route, "reviewer", context)
+    handle = object()
+    object.__setattr__(executor.prepared, "memory_service_handle", handle)
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+    monkeypatch.setattr(VibeExecutor, "_run", lambda self, *args, **kwargs: object())
+
+    executor.run("review", tmp_path, tmp_path / "attempt", stem="reviewer")
+    executor.run("review", tmp_path, tmp_path / "attempt", stem="reviewer_retry_1")
+    assert released == []
+    assert executor.prepared.memory_service_handle is handle
+
+    executor.close()
+    assert released == [handle]
+    assert executor.prepared.memory_service_handle is None
+
+    executor.close()
+    assert released == [handle]

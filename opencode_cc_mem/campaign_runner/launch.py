@@ -1951,7 +1951,17 @@ def _explicit_environment(
     service = context.memory_service
     authorization = service.get("authorization_env")
     token_file = service.get("token_file")
-    if isinstance(authorization, str) and isinstance(token_file, str):
+    # Only a gated-off Vibe route (no accepted vibe_memory cell, hence no memory
+    # tools) skips the bearer file it would not inject. Every other client keeps
+    # the original validate-and-inject behaviour even with an empty allowlist.
+    gated_off_vibe = (
+        context.route.client == "vibe" and not memory_tools.neutral_names
+    )
+    if (
+        not gated_off_vibe
+        and isinstance(authorization, str)
+        and isinstance(token_file, str)
+    ):
         try:
             token_path = Path(token_file).resolve()
             if token_path.stat().st_mode & 0o777 != 0o600:
