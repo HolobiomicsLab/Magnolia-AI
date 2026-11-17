@@ -68,7 +68,7 @@
               "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
               "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
               "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
-              "policy": "f7986fae8b9c7e921c908d29cfb4e5dd8214a2bcf73dc2ea7ceceb5bbaf14fa3",
+              "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -273,7 +273,7 @@
               "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "3f16d5aeeec12e5903b1913e9d81326abef913caff76824e6eed427559e38446",
+              "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -472,7 +472,7 @@
               "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "ef948b098a2887d4185df94160f8b07a05f4143c6705fdf3cc98d5594a43e258",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -670,7 +670,7 @@
               "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "3617c9cd434c0d3239975e5949d31ab2cecba96666257503f9c3094a0a0e3e30",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -874,7 +874,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "89b1ba681c08d30bcc37758e6abe3c29fce009430d552036cc9eb47f1bc6f7c1",
+            "configuration_identity_sha256": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -908,7 +908,7 @@
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
               "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
-              "policy": "b74fd423a2c1717376df27e864bb48bf650c29405b8e3170c171bac820c6a195",
+              "policy": "211e05cc288c85203d119123ff0623aad960a05a5519e6e6293a816354bc3d65",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -1008,7 +1008,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "89b1ba681c08d30bcc37758e6abe3c29fce009430d552036cc9eb47f1bc6f7c1",
+          "value": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1148,7 +1148,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "4756e61b9b26686c623fbf6dbc9ab5a747a19f170067932fa71ea95831a1928a",
+            "configuration_identity_sha256": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -1182,7 +1182,7 @@
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
               "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
-              "policy": "1e4a5dae4bf78281baa09c741b716ca80b66375af060d7b751e4ae61613be5b4",
+              "policy": "be6df35b2c5c99d8a969c66fbe65eb5d4aa17b4d7255097ca0e2d50e0475d46c",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -1282,7 +1282,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "4756e61b9b26686c623fbf6dbc9ab5a747a19f170067932fa71ea95831a1928a",
+          "value": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1388,7 +1388,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "55f97f96027eacbb37c8bf13cc285f3044206afa7754550bc93a8e011197dcd8",
+            "configuration_identity_sha256": "fb2f62b49f767c2d2f6c8a4aa883290ebdde32b160b308868cf5b3404c258c6f",
             "recompute_contract": {
               "identity": "codex-refused-role-unobserved",
               "discovery_dir": {
@@ -1407,7 +1407,7 @@
               "settings": "32300abaf02d6aa0744eedf2a701867f4054523cc185e5020afc4071068a4498",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "ef948b098a2887d4185df94160f8b07a05f4143c6705fdf3cc98d5594a43e258",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
@@ -1510,7 +1510,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "aeba621094f64d266dc65aff40d597e632eddaefe237a1cfc3bc672307413cbe",
+            "configuration_identity_sha256": "20a96c8e7dc2d057fe35ae7c5fdbb90d444f32f722eb3eb3d2badcdf90129e14",
             "recompute_contract": {
               "identity": "codex-refused-role-unobserved",
               "discovery_dir": {
@@ -1529,7 +1529,7 @@
               "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "3617c9cd434c0d3239975e5949d31ab2cecba96666257503f9c3094a0a0e3e30",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",

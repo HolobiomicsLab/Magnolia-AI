@@ -9,7 +9,9 @@ read_deny_patterns:
   - "**/*.env*/**"
   - "**/.magnolia/campaign-service.json"
   - "**/.magnolia/campaign-service.log"
-opencode_omitted_read_deny_patterns: []
+  - "**/.magnolia/services/**"
+opencode_omitted_read_deny_patterns:
+  - "**/.magnolia/services/**"
 edit_roots:
   - "{work_dir}"
 allowed_native_capabilities:
