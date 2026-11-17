@@ -142,11 +142,14 @@ def test_user_forced_tool_event_skip_is_reported(
         def get_session_log_path(self):
             return str(session)
 
+    force_retry_flags: list[bool] = []
+
     class Extractor:
         def should_extract(self, _path):
             return True
 
-        def commit(self, _path, _project):
+        def commit(self, _path, _project, *, force_retry=False):
+            force_retry_flags.append(force_retry)
             return None
 
     commits: list[str] = []
@@ -164,6 +167,7 @@ def test_user_forced_tool_event_skip_is_reported(
     assert payload["status"] == "skipped"
     assert payload["reason"] == "concurrent write"
     assert payload["retry"] is True
+    assert force_retry_flags == [True]
     assert commits == []
 
 

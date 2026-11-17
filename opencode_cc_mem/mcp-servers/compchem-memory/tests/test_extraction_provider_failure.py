@@ -312,6 +312,141 @@ def test_dialogue_provider_failure_persists_backoff_without_retry_storm(
     assert progress["retry"]["next_retry_at"]
 
 
+def test_growing_tool_event_session_keeps_active_backoff(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project = tmp_path / "project"
+    session = _tool_event_session(project)
+    calls = []
+    monkeypatch.setattr("compchem_memory.extraction.is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        "compchem_memory.extraction.AutomaticMemoryExtractor._llm_distill",
+        lambda _self, events: calls.append(events),
+    )
+
+    startup_scan._distill_tool_events(project)
+    with session.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+            "timestamp": "2026-11-17T08:31:00Z",
+            "event_type": "tool_success",
+            "tool": "new-tool",
+            "result_summary": "new result during backoff",
+        }) + "\n")
+    startup_scan._distill_tool_events(project)
+
+    assert len(calls) == 1
+    retry = yaml.safe_load(
+        (project / "extraction-state.yaml").read_text()
+    )["session_retries"]["closed.jsonl"]
+    assert retry["attempts"] == 1
+    assert retry["exhausted"] is False
+
+
+def test_native_opencode_activity_rearms_exhausted_retry(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    store = ensure_project_store(str(project))
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-11-17T08:30:37Z",
+            "opencode_session_id": "ses-native",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    marker = store / "opencode-distilled" / "ses-native.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({
+        "cursor": None,
+        "candidates": 0,
+        "done": False,
+        "retry": {
+            "attempts": 5,
+            "next_retry_at": None,
+            "exhausted": True,
+            "fingerprint": {"message_count": 1, "last_message_id": "m1"},
+        },
+    }) + "\n")
+    export = {
+        "messages": [
+            {
+                "info": {"id": "m1", "role": "user"},
+                "parts": [{"type": "text", "text": "first message"}],
+            },
+            {
+                "info": {"id": "m2", "role": "assistant"},
+                "parts": [{"type": "text", "text": "new activity"}],
+            },
+        ]
+    }
+    calls = []
+
+    opencode_ingest.ingest_opencode_sessions(
+        str(store), exporter=lambda _sid: export,
+        distiller=lambda transcript: calls.append(transcript),
+    )
+
+    assert len(calls) == 1
+    retry = json.loads(marker.read_text())["retry"]
+    assert retry["attempts"] == 1
+    assert retry["exhausted"] is False
+    assert retry["fingerprint"] == {
+        "message_count": 2,
+        "last_message_id": "m2",
+    }
+
+
+def test_native_opencode_updated_time_rearms_same_message_count(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    store = ensure_project_store(str(project))
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-11-17T08:30:37Z",
+            "opencode_session_id": "ses-native",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    marker = store / "opencode-distilled" / "ses-native.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({
+        "cursor": None,
+        "candidates": 0,
+        "done": False,
+        "retry": {
+            "attempts": 5,
+            "next_retry_at": None,
+            "exhausted": True,
+            "fingerprint": {
+                "message_count": 1,
+                "last_message_id": "m1",
+                "last_update": "100",
+            },
+        },
+    }) + "\n")
+    export = {
+        "info": {"time": {"updated": 200}},
+        "messages": [{
+            "id": "m1",
+            "time": {"created": 50},
+            "type": "user",
+            "text": "edited activity",
+        }],
+    }
+    calls = []
+
+    opencode_ingest.ingest_opencode_sessions(
+        str(store), exporter=lambda _sid: export,
+        distiller=lambda transcript: calls.append(transcript),
+    )
+
+    assert len(calls) == 1
+    retry = json.loads(marker.read_text())["retry"]
+    assert retry["attempts"] == 1
+    assert retry["fingerprint"] == {
+        "message_count": 1,
+        "last_message_id": "m1",
+        "last_update": "200",
+    }
+
+
 def test_manual_dialogue_distill_bypasses_exhausted_retry(tmp_path: Path) -> None:
     store = tmp_path / ".magnolia"
     marker = store / "opencode-distilled" / "session.json"

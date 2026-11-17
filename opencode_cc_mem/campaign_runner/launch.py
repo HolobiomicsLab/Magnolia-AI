@@ -2043,6 +2043,13 @@ def _contains_token(destination: str, token: str) -> bool:
 
 def _contains_value(destination: str, value: str, *, is_path: bool) -> bool:
     """Find a complete secret token without mistaking path prefixes for values."""
+    normalized = value.strip().lower()
+    placeholders = {"none", "null", "ollama", "changeme", "dummy", "test"}
+    is_repeated_x = normalized and set(normalized) <= {"x", ".", "-", "_", "…"}
+    if not is_path and (
+        len(value) < 16 or normalized in placeholders or is_repeated_x
+    ):
+        return False
     punctuation = set("./-") if is_path else {
         character
         for character in value
