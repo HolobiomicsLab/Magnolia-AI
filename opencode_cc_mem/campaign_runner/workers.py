@@ -6,6 +6,9 @@ import json
 import os
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from math import isfinite
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -40,6 +43,9 @@ _QUOTA_ERROR_NAMES = frozenset(
         "rate_limited",
         "quotaexceedederror",
         "quota_exceeded",
+        "freeusagelimiterror",
+        "free_usage_limit",
+        "provider.free_limit",
     }
 )
 
@@ -168,10 +174,77 @@ def parse_run_events(text: str) -> ParsedRun:
     return parsed
 
 
+def _retry_duration_reset(
+    value: Any, observed_at: datetime, *, milliseconds: bool = False
+) -> datetime | None:
+    """Convert a non-negative Retry-After duration to an absolute UTC time."""
+    if isinstance(value, bool):
+        return None
+    try:
+        duration = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not isfinite(duration) or duration < 0:
+        return None
+    seconds = duration / 1000 if milliseconds else duration
+    return observed_at + timedelta(seconds=seconds)
+
+
+def _retry_after_header(value: Any, observed_at: datetime) -> datetime | None:
+    """Parse an HTTP Retry-After delay or date."""
+    reset = _retry_duration_reset(value, observed_at)
+    if reset is not None:
+        return reset
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _header_reset_at(container: Mapping[str, Any], observed_at: datetime) -> datetime | None:
+    """Extract a case-insensitive Retry-After header from one response object."""
+    headers = container.get("headers")
+    if not isinstance(headers, Mapping):
+        return None
+    normalized = {str(key).casefold(): value for key, value in headers.items()}
+    reset = _retry_after_header(normalized.get("retry-after"), observed_at)
+    if reset is not None:
+        return reset
+    return _retry_duration_reset(
+        normalized.get("retry-after-ms"), observed_at, milliseconds=True
+    )
+
+
+def _quota_reset_at(error: Mapping[str, Any], observed_at: datetime) -> datetime | None:
+    """Extract OpenCode and HTTP Retry-After variants from a terminal error."""
+    durations = (("retryAfterMs", True), ("retry_after_ms", True))
+    for key, milliseconds in durations:
+        reset = _retry_duration_reset(error.get(key), observed_at, milliseconds=milliseconds)
+        if reset is not None:
+            return reset
+    for key in ("retryAfter", "retry_after"):
+        reset = _retry_after_header(error.get(key), observed_at)
+        if reset is not None:
+            return reset
+    response = error.get("response")
+    containers = (error, response if isinstance(response, Mapping) else {})
+    for container in containers:
+        reset = _header_reset_at(container, observed_at)
+        if reset is not None:
+            return reset
+    return None
+
+
 def _structured_quota_outcome(
-    errors: list[dict[str, Any]],
+    errors: list[dict[str, Any]], *, observed_at: datetime | None = None
 ) -> RunOutcome | None:
     """Recognize typed terminal limit errors without scanning model prose."""
+    observation_time = observed_at or datetime.now(timezone.utc)
     for error in errors:
         identifiers = {
             str(error.get(key, "")).casefold().replace("-", "_").replace(" ", "")
@@ -183,7 +256,7 @@ def _structured_quota_outcome(
                 "quota",
                 LimitInfo(
                     "provider rate or quota limit",
-                    None,
+                    _quota_reset_at(error, observation_time),
                     "opencode structured terminal error",
                 ),
             )

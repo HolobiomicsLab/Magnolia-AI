@@ -165,6 +165,87 @@ def test_service_environment_is_provider_specific_allowlist():
     assert "UNRELATED_SECRET" not in environment
 
 
+def test_managed_service_bytecode_stays_in_private_state(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "imported_by_service.py").write_text("VALUE = 42\n", encoding="utf-8")
+    marker = tmp_path / "imported"
+    probe = project / "service_probe.py"
+    imported = project / "imported_by_service.py"
+    probe.write_text(
+        "import importlib.util, os, pathlib, sys, time\n"
+        "sys.pycache_prefix = os.environ.get('PYTHONPYCACHEPREFIX')\n"
+        f"spec = importlib.util.spec_from_file_location('imported_by_service', {str(imported)!r})\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        f"pathlib.Path({str(marker)!r}).write_text(str(module.VALUE))\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    started = {}
+
+    def start(command, cwd, environment, log_path):
+        started["command"] = list(command)
+        started["environment"] = dict(environment)
+        log = log_path.open("ab")
+        process = subprocess.Popen(
+            [sys.executable, "-I", str(probe)],
+            cwd=cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+        log.close()
+        started["process"] = process
+        return process
+
+    def process_identity(pid):
+        return f"ps:{pid}:test"
+
+    def wait_ready(process, url, token, timeout):
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.read_text() == "42"
+        return {
+            "project_digest": memory_service.project_digest(project),
+            "process_identity": process_identity(process.pid),
+            "service_identity": started["environment"][
+                "MAGNOLIA_MEMORY_SERVICE_IDENTITY"
+            ],
+        }
+
+    def terminate(record):
+        process = started["process"]
+        process.kill()
+        process.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(memory_service, "_start_process", start)
+    monkeypatch.setattr(memory_service, "_process_identity", process_identity)
+    monkeypatch.setattr(
+        memory_service, "_process_command", lambda pid: tuple(started["command"])
+    )
+    monkeypatch.setattr(memory_service, "_listener_owned_by_pid", lambda pid, port: True)
+    monkeypatch.setattr(memory_service, "_wait_ready", wait_ready)
+    monkeypatch.setattr(memory_service, "_terminate_owned", terminate)
+    monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: 43101)
+
+    handle = memory_service.ensure_memory_service(_context(project))
+    state = Path(handle.state_dir)
+    try:
+        assert started["environment"]["PYTHONPYCACHEPREFIX"] == str(
+            state / "pycache"
+        )
+        assert not list(project.rglob("__pycache__"))
+        assert list((state / "pycache").rglob("*.pyc"))
+    finally:
+        stopped = memory_service.release_memory_service(handle)
+    assert stopped is True
+
+
 def test_service_environment_includes_explicit_critic_and_direct_fallback_routes():
     context = SimpleNamespace(
         setup={

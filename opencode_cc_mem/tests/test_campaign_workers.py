@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -226,6 +227,69 @@ def test_parse_passes_top_level_error_lines():
 def test_parse_without_error_lines_has_no_errors():
     body = json.dumps({"type": "text", "sessionID": "s1", "part": {"type": "text", "messageID": "m1", "text": "one"}})
     assert parse_run_events(body).errors == []
+
+
+def test_recorded_free_usage_limit_sets_retry_reset():
+    observed_at = datetime(2026, 11, 17, 8, 29, 21, tzinfo=timezone.utc)
+    error = {
+        "type": "provider.free-limit",
+        "message": "Free usage limit reached.",
+        "status": 429,
+        "response": {
+            "body": json.dumps(
+                {
+                    "type": "error",
+                    "error": {
+                        "type": "FreeUsageLimitError",
+                        "message": "Free usage limit reached.",
+                    },
+                }
+            )
+        },
+        "retryAfterMs": 55_839_000,
+    }
+
+    outcome = workers_module._structured_quota_outcome(
+        [error], observed_at=observed_at
+    )
+
+    assert outcome is not None
+    assert outcome.limit is not None
+    assert outcome.limit.reset_at == observed_at + timedelta(
+        milliseconds=55_839_000
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            {"status": 429, "retryAfter": 120},
+            datetime(2026, 11, 17, 8, 31, 21, tzinfo=timezone.utc),
+        ),
+        (
+            {"status": 429, "response": {"headers": {"Retry-After": "120"}}},
+            datetime(2026, 11, 17, 8, 31, 21, tzinfo=timezone.utc),
+        ),
+        (
+            {
+                "status": 429,
+                "headers": {"retry-after": "Tue, 17 Nov 2026 10:00:00 GMT"},
+            },
+            datetime(2026, 11, 17, 10, 0, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_structured_quota_accepts_standard_retry_after_forms(error, expected):
+    observed_at = datetime(2026, 11, 17, 8, 29, 21, tzinfo=timezone.utc)
+
+    outcome = workers_module._structured_quota_outcome(
+        [error], observed_at=observed_at
+    )
+
+    assert outcome is not None
+    assert outcome.limit is not None
+    assert outcome.limit.reset_at == expected
 
 
 def test_executor_returns_error_lines(tmp_path):
