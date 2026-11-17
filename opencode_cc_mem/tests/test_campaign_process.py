@@ -121,6 +121,31 @@ def _run_captured(tmp_path, stem, argv, env, governed):
     )
 
 
+def test_start_callback_holds_client_before_exec_without_extra_flag(tmp_path):
+    marker = tmp_path / "client-ran"
+
+    def check_before_exec(_pid, _pgid):
+        time.sleep(0.1)
+        assert not marker.exists()
+
+    outcome = run_process(
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')",
+        ],
+        cwd=tmp_path,
+        env={"PATH": os.environ.get("PATH", "")},
+        timeout_seconds=10,
+        stdout_path=tmp_path / "implicit-barrier.out",
+        stderr_path=tmp_path / "implicit-barrier.err",
+        control=ProcessControl(on_start=check_before_exec),
+    )
+
+    assert outcome.returncode == 0
+    assert marker.read_text() == "ran"
+
+
 @pytest.mark.parametrize("governed", (False, True))
 def test_client_process_launches_disconnect_stdin(tmp_path, monkeypatch, governed):
     real_popen = subprocess.Popen

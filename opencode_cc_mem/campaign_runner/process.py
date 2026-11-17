@@ -156,7 +156,7 @@ def run_process(
     stopped_reason: str | None = None
     typed_outcome: RunOutcome | None = None
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
-        if control and control.hold_before_exec:
+        if control and (control.hold_before_exec or control.on_start is not None):
             try:
                 process = _start_governed_process(
                     argv,

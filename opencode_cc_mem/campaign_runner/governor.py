@@ -194,6 +194,11 @@ class Admission:
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
         if self._finalized:
             return False
+        from .process import ProcessStartError
+
+        if isinstance(exc, ProcessStartError):
+            self._cancel_before_client_exec()
+            return False
         if not self.governor._was_launched(self.request.invocation_id):
             self.cancel_before_launch()
             return False
@@ -283,6 +288,7 @@ class Governor:
             assert key is not None
             return QuotaWaiting(key, request.invocation_id, "cancelled")
         now = self._now()
+        self.reconcile_abandoned(now=now)
         owner = _owner_identity(now)
         key = request.route.subscription_key
         assert key is not None
@@ -461,6 +467,39 @@ class Governor:
             usage=None,
             outcome=RunOutcome("failure"),
         )
+
+    def reconcile_abandoned(self, *, now: datetime | None = None) -> int:
+        """Recover reservations whose owner and physical native work ended."""
+        observed_at = self._now() if now is None else _utc(now)
+        with self._locked() as state:
+            self._recover_pending(state)
+            reservations = [dict(item) for item in state["reservations"].values()]
+        recovered = 0
+        for reservation in reservations:
+            if not _reservation_owner_gone(reservation, observed_at):
+                continue
+            invocation_id = str(reservation["invocation_id"])
+            if not reservation.get("launched"):
+                recovered += int(
+                    self.reconcile(
+                        invocation_id,
+                        process_ended=False,
+                        service_request_ended=False,
+                    )
+                )
+                continue
+            if reservation.get("client") not in {"claude-code", "codex", "vibe"}:
+                continue
+            if _reservation_process_alive(reservation):
+                continue
+            recovered += int(
+                self.reconcile(
+                    invocation_id,
+                    process_ended=True,
+                    service_request_ended=True,
+                )
+            )
+        return recovered
 
     def report(self, day: date) -> dict[str, Any]:
         """Return accounting without creating or modifying governor state."""
@@ -791,7 +830,7 @@ class Governor:
             if not isinstance(value, dict):
                 raise RuntimeError(f"invalid usage ledger row {line_number}")
             rows.append(value)
-        if has_torn_tail:
+        if has_torn_tail and repair:
             self._replace_ledger(body + b"\n")
         return rows
 
@@ -1023,9 +1062,6 @@ def _reservation_owner_gone(reservation: Mapping[str, Any], now: datetime) -> bo
         if current is not None:
             return current != expected
         return _pid_gone(pid)
-    expires_at = reservation.get("owner_expires_at")
-    if isinstance(expires_at, str) and now >= _parse_time(expires_at):
-        return True
     return _pid_gone(pid)
 
 

@@ -18,7 +18,7 @@ from campaign_runner.executors.contracts import (
 from campaign_runner.governor import AdmissionRequest, Governor, Policy, QuotaWaiting
 from campaign_runner.jobs import FakeJobBackend, JobController
 from campaign_runner.lease import AttemptLease
-from campaign_runner.reviewers import Reviewer, ReviewResult
+from campaign_runner.reviewers import REVIEW_FORMAT_NOTE, Reviewer, ReviewResult
 from campaign_runner.runner import CampaignRunner, RunnerConfig
 from campaign_runner.routing import ResolvedRoute, resolve_route
 from campaign_runner.state import CampaignStore, QuotaWait
@@ -239,6 +239,50 @@ def test_worker_limit_stops_all_repairs(tmp_path, returncode, text):
     state = _runner(store, worker, governor).run_once()["state"]
     assert state["state"] == "waiting_quota"
     assert worker.calls == 1
+
+
+def test_typed_worker_failure_with_success_exit_never_passes(tmp_path):
+    store = _store(tmp_path)
+    failed = _result()
+    failed.outcome = RunOutcome("failure")
+    worker = ResultWorker(store.run_dir, [failed])
+
+    state = _runner(store, worker, HoldGovernor()).run_once()["state"]
+
+    assert state["state"] == "waiting_human"
+
+
+def test_structured_opencode_rate_limit_stops_repairs_and_sets_hold(tmp_path):
+    route = resolve_route("worker", {"worker": {"model": "provider/model"}})
+    governor = _real_governor(tmp_path / "governor")
+    binary = tmp_path / "opencode"
+    binary.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "print(json.dumps({'sessionID':'limited','type':'error','error':"
+        "{'name':'RateLimitError','message':'provider rate limit'}}))\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    executor = OpenCodeExecutor(
+        binary=str(binary),
+        model="provider/model",
+        agent="campaign-worker",
+        governance=InvocationGovernance(
+            governor, route, "campaign:quota", "project"
+        ),
+    )
+
+    result = executor.run("work", tmp_path, tmp_path / "attempt")
+
+    assert result.outcome.kind == "quota"
+    assert result.attempts == 1
+    rows = [
+        json.loads(line)
+        for line in governor.ledger_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["outcome"]["kind"] for row in rows] == ["quota"]
+    assert governor.quota_wait(route.subscription_key).hold_id
 
 
 def test_reviewer_limit_resumes_validation_worker_called_once(tmp_path):
@@ -470,6 +514,46 @@ def test_non_review_reviewer_outcome_never_passes(tmp_path, monkeypatch, outcome
     assert receipt["status"] == "failed"
 
 
+@pytest.mark.parametrize("outcome_kind", ["failure", "timeout", "refused"])
+def test_failed_reviewer_valid_json_never_passes(
+    tmp_path, monkeypatch, outcome_kind
+):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+
+    class FailedReviewerExecutor:
+        def run(self, *args, **kwargs):
+            return WorkerResult(
+                0,
+                outcome_kind == "timeout",
+                0.1,
+                "review-session",
+                '{"issues":[],"followups":[]}',
+                "",
+                0,
+                empty_usage(),
+                1,
+                [],
+                [],
+                outcome=RunOutcome(outcome_kind),
+            )
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: FailedReviewerExecutor(),
+    )
+
+    state = _runner(
+        store, worker, HoldGovernor(), Reviewer(binary="unused")
+    ).run_once()["state"]
+
+    assert state["state"] == "waiting_human"
+    receipt = json.loads(
+        (store.attempts_dir / "work" / "001" / "receipt.json").read_text()
+    )
+    assert receipt["status"] == "failed"
+
+
 @pytest.mark.parametrize(
     ("outcome", "returncode"),
     [(RunOutcome("success"), 0), (RunOutcome("failure"), 1)],
@@ -545,6 +629,104 @@ def test_invalid_reviewer_uses_repair_budget_then_waits_human(tmp_path, monkeypa
     assert state["state"] == "waiting_human"
     assert state["attempt"] == 2
     assert worker.calls == 2
+
+
+def test_reviewer_quota_resume_does_not_reset_repair_budget(tmp_path, monkeypatch):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+    calls = []
+    responses = [
+        WorkerResult(
+            0, False, 0.1, "review-session", "not json", "", 0,
+            empty_usage(), 1, [], [], outcome=RunOutcome("success"),
+        ),
+        WorkerResult(
+            1, False, 0.1, "review-session", "partial", "", 0,
+            empty_usage(), 1, [], [],
+            outcome=RunOutcome(
+                "quota", LimitInfo("quota", None, "structured error")
+            ),
+        ),
+        WorkerResult(
+            0, False, 0.1, "review-session", "still not json", "", 0,
+            empty_usage(), 1, [], [], outcome=RunOutcome("success"),
+        ),
+        WorkerResult(
+            0, False, 0.1, "review-session",
+            '{"issues":[],"followups":[]}', "", 0,
+            empty_usage(), 1, [], [], outcome=RunOutcome("success"),
+        ),
+    ]
+
+    class RepairingReviewerExecutor:
+        def run(self, prompt, *args, **kwargs):
+            calls.append((prompt, kwargs.get("resume_session")))
+            return responses.pop(0)
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: RepairingReviewerExecutor(),
+    )
+    runner = _runner(
+        store,
+        worker,
+        HoldGovernor(),
+        Reviewer(binary="unused", max_retries=1),
+    )
+
+    first = runner.run_once()["state"]
+    assert first["state"] == "waiting_quota"
+    assert first["quota_wait"]["retry_cursor"] == 1
+
+    runner.resume_quota(manual=True)
+    resumed = runner.run_once()["state"]
+
+    assert resumed["state"] == "waiting_human"
+    assert len(calls) == 3
+    assert calls[-1] == (REVIEW_FORMAT_NOTE, "review-session")
+    assert len(responses) == 1
+
+
+def test_reviewer_quota_resume_records_usage_once(tmp_path, monkeypatch):
+    store = _store(tmp_path, review=True)
+    worker = ResultWorker(store.run_dir, [_result()])
+    first_usage = empty_usage()
+    first_usage["input_tokens"] = 10
+    resumed_usage = empty_usage()
+    resumed_usage["input_tokens"] = 5
+    responses = [
+        WorkerResult(
+            1, False, 0.1, "review-session", "partial", "", 0,
+            first_usage, 1, [], [],
+            outcome=RunOutcome(
+                "quota", LimitInfo("quota", None, "structured error")
+            ),
+        ),
+        WorkerResult(
+            0, False, 0.1, "review-session",
+            '{"issues":[],"followups":[]}', "", 0,
+            resumed_usage, 1, [], [], outcome=RunOutcome("success"),
+        ),
+    ]
+
+    class UsageReviewerExecutor:
+        def run(self, *args, **kwargs):
+            return responses.pop(0)
+
+    monkeypatch.setattr(
+        "campaign_runner.reviewers.executor_for",
+        lambda route, role, context: UsageReviewerExecutor(),
+    )
+    runner = _runner(
+        store, worker, HoldGovernor(), Reviewer(binary="unused", max_retries=1)
+    )
+
+    assert runner.run_once()["state"]["state"] == "waiting_quota"
+    runner.resume_quota(manual=True)
+    state = runner.run_once()["state"]
+
+    assert state["state"] == "completed"
+    assert state["usage"]["input_tokens"] == 15
 
 
 def test_reviewer_daily_limit_waits_once(tmp_path, monkeypatch):
@@ -809,14 +991,19 @@ def test_resumed_worker_prelaunch_quota_preserves_resume_artifact(tmp_path):
         SimpleNamespace(invocation_dir=invocation),
     )
     runner = _runner(store, worker, HoldGovernor())
-    runner.config.worker_factory = (
-        lambda model, timeout, resume_from=None, resume_artifact=None: replace(
+    def resume_bound_factory(
+        model, timeout, resume_from=None, resume_artifact=None
+    ):
+        if resume_artifact is not None and resume_from is None:
+            raise RuntimeError("resume directory was not preserved")
+        return replace(
             worker,
             prepared=SimpleNamespace(invocation_dir=resume_from or invocation),
             resume_artifact=resume_artifact,
             resume_permitted=resume_artifact is not None,
         )
-    )
+
+    runner.config.worker_factory = resume_bound_factory
     runner._worker_model = lambda stage: "claude-code/sonnet"
 
     assert runner.run_once()["state"]["state"] == "waiting_quota"

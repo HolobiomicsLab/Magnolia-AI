@@ -21,6 +21,7 @@ from campaign_runner.governor import (
     PolicyError,
     QuotaWaiting,
 )
+from campaign_runner.process import ProcessStartError
 from campaign_runner.routing import ResolvedRoute
 from compchem_memory import process_identity
 
@@ -116,6 +117,20 @@ def _reserve_and_exit(ledger, identifier, child_ready=None):
     )
     admitted.mark_started(pid=child.pid, pgid=child.pid)
     child_ready.put(child.pid)
+
+
+def _reserve_finished_native_and_exit(ledger, identifier):
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+    admitted = usage.admit(request(identifier, selected=route(client="codex")))
+    child = subprocess.Popen(
+        [sys.executable, "-c", "pass"],
+        start_new_session=True,
+    )
+    admitted.mark_started(pid=child.pid, pgid=child.pid)
+    child.wait()
 
 
 def _wait_for_process_exit(pid, timeout=5):
@@ -525,6 +540,66 @@ def test_never_launched_reservation_owner_lifecycle(tmp_path):
     assert isinstance(abandoned.admit(request("replacement")), Admission)
 
 
+def test_admission_reconciles_dead_never_launched_owner(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    ledger = tmp_path / "usage-ledger.jsonl"
+    dead_owner = context.Process(
+        target=_reserve_and_exit,
+        args=(ledger, "dead-owner"),
+    )
+    dead_owner.start()
+    dead_owner.join(5)
+    assert dead_owner.exitcode == 0
+
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+
+    assert isinstance(usage.admit(request("replacement")), Admission)
+
+
+def test_admission_finalizes_ended_abandoned_native_invocation(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    ledger = tmp_path / "usage-ledger.jsonl"
+    dead_owner = context.Process(
+        target=_reserve_finished_native_and_exit,
+        args=(ledger, "abandoned-native"),
+    )
+    dead_owner.start()
+    dead_owner.join(5)
+    assert dead_owner.exitcode == 0
+
+    usage = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1),
+        ledger_path=ledger,
+    )
+    replacement = usage.admit(
+        request("replacement", selected=route(client="codex"))
+    )
+
+    assert isinstance(replacement, (Admission, QuotaWaiting))
+    if isinstance(replacement, QuotaWaiting):
+        assert replacement.reason == "spacing"
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()]
+    assert rows[0]["invocation_id"] == "abandoned-native"
+    assert rows[0]["outcome"]["kind"] == "failure"
+
+
+def test_process_start_error_cancels_before_client_exec(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(tmp_path, clock, min_seconds_between_runs=1)
+    admission = usage.admit(request("pre-exec"))
+    admission.mark_started(pid=202, pgid=202, process_start_token="birth")
+
+    with pytest.raises(ProcessStartError):
+        with admission:
+            raise ProcessStartError(errno.EIO, "barrier failed")
+
+    assert not usage.ledger_path.exists()
+    assert usage._load_state()["reservations"] == {}
+
+
 def test_ended_work_reclaimed_once(tmp_path):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
     usage = governor(tmp_path, clock, max_concurrent=1, min_seconds_between_runs=1)
@@ -600,6 +675,23 @@ def test_waiters_visible_without_completed_runs(tmp_path):
     report = usage.report(date(2026, 11, 15))
     assert report["day"]["runs"] == 0
     assert report["waits"][0]["caller_id"] == "two"
+
+
+def test_report_does_not_repair_complete_unterminated_ledger_row(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(tmp_path, clock, min_seconds_between_runs=1)
+    row = {
+        "invocation_id": "one",
+        "reserved_at": clock().isoformat(),
+        "subscription_key": "codex",
+        "project_digest": "project-digest",
+        "usage": None,
+    }
+    original = json.dumps(row, sort_keys=True).encode()
+    usage.ledger_path.write_bytes(original)
+
+    assert usage.report(clock().date())["day"]["runs"] == 1
+    assert usage.ledger_path.read_bytes() == original
 
 
 def test_cancelled_and_stale_waits_are_not_active(tmp_path):
