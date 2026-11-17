@@ -1,0 +1,73 @@
+{
+ "run": "H",
+ "init": {
+  "model": "claude-haiku-5-5",
+  "claude_code_version": "2.1.326",
+  "mcp_servers": [],
+  "tools": [
+   "Read"
+  ],
+  "permissionMode": "default"
+ },
+ "hook_stream": [
+  {
+   "subtype": "hook_started",
+   "hook_name": "SessionStart:startup",
+   "exit_code": null,
+   "outcome": null,
+   "stdout_chars": 0,
+   "stderr": ""
+  },
+  {
+   "subtype": "hook_response",
+   "hook_name": "SessionStart:startup",
+   "exit_code": 0,
+   "outcome": "success",
+   "stdout_chars": 1506,
+   "stderr": ""
+  }
+ ],
+ "calls": [
+  {
+   "tool": "Read",
+   "input": "{\"file_path\": \"docs/notes.md\"}",
+   "is_error": false,
+   "result": "1\tALLOWED-NOTES-<R>\n2\tnotes line two\n3\t"
+  },
+  {
+   "tool": "Read",
+   "input": "{\"file_path\": \"README.md\"}",
+   "is_error": true,
+   "result": "Magnolia required role policy denied this operation."
+  },
+  {
+   "tool": "Read",
+   "input": "{\"file_path\": \"secret/.env\"}",
+   "is_error": true,
+   "result": "Magnolia required role policy denied this operation."
+  }
+ ],
+ "hook_transcript": [
+  "session-start",
+  "injected",
+  "prompt",
+  "tool pre read",
+  "tool post read",
+  "tool denied read",
+  "tool denied read",
+  "assistant",
+  "session-end"
+ ],
+ "result": {
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 4,
+  "total_cost_usd": 0.0012893100000000001,
+  "terminal_reason": "completed",
+  "models": [
+   "claude-haiku-5-5"
+  ]
+ },
+ "final_text": "1. ALLOWED (token: ALLOWED-NOTES-<R>)\n2. BLOCKED (the Magnolia required role policy denied the Read of README.md)\n3. BLOCKED (the Magnolia required role policy denied the Read of secret/.env)\n\nRead is the only tool in my current function list.",
+ "shape": "native_read over docs/ (bound row shape)"
+}

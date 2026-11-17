@@ -1,0 +1,101 @@
+{
+  "schema_version": "magnolia-live1-claude-dry-v1",
+  "observed_revision": "03333f9ced9e117aeae36b5dcfbafefd6e95b38f",
+  "installed_client": {
+    "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+    "version": "2.1.326",
+    "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+    "installed_mtime_local": "2026-11-17T04:18 CET"
+  },
+  "bound_client": {
+    "version": "2.1.325",
+    "sha256": "84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2"
+  },
+  "model_invocations": 0,
+  "roles": {
+    "worker": {
+      "production_row_accepted": true,
+      "refusal": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "mismatched_components": [
+        "client_version",
+        "client_sha256"
+      ],
+      "components_equal_to_row": [
+        "hook_command",
+        "hook_interpreter",
+        "hook_runner",
+        "hook_source",
+        "mcp",
+        "native_files",
+        "policy",
+        "required_env",
+        "settings"
+      ],
+      "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+      "hook_source_row": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3"
+    },
+    "reviewer": {
+      "production_row_accepted": true,
+      "refusal": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "mismatched_components": [
+        "client_version",
+        "client_sha256"
+      ],
+      "components_equal_to_row": [
+        "hook_command",
+        "hook_interpreter",
+        "hook_runner",
+        "hook_source",
+        "mcp",
+        "native_files",
+        "policy",
+        "required_env",
+        "settings"
+      ],
+      "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+      "hook_source_row": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3"
+    },
+    "helper": {
+      "production_row_accepted": true,
+      "refusal": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "mismatched_components": [
+        "client_version",
+        "client_sha256"
+      ],
+      "components_equal_to_row": [
+        "hook_command",
+        "hook_interpreter",
+        "hook_runner",
+        "hook_source",
+        "mcp",
+        "native_files",
+        "policy",
+        "required_env",
+        "settings"
+      ],
+      "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+      "hook_source_row": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3"
+    },
+    "evaluator": {
+      "production_row_accepted": true,
+      "refusal": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "mismatched_components": [
+        "client_version",
+        "client_sha256"
+      ],
+      "components_equal_to_row": [
+        "hook_command",
+        "hook_interpreter",
+        "hook_runner",
+        "hook_source",
+        "mcp",
+        "native_files",
+        "policy",
+        "required_env",
+        "settings"
+      ],
+      "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+      "hook_source_row": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3"
+    }
+  }
+}

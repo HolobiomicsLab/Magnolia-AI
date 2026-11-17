@@ -1,0 +1,141 @@
+{
+ "rows": 5,
+ "physical_claude_model_invocations": 5,
+ "receipts": [
+  {
+   "billing": "subscription",
+   "client": "claude-code",
+   "effective_cap": 30,
+   "resolved_model": "haiku",
+   "run_kind": "worker",
+   "outcome": {
+    "kind": "success",
+    "limit": null
+   },
+   "usage": {
+    "cache_write_tokens": 11270,
+    "cached_tokens": 313955,
+    "completeness": "complete",
+    "cost": 0.0064208500000000005,
+    "duration_seconds": 22.733364791609347,
+    "input_tokens": 28,
+    "output_tokens": 2049,
+    "reasoning_tokens": 452,
+    "source": "claude-stream-json",
+    "turns": 14
+   },
+   "subscription_key": "claude-code",
+   "schema_version": "magnolia-invocation-v1",
+   "parent_run_id": "live1b-W:live1b-W",
+   "session_bound": true
+  },
+  {
+   "billing": "subscription",
+   "client": "claude-code",
+   "effective_cap": 8,
+   "resolved_model": "haiku",
+   "run_kind": "reviewer",
+   "outcome": {
+    "kind": "success",
+    "limit": null
+   },
+   "usage": {
+    "cache_write_tokens": 9624,
+    "cached_tokens": 145021,
+    "completeness": "complete",
+    "cost": 0.00444841,
+    "duration_seconds": 15.795188708230853,
+    "input_tokens": 14,
+    "output_tokens": 2144,
+    "reasoning_tokens": 1089,
+    "source": "claude-stream-json",
+    "turns": 7
+   },
+   "subscription_key": "claude-code",
+   "schema_version": "magnolia-invocation-v1",
+   "parent_run_id": "live1b-R:live1b-R",
+   "session_bound": true
+  },
+  {
+   "billing": "subscription",
+   "client": "claude-code",
+   "effective_cap": 30,
+   "resolved_model": "haiku",
+   "run_kind": "helper",
+   "outcome": {
+    "kind": "success",
+    "limit": null
+   },
+   "usage": {
+    "cache_write_tokens": 4593,
+    "cached_tokens": 7381,
+    "completeness": "complete",
+    "cost": 0.0012893100000000001,
+    "duration_seconds": 5.738917457871139,
+    "input_tokens": 4,
+    "output_tokens": 593,
+    "reasoning_tokens": 331,
+    "source": "claude-stream-json",
+    "turns": 4
+   },
+   "subscription_key": "claude-code",
+   "schema_version": "magnolia-invocation-v1",
+   "parent_run_id": "live1b-H:live1b-H",
+   "session_bound": true
+  },
+  {
+   "billing": "subscription",
+   "client": "claude-code",
+   "effective_cap": 1,
+   "resolved_model": "haiku",
+   "run_kind": "evaluator",
+   "outcome": {
+    "kind": "success",
+    "limit": null
+   },
+   "usage": {
+    "cache_write_tokens": 3874,
+    "cached_tokens": 649,
+    "completeness": "complete",
+    "cost": 0.00088199,
+    "duration_seconds": 3.5403990829363465,
+    "input_tokens": 2,
+    "output_tokens": 201,
+    "reasoning_tokens": 186,
+    "source": "claude-stream-json",
+    "turns": 1
+   },
+   "subscription_key": "claude-code",
+   "schema_version": "magnolia-invocation-v1",
+   "parent_run_id": "live1b-E:live1b-E",
+   "session_bound": true
+  },
+  {
+   "billing": "subscription",
+   "client": "claude-code",
+   "effective_cap": 8,
+   "resolved_model": "haiku",
+   "run_kind": "reviewer",
+   "outcome": {
+    "kind": "success",
+    "limit": null
+   },
+   "usage": {
+    "cache_write_tokens": 7903,
+    "cached_tokens": 175110,
+    "completeness": "complete",
+    "cost": 0.0047378,
+    "duration_seconds": 19.65387179236859,
+    "input_tokens": 16,
+    "output_tokens": 2809,
+    "reasoning_tokens": 1738,
+    "source": "claude-stream-json",
+    "turns": 8
+   },
+   "subscription_key": "claude-code",
+   "schema_version": "magnolia-invocation-v1",
+   "parent_run_id": "live1b-R2:live1b-R2",
+   "session_bound": true
+  }
+ ]
+}
