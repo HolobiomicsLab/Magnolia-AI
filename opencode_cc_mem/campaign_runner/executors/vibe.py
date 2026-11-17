@@ -297,16 +297,17 @@ class VibeExecutor:
         )
         try:
             with admission or _NoAdmission():
+                self._verify_project_artifacts()
                 argv = self._argv(prompt, output_dir, effective_cap, resume_session)
-                process = run_process(
-                    argv,
-                    cwd,
-                    self.prepared.env,
-                    self.timeout_seconds,
-                    stdout_path,
-                    stderr_path,
-                    self._control(control, admission),
-                )
+                try:
+                    process = run_process(
+                        argv, cwd, self.prepared.env, self.timeout_seconds,
+                        stdout_path, stderr_path, self._control(control, admission),
+                    )
+                except ProcessStartError:
+                    if admission is not None:
+                        admission._cancel_before_client_exec()
+                    raise
                 if admission is not None and not process.client_started:
                     admission._cancel_before_client_exec()
                 export_path = output_dir / "export.json"

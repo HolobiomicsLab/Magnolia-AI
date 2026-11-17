@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
-from campaign_runner.service import read_service
+from campaign_runner.service import read_service, service_status
 from campaign_runner.workers import OpenCodeExecutor, WorkerExecutor
 
 if TYPE_CHECKING:
@@ -77,7 +77,8 @@ def _release_prepared_memory_service(prepared: Any) -> None:
 def _managed_service_record(context: ExecContext) -> Mapping[str, Any] | None:
     if context.project_dir is None or not context.opencode_server:
         return None
-    record = read_service(context.project_dir)
+    project = context.project_dir.resolve()
+    record = read_service(project)
     if not isinstance(record, Mapping):
         return None
     port = record.get("port")
@@ -86,6 +87,16 @@ def _managed_service_record(context: ExecContext) -> Mapping[str, Any] | None:
         f"http://localhost:{port}",
     }:
         return None
+    if record.get("project_path") != str(project):
+        raise ExecutorRefused(
+            "managed OpenCode service record is not bound to this project"
+        )
+    if service_status(project).get("running") is not True:
+        raise ExecutorRefused(
+            "managed OpenCode service lacks live authenticated identity proof"
+        )
+    if read_service(project) != record:
+        raise ExecutorRefused("managed OpenCode service record changed during proof")
     return record
 
 
@@ -195,14 +206,19 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                 raise ExecutorRefused("Codex helper/evaluator contract is no-tools")
             if context.project_dir is None:
                 raise ExecutorRefused("Codex requires a canonical project directory")
-            require_codex_trust(context.project_dir, context.setup)
             prepared = prepare_launch(context)
             try:
+                expected = {
+                    prepared.discovery_dir / relative: prepared.files[
+                        prepared.invocation_dir / relative
+                    ]
+                    for relative in (".codex/config.toml", ".codex/hooks.json")
+                }
                 default_cap = load_role(ROLE_CONFIG_NAMES[role]).default_cap
                 effective_cap = _effective_cap(context, default_cap)
                 if effective_cap is None:
                     raise ExecutorRefused("Codex requires a positive supervising cap")
-                return CodexExecutor(
+                executor = CodexExecutor(
                     prepared=prepared,
                     model=route.model,
                     role=role,
@@ -225,7 +241,17 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
                             )
                         )
                     ),
+                    trust_setup=context.setup,
                 )
+                executor._verify_client_bytes()
+                require_codex_trust(
+                    prepared.discovery_dir,
+                    context.setup,
+                    Path(prepared.argv[0]),
+                    expected,
+                    prepared.env,
+                )
+                return executor
             except Exception:
                 _release_prepared_memory_service(prepared)
                 raise

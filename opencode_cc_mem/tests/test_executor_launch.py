@@ -330,9 +330,9 @@ def test_member_oauth_survives_but_client_api_key_is_filtered(tmp_path):
     assert "OPENAI_API_KEY" not in launch.env
 
 
-def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
-    launch = prepare_launch(
-        _context(
+def test_codex_stdio_memory_refuses_provider_key_in_client_environment(tmp_path):
+    with pytest.raises(ExecutorRefused, match="provider credential"):
+        prepare_launch(_context(
             tmp_path,
             client="codex",
             role="worker",
@@ -343,11 +343,39 @@ def test_codex_rendered_config_may_name_passthrough_key(tmp_path):
                 "args": ISOLATED_MEMORY_ARGS,
                 "env_vars": ["OPENROUTER_API_KEY"],
             },
-        )
-    )
+        ))
 
-    assert "OPENROUTER_API_KEY" in _artifact_text(launch)
-    assert launch.env["OPENROUTER_API_KEY"] == "OPENROUTER-KEY-SENTINEL"
+
+def test_bound_codex_package_is_not_replaced_by_second_read(tmp_path, monkeypatch):
+    from campaign_runner import launch as launch_module
+
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    context = replace(
+        context,
+        python_executable=sys.executable,
+        environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+    )
+    accepted_package = {}
+
+    def replace_after_gate(_evidence, actual):
+        accepted_package.update(actual["components"]["codex_package"])
+        target = Path(actual["executable"]).with_name("codex-exec-server")
+        target.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        target.chmod(0o755)
+
+    monkeypatch.setattr(launch_module, "_verify_bound_launch_identity", replace_after_gate)
+    binary = Path(context.launch_argv[0])
+    context.role_capabilities["codex"]["worker"]["launch_identity"] = {
+        "components": {"client_sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}
+    }
+    launch = prepare_launch(context)
+
+    assert dict(launch.codex_package_identity) == accepted_package
 
 
 def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
@@ -520,7 +548,7 @@ def test_codex_code_mode_host_selector_is_filtered_or_refused(tmp_path, monkeypa
             prepare_launch(explicit)
 
 
-def test_codex_version_probe_uses_run_owned_home_and_launch_path(tmp_path):
+def test_codex_without_bound_package_metadata_is_never_executed(tmp_path):
     record = tmp_path / "version-environment.txt"
     binary = tmp_path / "codex-version-probe"
     binary.write_text(
@@ -538,12 +566,10 @@ def test_codex_version_probe_uses_run_owned_home_and_launch_path(tmp_path):
         environment={"PATH": "/run-owned/bin"},
     )
 
-    launch = prepare_launch(context)
+    with pytest.raises(ExecutorRefused, match="version metadata"):
+        prepare_launch(context)
 
-    home, observed_path = record.read_text().splitlines()
-    assert Path(home).parent == launch.invocation_dir.parent
-    assert not Path(home).exists()
-    assert observed_path == "/run-owned/bin"
+    assert not record.exists()
 
 
 def test_codex_normalized_launch_identity_names_selected_model(tmp_path):
@@ -1139,6 +1165,51 @@ def test_campaign_vibe_managed_route_acquires_project_service(
     )["mcp_servers"][0]
     assert rendered["url"] == "http://127.0.0.1:43101/mcp"
     assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
+
+
+def test_managed_memory_launch_identity_normalizes_ephemeral_port(
+    tmp_path, monkeypatch
+):
+    from campaign_runner import launch as launch_module
+
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("managed-service-token\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    ports = iter((43101, 43102))
+
+    def acquire(*_args, **_kwargs):
+        port = next(ports)
+        return SimpleNamespace(
+            route=lambda: {
+                "transport": "http",
+                "url": f"http://127.0.0.1:{port}/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            }
+        )
+
+    identities = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service", acquire
+    )
+    monkeypatch.setattr(
+        launch_module,
+        "_verify_bound_launch_identity",
+        lambda _evidence, identity: identities.append(identity["components"]),
+    )
+
+    for name in ("first", "second"):
+        root = tmp_path / name
+        root.mkdir()
+        context = _production_claude_context(
+            root,
+            role="worker",
+            memory_service={"transport": "managed"},
+        )
+        prepare_launch(context)
+
+    assert identities[0]["mcp"] == identities[1]["mcp"]
+    assert identities[0]["native_files"] == identities[1]["native_files"]
 
 
 def test_vibe_managed_memory_requires_explicit_accepted_capability_cell(

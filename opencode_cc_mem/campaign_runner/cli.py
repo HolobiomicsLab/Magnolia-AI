@@ -51,9 +51,11 @@ def _memory_route(
     route: ResolvedRoute,
     python_executable: str | None = None,
     installation_root: Path | None = None,
+    *,
+    managed: bool = False,
 ) -> dict[str, Any]:
-    """Return authenticated managed Vibe or observed-shape stdio memory."""
-    if route.client == "vibe":
+    """Keep memory/provider credentials in Magnolia's managed server process."""
+    if managed or route.client == "vibe":
         return {"transport": "managed"}
     root = installation_root or _ROOT
     runner = (
@@ -65,15 +67,10 @@ def _memory_route(
         "command": python_executable or resolve_python(root),
         "args": ["-I", str(runner.resolve()), "--memory-server"],
         "env_vars": [
-            "MAGNOLIA_ROOT",
-            "MAGNOLIA_PROJECT_DIR",
-            "MAGNOLIA_RULES_DIR",
-            "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
-            "MAGNOLIA_DISTILL_INTERVAL_MIN",
-            "MAGNOLIA_MEMORY_MODEL",
-            "MAGNOLIA_MEMORY_PROVIDER",
-            MEMORY_TOOL_ALLOWLIST_ENV,
-            MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+            "MAGNOLIA_ROOT", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_RULES_DIR",
+            "MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "MAGNOLIA_DISTILL_INTERVAL_MIN",
+            "MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER",
+            MEMORY_TOOL_ALLOWLIST_ENV, MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
         ],
     }
 
@@ -411,7 +408,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
             setup=memory_setup,
             memory_service=_memory_route(
-                route, python_executable, _ROOT
+                route, python_executable, _ROOT, managed=True
             ),
             invocation_id=uuid.uuid4().hex,
             launch_argv=(client_binary,),

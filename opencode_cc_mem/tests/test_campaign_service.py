@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -71,6 +73,36 @@ def test_service_status_hides_password_and_dead_pid(tmp_path):
     status = service_status(tmp_path)
     assert status["running"] is False
     assert status["password"] == "<hidden>"
+
+
+def test_managed_cap_proof_rejects_stale_service_record(tmp_path, monkeypatch):
+    from campaign_runner.executors.contracts import ExecContext
+    from campaign_runner.executors.registry import ExecutorRefused, _service_cap_checker
+    from campaign_runner.routing import ResolvedRoute
+
+    project = tmp_path / "project"
+    path = project / ".magnolia" / "campaign-service.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "project": project.name,
+        "project_path": str(project.resolve()),
+        "port": 4120,
+        "pid": 99999999,
+        "password": "old",
+        "agent_steps": {"campaign-worker": 5},
+        "config_sha256": "0" * 64,
+    }))
+    context = ExecContext(
+        route=ResolvedRoute("opencode", "m", "f", "k", "worker", "test"),
+        role="worker",
+        project_dir=project,
+        opencode_server="http://127.0.0.1:4120",
+        governor_cap=5,
+        agent="campaign-worker",
+    )
+
+    with pytest.raises(ExecutorRefused, match="live|authenticated"):
+        _service_cap_checker(context, "campaign-worker")
 
 
 # ---- behaviour observed on OpenCode 2.3.0 ------------------------------------

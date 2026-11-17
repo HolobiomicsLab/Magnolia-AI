@@ -9,8 +9,6 @@ import os
 import re
 import shlex
 import stat
-import subprocess
-import tempfile
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -100,6 +98,7 @@ CLAUDE_REDIRECT_ENV = frozenset(
 MEMORY_PROVIDER_ENV = frozenset(
     {
         "MAGNOLIA_LLM_API_KEY",
+        "MAGNOLIA_CRITIC_API_KEY",
         "DEEPSEEK_API_KEY",
         "ANTHROPIC_API_KEY",
         "MAGNOLIA_OPENAI_API_KEY",
@@ -241,7 +240,10 @@ def _prepare_launch(
         client_sha256 = str(launch_identity["components"]["client_sha256"])
         if route.client == "codex" and context.role in {"worker", "reviewer"}:
             executable = Path(launch_identity["executable"])
-            package_root, codex_package_identity = _resolved_codex_package(executable)
+            package_root = executable.parent.parent.resolve()
+            codex_package_identity = dict(
+                launch_identity["components"]["codex_package"]
+            )
             code_mode_host_path = _codex_package_executable_path(
                 package_root, codex_package_identity, "code_mode_host"
             )
@@ -388,10 +390,9 @@ def configuration_identity(context: ExecContext) -> str:
 def _acquire_managed_memory_service(
     context: ExecContext,
 ) -> tuple[ExecContext, Any | None]:
-    """Acquire a per-project service for a Vibe role that uses memory tools."""
+    """Acquire a per-project service for any role that uses memory tools."""
     if (
         context.route is None
-        or context.route.client != "vibe"
         or context.memory_service.get("transport") != "managed"
     ):
         return context, None
@@ -400,7 +401,7 @@ def _acquire_managed_memory_service(
     if not tools.neutral_names:
         return context, None
     if context.project_dir is None or not context.python_executable:
-        raise ExecutorRefused("managed Vibe memory requires a project and Python")
+        raise ExecutorRefused("managed memory requires a project and Python")
     from compchem_memory.harness.memory_service import ensure_memory_service
 
     handle = ensure_memory_service(
@@ -556,23 +557,39 @@ def _normalized_launch_identity(
 ) -> dict[str, Any]:
     """Bind executable bytes and path-independent rendered launch components."""
     executable = _resolved_client_executable(context, launch_env)
-    replacements = _identity_replacements(context, invocation_dir)
+    replacements = list(_identity_replacements(context, invocation_dir))
+    if context.memory_service.get("transport") == "http":
+        service_url = context.memory_service.get("url")
+        if isinstance(service_url, str) and service_url:
+            replacements.append((service_url, "{memory_service_url}"))
+    normalized_replacements = tuple(
+        sorted(set(replacements), key=lambda item: len(item[0]), reverse=True)
+    )
     normalized_native = {
-        name: _normalize_identity_body(body, replacements)
+        name: _normalize_identity_body(body, normalized_replacements)
         for name, body in native_bodies.items()
     }
+    client_sha256 = _file_digest(executable)
     components = {
+        "client_sha256": client_sha256,
         "client_version": _installed_client_version(
             executable,
             invocation_dir=invocation_dir,
             launch_env=launch_env,
         ),
-        "client_sha256": _file_digest(executable),
-        "settings": _settings_rule_digest(context, settings_body, replacements),
-        "mcp": _digest(_normalize_identity_body(mcp_body, replacements)),
+        "settings": _settings_rule_digest(
+            context, settings_body, normalized_replacements
+        ),
+        "mcp": _digest(
+            _normalize_identity_body(mcp_body, normalized_replacements)
+        ),
         "native_files": _digest_named_bodies(sorted(normalized_native.items())),
-        "policy": _digest(_normalize_identity_body(policy_body, replacements)),
-        "hook_command": _hook_commands_digest(native_bodies, replacements),
+        "policy": _digest(
+            _normalize_identity_body(policy_body, normalized_replacements)
+        ),
+        "hook_command": _hook_commands_digest(
+            native_bodies, normalized_replacements
+        ),
         "hook_interpreter": _hook_interpreter_digest(context, launch_env),
         "hook_runner": _hook_runner_digest(context),
         "hook_source": _hook_source_digest(context),
@@ -779,7 +796,20 @@ def _installed_client_version(
     launch_env: Mapping[str, str],
 ) -> str:
     """Read client metadata with any Codex writes confined to the run."""
-    package = executable.parent.parent / "package.json"
+    package_root = executable.parent.parent
+    codex_manifest = package_root / "codex-package.json"
+    try:
+        codex_metadata = json.loads(codex_manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        codex_metadata = {}
+    codex_version = codex_metadata.get("version")
+    if (
+        codex_metadata.get("layoutVersion") == 1
+        and isinstance(codex_version, str)
+        and codex_version
+    ):
+        return codex_version
+    package = package_root / "package.json"
     try:
         metadata = json.loads(package.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
@@ -789,28 +819,6 @@ def _installed_client_version(
         version, str
     ) and version:
         return version
-    try:
-        invocation_dir.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with tempfile.TemporaryDirectory(
-            prefix=".codex-version-", dir=invocation_dir.parent
-        ) as temporary_home:
-            completed = subprocess.run(
-                [str(executable), "--version"],
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-                env={
-                    "HOME": temporary_home,
-                    "PATH": launch_env.get("PATH", os.defpath),
-                },
-            )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ExecutorRefused("launched client version metadata is unavailable") from exc
-    match = re.fullmatch(r"codex-cli\s+([^\s]+)\s*", completed.stdout)
-    if completed.returncode == 0 and match is not None:
-        return match.group(1)
     raise ExecutorRefused("launched client version metadata is unavailable")
 
 
@@ -1499,6 +1507,12 @@ def _validate_memory_service(context: ExecContext, service: Mapping[str, Any]) -
     env_vars = service.get("env_vars", ())
     if isinstance(env_vars, (list, tuple)):
         dependencies.extend(str(value) for value in env_vars)
+        provider_keys = sorted(set(str(value) for value in env_vars) & MEMORY_PROVIDER_ENV)
+        if provider_keys:
+            raise ExecutorRefused(
+                "filtered provider credential cannot enter the client environment: "
+                + ", ".join(provider_keys)
+            )
     filtered = sorted(set(dependencies) & FORBIDDEN_CLIENT_ENV)
     if filtered:
         raise ExecutorRefused(
@@ -1649,10 +1663,7 @@ def _effective_environment(
                 )
             }
         )
-    if (
-        context.route.client == "vibe"
-        and context.memory_service.get("transport") == "http"
-    ):
+    if context.memory_service.get("transport") == "http":
         for name in MEMORY_PROVIDER_ENV:
             env.pop(name, None)
     if protected_names is not None:

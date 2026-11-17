@@ -52,17 +52,12 @@ def test_vibe_campaign_route_is_managed_and_never_static(monkeypatch):
     assert _memory_route(route) == {"transport": "managed"}
 
 
-def test_claude_campaign_route_is_stdio_with_expanded_environment_names():
+def test_claude_campaign_route_keeps_provider_keys_in_managed_server():
     route = ResolvedRoute("claude-code", "haiku", "family", "claude-code", "worker", "test")
 
-    memory = _memory_route(route, "/repo/.venv/bin/python3")
+    memory = _memory_route(route, "/repo/.venv/bin/python3", managed=True)
 
-    assert memory["transport"] == "stdio"
-    assert memory["command"] == "/repo/.venv/bin/python3"
-    assert memory["args"][0] == "-I"
-    assert memory["args"][-1] == "--memory-server"
-    assert memory["args"][1].endswith("/compchem_memory/hook/runner.py")
-    assert "MAGNOLIA_PROJECT_DIR" in memory["env_vars"]
+    assert memory == {"transport": "managed"}
 
 
 @pytest.mark.parametrize("override", (None, "/selected/.venv/bin/python3"))
@@ -87,8 +82,8 @@ def test_campaign_uses_repository_interpreter_for_context_and_memory(tmp_path, m
     runner = cli._build_runner(SimpleNamespace(run_dir=str(run), command="run"))
     context = runner.config.worker_factory("claude-code/haiku", 30)
     assert context.python_executable == expected
-    assert context.memory_service["command"] == expected
-    assert _memory_route(context.route)["command"] == expected
+    assert context.memory_service == {"transport": "managed"}
+    assert _memory_route(context.route, managed=True) == {"transport": "managed"}
 
 
 def make_inputs(tmp_path):
