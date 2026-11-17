@@ -70,6 +70,17 @@ a later event. Earlier asynchronous Stop hooks did not finish, and the critic ju
 returns no JSON. Vibe cannot attach context to an MCP result safely, so Magnolia carries an action
 note to the same agent's next built-in post-tool event (or the main agent's next prompt).
 
+The Codex 0.169.0 campaign worker/reviewer gate also found a wider code-mode tool catalog than
+the role allowlists. Worker and reviewer expose `exec_command`, `write_stdin`, three MCP-resource
+tools and five `multi_agent_v1__*` tools; the worker additionally sees non-allowlisted memory
+tools. The required PreToolUse hook's deny-unknown allowlist is therefore the enforcement
+boundary. `write_stdin` is not hooked, but it is unreachable without an `exec_command` session,
+and that hooked call is denied. Offline `--help` and `features list` found no documented per-tool
+catalog-removal switch; `--disable multi_agent` did not remove the v1 tools in the live gate.
+Changing other feature overrides would alter argv and requires a new gate. The sanitized evidence
+and accepted limitation are recorded in
+[`docs/evidence/codex/gate4/`](../opencode_cc_mem/docs/evidence/codex/gate4/README.md).
+
 ## Choose the integration level
 
 | Level | What is available | What remains to implement or do explicitly |

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_from": {
-    "revision": "a6439a52c5634a7c4c90e3745887873b4527c1e0",
+    "revision": "167ad97cb990aa372c859a2e6f5a6de248aa047e",
     "sources": [
       "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
       "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
@@ -9,10 +9,15 @@
       "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
       "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
       "opencode_cc_mem/docs/evidence/codex/task-codex-livefix-report.md",
-      "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md"
+      "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/README.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/runtime-surface.json"
     ]
   },
-  "note": "Claude live role gates are accepted and launch-bound to the real client plus normalized project-independent rendered components. Codex and Vibe remain refused.",
+  "note": "Claude live role gates and the Codex worker/reviewer gate are accepted and launch-bound to the exercised clients plus normalized project-independent rendered components. Codex helper/evaluator and all Vibe roles remain refused.",
   "rows": [
     {
       "client": "claude-code",
@@ -804,12 +809,12 @@
       "role_label": "worker",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/README.md",
         "value": {
-          "decision": "refused-awaiting-live-rerun",
+          "decision": "accepted-live",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
             "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
@@ -830,79 +835,142 @@
             }
           }
         },
-        "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
+        "reason": "Accepted by the lead after gate 4 met the complete worker role gate; enforcement is bound to the exercised client, model, normalized launch identity and required hook allowlist."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
             "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-          }
+          },
+          "note": "The executable version and SHA-256 were exercised by gate 4; the tracked path is sanitized."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "entrypoint": ["codex", "-C", "<project>", "-s", "workspace-write", "-m", "gpt-5.6-luna", "exec", "--json"],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production worker argv was captured before the one-attempt live launch."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb",
+          "note": "The live gate and current branch bind the same normalized configuration identity."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+          "value": {
+            "role": "worker",
+            "source": "gate 4 routed tool calls and hook rows"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed reads/searches and one worker-owned edit completed under the production hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+          "value": {
+            "actions": [
+              "secret and symlink-alias reads",
+              "edits outside the worker-owned work tree",
+              "control edits",
+              "shell",
+              "non-allowlisted memory writes"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "effective_max_turns": 30,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective worker cap."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": ["input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "cache_write_tokens", "cost", "turns"]
+          },
+          "note": "One subscription ledger receipt retained the native token/cache counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
         }
-      }
+      },
+      "notes": [
+        "Accepted limitation: the code-mode catalog is wider than the worker allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate."
+      ]
     },
     {
       "client": "codex",
@@ -910,12 +978,12 @@
       "role_label": "reviewer",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/README.md",
         "value": {
-          "decision": "refused-awaiting-live-rerun",
+          "decision": "accepted-live",
           "client_identity": {
-            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
             "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
           },
@@ -936,79 +1004,133 @@
             }
           }
         },
-        "reason": "D2: Codex worker and reviewer are refused unless the complete role gate passes."
+        "reason": "Accepted by the lead after gate 4 met the complete reviewer role gate; enforcement is bound to the exercised client, model, normalized launch identity and required hook allowlist."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
           "value": {
-            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
             "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-          }
+          },
+          "note": "The executable version and SHA-256 were exercised by gate 4; the tracked path is sanitized."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "entrypoint": ["codex", "-C", "<project>", "-s", "read-only", "-m", "gpt-5.6-luna", "exec", "--json"],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production reviewer argv was captured before the one-attempt live launch."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f",
+          "note": "The live gate and current branch bind the same normalized configuration identity."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+          "value": {
+            "role": "reviewer",
+            "source": "gate 4 primary and diagnostic routed tool calls and hook rows"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+          "value": {
+            "capabilities": ["native_read", "native_glob", "native_grep"]
+          },
+          "note": "Allowed documentation and worker-result reads completed under the production hook."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP-resource tools",
+              "delegation"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect; write_stdin failed before a hook because no session existed."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective reviewer cap."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": ["input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "cache_write_tokens", "cost", "turns"]
+          },
+          "note": "One subscription ledger receipt per reviewer invocation retained the native token/cache counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
         }
-      }
+      },
+      "notes": [
+        "Accepted limitation: the code-mode catalog is wider than the reviewer allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate."
+      ]
     },
     {
       "client": "codex",
