@@ -653,15 +653,17 @@ def test_setup_harness_call_shapes(tmp_path):
 
 
 def test_setup_check_needs_exit_zero_and_exact_line(tmp_path):
-    ws = make_workspace(tmp_path)
-    path = write_setup(ws, {"main_model": "a/b"})
     cases = [
         ({}, 1),  # the stub echoes the prompt as JSON: must fail
         ({"STUB_SAY": "Uppercase this token and reply with only the result: magnolia-test"}, 1),
         ({"STUB_SAY": "MAGNOLIA-TEST", "STUB_EXIT": "3"}, 1),
         ({"STUB_SAY": "  MAGNOLIA-TEST  "}, 0),
     ]
-    for env, code in cases:
+    for index, (env, code) in enumerate(cases):
+        case_root = tmp_path / f"case-{index}"
+        case_root.mkdir()
+        ws = make_workspace(case_root)
+        path = write_setup(ws, {"main_model": "a/b"})
         env = {"MAGNOLIA_SETUP_NONCE": "magnolia-test", **env}
         proc = run_raw(ws, ["setup", "--harness", "claude", "--model", "m", PROJECT], env=env)
         assert proc.returncode == code, (env, proc.stderr)

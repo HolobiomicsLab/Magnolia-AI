@@ -6,6 +6,7 @@ Run from opencode_cc_mem/:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -45,6 +46,9 @@ class _ClientExecutor:
         from campaign_runner.executors.contracts import RunOutcome
 
         self.calls.append((prompt, kwargs))
+        control = kwargs.get("control")
+        if control is not None and control.on_start is not None:
+            control.on_start(os.getpid(), os.getpgid(0))
         return SimpleNamespace(
             final_text=__import__("json").dumps(self.response),
             outcome=RunOutcome("success"),
@@ -334,7 +338,7 @@ def test_evaluator_selected_model_and_no_tools_one_turn(monkeypatch, tmp_path):
     assert captured["role"] == "evaluator"
     assert captured["context"].role_cap == 1
     assert captured["context"].required_capabilities == ()
-    assert captured["context"].python_executable == sys.executable
+    assert captured["context"].python_executable.endswith("/.venv/bin/python3")
     assert executor.calls[0][1]["retries"] == 0
 
 
@@ -567,4 +571,6 @@ def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
         "catalog_timeout_seconds": calls[1][1]["timeout"],
         "agent_file_bytes": None,
     }
+    assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
+    observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
     assert observed == snapshot

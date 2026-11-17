@@ -186,7 +186,10 @@ export default {
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           if (turnEnd) {
-            handoffTurnEnd(directory, sidStr, "capture", eventTurnDetails(ev))
+            handoffTurnEnd(
+              directory, sidStr, "capture", eventTurnDetails(ev),
+              record.projectOf(sidStr) ?? undefined,
+            )
           }
         }
       } catch { /* aborted or stream error — never break the session */ }
@@ -214,6 +217,7 @@ export default {
           if (input?.event?.type === "session.idle") {
             handoffTurnEnd(
               directory, String(sid), "capture", eventTurnDetails(input?.event),
+              record.projectOf(String(sid)) ?? undefined,
             )
           }
         }

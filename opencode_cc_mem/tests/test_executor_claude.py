@@ -1038,6 +1038,25 @@ def test_claude_hold_before_exec_is_not_an_attempt(tmp_path):
     assert _calls(state) == []
 
 
+def test_claude_preserves_outer_start_barrier_without_inner_governance(tmp_path):
+    stream = _jsonl(tmp_path / "unused.jsonl", [_live_event("c7", "07-stream-result.json")])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary, config, role="evaluator", role_cap=1)
+
+    def reject_start(_pid, _pgid):
+        raise RuntimeError("outer admission could not record process start")
+
+    with pytest.raises(WorkerError, match="outer admission could not record process start"):
+        executor_for(context.route, "evaluator", context).run(
+            "evaluate",
+            context.project_dir,
+            tmp_path / "attempt",
+            control=ProcessControl(on_start=reject_start, hold_before_exec=True),
+        )
+
+    assert _calls(state) == []
+
+
 @pytest.mark.parametrize(
     "message",
     (

@@ -34,6 +34,7 @@ globalThis.__MAGNOLIA_TEST_SPAWN = (command, argv, options) => {
 }
 const mod = await import(pluginPath)
 let resumed = false
+let promptHook
 const event = mode === "v2"
   ? {
       id: "evt_terminal", type: "session.execution.succeeded",
@@ -48,14 +49,19 @@ if (mode === "v2") {
       resumed = true
       if (calls.length !== 1) throw new Error("turn-end handoff was not synchronous")
     })() },
-    session: { context: async () => { throw new Error("context awaited before handoff") } },
+    session: {
+      hook: async (_name, callback) => { promptHook = callback },
+      context: async () => { throw new Error("context awaited before handoff") },
+    },
   }
   await mod.default.setup(ctx)
+  await promptHook({ sessionID: "s1" })
   for (let index = 0; index < 20 && !resumed; index += 1) {
     await new Promise((resolve) => setImmediate(resolve))
   }
 } else {
   const hooks = await mod.default.server({ directory })
+  await hooks["chat.message"]({ sessionID: "s1" })
   hooks.event({ event })
   resumed = calls.length === 1
 }
@@ -99,6 +105,37 @@ release()
 for (let index = 0; index < 20 && !resumed; index += 1) await new Promise((r) => setImmediate(r))
 const payload = JSON.parse((await import("node:fs")).readFileSync(calls[0].argv.at(-1), "utf8"))
 process.stdout.write(JSON.stringify({ calls, payload, resumed }))
+"""
+
+CAPTURE_PROJECT_FLIP_DRIVER = r"""
+const [pluginPath, directory] = process.argv.slice(2)
+const fs = await import("node:fs")
+const calls = []
+globalThis.__MAGNOLIA_TEST_SPAWN = (command, argv, options) => {
+  calls.push({ command, argv, detached: options.detached })
+  return { unref: () => {} }
+}
+let promptHook
+let release
+const gate = new Promise((resolve) => { release = resolve })
+const mod = await import(pluginPath)
+const ctx = {
+  location: { directory },
+  session: { hook: async (_name, callback) => { promptHook = callback } },
+  event: { subscribe: () => (async function* () {
+    await gate
+    yield { type: "session.execution.succeeded", durable: { aggregateID: "s1", seq: 25 } }
+  })() },
+}
+await mod.default.setup(ctx)
+await promptHook({ sessionID: "s1" })
+fs.writeFileSync(directory + "/.magnolia/.active-project", "beta\n")
+release()
+for (let index = 0; index < 20 && calls.length === 0; index += 1) {
+  await new Promise((resolve) => setImmediate(resolve))
+}
+const payload = JSON.parse(fs.readFileSync(calls[0].argv.at(-1), "utf8"))
+process.stdout.write(JSON.stringify({ calls, payload }))
 """
 
 ACTION_DRIVER = r"""
@@ -203,6 +240,30 @@ def test_capture_turn_end_spawns_before_reading_session_context(tmp_path):
     assert result["payload"]["operation"] == "capture"
     assert result["payload"]["turn_id"] is None
     assert result["payload"]["durable_seq"] == 25
+
+
+def test_capture_handoff_keeps_first_prompt_project_after_marker_flip(tmp_path):
+    workspace = tmp_path / "project"
+    (workspace / ".magnolia").mkdir(parents=True)
+    (workspace / ".magnolia" / ".active-project").write_text("alpha\n")
+    for name in ("alpha", "beta"):
+        (workspace / "projects" / name / ".magnolia").mkdir(parents=True)
+    driver = tmp_path / "capture-project-flip.mjs"
+    driver.write_text(CAPTURE_PROJECT_FLIP_DRIVER, encoding="utf-8")
+
+    proc = subprocess.run(
+        [NODE, str(driver), CAPTURE_PLUGIN.as_uri(), str(workspace)],
+        env={**os.environ, "MAGNOLIA_PYTHON": "/test/python"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if proc.returncode != 0 and "ERR_UNKNOWN_FILE_EXTENSION" in proc.stderr:
+        pytest.skip("this node cannot strip TypeScript types")
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)["payload"]
+    assert payload["project_dir"].endswith("/projects/alpha")
+    assert payload["store"].endswith("/projects/alpha/.magnolia")
 
 
 def test_action_probe_turn_end_hands_injected_items_to_worker(tmp_path):

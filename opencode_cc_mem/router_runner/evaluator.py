@@ -44,6 +44,7 @@ from campaign_runner.governor import (
     QuotaWaiting,
     _process_start_token,
 )
+from campaign_runner.launch import resolve_python
 from campaign_runner.process import ProcessControl, run_process
 from campaign_runner.roles import load_role
 from campaign_runner.routing import load_setup, resolve_route
@@ -100,6 +101,14 @@ class EvalQuotaWait:
     reason: str
     reset_at: str | None
     hold_id: str | None
+
+
+@dataclass(frozen=True)
+class _ClientCall:
+    """Typed evaluator result retained across the parse boundary."""
+
+    text: str
+    outcome: RunOutcome
 
 
 def confidence_threshold() -> float:
@@ -201,11 +210,11 @@ class GenerativeEvaluator:
         """Restore the project recorded for a durable evaluator action."""
         self.project_dir = Path(project_dir).resolve()
 
-    def available(self) -> bool:
-        if not self._uses_client():
+    def available(self, route=None) -> bool:
+        route = route or resolve_evaluator_route(self.model)
+        if not self._uses_client(route):
             return llm.is_llm_available()
         try:
-            route = resolve_evaluator_route(self.model)
             load_role("evaluator")
             if not self._executable_available(self._binary(route.client)):
                 return False
@@ -224,18 +233,25 @@ class GenerativeEvaluator:
         """Return the durable evaluator route binding without launch side effects."""
         route = resolve_evaluator_route(self.model)
         return {
-            "client": route.client,
+            "client": route.client if self._uses_client(route) else "api",
             "model": route.model,
             "subscription_key": route.subscription_key,
             "role": route.role,
             "project_dir": str(self.project_dir),
         }
 
-    def _uses_client(self) -> bool:
-        model = self.model or ""
-        return model.startswith(
-            ("claude-code/", "codex/", "vibe/", "opencode-go/")
-        )
+    def _uses_client(self, route=None) -> bool:
+        """Return whether the resolved route selected a subscription client."""
+        selected = route or resolve_evaluator_route(self.model)
+        if selected.source == "api-fallback":
+            return False
+        if self.model is not None:
+            return self.model.startswith(
+                ("claude-code/", "codex/", "vibe/", "opencode-go/")
+            )
+        return selected.source == "routes.evaluator" and selected.client in {
+            "claude-code", "codex", "vibe", "opencode",
+        }
 
     def _binary(self, client: str) -> str:
         if client == "opencode":
@@ -261,19 +277,26 @@ class GenerativeEvaluator:
             if route.client == "opencode"
             else load_role_capabilities()
         )
-        environment = dict(os.environ)
+        environment = {**os.environ, "MAGNOLIA_DOORBELL": "0"}
         if route.client != "opencode":
             environment.update({
                 "MAGNOLIA_PROJECT_DIR": str(self.project_dir),
                 "MAGNOLIA_ROOT": str(self.project_dir.parent),
             })
+        invocation_id = uuid.uuid4().hex
+        run_dir = self.project_dir / ".magnolia" / "evaluator-runs" / invocation_id
+        setup = load_setup(root)
+        try:
+            tools_port = int(environment.get("MAGNOLIA_TOOLS_PORT", "8766"))
+        except ValueError:
+            tools_port = 8766
         return ExecContext(
             route=route,
             role="evaluator",
             project_dir=self.project_dir,
-            run_dir=self.project_dir / ".magnolia" / "evaluator-runs",
-            control_dir=self.project_dir / ".magnolia" / "evaluator-control",
-            work_dir=self.project_dir,
+            run_dir=run_dir,
+            control_dir=run_dir / "control",
+            work_dir=run_dir / "work",
             timeout_seconds=90,
             role_cap=1,
             governor_cap=(
@@ -287,10 +310,11 @@ class GenerativeEvaluator:
             installation_root=root,
             workspace_root=self.project_dir.parent,
             project_identity=project_digest,
-            python_executable=os.environ.get("PYTHON", sys.executable),
-            setup={},
+            python_executable=resolve_python(root, environment),
+            tools_port=tools_port,
+            setup=setup,
             required_capabilities=(),
-            invocation_id=uuid.uuid4().hex,
+            invocation_id=invocation_id,
             launch_argv=(binary,),
             environment=environment,
         )
@@ -337,13 +361,16 @@ class GenerativeEvaluator:
         waiter_id: str | None = None,
         availability_checked: bool = False,
     ) -> EvalDecision | EvalQuotaWait | None:
-        if not availability_checked and not self.available():
+        route = resolve_evaluator_route(self.model)
+        if not availability_checked and not self.available(route):
             return None
-        if self._uses_client():
-            outcome = self._call_client(text, context or {}, waiter_id)
+        if self._uses_client(route):
+            outcome = self._call_client(text, context or {}, waiter_id, route=route)
             if isinstance(outcome, EvalQuotaWait):
                 return outcome
-            out = self._extract_object(outcome)
+            if not isinstance(outcome, _ClientCall) or outcome.outcome.kind != "success":
+                return None
+            out = self._extract_object(outcome.text)
         else:
             user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
             out = llm.call_llm_json(
@@ -356,9 +383,11 @@ class GenerativeEvaluator:
         return EVALUATOR_SYSTEM_PROMPT
 
     def _call_client(
-        self, text: str, context: dict, waiter_id: str | None
-    ) -> str | EvalQuotaWait:
-        route, exec_context, executor = self._executor()
+        self, text: str, context: dict, waiter_id: str | None, *, route=None
+    ) -> _ClientCall | EvalQuotaWait:
+        route = route or resolve_evaluator_route(self.model)
+        exec_context = self._execution_context(route)
+        executor = executor_for(route, "evaluator", exec_context)
         waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
         system = self._system_prompt()
         prompt = system + "\n\n" + json.dumps(
@@ -375,46 +404,63 @@ class GenerativeEvaluator:
                     admission.release(outcome=RunOutcome("failure"))
                 else:
                     admission.cancel_before_launch()
-            return ""
+            return _ClientCall("", RunOutcome("failure"))
         outcome = self._client_outcome(result)
         if admission is not None:
             if not admission.governor._was_launched(admission.request.invocation_id):
-                admission.mark_started(
-                    pid=os.getpid(),
-                    pgid=os.getpgid(0),
-                    process_start_token=_process_start_token(os.getpid()),
+                admission.cancel_before_launch()
+                return _ClientCall(
+                    str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
+                    RunOutcome("failure"),
                 )
             admission.release(usage=self._usage(result), outcome=outcome)
         if outcome.kind == "quota":
             waiting = self._pending_admission(route, exec_context, waiter)
             return self._wait_result(waiter, waiting)
-        return str(getattr(result, "final_text", getattr(result, "stdout", "")) or "")
+        return _ClientCall(
+            str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
+            outcome,
+        )
 
     @staticmethod
     def _client_outcome(result) -> RunOutcome:
+        quota = GenerativeEvaluator._terminal_quota_outcome(result)
+        if quota is not None:
+            return quota
         outcome = getattr(result, "outcome", None)
         if isinstance(outcome, RunOutcome):
             return outcome
-        evidence = "\n".join(
-            str(value)
-            for value in (
-                getattr(result, "final_text", ""),
-                getattr(result, "all_text", ""),
-                getattr(result, "stdout", ""),
-                getattr(result, "stderr", ""),
-                getattr(result, "stopped_reason", ""),
-                getattr(result, "errors", ""),
-            )
-            if value
-        ).casefold()
-        if any(marker in evidence for marker in _QUOTA_TEXT):
-            return RunOutcome(
-                "quota",
-                LimitInfo("quota or rate limit", None, "evaluator client output"),
-            )
         return RunOutcome(
             "success" if getattr(result, "returncode", 1) == 0 else "failure"
         )
+
+    @staticmethod
+    def _terminal_quota_outcome(result) -> RunOutcome | None:
+        """Recognize quota only in terminal diagnostics, never answer prose."""
+        diagnostics = [str(getattr(result, "stderr", "") or "")]
+        errors = getattr(result, "errors", ())
+        if isinstance(errors, list):
+            diagnostics.extend(json.dumps(row, sort_keys=True) for row in errors)
+        stdout = str(getattr(result, "stdout", "") or "")
+        for line in stdout.splitlines():
+            try:
+                event = json.loads(line)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(event, dict):
+                continue
+            part = event.get("part") if isinstance(event.get("part"), dict) else {}
+            if event.get("type") in {"error", "turn.failed"} or part.get("type") == "error":
+                diagnostics.append(json.dumps(event, sort_keys=True))
+        evidence = "\n".join(diagnostics).casefold()
+        if any(marker in evidence for marker in _QUOTA_TEXT):
+            return RunOutcome(
+                "quota",
+                LimitInfo(
+                    "quota or rate limit", None, "evaluator client diagnostics",
+                ),
+            )
+        return None
 
     def _admit(self, route, context: ExecContext, waiter: str) -> Admission | QuotaWaiting | None:
         if not self._has_governor():
@@ -470,7 +516,8 @@ class GenerativeEvaluator:
                 lambda pid, pgid: admission.mark_started(pid=pid, pgid=pgid)
                 if admission is not None
                 else None
-            )
+            ),
+            hold_before_exec=admission is not None,
         )
         if isinstance(executor, OpenCodeEvaluatorExecutor):
             if admission is None:
@@ -494,6 +541,7 @@ class GenerativeEvaluator:
             return type("EvaluatorProcessResult", (), {
                 "returncode": process.returncode,
                 "stdout": stdout.read_text(encoding="utf-8", errors="replace"),
+                "stderr": stderr.read_text(encoding="utf-8", errors="replace"),
                 "outcome": process.outcome,
                 "usage": {},
                 "attempts": 1 if process.client_started else 0,

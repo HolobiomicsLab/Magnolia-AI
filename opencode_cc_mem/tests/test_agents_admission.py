@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,10 @@ from campaign_runner.helper_admission import (
     AdmissionRefused,
     admit_letter,
     consume_generation_receipt,
+    run_setup_probe,
     write_generation_receipt,
 )
+from campaign_runner.governor import Governor, Policy
 
 
 def _project(root: Path, name: str, *, lane: bool = False) -> Path:
@@ -41,6 +44,44 @@ def _letter(root: Path, lane: str, sender: str, *, headers: str = "") -> Path:
         encoding="utf-8",
     )
     return letter
+
+
+def test_setup_probe_filters_credentials_and_records_one_turn(tmp_path):
+    binary = tmp_path / "probe"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "test -z \"${ANTHROPIC_API_KEY+x}\" || exit 81\n"
+        "test -z \"${CLAUDE_CONFIG_DIR+x}\" || exit 82\n"
+        "test \"$MAGNOLIA_DOORBELL\" = 0 || exit 83\n"
+        "printf 'probe-ok\\n'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    ledger = tmp_path / "usage.jsonl"
+    governor = Governor(
+        Policy(max_concurrent=1, min_seconds_between_runs=1), ledger_path=ledger
+    )
+
+    result = run_setup_probe(
+        "claude",
+        "haiku",
+        "probe",
+        tmp_path,
+        str(binary),
+        governor=governor,
+        environment={
+            **os.environ,
+            "ANTHROPIC_API_KEY": "must-not-reach-child",
+            "CLAUDE_CONFIG_DIR": "/must/not/reach/child",
+        },
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "probe-ok\n"
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["usage"]["turns"] == 1
+    assert rows[0]["usage"]["source"] == "setup-probe"
 
 
 def test_helper_valid_same_checkout_sender(tmp_path):

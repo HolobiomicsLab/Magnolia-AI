@@ -737,7 +737,10 @@ class ClaudeCodeExecutor:
             on_heartbeat=control.on_heartbeat if control else None,
             observe=observe,
             poll_interval=control.poll_interval if control else 0.05,
-            hold_before_exec=admission is not None,
+            hold_before_exec=(
+                admission is not None
+                or (control.hold_before_exec if control is not None else False)
+            ),
         )
 
     def _outcome(self, process: Any, parsed: ParsedClaudeRun) -> RunOutcome:

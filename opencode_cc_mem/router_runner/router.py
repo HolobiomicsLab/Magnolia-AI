@@ -20,7 +20,7 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -291,7 +291,7 @@ class Router:
     def resume_evaluation(self, waiter_id: str, manual: bool = False) -> RouteReply:
         """Resume one stored evaluator action after observing its exact hold."""
         row = self.engine.store.get("eval_waiters", "waiter_id", waiter_id)
-        if row is None or row["state"] != "pending":
+        if row is None or row["state"] not in {"pending", "running"}:
             return RouteReply("unavailable", detail="evaluation waiter is not pending")
         try:
             persisted = json.loads(row["context"])
@@ -311,9 +311,16 @@ class Router:
         project = binding.get("project")
         if project is not None and project not in self.registry:
             return RouteReply("unavailable", detail="evaluator project registry changed")
-        if self.evaluator is None or not self.evaluator.available():
+        has_checkpointed_decision = bool(row.get("decision_json"))
+        if not has_checkpointed_decision and (
+            self.evaluator is None or not self.evaluator.available()
+        ):
             return RouteReply("unavailable", detail="evaluator route is unavailable")
-        hold = self.evaluator.quota_wait(row["subscription_key"], waiter_id)
+        hold = (
+            None
+            if has_checkpointed_decision
+            else self.evaluator.quota_wait(row["subscription_key"], waiter_id)
+        )
         if hold is not None:
             if row["hold_id"] is not None and hold.hold_id != row["hold_id"]:
                 return RouteReply("unavailable", detail="evaluator quota hold changed")
@@ -335,12 +342,15 @@ class Router:
         if claimed is None:
             return RouteReply("unavailable", detail="evaluation waiter is not pending")
         try:
-            result = self._evaluate_once(
-                claimed["text"],
-                context,
-                waiter_id=waiter_id,
-                availability_checked=True,
-            )
+            if claimed.get("decision_json"):
+                result = EvalDecision(**json.loads(claimed["decision_json"]))
+            else:
+                result = self._evaluate_once(
+                    claimed["text"],
+                    context,
+                    waiter_id=waiter_id,
+                    availability_checked=True,
+                )
         except Exception:
             self.engine.store.set_eval_waiter_state(
                 waiter_id,
@@ -364,17 +374,47 @@ class Router:
                 waiter_id, "unavailable", datetime.now(timezone.utc).isoformat()
             )
             return RouteReply("unavailable", detail="evaluator produced no decision")
-        self.engine.record_eval_decision(claimed["text"], result)
+        decision_json = json.dumps(asdict(result), sort_keys=True)
+        self.engine.record_waiter_eval_decision(
+            waiter_id,
+            claimed["text"],
+            result,
+            decision_json,
+            datetime.now(timezone.utc).isoformat(),
+        )
         flags = ["untrusted_text"] if INJECTION.search(claimed["text"]) else []
+        try:
+            reply = self._apply_eval(
+                result, claimed["text"], flags, idempotency_key=waiter_id
+            )
+        except Exception:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=claimed["hold_id"],
+                reset_at=claimed["reset_at"],
+            )
+            return RouteReply(
+                "unavailable", detail="evaluator action failed; waiter remains pending"
+            )
         self.engine.store.set_eval_waiter_state(
             waiter_id,
             "completed",
             datetime.now(timezone.utc).isoformat(),
             clear_input=True,
+            reply_json=json.dumps(asdict(reply), sort_keys=True),
         )
-        return self._apply_eval(result, claimed["text"], flags)
+        return reply
 
-    def _apply_eval(self, decision: EvalDecision, text: str, flags: list[str]) -> RouteReply:
+    def _apply_eval(
+        self,
+        decision: EvalDecision,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         if decision.confidence < confidence_threshold():
             return RouteReply(
                 "clarify",
@@ -385,6 +425,20 @@ class Router:
         if decision.action == "stop":
             if decision.work_item_id:
                 try:
+                    existing = self.engine.store.get(
+                        "work_items", "work_item_id", decision.work_item_id
+                    )
+                    if (
+                        idempotency_key is not None
+                        and existing is not None
+                        and existing["state"] == WorkItemState.STOPPED
+                    ):
+                        return RouteReply(
+                            "stopped",
+                            work_item_id=decision.work_item_id,
+                            detail=f"{decision.work_item_id} stopped by eval",
+                            flags=flags,
+                        )
                     self.engine.stop(decision.work_item_id, by=operator())
                     return RouteReply("stopped", work_item_id=decision.work_item_id,
                                       detail=f"{decision.work_item_id} stopped by eval", flags=flags)
@@ -395,12 +449,22 @@ class Router:
         if decision.action == "ignore":
             return RouteReply("ignored", detail=f"eval ignored: {decision.reason}", flags=flags)
         if decision.action == "attach" and decision.work_item_id:
-            return self._follow_up(decision.work_item_id, text, flags)
+            return self._follow_up(
+                decision.work_item_id,
+                text,
+                flags,
+                idempotency_key=idempotency_key,
+            )
         if not decision.project or decision.project not in self.registry:
             return RouteReply("clarify",
                               detail=f"eval proposed unknown project {decision.project}: not allowed",
                               flags=flags)
-        return self._handoff(decision.project, text, flags + ["eval"])
+        return self._handoff(
+            decision.project,
+            text,
+            flags + ["eval"],
+            idempotency_key=idempotency_key,
+        )
 
     def _explicit_project(self, text: str) -> str | None:
         m = AT_PROJECT.search(text)
@@ -414,7 +478,14 @@ class Router:
             return m.group(1) if m.group(1) in self.registry else "__unknown__"
         return None
 
-    def _handoff(self, project: str, text: str, flags: list[str]) -> RouteReply:
+    def _handoff(
+        self,
+        project: str,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         if project not in self.registry:
             return RouteReply("rejected", detail=f"project not allowed: {project}", flags=flags)
         lane_inbox = self.registry[project].get("inbox")
@@ -432,14 +503,37 @@ class Router:
         try:
             Path(lane_inbox).mkdir(parents=True, exist_ok=True)
             from .models import new_id
-            path = Path(lane_inbox) / f"{new_id('route')}.task.md"
-            path.write_text(letter, encoding="utf-8")
+            filename = (
+                "route-eval-"
+                + hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]
+                + ".task.md"
+                if idempotency_key
+                else f"{new_id('route')}.task.md"
+            )
+            path = Path(lane_inbox) / filename
+            if path.exists():
+                if path.read_text(encoding="utf-8") != letter:
+                    return RouteReply(
+                        "rejected",
+                        project=project,
+                        detail="handoff idempotency key collision",
+                        flags=flags,
+                    )
+            else:
+                path.write_text(letter, encoding="utf-8")
             self._last_project = project
             return RouteReply("handoff", project=project, detail=str(path), flags=flags)
         except OSError as exc:
             return RouteReply("rejected", project=project, detail=f"handoff failed: {exc}", flags=flags)
 
-    def _follow_up(self, work_item_id: str, text: str, flags: list[str]) -> RouteReply:
+    def _follow_up(
+        self,
+        work_item_id: str,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         try:
             wi = self.engine.store.get("work_items", "work_item_id", work_item_id)
         except Exception:
@@ -451,11 +545,15 @@ class Router:
             return RouteReply("rejected", work_item_id=work_item_id,
                               detail="work item is stopped; no automatic resume", flags=flags)
         if wi["state"] in (WorkItemState.COMPLETED, WorkItemState.FAILED):
-            result = self.engine.follow_up(work_item_id, operator(), text)
+            result = self.engine.follow_up(
+                work_item_id, operator(), text, idempotency_key=idempotency_key
+            )
             return RouteReply("work_item", project=wi["project"],
                               work_item_id=result.get("work_item_id"),
                               detail=f"new linked work item after {wi['state']}", flags=flags)
-        result = self.engine.follow_up(work_item_id, operator(), text)
+        result = self.engine.follow_up(
+            work_item_id, operator(), text, idempotency_key=idempotency_key
+        )
         return RouteReply("post", project=wi["project"], work_item_id=work_item_id,
                           detail=f"context post to {result.get('kind')}", flags=flags)
 
