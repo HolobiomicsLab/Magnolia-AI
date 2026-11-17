@@ -139,19 +139,27 @@ def test_decline_followups_command_uses_runner_state_api(tmp_path, capsys, monke
     store.transition("running", "start")
     store.transition("waiting_human", "review followups need a decision")
     calls = []
+    runtime = []
 
     class Runner:
         def decline_followups(self, approver, reason, minutes=0):
             calls.append((approver, reason, minutes))
             return store.transition("completed", "declined followups")
 
-    monkeypatch.setattr("campaign_runner.cli._build_runner", lambda _args: Runner())
+    def build_runner(args):
+        runtime.append((args.distill_on_complete, args.db, args.opencode_bin))
+        return Runner()
+
+    monkeypatch.setattr("campaign_runner.cli._build_runner", build_runner)
 
     assert main([
         "decline-followups", str(run_dir), "--approver", "tao",
         "--reason", "stage is sufficient", "--minutes", "2",
+        "--distill-on-complete", "--db", "/tmp/custom.db",
+        "--opencode-bin", "/tmp/opencode",
     ]) == 0
     assert calls == [("tao", "stage is sufficient", 2.0)]
+    assert runtime == [(True, "/tmp/custom.db", "/tmp/opencode")]
     assert '"state": "completed"' in capsys.readouterr().out
 
 

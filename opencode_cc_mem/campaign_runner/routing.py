@@ -142,6 +142,7 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
             (get("model"), "model"),
             (os.environ.get("MAGNOLIA_EVAL_MODEL"), "MAGNOLIA_EVAL_MODEL"),
             (routes.get("evaluator"), "routes.evaluator"),
+            (get("api_fallback_model"), "api-fallback"),
         )
     else:
         explicit_model = get("model") or get("model_flag")
@@ -170,10 +171,8 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
         return _route(None, role, global_source, client, required=False)
     if role == "helper" and selected is None and global_model is None:
         selected, source = "deepseek/deepseek-flash", "legacy-fallback"
-    if selected is None:
+    if selected is None and role != "evaluator":
         selected, source = global_model, global_source
-    if role == "evaluator" and selected is None:
-        selected, source = get("api_fallback_model"), "api-fallback"
     return _route(
         selected,
         role,

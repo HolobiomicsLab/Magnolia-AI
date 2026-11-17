@@ -1089,6 +1089,18 @@ def test_forbidden_path_value_is_not_matched_as_sibling_prefix(tmp_path):
     assert str(shared.resolve()) in _artifact_text(launch)
 
 
+def test_short_provider_placeholder_does_not_match_inside_launch_text(tmp_path):
+    context = _context(
+        tmp_path,
+        launch_argv=("/opt/contest/bin/client",),
+        environment={"OLLAMA_API_KEY": "test"},
+    )
+
+    launch = prepare_launch(context)
+
+    assert "OLLAMA_API_KEY" not in launch.env
+
+
 @pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
 def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter):
     secret = "sk-ant-SECRET_123"
@@ -1108,7 +1120,7 @@ def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter
         prepare_launch(context)
 
 
-def test_redirecting_secret_name_is_refused_even_inside_longer_value(tmp_path):
+def test_provider_value_prefix_inside_longer_value_is_not_refused(tmp_path):
     secret = "sk-ant-SECRET_123"
     context = _context(
         tmp_path,
@@ -1122,8 +1134,9 @@ def test_redirecting_secret_name_is_refused_even_inside_longer_value(tmp_path):
         },
     )
 
-    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
-        prepare_launch(context)
+    launch = prepare_launch(context)
+
+    assert "ANTHROPIC_API_KEY" not in launch.env
 
 
 def test_noninteractive_mention_writes_no_letter(tmp_path):

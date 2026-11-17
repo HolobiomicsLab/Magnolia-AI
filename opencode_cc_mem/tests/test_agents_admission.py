@@ -16,6 +16,7 @@ from campaign_runner.helper_admission import (
     write_generation_receipt,
 )
 from campaign_runner.governor import Governor, Policy
+from campaign_runner.process import ProcessStartError
 
 
 def _project(root: Path, name: str, *, lane: bool = False) -> Path:
@@ -84,6 +85,50 @@ def test_setup_probe_filters_credentials_and_records_one_turn(tmp_path):
     assert len(rows) == 1
     assert rows[0]["usage"]["turns"] == 1
     assert rows[0]["usage"]["source"] == "setup-probe"
+
+
+def test_opencode_setup_probe_keeps_provider_key(tmp_path):
+    binary = tmp_path / "opencode-probe"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "test \"$OPENROUTER_API_KEY\" = provider-key || exit 85\n"
+        "printf 'probe-ok\\n'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+
+    result = run_setup_probe(
+        "opencode",
+        "openrouter/deepseek/deepseek-v4.1-flash",
+        "probe",
+        tmp_path,
+        str(binary),
+        governor=Governor(Policy(max_concurrent=1), ledger_path=tmp_path / "usage.jsonl"),
+        environment={**os.environ, "OPENROUTER_API_KEY": "provider-key"},
+    )
+
+    assert result.returncode == 0
+
+
+def test_setup_probe_spawn_failure_releases_admission(tmp_path, monkeypatch):
+    governor = Governor(
+        Policy(max_concurrent=1), ledger_path=tmp_path / "usage.jsonl"
+    )
+
+    def fail_start(*args, **kwargs):
+        control = args[-1]
+        control.on_start(1234, 1234)
+        raise ProcessStartError(5, "spawn failed")
+
+    monkeypatch.setattr("campaign_runner.helper_admission.run_process", fail_start)
+    with pytest.raises(ProcessStartError):
+        run_setup_probe(
+            "claude", "haiku", "probe", tmp_path, "/bin/false",
+            governor=governor, environment=dict(os.environ),
+        )
+
+    state = json.loads(governor.state_path.read_text())
+    assert state["reservations"] == {}
 
 
 def test_helper_valid_same_checkout_sender(tmp_path):

@@ -579,12 +579,30 @@ def _write_progress(
     rec_path.write_text(json.dumps(payload) + "\n")
 
 
-def _retry_blocked(rec: dict | None) -> bool:
+def _retry_blocked(
+    rec: dict | None, fingerprint: dict[str, int] | None = None,
+) -> bool:
     """Return whether persisted extraction backoff blocks this sweep."""
     from compchem_memory.extraction_retry import retry_is_due
 
     retry = rec.get("retry") if isinstance(rec, dict) else None
+    if isinstance(retry, dict) and retry.get("fingerprint") != fingerprint:
+        return False
     return isinstance(retry, dict) and not retry_is_due(retry)
+
+
+def _clear_failed_retry(store: Path, rec_path: Path, rec: dict | None) -> dict | None:
+    """Remove one retry series without changing transcript progress."""
+    if not rec or "retry" not in rec:
+        return rec
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            return _read_progress(rec_path)
+        updated = dict(rec)
+        updated.pop("retry", None)
+        updated["updated"] = datetime.now(timezone.utc).isoformat()
+        rec_path.write_text(json.dumps(updated) + "\n")
+        return updated
 
 
 def _record_failed_retry(
@@ -598,7 +616,10 @@ def _record_failed_retry(
     """Persist one failed attempt if this session's progress is unchanged."""
     from compchem_memory.extraction_retry import next_retry
 
-    retry = next_retry(rec.get("retry") if rec else None)
+    prior_retry = rec.get("retry") if rec else None
+    if isinstance(prior_retry, dict) and prior_retry.get("fingerprint") != fingerprint:
+        prior_retry = None
+    retry = next_retry(prior_retry, fingerprint=fingerprint)
     with project_writer_lease(store):
         if _read_progress(rec_path) != rec:
             return None
@@ -645,7 +666,7 @@ def _session_ref(store_dir: str, session: Any) -> Any:
     if isinstance(session, SessionRef):
         return session
     for ref in list_sessions(store_dir):
-        if ref.key == session:
+        if ref.key == session or ref.session_id == session:
             return ref
     return SessionRef("opencode", str(session), str(session), None, None, True)
 
@@ -657,6 +678,7 @@ def distill_session_transcript(
     commit: bool,
     exporter: Callable[[str], Optional[dict]] | None = None,
     distiller: Callable[[str], list[dict[str, Any]]] | None = None,
+    force_retry: bool = False,
 ) -> dict[str, Any] | None:
     """Distil ONE session's new (post-cursor) dialogue, for the manual tool.
 
@@ -686,7 +708,9 @@ def distill_session_transcript(
     )
 
     fingerprint = hook_transcript_fingerprint(store, ref)
-    if commit and _retry_blocked(rec):
+    if commit and force_retry:
+        rec = _clear_failed_retry(store, rec_path, rec)
+    if commit and _retry_blocked(rec, fingerprint):
         retry = rec.get("retry", {})
         return {
             "status": "skipped",
@@ -724,7 +748,9 @@ def distill_session_transcript(
         )
         distill_log.push_extraction_failure_notice(str(store.parent))
         if retry and retry["exhausted"]:
-            distill_log.push_extraction_retry_exhausted_notice(str(store.parent))
+            distill_log.push_extraction_retry_exhausted_notice(
+                str(store.parent), ref.key
+            )
         return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
     _attach_transcript_origins(kept, new_msgs, ref)
@@ -826,7 +852,7 @@ def ingest_opencode_sessions(
         is_active = ref.harness == "opencode" and ref.session_id == active_sid
         can_seal = ref.sealable and not is_active
         fingerprint = hook_transcript_fingerprint(store, ref)
-        if _retry_blocked(rec):
+        if _retry_blocked(rec, fingerprint):
             continue
         if fingerprint_matches(rec, fingerprint):
             continue
@@ -877,7 +903,9 @@ def ingest_opencode_sessions(
             )
             distill_log.push_extraction_failure_notice(str(store.parent))
             if retry and retry["exhausted"]:
-                distill_log.push_extraction_retry_exhausted_notice(str(store.parent))
+                distill_log.push_extraction_retry_exhausted_notice(
+                    str(store.parent), ref.key
+                )
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]

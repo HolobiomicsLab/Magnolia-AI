@@ -388,40 +388,52 @@ class GenerativeEvaluator:
     ) -> _ClientCall | EvalQuotaWait:
         route = route or resolve_evaluator_route(self.model)
         exec_context = self._execution_context(route)
-        executor = executor_for(route, "evaluator", exec_context)
-        waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
-        system = "" if route.client == "opencode" else self._system_prompt()
-        prompt = system + "\n\n" + json.dumps(
-            {"message": text, "context": context}, ensure_ascii=False
-        )
-        admission = self._admit(route, exec_context, waiter)
-        if isinstance(admission, QuotaWaiting):
-            return self._persist_wait(route, exec_context, waiter, admission)
+        executor = None
         try:
-            result = self._run_executor(executor, exec_context, prompt, waiter, admission)
-        except Exception:
-            if admission is not None:
-                if admission.governor._was_launched(admission.request.invocation_id):
-                    admission.release(outcome=RunOutcome("failure"))
-                else:
-                    admission.cancel_before_launch()
-            return _ClientCall("", RunOutcome("failure"))
-        outcome = self._client_outcome(result)
-        if admission is not None:
-            if not admission.governor._was_launched(admission.request.invocation_id):
-                admission.cancel_before_launch()
-                return _ClientCall(
-                    str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
-                    RunOutcome("failure"),
+            executor = executor_for(route, "evaluator", exec_context)
+            waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
+            system = "" if route.client == "opencode" else self._system_prompt()
+            prompt = system + "\n\n" + json.dumps(
+                {"message": text, "context": context}, ensure_ascii=False
+            )
+            admission = self._admit(route, exec_context, waiter)
+            if isinstance(admission, QuotaWaiting):
+                return self._persist_wait(route, exec_context, waiter, admission)
+            try:
+                result = self._run_executor(
+                    executor, exec_context, prompt, waiter, admission
                 )
-            admission.release(usage=self._usage(result), outcome=outcome)
-        if outcome.kind == "quota":
-            waiting = self._pending_admission(route, exec_context, waiter)
-            return self._wait_result(waiter, waiting)
-        return _ClientCall(
-            str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
-            outcome,
-        )
+            except Exception:
+                if admission is not None:
+                    if admission.governor._was_launched(admission.request.invocation_id):
+                        admission.release(outcome=RunOutcome("failure"))
+                    else:
+                        admission.cancel_before_launch()
+                return _ClientCall("", RunOutcome("failure"))
+            outcome = self._client_outcome(result)
+            if admission is not None:
+                if not admission.governor._was_launched(admission.request.invocation_id):
+                    admission.cancel_before_launch()
+                    return _ClientCall(
+                        str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
+                        RunOutcome("failure"),
+                    )
+                admission.release(usage=self._usage(result), outcome=outcome)
+            if outcome.kind == "quota":
+                waiting = self._pending_admission(route, exec_context, waiter)
+                return self._wait_result(waiter, waiting)
+            return _ClientCall(
+                str(getattr(result, "final_text", getattr(result, "stdout", "")) or ""),
+                outcome,
+            )
+        finally:
+            close = getattr(executor, "close", None)
+            try:
+                if callable(close):
+                    close()
+            finally:
+                if exec_context.run_dir is not None:
+                    shutil.rmtree(exec_context.run_dir, ignore_errors=True)
 
     @staticmethod
     def _client_outcome(result) -> RunOutcome:

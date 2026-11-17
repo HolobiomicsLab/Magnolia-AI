@@ -66,6 +66,7 @@ Usage: magnolia [--harness opencode|claude|codex|vibe] [--profile NAME] [setup] 
        magnolia usage [resume <subscription-key>]
        magnolia memory set <model> [--provider P] [--fallback-provider P --fallback-model M]
        magnolia memory status
+       magnolia memory retry <session>
 
 Launch opencode for the given Magnolia project. If the project does not
 exist, prompts to scaffold it under $PROJECTS_DIR/.
@@ -733,6 +734,28 @@ print("rendered opencode.json: memory enabled =", m.get("enabled"),
     fi
 }
 
+cmd_memory_retry() {
+    local session="${1:-}" active project src
+    if [ -z "$session" ] || [ "$#" -ne 1 ]; then
+        echo "usage: magnolia memory retry <session>" >&2
+        exit 1
+    fi
+    if [ ! -s "$ACTIVE_PROJECT_FILE" ]; then
+        echo "error: no active project; launch a project before retrying memory" >&2
+        exit 1
+    fi
+    active="$(cat "$ACTIVE_PROJECT_FILE")"
+    project="$PROJECTS_DIR/$active"
+    if [ ! -d "$project" ]; then
+        echo "error: active project does not exist: $active" >&2
+        exit 1
+    fi
+    src="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
+    PYTHONPATH="$OPENCODE_DIR:$src${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m compchem_memory.retry_cli \
+        --project-dir "$project" "$session"
+}
+
 # Interactive two-step setup (step 2 can also be done later via the agent
 # + `magnolia memory set` — see rules/memory-setup.md).
 setup_run() {
@@ -881,8 +904,9 @@ if [ "${1:-}" = "memory" ]; then
     case "${1:-}" in
         set) shift; cmd_memory_set "$@"; exit 0 ;;
         status) cmd_memory_status; exit 0 ;;
+        retry) shift; cmd_memory_retry "$@"; exit $? ;;
         *)
-            echo "usage: magnolia memory set <model> [--provider P]   |   magnolia memory status" >&2
+            echo "usage: magnolia memory set <model> [--provider P] | magnolia memory status | magnolia memory retry <session>" >&2
             exit 1
             ;;
     esac

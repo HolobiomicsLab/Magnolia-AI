@@ -230,7 +230,12 @@ class UsageRecord:
             "uncached_input_tokens": _number(tokens.get("uncached_input_tokens")),
             "output_tokens": _number(tokens.get("output", tokens.get("output_tokens"))),
             "reasoning_tokens": _number(tokens.get("reasoning", tokens.get("reasoning_tokens"))),
-            "cached_tokens": _number(cache.get("read", tokens.get("cached_tokens"))),
+            "cached_tokens": _number(
+                cache.get(
+                    "read",
+                    tokens.get("cached_tokens", tokens.get("cache_read_tokens")),
+                )
+            ),
             "cache_write_tokens": _number(cache.get("write", tokens.get("cache_write_tokens"))),
             "cost": _number(raw.get("cost", raw.get("cost_usd"))),
         }

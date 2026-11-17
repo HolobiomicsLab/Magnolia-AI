@@ -85,7 +85,36 @@ def test_helper_evaluator_and_interactive_precedence(monkeypatch):
     assert (unprefixed.client, unprefixed.model) == ("opencode", "opencode-go/glm-5.3")
 
 
-@pytest.mark.parametrize("role", ["worker", "reviewer", "helper", "evaluator"])
+def test_evaluator_main_model_never_overrides_api_fallback(monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)
+
+    route = evaluator_module.resolve_evaluator_route(setup={
+        "main_model": "opencode-go/glm-5.3",
+        "api_fallback_model": "openrouter/deepseek/deepseek-v4.1-flash",
+    })
+
+    assert route.source == "api-fallback"
+    assert route.model == "openrouter/deepseek/deepseek-v4.1-flash"
+    assert evaluator_module.GenerativeEvaluator()._uses_client(route) is False
+
+    with pytest.raises(RouteError, match="evaluator"):
+        resolve_route("evaluator", {"main_model": "opencode-go/glm-5.3"})
+
+
+def test_explicit_evaluator_route_is_used_and_reported(monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)
+
+    route = evaluator_module.resolve_evaluator_route(setup={
+        "main_model": "opencode-go/glm-5.3",
+        "routes": {"evaluator": "claude-code/claude-haiku-5-5"},
+    })
+
+    assert (route.client, route.model, route.source) == (
+        "claude-code", "claude-haiku-5-5", "routes.evaluator",
+    )
+
+
+@pytest.mark.parametrize("role", ["worker", "reviewer", "helper"])
 def test_global_native_harness_is_retained_for_noninteractive_roles(monkeypatch, role):
     monkeypatch.delenv("MAGNOLIA_AGENTS_MODEL", raising=False)
     monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)

@@ -775,7 +775,7 @@ class CampaignRunner:
             "session_ids": sorted(set(legacy_session_ids)),
             "unavailable": unavailable,
         }
-        with self.store.lock():
+        with self.store.distill_queue_lock():
             try:
                 queued = [
                     json.loads(line)
@@ -1197,14 +1197,27 @@ class CampaignRunner:
             executor = self.config.worker_factory(
                 model, timeout, resume_from, resume_artifact
             )
-            result = executor.run(
-                prompt,
-                cwd=self.store.run_dir,
-                attempt_dir=attempt_dir,
-                stem="worker",
-                resume_session=resume_session,
-                control=control,
-            )
+            run_error: BaseException | None = None
+            try:
+                result = executor.run(
+                    prompt,
+                    cwd=self.store.run_dir,
+                    attempt_dir=attempt_dir,
+                    stem="worker",
+                    resume_session=resume_session,
+                    control=control,
+                )
+            except BaseException as exc:
+                run_error = exc
+                raise
+            finally:
+                close = getattr(executor, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except BaseException:
+                        if run_error is None:
+                            raise
         except Exception as exc:
             return self._fail_before_validation(stage, attempt, f"worker failed: {exc}")
         lease.update_session(result.session_id)
