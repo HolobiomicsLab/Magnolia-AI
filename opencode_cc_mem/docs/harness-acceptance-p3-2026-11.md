@@ -1,6 +1,7 @@
 # Plan 3 harness acceptance draft — 17 November 2026
 
-This is the offline acceptance record at `c38d1fa`. It is deliberately not a
+This is the offline acceptance record at `912aec5` (first drafted at
+`c38d1fa`). It is deliberately not a
 phase-release decision. `observed` means a tracked, sanitised live artifact
 exists; `stub-only` means only offline or synthetic proof exists; `refused`
 means the production capability gate rejects the role; and `pending` means a
@@ -20,8 +21,8 @@ credential, private prompt, home path or scientific secret is published here.
 | claude-code | reviewer | pending | opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md<br>opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
 | claude-code | helper | pending | opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md<br>opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
 | claude-code | evaluator | pending | opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md<br>opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
-| codex | worker | observed | opencode_cc_mem/docs/evidence/codex/gate4/README.md<br>opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json |
-| codex | reviewer | observed | opencode_cc_mem/docs/evidence/codex/gate4/README.md<br>opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json |
+| codex | worker | pending | opencode_cc_mem/docs/evidence/codex/gate4/README.md<br>opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json |
+| codex | reviewer | pending | opencode_cc_mem/docs/evidence/codex/gate4/README.md<br>opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json |
 | codex | helper | refused | opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md<br>opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
 | codex | evaluator | refused | opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md<br>opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
 | vibe | worker | pending | opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md<br>opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md |
@@ -32,8 +33,9 @@ credential, private prompt, home path or scientific secret is published here.
 
 Claude Code 2.1.325 previously passed worker, reviewer, helper and evaluator
 gates, and the final-launch re-run covered worker/helper/evaluator. Task 14 then
-changed the bound `hook_source` digest from `37e00cb7…` to `0cb4cea4…` while
-preserving the gate rows. The earlier behavior remains historical observation,
+changed the bound `hook_source` digest from `37e00cb7…` to `0cb4cea4…`, and
+fix B (server-side memory allowlist, writer lease) moved it to `927d5975…`,
+while preserving the gate rows. The earlier behavior remains historical observation,
 but all four current identities are marked **re-observation pending** here.
 
 Codex CLI 0.169.0 worker and reviewer were observed at gate 4 with model
@@ -47,7 +49,12 @@ wider than the role allowlist. `write_stdin`, MCP-resource and
 memory tools. All exercised inner calls were hook-denied, while `write_stdin`
 is unhooked but has no reachable session because `exec_command` is denied.
 Acceptance therefore rests on the required deny-unknown hook, not catalog
-removal. Codex helper/evaluator were not re-run on 0.169.0 and remain refused.
+removal. Fix B then trimmed the worker memory catalog to the role allowlist and
+added token-state denials, which changed the worker `mcp`, `native_files` and
+`policy` digests, the reviewer `policy` digest and both configuration
+identities. Gate 4 is therefore historical observation of the pre-fix-B
+identity, and both roles are **re-observation pending** here. Codex
+helper/evaluator were not re-run on 0.169.0 and remain refused.
 
 Vibe 3.1.2 has earlier adapter observations, including a paid fallback to
 Mistral Medium 3.5 when telemetry was disabled. No current Plan 3 role has a
@@ -59,10 +66,10 @@ pending and production-gated.
 
 | Proof row | Offline status and artifact | Live status and limitation |
 | --- | --- | --- |
-| Client/version/role identity | **stub-only** — capability validation and immutable bindings in `tests/test_executor_capabilities.py` | **observed** for Codex worker/reviewer; **pending** for current Claude identities and all Vibe roles; **refused** for Codex helper/evaluator |
-| Worker usefulness and boundary | **stub-only** — role-policy, launch and read-server suites | **observed** for Codex XW; Claude historical observation is **pending** re-observation; Vibe is **pending** |
-| Reviewer independence and boundary | **stub-only** — family selection/rejection and no-edit tests | **observed** for Codex XR; current Claude is **pending**; OpenCode/Vibe campaigns are **pending** |
-| Rules/boot/hook delivery | **stub-only** — renderer parity and recorded fixtures | Claude has historical observation but current binding is **pending**; Codex XW/XR is **observed**; OpenCode/Vibe are **pending** |
+| Client/version/role identity | **stub-only** — capability validation and immutable bindings in `tests/test_executor_capabilities.py` | Codex worker/reviewer observed at gate 4 on the pre-fix-B identity, current identity **pending**; **pending** for current Claude identities and all Vibe roles; **refused** for Codex helper/evaluator |
+| Worker usefulness and boundary | **stub-only** — role-policy, launch and read-server suites | Codex XW observed at gate 4 (pre-fix-B), current **pending**; Claude historical observation is **pending** re-observation; Vibe is **pending** |
+| Reviewer independence and boundary | **stub-only** — family selection/rejection and no-edit tests | Codex XR observed at gate 4 (pre-fix-B), current **pending**; current Claude is **pending**; OpenCode/Vibe campaigns are **pending** |
+| Rules/boot/hook delivery | **stub-only** — renderer parity and recorded fixtures | Claude has historical observation but current binding is **pending**; Codex XW/XR observed at gate 4 (pre-fix-B), current **pending**; OpenCode/Vibe are **pending** |
 | Continuity and memory | **stub-only** — harness-qualified transcript, origin and drain-once tests | No complete mixed-client acceptance campaign exists: **pending**. Vibe D3 is also **pending** |
 | Usage/governor | **stub-only** — admission, nullable counters, resume deltas and `magnolia usage` tests | Codex gate 4 and historical Claude runs have individual receipts, but shared day/week campaign proof is **pending** |
 | Quota for all four caller kinds | **stub-only** — 56 synthetic stream cases in `tests/test_executor_acceptance_matrix.py`; synthetic labels are retained | Real account quota/reset evidence is **pending** for every client and is never promoted from synthetic data |
@@ -93,13 +100,15 @@ invocations and **zero** memory/critic API calls.
 - **D1 implemented:** defaults are 2 concurrent, 50 physical invocations/day,
   60 turns/invocation and 30 seconds between starts, shared per subscription
   key across projects for one OS user. Fifty is a ceiling, not a target.
-- **D2 accepted for Codex worker/reviewer only:** gate 4 supplies the observed
-  full-guarantee evidence, with the catalog residual above. No reduced-guarantee
+- **D2 accepted for Codex worker/reviewer only:** gate 4 supplied the observed
+  full-guarantee evidence on the pre-fix-B identity, with the catalog residual
+  above; the current identity needs re-observation. No reduced-guarantee
   exception was used. Codex helper/evaluator remain refused.
 - **D3 implemented in code but not accepted live for Vibe:** the project-bound
-  loopback HTTP service exists, but the TM-5 same-user role denial, complete
-  server allowlist/writer-safety acceptance and authenticated Vibe run remain
-  pending. Vibe memory stays disabled for acceptance purposes.
+  loopback HTTP service exists, with the server-side tool allowlist (stdio,
+  HTTP, catalog and hook in parity), the project writer lease and the
+  token-state denial for Claude, Codex and Vibe roles covered by tests. The
+  live read-denial probe and an authenticated Vibe run remain pending. Vibe memory stays disabled for acceptance purposes.
 - **D4 approved but not enabled by evidence:** guarded Vibe worker edits are
   permitted by design only after the complete safety gate; that gate is pending.
 
@@ -125,12 +134,14 @@ condition. This task changes no behavior code or OpenCode plugin.
 - “At most one restart” means one fresh start after one failed reuse check per
   acquire, with no respawn loop. A health-probe retry is not a process restart.
 - A token file at `0600` is not same-user role isolation. The OpenCode deny
-  proposal above is not applied; Vibe role-denial proof remains pending.
+  proposal above is not applied; the Claude, Codex and Vibe roles carry the
+  deny in code and tests, and the live Vibe read-denial probe remains pending.
 - Explicit OpenRouter routes fail visibly; they must not silently switch to a
   direct key. A separately configured fallback or visible heuristic/disabled
   degradation needs its own decision and test.
-- “OpenRouter is the default” remains too broad until setup explicitly writes
-  the provider/model for a new configuration. Existing direct DeepSeek, Kimi
+- New setups now write `memory_provider=openrouter` with
+  `deepseek/deepseek-v4.1-flash` when `OPENROUTER_API_KEY` is available, so
+  “OpenRouter is the default” holds for new configurations only. Existing direct DeepSeek, Kimi
   and Anthropic configurations are never silently migrated.
 
 ## OpenRouter privacy and direct-cost comparison
