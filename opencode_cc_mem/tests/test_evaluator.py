@@ -6,13 +6,20 @@ Run from opencode_cc_mem/:
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from router_runner import agentd
-from router_runner.evaluator import EvalDecision, GenerativeEvaluator, JevEvaluator, make_evaluator
+from router_runner.evaluator import (
+    EVALUATOR_SYSTEM_PROMPT,
+    EvalDecision,
+    GenerativeEvaluator,
+    JevEvaluator,
+    make_evaluator,
+)
 from router_runner.router import Router
 
 
@@ -205,6 +212,53 @@ def test_go_generative_path_returns_none_on_bad_json(monkeypatch):
                         lambda *a, **k: Out())
     ev = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash")
     assert ev.evaluate("dock", {}) is None
+
+
+def test_go_generative_path_receives_system_prompt_and_closed_stdin(monkeypatch):
+    seen = {}
+
+    class Out:
+        returncode = 0
+        stdout = '{"action":"ignore","confidence":0.9,"reason":"x"}'
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["stdin"] = kwargs.get("stdin")
+        return Out()
+
+    monkeypatch.setattr("router_runner.evaluator.subprocess.run", fake_run)
+    decision = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {})
+
+    assert decision is not None
+    assert EVALUATOR_SYSTEM_PROMPT in seen["cmd"][-1]
+    assert seen["stdin"] is subprocess.DEVNULL
+
+
+def test_generic_generative_path_receives_shared_system_prompt(monkeypatch):
+    seen = {}
+
+    monkeypatch.setattr("router_runner.evaluator.llm.is_llm_available", lambda: True)
+
+    def fake_call(system, user, **kwargs):
+        seen["system"] = system
+        return {"action": "ignore", "confidence": 0.9, "reason": "x"}
+
+    monkeypatch.setattr("router_runner.evaluator.llm.call_llm_json", fake_call)
+    decision = GenerativeEvaluator("openai/gpt-test").evaluate("dock", {})
+
+    assert decision is not None
+    assert seen["system"] == EVALUATOR_SYSTEM_PROMPT
+
+
+def test_go_generative_path_rejects_invalid_action(monkeypatch):
+    class Out:
+        returncode = 0
+        stdout = '{"action":"launch","confidence":0.9,"reason":"x"}'
+        stderr = ""
+
+    monkeypatch.setattr("router_runner.evaluator.subprocess.run", lambda *a, **k: Out())
+    assert GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {}) is None
 
 
 def _ingest(tmp_path):

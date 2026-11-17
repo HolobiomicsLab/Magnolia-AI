@@ -38,6 +38,15 @@ llm = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(llm)
 
 ACTIONS = {"accept", "attach", "stop", "ignore"}
+EVALUATOR_SYSTEM_PROMPT = (
+    "You are an admission evaluator. Given a user message and optional "
+    "context, return ONLY a JSON object with keys: action "
+    "(accept|attach|stop|ignore), project (string or null), work_item_id "
+    "(string or null), confidence (0..1), reason (short). "
+    "accept means create/route new work to the named project; attach "
+    "means follow up an existing Work Item; stop means stop it; ignore "
+    "means no action. Never invent project names not present in context."
+)
 
 
 @dataclass
@@ -120,6 +129,7 @@ class GenerativeEvaluator:
             out = subprocess.run(
                 [binary, "--standalone", "run", "--model", model, prompt],
                 env={**os.environ, "OPENCODE_DB": db},
+                stdin=subprocess.DEVNULL,
                 capture_output=True, text=True, timeout=90, check=False,
             )
         except Exception:
@@ -149,20 +159,13 @@ class GenerativeEvaluator:
     def evaluate(self, text: str, context: dict | None = None) -> EvalDecision | None:
         if not self.available():
             return None
+        user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
         if (self.model or "").startswith("opencode-go/"):
-            out = self._call_go_model(system="", user=json.dumps({"message": text, "context": context or {}}))
+            out = self._call_go_model(system=EVALUATOR_SYSTEM_PROMPT, user=user)
         else:
-            system = (
-                "You are an admission evaluator. Given a user message and optional "
-                "context, return ONLY a JSON object with keys: action "
-                "(accept|attach|stop|ignore), project (string or null), work_item_id "
-                "(string or null), confidence (0..1), reason (short). "
-                "accept means create/route new work to the named project; attach "
-                "means follow up an existing Work Item; stop means stop it; ignore "
-                "means no action. Never invent project names not present in context."
+            out = llm.call_llm_json(
+                EVALUATOR_SYSTEM_PROMPT, user, max_tokens=400, disable_thinking=True
             )
-            user = json.dumps({"message": text, "context": context or {}}, ensure_ascii=False)
-            out = llm.call_llm_json(system, user, max_tokens=400, disable_thinking=True)
         if not isinstance(out, dict):
             return None
         action = out.get("action")
