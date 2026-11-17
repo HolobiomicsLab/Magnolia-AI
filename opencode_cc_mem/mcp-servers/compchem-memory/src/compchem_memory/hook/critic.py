@@ -447,6 +447,8 @@ def _error_row(
         "upstream_provider": result.upstream_provider,
         "usage": result.usage,
         "quality_floor_dropped": result.quality_floor_dropped,
+        "fallback_provider": result.fallback_provider,
+        "fallback_model": result.fallback_model,
     }
 
 
@@ -461,6 +463,8 @@ def _verdict_row(
     upstream_provider: str | None,
     usage: dict | None,
     quality_floor_dropped: bool,
+    fallback_provider: str | None = None,
+    fallback_model: str | None = None,
     turn_id: str | None = None,
 ) -> dict:
     severity = verdict.get("severity") if verdict.get("severity") is not None else "none"
@@ -475,6 +479,8 @@ def _verdict_row(
         "upstream_provider": upstream_provider,
         "usage": usage,
         "quality_floor_dropped": quality_floor_dropped,
+        "fallback_provider": fallback_provider,
+        "fallback_model": fallback_model,
         "turn_id": turn_id,
     }
 
@@ -501,7 +507,25 @@ def _save_notice(paths: ProjectPaths, harness: str, session_id: str, row: dict) 
         state.data["unshown_notices"] = notices
 
 
+def _save_route_failure_notice(
+    paths: ProjectPaths, harness: str, session_id: str, reason: str,
+) -> None:
+    """Queue at most one visible critic-route failure for this session."""
+    with SessionState.open(paths.store, harness, session_id) as state:
+        if state.data.get("critic_route_failure_noticed"):
+            return
+        notices = state.data.get("unshown_notices")
+        if not isinstance(notices, list):
+            notices = []
+        notices.append(f"⚠ Claim critic unavailable: {reason[:140]}")
+        state.data["unshown_notices"] = notices
+        state.data["critic_route_failure_noticed"] = True
+
+
 def _judge(route: Route, report: str, trace_text: str) -> CallResult:
+    # OpenCode's TypeScript plugin only hands off. Python owns provider routing,
+    # sticky sessions, secret scrubbing and usage; critic prompts have no reused
+    # prefix, so intentionally pass no cache_prefix.
     user = f"TOOL_TRACE:\n{trace_text}\n\nREPORT:\n{report}\n\nReturn only the JSON."
     return call_route(
         route, SYSTEM, user, max_tokens=500, temperature=0,
@@ -538,6 +562,9 @@ def run_critic(
         result = _judge(route, report, trace_text)
         if result.error or not result.text:
             _append_jsonl(out_dir / "errors.jsonl", _error_row(harness, session_id, agent_id, route, result))
+            _save_route_failure_notice(
+                paths, harness, session_id, result.error or "judge returned no text",
+            )
             return CriticOutcome.error(result.error or "judge returned no text")
         try:
             verdict = _parse_verdict(result.text)
@@ -553,6 +580,8 @@ def run_critic(
             result.upstream_provider,
             result.usage,
             result.quality_floor_dropped,
+            result.fallback_provider,
+            result.fallback_model,
             turn_id,
         )
         _append_jsonl(verdict_path, row)

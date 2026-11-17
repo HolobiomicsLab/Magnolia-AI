@@ -51,6 +51,10 @@
  *
  * M2 therefore persists and detaches synchronously at the terminal event;
  * transcript capture, judging, idempotence, and retries belong to Python.
+ *
+ * Note (2026-11-17): this plugin only hands off. Python also owns provider
+ * routing, sticky sessions, secret scrubbing and usage accounting. Critic
+ * prompts have no reused prefix, so they request no cache breakpoint.
  */
 import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
 

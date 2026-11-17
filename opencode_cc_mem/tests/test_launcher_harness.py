@@ -477,6 +477,74 @@ def _helper_source(script: Path, name: str) -> str:
     return "\n".join(lines[start:end + 1]) + "\n"
 
 
+def test_new_memory_setup_prefers_openrouter_and_preserves_existing(tmp_path):
+    script = make_workspace(tmp_path) / "opencode_cc_mem/softwares/bin/magnolia"
+    helpers = _helper_source(script, "memory_provider_for_model") + _helper_source(
+        script, "memory_setup_default"
+    )
+    driver = helpers + "memory_setup_default \"$CURRENT_MODEL\" \"$CURRENT_PROVIDER\"\n"
+
+    def select(env):
+        return subprocess.run(
+            ["/bin/bash", "-c", driver], env={"PATH": "/usr/bin:/bin", **env},
+            capture_output=True, text=True, check=True,
+        ).stdout.strip().split("\t")
+
+    assert select({"OPENROUTER_API_KEY": "stub", "CURRENT_MODEL": "", "CURRENT_PROVIDER": ""}) == [
+        "deepseek/deepseek-v4.1-flash", "openrouter",
+    ]
+    assert select({"CURRENT_MODEL": "", "CURRENT_PROVIDER": ""}) == [
+        "deepseek-flash", "deepseek",
+    ]
+    assert select({"OPENROUTER_API_KEY": "stub", "CURRENT_MODEL": "k3", "CURRENT_PROVIDER": "kimi"}) == [
+        "k3", "kimi",
+    ]
+
+
+def test_memory_setup_keeps_mistral_and_zai_selectable(tmp_path):
+    script = make_workspace(tmp_path) / "opencode_cc_mem/softwares/bin/magnolia"
+    driver = _helper_source(script, "memory_provider_for_model") + (
+        "memory_provider_for_model mistral-small-latest\n"
+        "memory_provider_for_model glm-5.3-flash\n"
+    )
+    proc = subprocess.run(
+        ["/bin/bash", "-c", driver], env={"PATH": "/usr/bin:/bin"},
+        capture_output=True, text=True, check=True,
+    )
+    assert proc.stdout.splitlines() == ["mistral", "zai"]
+
+
+def test_existing_memory_and_critic_routes_are_rendered_unchanged(tmp_path):
+    ws = make_workspace(tmp_path)
+    configured = {
+        "memory_enabled": True,
+        "memory_provider": "kimi",
+        "memory_model": "k3",
+        "critic_provider": "mistral",
+        "critic_model": "mistral-small-latest",
+        "direct_fallback_provider": "zai",
+        "direct_fallback_model": "glm-5.3-flash",
+    }
+    path = write_setup(ws, configured)
+
+    proc = run_raw(ws, [PROJECT])
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == configured
+    rendered = json.loads(
+        (ws / "opencode_cc_mem/projects" / PROJECT / "opencode.json").read_text()
+    )
+    environment = rendered["mcp"]["servers"]["compchem-memory"]["environment"]
+    assert environment | {
+        "MAGNOLIA_MEMORY_PROVIDER": "kimi",
+        "MAGNOLIA_MEMORY_MODEL": "k3",
+        "MAGNOLIA_CRITIC_PROVIDER": "mistral",
+        "MAGNOLIA_CRITIC_MODEL": "mistral-small-latest",
+        "MAGNOLIA_DIRECT_FALLBACK_PROVIDER": "zai",
+        "MAGNOLIA_DIRECT_FALLBACK_MODEL": "glm-5.3-flash",
+    } == environment
+
+
 def test_setup_harness_writes_after_check_passes(tmp_path):
     ws = make_workspace(tmp_path)
     path = write_setup(ws, {"main_model": "a/b"})

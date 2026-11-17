@@ -100,6 +100,8 @@ SERVER_RUNTIME_ENV = frozenset(
         "MAGNOLIA_CRITIC_MODEL",
         "MAGNOLIA_CRITIC_PROVIDER",
         "MAGNOLIA_DISABLE_INLINE_EXTRACT",
+        "MAGNOLIA_DIRECT_FALLBACK_MODEL",
+        "MAGNOLIA_DIRECT_FALLBACK_PROVIDER",
         "MAGNOLIA_DISTILL_INTERVAL_MIN",
         "MAGNOLIA_DISTILL_SECOND_PASS",
         "MAGNOLIA_DREAMING_JUDGE",
@@ -306,6 +308,16 @@ def _server_environment(context: Any) -> dict[str, str]:
     ).strip().lower()
     allowed = set(SAFE_BASE_ENV | SERVER_RUNTIME_ENV)
     allowed.update(PROVIDER_KEYS.get(provider, ()))
+    fallback_provider = str(
+        setup.get("direct_fallback_provider")
+        or base.get("MAGNOLIA_DIRECT_FALLBACK_PROVIDER")
+        or ""
+    ).strip().lower()
+    allowed.update(PROVIDER_KEYS.get(fallback_provider, ()))
+    critic_provider = str(
+        setup.get("critic_provider") or base.get("MAGNOLIA_CRITIC_PROVIDER") or ""
+    ).strip().lower()
+    allowed.update(PROVIDER_KEYS.get(critic_provider, ()))
     environment = {
         str(key): str(value)
         for key, value in base.items()
@@ -316,6 +328,20 @@ def _server_environment(context: Any) -> dict[str, str]:
     model = setup.get("memory_model") or base.get("MAGNOLIA_MEMORY_MODEL")
     if model:
         environment["MAGNOLIA_MEMORY_MODEL"] = str(model)
+    critic_provider = setup.get("critic_provider")
+    critic_model = setup.get("critic_model")
+    if critic_provider:
+        environment["MAGNOLIA_CRITIC_PROVIDER"] = str(critic_provider)
+    if critic_model:
+        environment["MAGNOLIA_CRITIC_MODEL"] = str(critic_model)
+    fallback_model = (
+        setup.get("direct_fallback_model")
+        or base.get("MAGNOLIA_DIRECT_FALLBACK_MODEL")
+    )
+    if fallback_provider:
+        environment["MAGNOLIA_DIRECT_FALLBACK_PROVIDER"] = fallback_provider
+    if fallback_model:
+        environment["MAGNOLIA_DIRECT_FALLBACK_MODEL"] = str(fallback_model)
     return environment
 
 
