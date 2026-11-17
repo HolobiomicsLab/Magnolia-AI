@@ -100,6 +100,15 @@ def _build_parser() -> argparse.ArgumentParser:
     approve.add_argument("--reason", required=True)
     approve.add_argument("--minutes", type=float, default=0)
 
+    decline = subparsers.add_parser(
+        "decline-followups",
+        help="decline proposed follow-ups and accept an otherwise passing stage",
+    )
+    decline.add_argument("run_dir")
+    decline.add_argument("--approver", required=True)
+    decline.add_argument("--reason", required=True)
+    decline.add_argument("--minutes", type=float, default=0)
+
     approve_start = subparsers.add_parser(
         "approve-start", help="approve the initial campaign start"
     )
@@ -593,6 +602,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "approve":
             _print_state(
                 store.approve(args.approver, args.reason, minutes=args.minutes)
+            )
+            return 0
+        if args.command == "decline-followups":
+            runner = _build_runner(args)
+            _print_state(
+                runner.decline_followups(
+                    args.approver,
+                    args.reason,
+                    minutes=args.minutes,
+                )
             )
             return 0
         if args.command == "approve-start":

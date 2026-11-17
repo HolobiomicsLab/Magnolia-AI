@@ -69,7 +69,7 @@ else:
     assert (project / ".magnolia" / "crash.log").exists()
 
 
-def test_campaign_stdio_memory_server_is_strictly_project_bound(tmp_path):
+def test_campaign_stdio_memory_server_ignores_tool_project_argument(tmp_path):
     project = tmp_path / "project"
     other = tmp_path / "other"
     project.mkdir()
@@ -82,15 +82,11 @@ runner, project, other = sys.argv[1:]
 os.environ["MAGNOLIA_PROJECT_DIR"] = project
 
 def fake_run(self, *args, **kwargs):
-    from compchem_memory.server import ProjectBindingError, _enforce_http_project_binding
-    refused = False
-    try:
-        _enforce_http_project_binding(other)
-    except ProjectBindingError:
-        refused = True
+    from compchem_memory.server import _enforce_http_project_binding
+    resolved = _enforce_http_project_binding(other)
     sys.__stderr__.write("BOUND=" + json.dumps({
         "strict": os.environ.get("MAGNOLIA_PROJECT_BOUND"),
-        "cross_project_refused": refused,
+        "tool_argument_ignored": os.path.realpath(resolved) == os.path.realpath(project),
     }) + "\n")
 
 FastMCP.run = fake_run
@@ -121,5 +117,5 @@ module.main()
     )
     assert json.loads(bound_line.removeprefix("BOUND=")) == {
         "strict": "1",
-        "cross_project_refused": True,
+        "tool_argument_ignored": True,
     }

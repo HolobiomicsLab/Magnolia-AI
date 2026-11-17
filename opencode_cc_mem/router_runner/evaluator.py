@@ -247,7 +247,14 @@ class GenerativeEvaluator:
             return False
         if self.model is not None:
             return self.model.startswith(
-                ("claude-code/", "codex/", "vibe/", "opencode-go/")
+                (
+                    "claude-code/",
+                    "codex/",
+                    "vibe/",
+                    "opencode-go/",
+                    "opencode/",
+                    "openrouter/",
+                )
             )
         return selected.source == "routes.evaluator" and selected.client in {
             "claude-code", "codex", "vibe", "opencode",
@@ -298,7 +305,7 @@ class GenerativeEvaluator:
             control_dir=run_dir / "control",
             work_dir=run_dir / "work",
             timeout_seconds=90,
-            role_cap=1,
+            role_cap=2 if route.client == "opencode" else 1,
             governor_cap=(
                 self._governor().policy.max_turns_per_run
                 if self._has_governor()

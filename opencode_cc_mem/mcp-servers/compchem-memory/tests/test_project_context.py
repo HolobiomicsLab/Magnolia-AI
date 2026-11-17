@@ -19,6 +19,29 @@ def test_explicit_arg_always_wins(monkeypatch):
     assert pc.effective_project_dir("projects/proj_b") == "projects/proj_b"
 
 
+@pytest.mark.parametrize("binding", ["environment", "argv"])
+def test_bound_role_ignores_model_supplied_project_dir_once(
+    monkeypatch, caplog, binding
+):
+    monkeypatch.setattr(pc, "_STARTUP_ENV", "projects/proj_a")
+    monkeypatch.delenv("MAGNOLIA_PROJECT_BOUND", raising=False)
+    monkeypatch.delenv("MAGNOLIA_PROJECT_DIR", raising=False)
+    monkeypatch.setattr(pc.sys, "argv", ["memory-server"])
+    monkeypatch.setattr(pc, "_BOUND_PROJECT_OVERRIDE_LOGGED", False)
+    if binding == "environment":
+        monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    else:
+        monkeypatch.setattr(
+            pc.sys,
+            "argv",
+            ["memory-server", "--tool-allowlist-json", '["memory_get_context"]'],
+        )
+
+    assert pc.effective_project_dir("projects/model-choice") == "projects/proj_a"
+    assert pc.effective_project_dir("projects/second-choice") == "projects/proj_a"
+    assert caplog.text.count("ignored model-supplied project_dir") == 1
+
+
 def test_env_fallback_without_hint(monkeypatch):
     monkeypatch.setattr(pc, "_STARTUP_ENV", "projects/proj_a")
     monkeypatch.setattr(pc, "_request_hint", lambda: None)

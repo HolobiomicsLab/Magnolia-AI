@@ -993,17 +993,19 @@ def test_service_timings_are_clamped_and_logged(
     assert "clamp" in caplog.text.lower()
 
 
-def test_memory_http_rejects_cross_project_request(tmp_path, monkeypatch):
+def test_memory_bound_tool_call_ignores_cross_project_argument(tmp_path, monkeypatch):
     bound = tmp_path / "bound"
     other = tmp_path / "other"
     bound.mkdir()
     other.mkdir()
     monkeypatch.setattr(server, "PROJECT_DIR", str(bound))
+    monkeypatch.setattr(server.project_context, "_STARTUP_ENV", str(bound))
     monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(bound))
 
     assert server._resolve_project_store(str(bound)) == str(bound.resolve())
-    with pytest.raises(server.ProjectBindingError, match="bound to a different project"):
-        server._resolve_project_store(str(other))
+    assert server._resolve_project_store(str(other)) == str(bound.resolve())
+    assert server._write_guard(str(other), allow_cross_project=False) is None
 
     monkeypatch.setattr(
         server.project_context,
@@ -1139,6 +1141,7 @@ def test_strict_http_binding_ignores_active_project_marker(tmp_path, monkeypatch
     )
     monkeypatch.setattr(server.project_context, "_process_start_time", lambda: -1.0)
     monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(bound))
     monkeypatch.setenv("MAGNOLIA_OPENCODE_DIR", str(bound))
 
     assert server.project_context.effective_project_dir() == str(bound)
