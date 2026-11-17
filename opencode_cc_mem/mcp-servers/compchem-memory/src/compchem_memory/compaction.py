@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from compchem_memory.llm import is_llm_available, call_llm
+from compchem_memory.tiers.session import session_writer_lock
 from compchem_memory.writer_lease import (
     file_fingerprint,
     fingerprint_unchanged,
@@ -89,19 +90,20 @@ def _replace_if_unchanged(
 ) -> CompactionResult | None:
     """Swap in the compacted log under the project writer lease, unless the log
     changed while it was being compacted (the summary may call an LLM)."""
-    with project_writer_lease(session_path):
-        if not fingerprint_unchanged(read_set):
-            print(f"[compaction] {session_path.name} changed during compaction; "
-                  "not replaced", file=sys.stderr)
-            return None
-        _write_compacted_session(session_path, result)
-        # Replace original with compacted version
-        compacted_path = session_path.with_suffix(".compacted.jsonl")
-        try:
-            session_path.rename(session_path.with_suffix(".backup.jsonl"))
-            compacted_path.rename(session_path)
-        except OSError:
-            pass
+    with session_writer_lock(session_path):
+        with project_writer_lease(session_path):
+            if not fingerprint_unchanged(read_set):
+                print(f"[compaction] {session_path.name} changed during compaction; "
+                      "not replaced", file=sys.stderr)
+                return None
+            _write_compacted_session(session_path, result)
+            # Replace original with compacted version
+            compacted_path = session_path.with_suffix(".compacted.jsonl")
+            try:
+                session_path.rename(session_path.with_suffix(".backup.jsonl"))
+                compacted_path.rename(session_path)
+            except OSError:
+                pass
     return result
 
 

@@ -463,6 +463,40 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert stopped == [(4101, "ps:4101:start")]
 
 
+def test_memory_service_does_not_reuse_changed_runtime_route(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    identities = {
+        os.getpid(): f"ps:{os.getpid()}:test-launcher",
+        4101: "ps:4101:first",
+    }
+    started, stopped = _stub_runtime(monkeypatch, identities)
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda url, token, timeout=2.0: {
+            "project_digest": memory_service.project_digest(project),
+            "process_identity": identities[4101],
+            "service_identity": started[-1][1]["MAGNOLIA_MEMORY_SERVICE_IDENTITY"],
+        },
+    )
+
+    first = memory_service.ensure_memory_service(_context(project))
+    changed = _context(project)
+    changed.setup["memory_model"] = "changed-model"
+    second = memory_service.ensure_memory_service(changed)
+
+    assert len(started) == 2
+    assert first.service_identity != second.service_identity
+    assert stopped == [(4101, "ps:4101:first")]
+    record = json.loads(
+        (memory_service.private_state_dir(project) / "service.json").read_text()
+    )
+    assert len(record["runtime_digest"]) == 64
+    assert "provider-secret" not in json.dumps(record)
+    assert memory_service.release_memory_service(second) is True
+
+
 def test_different_allowlists_get_independent_live_services(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()

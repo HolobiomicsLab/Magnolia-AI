@@ -76,6 +76,19 @@ def test_key_autodetect_openrouter(monkeypatch):
     assert provider == llm.PROVIDER_OPENROUTER
 
 
+def test_missing_openrouter_key_is_visible_once_from_availability_probe(
+    monkeypatch, capsys,
+):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openrouter")
+
+    assert llm.is_llm_available() is False
+    assert llm.is_llm_available() is False
+
+    stderr = capsys.readouterr().err
+    assert stderr.count("OPENROUTER_API_KEY is not configured") == 1
+
+
 def test_openai_compat_call_uses_gateway(monkeypatch):
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "openrouter")

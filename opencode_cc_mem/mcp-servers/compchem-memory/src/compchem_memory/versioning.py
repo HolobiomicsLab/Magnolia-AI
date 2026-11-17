@@ -12,7 +12,7 @@ Madina Bekbergenova.
 import subprocess
 from pathlib import Path
 
-from compchem_memory.writer_lease import leased_store_writer
+from compchem_memory.writer_lease import holds_any_project_writer_lease
 
 # Ignore everything, then re-include only the knowledge tiers and this file.
 # Robust against new plumbing directories appearing later.
@@ -22,6 +22,8 @@ _GITIGNORE = "/*\n!/.gitignore\n!/entries/\n!/staging/\n!/.handover-state.md\n"
 
 
 def _git(store: Path, *args: str) -> subprocess.CompletedProcess:
+    if holds_any_project_writer_lease():
+        raise RuntimeError("git subprocess refused while the project writer lease is held")
     # check=False is intentional: git failures (e.g. git missing) surface to the
     # caller via is_repo()/exit codes rather than raising mid-operation.
     return subprocess.run(
@@ -48,7 +50,6 @@ def ensure_repo(store: str | Path) -> None:
         gi.write_text(_GITIGNORE)
 
 
-@leased_store_writer
 def commit_all(store: Path, message: str) -> str | None:
     """Stage the tracked tiers and commit if anything changed. Returns the new
     commit hash, or None when there is nothing to commit (a clean tree, or only

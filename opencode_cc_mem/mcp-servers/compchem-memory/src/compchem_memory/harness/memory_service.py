@@ -209,6 +209,15 @@ def tool_allowlist_digest(tool_allowlist: Sequence[str]) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
+def service_environment_digest(environment: Mapping[str, str]) -> str:
+    """Fingerprint the exact secret-bearing runtime without storing its values."""
+    body = json.dumps(
+        sorted((str(key), str(value)) for key, value in environment.items()),
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(body).hexdigest()
+
+
 def private_state_dir(
     project_dir: Path, tool_allowlist: Sequence[str] | None = None
 ) -> Path:
@@ -226,6 +235,7 @@ def ensure_memory_service(
     project = _context_project(context)
     environment = _server_environment(context)
     _require_provider_key(context, environment)
+    runtime_digest = service_environment_digest(environment)
     requested_tools = (
         tool_allowlist
         if tool_allowlist is not None
@@ -242,7 +252,12 @@ def ensure_memory_service(
         record = _read_record(state)
         if record is not None:
             handle = _reuse(
-                record, state, project, holder, tool_allowlist=tools.neutral_names
+                record,
+                state,
+                project,
+                holder,
+                tool_allowlist=tools.neutral_names,
+                runtime_digest=runtime_digest,
             )
             if handle is not None:
                 return handle
@@ -254,6 +269,7 @@ def ensure_memory_service(
             environment,
             holder,
             tool_allowlist=tools.neutral_names,
+            runtime_digest=runtime_digest,
         )
 
 
@@ -459,6 +475,7 @@ def _reuse(
     holder: dict[str, Any],
     *,
     tool_allowlist: tuple[str, ...] | None = None,
+    runtime_digest: str | None = None,
 ) -> ServiceHandle | None:
     expected_digest = project_digest(project)
     if record.get("provisional") is True:
@@ -479,6 +496,8 @@ def _reuse(
         else tool_allowlist
     )
     if tuple(record.get("tool_allowlist", ())) != expected_tools:
+        return None
+    if runtime_digest is not None and record.get("runtime_digest") != runtime_digest:
         return None
     if token_file != (state / "bearer-token").resolve():
         return None
@@ -526,6 +545,7 @@ def _start_service(
     holder: dict[str, Any],
     *,
     tool_allowlist: tuple[str, ...],
+    runtime_digest: str,
 ) -> ServiceHandle:
     setup = getattr(context, "setup", {}) or {}
     acquirer_pid = os.getpid()
@@ -595,6 +615,7 @@ def _start_service(
                     "service_identity": service_identity,
                     "token_file": str(token_file),
                     "tool_allowlist": list(tool_allowlist),
+                    "runtime_digest": runtime_digest,
                     "command": command,
                     "observed_command": observed_command,
                     "final_command": _final_service_command(command, observed_command),

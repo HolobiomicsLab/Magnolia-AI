@@ -832,7 +832,10 @@ def is_llm_available() -> bool:
     p = _resolve_provider()
     if p and _get_api_key(p):
         return True
-    return bool(p == PROVIDER_OPENROUTER and _direct_fallback_route("memory"))
+    if p == PROVIDER_OPENROUTER:
+        _warn_openrouter_failure_once("memory", "OPENROUTER_API_KEY is not configured")
+        return bool(_direct_fallback_route("memory"))
+    return False
 
 
 def _record_timing(provider: str | None, model: str | None, ms: float,

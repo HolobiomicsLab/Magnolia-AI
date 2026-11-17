@@ -42,10 +42,12 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     has_llm = is_llm_available()
     has_dialogue = has_llm and _has_dialogue_source(store)
     if not has_dialogue:
-        if has_llm:
-            drain_opencode_payloads(store)
-        else:
+        from compchem_memory.llm import resolve_route
+
+        if resolve_route("critic") is None:
             drain_opencode_payloads(store, critic_skip_reason="no route")
+        else:
+            drain_opencode_payloads(store)
     if has_dialogue:
         result = _distill_dialogue(store)
     else:

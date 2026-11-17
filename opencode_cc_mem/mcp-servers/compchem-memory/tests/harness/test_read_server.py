@@ -207,6 +207,17 @@ def test_read_server_bounds_output(tmp_path, monkeypatch):
         server.search("re:^(line+)+$", "many.txt")
 
 
+@pytest.mark.parametrize("literal", ["[", "foo("])
+def test_read_server_accepts_regex_metacharacters_as_literals(tmp_path, literal):
+    server, project, _outside = _server(tmp_path)
+    (project / "notes.txt").write_text(f"before {literal} after\n", encoding="utf-8")
+
+    result = server.search(literal, "notes.txt")
+
+    assert result["regex"] is False
+    assert result["matches"][0]["text"] == f"before {literal} after"
+
+
 def test_read_server_refuses_binary_reads_and_counts_search_skips(tmp_path):
     server, project, _outside = _server(tmp_path)
     (project / "clean.txt").write_text("needle clean\n", encoding="utf-8")
