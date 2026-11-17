@@ -12,6 +12,7 @@ from compchem_memory import quick_search
 from compchem_memory.hook.action_retrieval import (
     ActionNote,
     _cache_key,
+    _log,
     args_to_query,
     commit_exposure,
     discard_note,
@@ -88,6 +89,36 @@ def _rows(store: Path) -> list[dict]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_action_log_large_concurrent_rows_remain_valid_jsonl(tmp_path):
+    paths = _paths(tmp_path)
+    barrier = threading.Barrier(8)
+
+    def write_rows(worker: int) -> None:
+        barrier.wait()
+        for index in range(10):
+            _log(
+                paths,
+                {
+                    "sessionID": f"s{worker}",
+                    "callID": f"{worker}-{index}",
+                    "payload": "x" * 10_000,
+                },
+            )
+
+    threads = [threading.Thread(target=write_rows, args=(worker,)) for worker in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert all(not thread.is_alive() for thread in threads)
+    rows = _rows(paths.store)
+    assert len(rows) == 80
+    assert {(row["sessionID"], row["callID"]) for row in rows} == {
+        (f"s{worker}", f"{worker}-{index}") for worker in range(8) for index in range(10)
+    }
 
 
 def _call(

@@ -224,11 +224,23 @@ def _now() -> str:
 
 
 def _log(paths: ProjectPaths, row: dict) -> None:
-    """Append telemetry without ever breaking a hook call."""
+    """Append one O_APPEND write per row without ever breaking a hook call."""
     try:
         paths.store.mkdir(parents=True, exist_ok=True)
-        with open(paths.store / "action-retrieval.jsonl", "a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"ts": _now(), **row}, ensure_ascii=False) + "\n")
+        data = json.dumps({"ts": _now(), **row}, ensure_ascii=False).encode("utf-8") + b"\n"
+        descriptor = os.open(
+            paths.store / "action-retrieval.jsonl",
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            0o644,
+        )
+        try:
+            # Avoid BufferedWriter splitting a large row into interleavable writes.
+            remaining = memoryview(data)
+            while remaining:
+                written = os.write(descriptor, remaining)
+                remaining = remaining[written:]
+        finally:
+            os.close(descriptor)
     except Exception:  # noqa: BLE001 - telemetry is never session-critical
         pass
 
