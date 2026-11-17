@@ -247,6 +247,7 @@ class Admission:
         *,
         usage: UsageRecord | None = None,
         outcome: RunOutcome | None = None,
+        suppress_session_identity: bool = False,
     ) -> bool:
         """Persist one completion; repeated releases are harmless."""
         if self._finalized:
@@ -255,6 +256,7 @@ class Admission:
             self.request.invocation_id,
             usage=usage,
             outcome=outcome or RunOutcome("success"),
+            suppress_session_identity=suppress_session_identity,
         )
         self._finalized = self._finalized or finalized
         return finalized
@@ -666,6 +668,7 @@ class Governor:
         *,
         usage: UsageRecord | None,
         outcome: RunOutcome,
+        suppress_session_identity: bool = False,
     ) -> bool:
         with self._locked() as state:
             self._recover_pending(state)
@@ -674,7 +677,12 @@ class Governor:
             reservation = state["reservations"].get(invocation_id)
             if not reservation or not reservation.get("launched"):
                 return False
-            record = self._completion_record(reservation, usage, outcome)
+            record = self._completion_record(
+                reservation,
+                usage,
+                outcome,
+                suppress_session_identity=suppress_session_identity,
+            )
             state["pending_completions"][invocation_id] = record
             if outcome.kind == "quota":
                 limit = outcome.limit
@@ -700,6 +708,8 @@ class Governor:
         reservation: Mapping[str, Any],
         usage: UsageRecord | None,
         outcome: RunOutcome,
+        *,
+        suppress_session_identity: bool = False,
     ) -> dict[str, Any]:
         usage_values = None
         if usage is not None:
@@ -742,9 +752,13 @@ class Governor:
                 "process_start_token": reservation["process_start_token"],
                 "service_request_id": reservation["service_request_id"],
             },
-            "session_identity": _session_dict(usage.session_identity)
-            if usage is not None and usage.session_identity is not None
-            else reservation["session_identity"],
+            "session_identity": (
+                None
+                if suppress_session_identity
+                else _session_dict(usage.session_identity)
+                if usage is not None and usage.session_identity is not None
+                else reservation["session_identity"]
+            ),
             "usage": usage_values,
             "outcome": {
                 "kind": outcome.kind,

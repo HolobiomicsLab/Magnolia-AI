@@ -35,6 +35,9 @@ STRIPPED_ENV = {
 }
 PASSTHROUGH_ENV = {
     "VENDOR_SPECIFIC_API_KEY": "unlisted-provider-key",
+    "OPENAI_BASE_URL": "https://provider-override.invalid/v1",
+    "MISTRAL_BASE_URL": "https://mistral-override.invalid/v1",
+    "MISTRAL_API_BASE": "https://mistral-api-override.invalid/v1",
     "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
     "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
     "OPENROUTER_API_KEY": "forbidden-openrouter-key",
@@ -47,6 +50,10 @@ PASSTHROUGH_ENV = {
     "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
 }
 PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
+PROXY_ENV = {
+    name: f"{name.lower()}-proxy-sentinel"
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
+}
 
 
 def _real_export(
@@ -113,6 +120,7 @@ def _stub(
     *,
     stdout_lines: list[list[dict]] | None = None,
     linger_after_first: bool = False,
+    stderr_lines: list[str] | None = None,
 ) -> tuple[Path, Path, Path]:
     state = tmp_path / "stub-state"
     state.mkdir()
@@ -122,12 +130,13 @@ def _stub(
         "stdout_lines": stdout_lines or [[] for _ in exports],
         "state": str(state),
         "linger_after_first": linger_after_first,
+        "stderr_lines": stderr_lines or [],
     }))
     binary = tmp_path / "vibe-stub"
     binary.write_text(
         """#!/usr/bin/env python3
 import json, os, pathlib, shutil, sys, time
-config = json.loads(pathlib.Path(os.environ["VIBE_STUB_CONFIG"]).read_text())
+config = json.loads(pathlib.Path(__file__).with_suffix(".json").read_text())
 state = pathlib.Path(config["state"])
 index = len(list(state.glob("call-*.json")))
 argv = sys.argv
@@ -142,12 +151,19 @@ output_dir.mkdir(parents=True, exist_ok=True)
         if name in os.environ
     },
     "telemetry": os.environ.get("VIBE_ENABLE_TELEMETRY"),
+    "child_names": sorted(os.environ),
+    "proxy_env": {name: os.environ.get(name) for name in (
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"
+    )},
+    "stub_config_forwarded": "VIBE_STUB_CONFIG" in os.environ,
 }))
 source = config["exports"][index]
 if source:
     shutil.copy(source, output_dir / "export.json")
 for event in config["stdout_lines"][index]:
     print(json.dumps(event), flush=True)
+for line in config["stderr_lines"]:
+    print(line, file=sys.stderr, flush=True)
 if index == 0 and config["linger_after_first"]:
     time.sleep(5)
     (state / "was-not-terminated").write_text("late")
@@ -161,8 +177,9 @@ def _context(
     tmp_path: Path,
     *,
     binary: Path | None = None,
-    stub_config: Path | None = None,
     governance: InvocationGovernance | None = None,
+    environment: dict[str, str] | None = None,
+    renderer_env: dict[str, str] | None = None,
 ) -> ExecContext:
     project = tmp_path / "project"
     run = tmp_path / "run"
@@ -196,9 +213,8 @@ def _context(
             "accepted": True, "model": "selected-model", "identity": "fixture"
         },
     }
-    environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
-    if stub_config is not None:
-        environment["VIBE_STUB_CONFIG"] = str(stub_config)
+    if environment is None:
+        environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
     context = ExecContext(
         route=route, role="reviewer", project_dir=project, run_dir=run,
         control_dir=run / "control", work_dir=run / "work",
@@ -207,6 +223,7 @@ def _context(
         tools_port=8123, launch_argv=(str(binary or "vibe-stub"),),
         role_capabilities={"vibe": {"reviewer": evidence}},
         environment=environment,
+        renderer_env=renderer_env or {},
         setup={"vibe_trust_path": str(trust)},
         governance=governance,
         timeout_seconds=3,
@@ -329,6 +346,130 @@ def test_vibe_real_export_selected_model_and_fallback_notice():
     assert fallback.reported_model != accepted.reported_model
 
 
+def test_vibe_child_env_allows_only_mistral_account_process_basics(tmp_path):
+    binary, _, state = _stub(tmp_path, [None])
+    context = _context(
+        tmp_path,
+        binary=binary,
+        governance=_governance(tmp_path),
+        environment={
+            "HOME": str(tmp_path / "member-home"),
+            "USER": "member",
+            "LOGNAME": "member",
+            "SHELL": "/bin/zsh",
+            "TMPDIR": str(tmp_path),
+            "LANG": "en_US.UTF-8",
+            "LC_ALL": "en_US.UTF-8",
+            "TERM": "xterm-256color",
+            "PATH": os.environ.get("PATH", ""),
+            "SSL_CERT_FILE": "/etc/ssl/cert.pem",
+            "NODE_EXTRA_CA_CERTS": "/etc/ssl/cert.pem",
+            **PROXY_ENV,
+            **PARENT_CLIENT_ENV,
+            "VIBE_STUB_CONFIG": "must-not-reach-child",
+        },
+    )
+    executor = executor_for(context.route, "reviewer", context)
+
+    result = executor.run("review", context.project_dir, tmp_path / "attempt")
+
+    (call,) = _calls(state)
+    assert call["client_env"] == {}
+    assert set(call["child_names"]) - set(executor.prepared.env) <= {
+        "__CF_USER_TEXT_ENCODING"
+    }
+    assert call["proxy_env"] == PROXY_ENV
+    assert not call["stub_config_forwarded"]
+    assert "VIBE_STUB_CONFIG" not in executor.prepared.env
+    assert "VIBE_HOME" not in executor.prepared.env
+    assert result.outcome.kind == "failure"
+
+
+def test_vibe_renderer_env_cannot_inject_provider_or_endpoint(tmp_path):
+    binary, _, state = _stub(tmp_path, [None])
+    context = _context(
+        tmp_path,
+        binary=binary,
+        governance=_governance(tmp_path),
+        renderer_env={
+            "VENDOR_SPECIFIC_API_KEY": "renderer-provider-key",
+            "MISTRAL_API_KEY": "renderer-mistral-key",
+            "OPENAI_BASE_URL": "https://renderer-provider.invalid/v1",
+            "MISTRAL_API_BASE": "https://renderer-mistral.invalid/v1",
+            "MISTRAL_PROVIDER": "renderer-provider",
+            **PROXY_ENV,
+        },
+    )
+    executor = executor_for(context.route, "reviewer", context)
+
+    executor.run("review", context.project_dir, tmp_path / "attempt")
+
+    (call,) = _calls(state)
+    assert call["client_env"] == {}
+    assert call["proxy_env"] == PROXY_ENV
+    assert "OPENAI_BASE_URL" not in call["child_names"]
+    assert "MISTRAL_API_BASE" not in call["child_names"]
+    assert "MISTRAL_PROVIDER" not in call["child_names"]
+
+
+def test_vibe_missing_or_mismatched_effective_model_is_not_accepted(tmp_path):
+    export = tmp_path / "export.json"
+    export.write_text(json.dumps(_real_export(model=None)))
+    binary, _, state = _stub(tmp_path, [export])
+    context = _context(tmp_path, binary=binary, governance=_governance(tmp_path))
+
+    result = executor_for(context.route, "reviewer", context).run(
+        "review", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "failure"
+    assert "model_unverified" in [item["kind"] for item in result.errors]
+    assert result.session_identity is None
+    assert result.resume_artifact is None
+    assert len(_calls(state)) == 1
+    assert len((tmp_path / "usage-ledger.jsonl").read_text().splitlines()) == 1
+
+
+def test_vibe_successful_process_fallback_is_not_accepted(tmp_path):
+    export = tmp_path / "export.json"
+    export.write_text(json.dumps(_fallback_export()))
+    binary, _, state = _stub(tmp_path, [export])
+    context = _context(tmp_path, binary=binary, governance=_governance(tmp_path))
+
+    result = executor_for(context.route, "reviewer", context).run(
+        "review", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "model_mismatch"
+    assert result.session_identity is None
+    assert result.resume_artifact is None
+    assert "model_mismatch" in [item["kind"] for item in result.errors]
+
+
+def test_vibe_missing_mistral_credentials_surfaces_own_setup_guidance(tmp_path):
+    export = tmp_path / "export.json"
+    export.write_text(json.dumps(_real_export(outcome="error", exit_code=1)))
+    binary, _, state = _stub(
+        tmp_path,
+        [export],
+        stderr_lines=[
+            "Authentication failed: Mistral API key not found in Vibe configuration or keyring."
+        ],
+    )
+    context = _context(tmp_path, binary=binary, governance=_governance(tmp_path))
+
+    result = executor_for(context.route, "reviewer", context).run(
+        "review", context.project_dir, tmp_path / "attempt"
+    )
+
+    assert result.outcome.kind == "failure"
+    guidance = [item for item in result.errors if item["kind"] == "mistral_setup_required"]
+    assert len(guidance) == 1
+    assert "run Vibe's own setup once" in guidance[0]["message"]
+    assert len(_calls(state)) == 1
+    assert len((tmp_path / "usage-ledger.jsonl").read_text().splitlines()) == 1
+
+
 def test_vibe_export_usage_cache_and_redaction():
     parsed = parse_vibe_export(json.dumps(_real_export(outcome="price_limit", exit_code=3)))
     assert parsed.usage.input_tokens == 135962
@@ -361,7 +502,7 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
     )
     governance = _governance(tmp_path)
     context = _context(
-        tmp_path, binary=binary, stub_config=config, governance=governance
+        tmp_path, binary=binary, governance=governance
     )
 
     result = executor_for(context.route, "reviewer", context).run(
@@ -369,7 +510,7 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
     )
 
     assert result.outcome.kind == expected
-    if payload is None:
+    if expected != "success":
         assert result.session_identity is None
         assert result.resume_artifact is None
     else:
@@ -380,8 +521,10 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
     assert call["telemetry"] == "false"
     rows = (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
     assert len(rows) == 1
-    if payload is not None:
+    if expected == "success":
         assert json.loads(rows[0])["session_identity"]["session_id"] == "vibe-session"
+    else:
+        assert json.loads(rows[0])["session_identity"] is None
     diagnostics = [item["kind"] for item in result.errors]
     assert ("model_mismatch" in diagnostics) is (expected == "model_mismatch")
 
@@ -395,7 +538,7 @@ def test_vibe_quota_precedes_success_empty_without_retry(tmp_path):
         stdout_lines=[[{"type": "status"}]],
         linger_after_first=True,
     )
-    context = _context(tmp_path, binary=binary, stub_config=config, governance=_governance(tmp_path))
+    context = _context(tmp_path, binary=binary, governance=_governance(tmp_path))
     quota = RunOutcome("quota", LimitInfo("fixture quota", None, "synthetic"))
 
     def observe_after_output(stdout: Path, _stderr: Path):
@@ -444,7 +587,7 @@ def test_vibe_daily_limit_returns_without_client_or_attempt(tmp_path):
         governor, route, "parent-run", "project-fixture", role_cap=8
     )
     context = _context(
-        tmp_path, binary=binary, stub_config=config, governance=governance
+        tmp_path, binary=binary, governance=governance
     )
 
     result = executor_for(context.route, "reviewer", context).run(
@@ -460,13 +603,102 @@ def test_vibe_daily_limit_returns_without_client_or_attempt(tmp_path):
     assert _calls(state) == []
 
 
+@pytest.mark.parametrize("resumed_payload", (_real_export(model=None), _fallback_export()))
+def test_vibe_resumed_unaccepted_model_suppresses_session_and_receipt_identity(
+    tmp_path, resumed_payload
+):
+    first_export = tmp_path / "first.json"
+    first_export.write_text(json.dumps(_real_export()))
+    resumed_export = tmp_path / "resumed.json"
+    resumed_export.write_text(json.dumps(resumed_payload))
+    binary, _, state = _stub(tmp_path, [first_export, resumed_export])
+    first_context = _context(
+        tmp_path, binary=binary, governance=_governance(tmp_path)
+    )
+    first_executor = executor_for(first_context.route, "reviewer", first_context)
+    first = first_executor.run(
+        "first", first_context.project_dir, tmp_path / "attempt-1"
+    )
+    resume_context = replace(
+        first_context,
+        resume_from=first_executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "reviewer", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    expected_kind = (
+        "model_mismatch"
+        if resumed_payload["config"]["active_model"] == ""
+        else "failure"
+    )
+    assert second.outcome.kind == expected_kind
+    assert second.session_id is None
+    assert second.session_identity is None
+    assert second.resume_artifact is None
+    assert len(_calls(state)) == 2
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
+    ]
+    assert len(rows) == 2
+    assert rows[0]["session_identity"]["session_id"] == "vibe-session"
+    assert rows[1]["session_identity"] is None
+    assert rows[1]["usage"]["input_tokens"] == 135962
+    assert rows[1]["outcome"]["kind"] == expected_kind
+
+
+def test_vibe_resumed_wrong_session_precedes_bad_model(tmp_path):
+    first_export = tmp_path / "first.json"
+    first_export.write_text(json.dumps(_real_export()))
+    resumed_export = tmp_path / "resumed.json"
+    resumed_payload = _fallback_export()
+    resumed_payload["session_id"] = "other-session"
+    resumed_export.write_text(json.dumps(resumed_payload))
+    binary, _, state = _stub(tmp_path, [first_export, resumed_export])
+    first_context = _context(
+        tmp_path, binary=binary, governance=_governance(tmp_path)
+    )
+    first_executor = executor_for(first_context.route, "reviewer", first_context)
+    first = first_executor.run(
+        "first", first_context.project_dir, tmp_path / "attempt-1"
+    )
+    resume_context = replace(
+        first_context,
+        resume_from=first_executor.prepared.invocation_dir,
+        resume_artifact=first.resume_artifact,
+    )
+
+    second = executor_for(resume_context.route, "reviewer", resume_context).run(
+        "second", resume_context.project_dir, tmp_path / "attempt-2", retries=0
+    )
+
+    assert second.outcome.kind == "refused"
+    assert second.session_id is None
+    assert second.session_identity is None
+    assert second.resume_artifact is None
+    assert "resume_identity_mismatch" in [item["kind"] for item in second.errors]
+    assert "model_mismatch" in [item["kind"] for item in second.errors]
+    assert len(_calls(state)) == 2
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "usage-ledger.jsonl").read_text().splitlines()
+    ]
+    assert len(rows) == 2
+    assert rows[1]["session_identity"] is None
+    assert rows[1]["usage"]["input_tokens"] == 135962
+    assert rows[1]["outcome"]["kind"] == "refused"
+
+
 def test_vibe_resume_artifact_round_trip_and_mismatch_refusal(tmp_path):
     first_export = tmp_path / "first.json"
     first_export.write_text(json.dumps(_real_export()))
     resumed_export = tmp_path / "resumed.json"
     resumed_export.write_text(json.dumps(_real_export()))
     binary, config, state = _stub(tmp_path, [first_export, resumed_export])
-    first_context = _context(tmp_path, binary=binary, stub_config=config)
+    first_context = _context(tmp_path, binary=binary)
     first_executor = executor_for(first_context.route, "reviewer", first_context)
     first = first_executor.run("first", first_context.project_dir, tmp_path / "attempt-1")
     resume_context = replace(
@@ -495,7 +727,7 @@ def test_vibe_refuses_forged_resume_session_without_starting_client(tmp_path):
     export = tmp_path / "first.json"
     export.write_text(json.dumps(_real_export()))
     binary, config, state = _stub(tmp_path, [export])
-    context = _context(tmp_path, binary=binary, stub_config=config)
+    context = _context(tmp_path, binary=binary)
     executor = executor_for(context.route, "reviewer", context)
     result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
     binding_path = executor.prepared.invocation_dir / "vibe-session-bindings.json"
@@ -530,7 +762,7 @@ def test_vibe_refuses_resume_session_rebound_in_store(tmp_path, field, value):
     export = tmp_path / "first.json"
     export.write_text(json.dumps(_real_export()))
     binary, config, state = _stub(tmp_path, [export])
-    context = _context(tmp_path, binary=binary, stub_config=config)
+    context = _context(tmp_path, binary=binary)
     executor = executor_for(context.route, "reviewer", context)
     result = executor.run("first", context.project_dir, tmp_path / "attempt-1")
     binding_path = executor.prepared.invocation_dir / "vibe-session-bindings.json"
