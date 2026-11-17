@@ -85,6 +85,26 @@ def test_helper_evaluator_and_interactive_precedence(monkeypatch):
     assert (unprefixed.client, unprefixed.model) == ("opencode", "opencode-go/glm-5.3")
 
 
+@pytest.mark.parametrize("role", ["worker", "reviewer", "helper", "evaluator"])
+def test_global_native_harness_is_retained_for_noninteractive_roles(monkeypatch, role):
+    monkeypatch.delenv("MAGNOLIA_AGENTS_MODEL", raising=False)
+    monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)
+    route = resolve_route(
+        role,
+        {
+            "harness": "codex",
+            "models": {"codex": "gpt-5.6-sol"},
+            "api_fallback_model": "opencode-go/deepseek-v4",
+        },
+    )
+
+    assert (route.client, route.model, route.subscription_key) == (
+        "codex",
+        "gpt-5.6-sol",
+        "codex",
+    )
+
+
 def test_all_five_real_consumers_share_resolver(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("MAGNOLIA_AGENTS_MODEL", raising=False)
     monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)

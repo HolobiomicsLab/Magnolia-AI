@@ -60,6 +60,10 @@ class ReviewExecutor(Protocol):
         control: ProcessControl | None = None,
         resume_artifact: ResumeArtifact | None = None,
         resume_from: Path | None = None,
+        retry_cursor: int = 0,
+        accumulated_attempts: int = 0,
+        accumulated_usage: Mapping[str, float] | None = None,
+        resume_session: str | None = None,
     ) -> ReviewResult:
         ...
 
@@ -206,6 +210,11 @@ class CampaignRunner:
                         resume_session=resume_session,
                         resume_artifact=(
                             resumed.resume_artifact if resumed is not None else None
+                        ),
+                        resume_from=(
+                            Path(resumed.resume_from)
+                            if resumed is not None and resumed.resume_from is not None
+                            else None
                         ),
                     )
                 except CampaignBusyError as exc:
@@ -798,6 +807,7 @@ class CampaignRunner:
         *,
         resume_session: str | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> CampaignState:
         stage = self.protocol.stage(state.stage)
         attempt = state.attempt + 1
@@ -841,6 +851,7 @@ class CampaignRunner:
                 lease,
                 resume_session=resume_session,
                 resume_artifact=resume_artifact,
+                resume_from=resume_from,
             )
         finally:
             lease.release()
@@ -853,6 +864,7 @@ class CampaignRunner:
         *,
         resume_session: str | None = None,
         resume_artifact: ResumeArtifact | None = None,
+        resume_from: Path | None = None,
     ) -> CampaignState:
         attempt_dir = self._attempt_dir(stage, attempt)
         attempt_dir.mkdir(parents=True, exist_ok=True)
@@ -871,6 +883,7 @@ class CampaignRunner:
                 lease,
                 resume_session=resume_session,
                 resume_artifact=resume_artifact,
+                resume_from=resume_from,
             )
         if stage.type == "job":
             stop_reason = self._stop_requested_reason(self.store.load())
@@ -1049,6 +1062,12 @@ class CampaignRunner:
                 resume_artifact=result_resume_artifact or resume_artifact,
                 resume_from=result_resume_from or resume_from,
             )
+        if result.outcome is not None and result.outcome.kind != "success":
+            return self._fail_before_validation(
+                stage,
+                attempt,
+                f"worker execution outcome was {result.outcome.kind}",
+            )
         if result.stopped_reason:
             return self._finish_stopped(stage, attempt, result.stopped_reason, "stop")
         if result.timed_out:
@@ -1110,11 +1129,11 @@ class CampaignRunner:
                     attempt,
                     session_identity=review.session_identity,
                     result_ref=str(
-                        (attempt_dir / "worker_result.json").relative_to(
+                        (attempt_dir / "reviewer.json").relative_to(
                             self.store.run_dir
                         )
                     ),
-                    retry_cursor=review.attempts,
+                    retry_cursor=review.retry_cursor,
                     resume_artifact=review.resume_artifact,
                     resume_from=review.resume_from,
                 )
@@ -1244,11 +1263,24 @@ class CampaignRunner:
             worker_report = artifact_paths[-1] if artifact_paths else self.store.run_dir
         prompt = build_review_prompt(artifact_paths, worker_report, stage.id)
         review_kwargs: dict[str, Any] = {"control": control}
+        prior: dict[str, Any] = {}
         resumed = self.store.load().resumed_from_quota
         if resumed is not None and resumed.suspended_phase == "reviewer":
+            prior = self._read_reviewer_checkpoint(attempt_dir)
             review_kwargs["resume_artifact"] = resumed.resume_artifact
             review_kwargs["resume_from"] = (
                 Path(resumed.resume_from) if resumed.resume_from is not None else None
+            )
+            review_kwargs["retry_cursor"] = resumed.retry_cursor or 0
+            review_kwargs["accumulated_attempts"] = int(prior.get("attempts") or 0)
+            prior_usage = prior.get("usage")
+            review_kwargs["accumulated_usage"] = (
+                prior_usage if isinstance(prior_usage, Mapping) else None
+            )
+            review_kwargs["resume_session"] = (
+                resumed.session_identity.session_id
+                if resumed.session_identity is not None
+                else prior.get("session_id")
             )
         result = self.config.reviewer.run(
             model,
@@ -1258,7 +1290,8 @@ class CampaignRunner:
             self.store.run_dir,
             **review_kwargs,
         )
-        self._record_usage(result.usage, f"reviewer usage for {stage.id}/{attempt}")
+        usage_delta = self._usage_delta(result.usage, prior.get("usage"))
+        self._record_usage(usage_delta, f"reviewer usage for {stage.id}/{attempt}")
         write_receipt(
             attempt_dir / "reviewer.json",
             {
@@ -1268,9 +1301,32 @@ class CampaignRunner:
                 "session_id": result.session_id,
                 "session_identity": _session_identity_dict(result.session_identity),
                 "resume_artifact": _resume_artifact_dict(result.resume_artifact),
+                "usage": result.usage,
+                "attempts": result.attempts,
+                "retry_cursor": result.retry_cursor,
             },
         )
         return result
+
+    @staticmethod
+    def _read_reviewer_checkpoint(attempt_dir: Path) -> dict[str, Any]:
+        path = attempt_dir / "reviewer.json"
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _usage_delta(
+        usage: Mapping[str, float], baseline: Any
+    ) -> dict[str, float]:
+        if not isinstance(baseline, Mapping):
+            return dict(usage)
+        return {
+            key: max(0.0, float(value) - float(baseline.get(key, 0) or 0))
+            for key, value in usage.items()
+        }
 
     def _finish_gate_failure(
         self,

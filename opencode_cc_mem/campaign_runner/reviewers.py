@@ -67,6 +67,7 @@ class ReviewResult:
     session_identity: SessionIdentity | None = None
     resume_artifact: ResumeArtifact | None = None
     resume_from: Path | None = None
+    retry_cursor: int = 0
 
 
 def model_family(model: str) -> str:
@@ -257,6 +258,10 @@ class Reviewer:
         control: ProcessControl | None = None,
         resume_artifact: ResumeArtifact | None = None,
         resume_from: Path | None = None,
+        retry_cursor: int = 0,
+        accumulated_attempts: int = 0,
+        accumulated_usage: Mapping[str, float] | None = None,
+        resume_session: str | None = None,
     ) -> ReviewResult:
         route = resolve_route("reviewer", {"reviewer": {"model": model}})
         context = (
@@ -287,11 +292,13 @@ class Reviewer:
         review_failed = False
         try:
             usage = empty_usage()
-            session_id: str | None = None
-            current_prompt = prompt
+            if accumulated_usage is not None:
+                _merge_usage(usage, accumulated_usage)
+            session_id = resume_session
+            current_prompt = prompt if retry_cursor == 0 else REVIEW_FORMAT_NOTE
             errors: list[str] = []
-            attempts = 0
-            for retry_index in range(self.max_retries + 1):
+            attempts = accumulated_attempts
+            for retry_index in range(retry_cursor, self.max_retries + 1):
                 result = executor.run(
                     current_prompt,
                     cwd,
@@ -310,7 +317,7 @@ class Reviewer:
                 result_resume_from = _bound_invocation_dir(
                     executor, result_artifact, context.control_dir
                 )
-                if result.outcome is not None and result.outcome.overrides_repair:
+                if result.outcome is not None and result.outcome.kind != "success":
                     return ReviewResult(
                         issues=[],
                         followups=[],
@@ -324,6 +331,7 @@ class Reviewer:
                         session_identity=session_identity,
                         resume_artifact=result_artifact,
                         resume_from=result_resume_from,
+                        retry_cursor=retry_index,
                     )
                 if result.stopped_reason:
                     return ReviewResult(
@@ -339,6 +347,7 @@ class Reviewer:
                         session_identity=session_identity,
                         resume_artifact=result_artifact,
                         resume_from=result_resume_from,
+                        retry_cursor=retry_index,
                     )
                 try:
                     issues, followups = validate_review(_extract_json(result.final_text), run_dir)
@@ -356,9 +365,11 @@ class Reviewer:
                     usage=self._resolve_usage(route.client, session_id, usage),
                     attempts=attempts,
                     model=model,
+                    outcome=result.outcome,
                     session_identity=session_identity,
                     resume_artifact=result_artifact,
                     resume_from=result_resume_from,
+                    retry_cursor=retry_index,
                 )
             raise ReviewError("; ".join(errors) if errors else "review failed")
         except BaseException:

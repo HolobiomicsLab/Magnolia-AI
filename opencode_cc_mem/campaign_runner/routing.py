@@ -78,6 +78,7 @@ def _route(
     default_client: str,
     *,
     required: bool,
+    inherit_default_client: bool = False,
 ) -> ResolvedRoute:
     if configured is None or not str(configured).strip():
         if not required:
@@ -86,7 +87,11 @@ def _route(
     configured = str(configured)
     from .reviewers import model_family
 
-    client = default_client if role == "interactive" else "opencode"
+    client = (
+        default_client
+        if role == "interactive" or inherit_default_client
+        else "opencode"
+    )
     model = configured
     for prefix in CLIENTS:
         if configured.startswith(prefix + "/"):
@@ -165,11 +170,18 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
         return _route(None, role, global_source, client, required=False)
     if role == "helper" and selected is None and global_model is None:
         selected, source = "deepseek/deepseek-flash", "legacy-fallback"
-    if role == "evaluator" and selected is None:
-        selected, source = get("api_fallback_model"), "api-fallback"
     if selected is None:
         selected, source = global_model, global_source
-    return _route(selected, role, source, client, required=True)
+    if role == "evaluator" and selected is None:
+        selected, source = get("api_fallback_model"), "api-fallback"
+    return _route(
+        selected,
+        role,
+        source,
+        client,
+        required=True,
+        inherit_default_client=source == global_source,
+    )
 
 
 def load_setup(root: Path) -> dict[str, Any]:

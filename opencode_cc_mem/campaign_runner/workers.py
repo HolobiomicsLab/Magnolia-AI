@@ -33,6 +33,15 @@ EMPTY_OUTPUT_NOTE = (
     "Your previous turn returned no final text. Reply now with the complete "
     "result. Do not continue investigating."
 )
+_QUOTA_ERROR_NAMES = frozenset(
+    {
+        "ratelimiterror",
+        "rate_limit_error",
+        "rate_limited",
+        "quotaexceedederror",
+        "quota_exceeded",
+    }
+)
 
 
 class WorkerError(Exception):
@@ -157,6 +166,28 @@ def parse_run_events(text: str) -> ParsedRun:
     parsed.all_text = "\n".join(item for message in order for item in texts[message])
     parsed.final_text = "\n".join(texts[order[-1]]) if order else ""
     return parsed
+
+
+def _structured_quota_outcome(
+    errors: list[dict[str, Any]],
+) -> RunOutcome | None:
+    """Recognize typed terminal limit errors without scanning model prose."""
+    for error in errors:
+        identifiers = {
+            str(error.get(key, "")).casefold().replace("-", "_").replace(" ", "")
+            for key in ("name", "type", "code")
+        }
+        status = error.get("status", error.get("statusCode"))
+        if status == 429 or identifiers & _QUOTA_ERROR_NAMES:
+            return RunOutcome(
+                "quota",
+                LimitInfo(
+                    "provider rate or quota limit",
+                    None,
+                    "opencode structured terminal error",
+                ),
+            )
+    return None
 
 
 @dataclass(frozen=True)
@@ -308,6 +339,9 @@ class OpenCodeExecutor:
                     parsed = parse_run_events(
                         stdout_path.read_text(encoding="utf-8", errors="replace")
                     )
+                    structured_quota = _structured_quota_outcome(parsed.errors)
+                    if structured_quota is not None:
+                        outcome.outcome = structured_quota
                     usage_record, usage_baseline = self._usage_record(
                         parsed,
                         usage_baseline,
