@@ -43,13 +43,13 @@
       "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
     ]
   },
-  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. The Claude Code worker stays stale until a live call attempts the denied outside write. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused: the Plan 4 live gate (docs/evidence/live-p4/vibe) stopped on disabled tools still exposed and empty production output.",
+  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. Plan 4 Task 6b then re-observed the Claude Code worker's denied outside write, clearing that row too. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused: Vibe 3.1.2 cannot remove its filesystem builtins from the model-visible catalogue (Plan 4 Task 7a; live evidence docs/evidence/live-p4/vibe).",
   "rows": [
     {
       "client": "claude-code",
       "role": "worker",
       "role_label": "worker",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
@@ -248,7 +248,8 @@
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
         "Live pass 2a re-observed the worker identity, tool surface, policy boundaries and usage on the final role shape.",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): identity matched; read, grep, secret and alias denials and work/ write and edit observed (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cw.json). Still stale: the model declined to attempt the outside write, so that denial was not re-observed; one live call that attempts it clears the row."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): identity matched; read, grep, secret and alias denials and work/ write and edit observed (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cw.json). Still stale: the model declined to attempt the outside write, so that denial was not re-observed; one live call that attempts it clears the row.",
+        "Plan 4 Task 6b live (17-18 Nov 2026): identity recomputed equal (launch 88de138b, config 7f544ae3, hook_source 496c1102); the outside write was attempted and denied by the hook before execution, outside directory unchanged (opencode_cc_mem/docs/evidence/live-p4/live6b/c1-claude-worker-hooks.json). The allowed work/ write and edit on this identity are from Task 6 (live-p4/reobserve/B-cw-hooks.json); 6b's own work/ write was denied only because the gate had not created work/, which the campaign run store always creates."
       ]
     },
     {
@@ -448,7 +449,7 @@
         "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
         "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
         "Live pass 2a re-observed the reviewer identity and read-only policy boundaries. First-try review validation failed because the prompt omitted the run-directory evidence-path rule fixed by F-L3.",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; read, grep, secret and alias reads denied, edit and write denied, valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, grep; denied: secret read, alias read, edit, write; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json)."
       ]
     },
     {
@@ -1115,7 +1116,7 @@
         "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
         "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending.",
         "re-observation pending after final-review fix wave (2026-11-17)",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; memory_get_context, read, search, secret and alias denied, apply_patch add/update in work/ allowed, outside apply_patch denied, bash denied (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xw.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: memory_get_context, read, search, apply_patch add and update in work/; denied: secret read, alias read, outside apply_patch, bash (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xw.json)."
       ]
     },
     {
@@ -1384,7 +1385,7 @@
         "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
         "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
         "re-observation pending after final-review fix wave (2026-11-17)",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; read, search, secret and alias denied, apply_patch add/update denied, bash denied, valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xr.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, search; denied: secret read, alias read, apply_patch add and update, bash; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xr.json)."
       ]
     },
     {

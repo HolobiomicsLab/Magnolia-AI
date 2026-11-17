@@ -1,0 +1,69 @@
+{
+ "launch_identity_sha256": "88de138b3237976bf31f29b55451333e1f6c345d454b66e4902de0bc346dc525",
+ "configuration_identity": "7f544ae3cd4c09f4e4c7aa75110b21cbe078c6d000d9d16a93235454a6888b36",
+ "mismatch": {},
+ "hook_source_equal": true,
+ "row_hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+ "production_projection": {
+  "accepted": false,
+  "blocking_cells": [],
+  "gate_accepted": true,
+  "stale": true,
+  "vibe_memory": null
+ },
+ "candidate_projection": {
+  "accepted": true,
+  "blocking_cells": [],
+  "gate_accepted": true,
+  "stale": false,
+  "vibe_memory": null
+ },
+ "client_env_keys": [
+  "COMPCHEM_TOOLS_PORT",
+  "HOME",
+  "LANG",
+  "LOGNAME",
+  "MAGNOLIA_CLIENT",
+  "MAGNOLIA_CONTROL_DIR",
+  "MAGNOLIA_DISTILL_INTERVAL_MIN",
+  "MAGNOLIA_DOORBELL",
+  "MAGNOLIA_HOOK_POLICY",
+  "MAGNOLIA_HOOK_POLICY_REQUIRED",
+  "MAGNOLIA_HOOK_POLICY_SHA256",
+  "MAGNOLIA_INSTALLATION_ROOT",
+  "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+  "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+  "MAGNOLIA_MODEL",
+  "MAGNOLIA_PROJECT_DIR",
+  "MAGNOLIA_PROJECT_IDENTITY",
+  "MAGNOLIA_PYTHON",
+  "MAGNOLIA_ROLE",
+  "MAGNOLIA_ROOT",
+  "MAGNOLIA_RULES_DIR",
+  "MAGNOLIA_RUN_DIR",
+  "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+  "MAGNOLIA_WORKSPACE_ROOT",
+  "MAGNOLIA_WORK_DIR",
+  "PATH",
+  "PYTHONPYCACHEPREFIX",
+  "SHELL",
+  "TMPDIR",
+  "USER",
+  "XDG_STATE_HOME"
+ ],
+ "native_files": {
+  "claude-mcp.json": "1972bd501078329f2d494056b385fb44098c04b1edcbf40f74c743019abfe5bc",
+  "claude-settings.json": "3e4075ebed1d9a5c05b0c757e61ccc183c44387028ca67de731972f67bdbc372"
+ },
+ "components_hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+ "task6_values": {
+  "launch": "88de138b",
+  "config": "7f544ae3",
+  "hook_source": "496c1102"
+ },
+ "equal_to_task6": {
+  "launch": true,
+  "config": true,
+  "hook_source": true
+ }
+}

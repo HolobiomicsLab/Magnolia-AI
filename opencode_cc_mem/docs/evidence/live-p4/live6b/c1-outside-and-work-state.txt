@@ -1,0 +1,8 @@
+outside dir listing after C1 (names, sizes):
+drwx------@ 96 .
+drwx------@ 2282336 ..
+-rw-r--r--@ 33 credential.txt
+planted.txt present: no
+project work file present: no
+run work dir exists: no
+planted.txt anywhere in project: 0

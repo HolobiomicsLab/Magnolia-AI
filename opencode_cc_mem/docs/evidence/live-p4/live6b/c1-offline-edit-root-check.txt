@@ -1,0 +1,7 @@
+Offline (no model call) evaluation of the production hook path check (compchem_memory.hook.policy._path_forms_allowed) against each run's policy.json; _within_any requires root.is_dir().
+p4-B-cw edit-target <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-B-cw/work/result.txt allowed | matches deny pattern: False | parent exists: True
+p4-B-cw edit-target <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-6b-cw/work/result.txt DENIED | matches deny pattern: False | parent exists: False
+p4-B-cw edit_roots ['<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-B-cw/work'] deny patterns ('**/*.env*', '**/*.env*/**', '**/.magnolia/campaign-service.json', '**/.magnolia/campaign-service.log', '**/.magnolia/services/**', '<G>/xdg/state/magnolia/services/**')
+p4-6b-cw edit-target <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-6b-cw/work/result.txt DENIED | matches deny pattern: False | parent exists: False
+p4-6b-cw edit-target <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-6b-cw/work/result.txt DENIED | matches deny pattern: False | parent exists: False
+p4-6b-cw edit_roots ['<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-6b-cw/work'] deny patterns ('**/*.env*', '**/*.env*/**', '**/.magnolia/campaign-service.json', '**/.magnolia/campaign-service.log', '**/.magnolia/services/**', '<G>/xdg/state/magnolia/services/**')

@@ -333,15 +333,10 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     assert set(projected) == {"claude-code", "codex", "vibe"}
     assert len(changed_rows) == 8
     # Plan 4 Task 4 changed the hook adapter: the six accepted rows were rebound to the
-    # new hook_source. Plan 4 Task 6 re-observed five of them live; the Claude Code worker
-    # stays stale until a live call attempts the denied outside write. Codex helper and
+    # new hook_source and re-observed live in Plan 4 Tasks 6 and 6b. Codex helper and
     # evaluator stay refused (and stale).
     stale_rows = {(row["client"], row["role"]) for row in changed_rows if row["stale"]}
-    assert stale_rows == {
-        ("claude-code", "worker"),
-        ("codex", "helper"),
-        ("codex", "evaluator"),
-    }
+    assert stale_rows == {("codex", "helper"), ("codex", "evaluator")}
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
@@ -360,7 +355,7 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
         name: (role["accepted"], role["stale"])
         for name, role in projected["claude-code"].items()
     } == {
-        "worker": (False, True),
+        "worker": (True, False),
         "reviewer": (True, False),
         "helper": (True, False),
         "evaluator": (True, False),
@@ -413,19 +408,9 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
-    # Plan 4 Task 6: worker still stale (outside-write denial not re-observed live).
-    assert {name: item["stale"] for name, item in projected.items()} == {
-        "worker": True,
-        "reviewer": False,
-        "helper": False,
-        "evaluator": False,
-    }
-    assert {name: item["accepted"] for name, item in projected.items()} == {
-        "worker": False,
-        "reviewer": True,
-        "helper": True,
-        "evaluator": True,
-    }
+    # Re-observed live on the rebound hook_source in Plan 4 Tasks 6 and 6b.
+    assert all(item["stale"] is False for item in projected.values())
+    assert all(item["accepted"] is True for item in projected.values())
     assert {
         row["role"]: row["gate"]["artifact"] for row in rows
     } == {
