@@ -114,7 +114,10 @@ def _distill_tool_events(pd: Path) -> dict[str, Any]:
             continue
         is_active = session_path.stem == active_id
         try:
-            extractor.commit(session_path, str(pd))
+            saved = extractor.commit(session_path, str(pd))
+            if saved is None:
+                skipped += 1
+                continue
             if not is_active:
                 marker.write_text(
                     json.dumps({"distilled_at": _now_iso(), "events_path": session_path.name})

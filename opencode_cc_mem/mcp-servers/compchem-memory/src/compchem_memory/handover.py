@@ -1056,6 +1056,9 @@ def generate_handover(
               f"all {len(refs)} sessions", file=sys.stderr)
 
     state_path = store / HANDOVER_STATE_FILE
+    # Fingerprint before reading so a concurrent state write cannot be mistaken
+    # for the view on which this merge was based.
+    state_read = file_fingerprint([state_path])
     base = ""
     if state_path.exists():
         try:
@@ -1064,7 +1067,6 @@ def generate_handover(
             base = ""
     # Exports and merges call subprocesses and an LLM outside the project writer
     # lease; each write below re-validates the state and cursor it was based on.
-    state_read = file_fingerprint([state_path])
 
     # Schema v2 (2026-10-08): merge-time hold-back. Items unchanged across
     # HOLD_BACK_MIN_UNCHANGED_MERGES merges with ≥ HOLD_BACK_MIN_SESSIONS_SINCE

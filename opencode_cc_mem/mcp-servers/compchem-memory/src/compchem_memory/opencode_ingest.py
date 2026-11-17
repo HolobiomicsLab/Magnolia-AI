@@ -678,7 +678,12 @@ def distill_session_transcript(
         if _read_progress(rec_path) != rec:
             print(f"[opencode_ingest] {ref.key}: progress changed during distillation; "
                   "nothing saved, the next sweep retries", file=sys.stderr)
-            return {"status": "committed", "saved": []}
+            return {
+                "status": "skipped",
+                "reason": "concurrent write",
+                "retry": True,
+                "saved": [],
+            }
         rec_path.parent.mkdir(parents=True, exist_ok=True)
         saved = [_save_candidate(store, c, ref.key) for c in kept]
         new_cursor = _last_message_id(new_msgs) or cursor

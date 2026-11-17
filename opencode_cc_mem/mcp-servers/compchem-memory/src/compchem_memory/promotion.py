@@ -359,10 +359,13 @@ def propose_promotions(
     fact_patterns = collect_cluster_fact_patterns(load_destinations(rules_dir))
     artifact = store / "reflex" / "promotion-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    eligible = eligible_entries(store_dir)
     # The panel, drafter and checker call an LLM, so they run outside the
     # project writer lease; the write below re-validates what was read here.
-    read_set = file_fingerprint([*(entry["path"] for entry in eligible), artifact])
+    # Fingerprint before loading so a write in that narrow window is visible.
+    entries_dir = store / "entries"
+    entry_paths = [p for p in sorted(entries_dir.glob("*.md")) if p.name != "INDEX.md"]
+    read_set = file_fingerprint([*entry_paths, artifact])
+    eligible = eligible_entries(store_dir)
     prior_keys = prior_rejected_keys(artifact, _entry_key)
     prior_rej = _prior_rejected_records(artifact)
     now = datetime.now(timezone.utc).isoformat()

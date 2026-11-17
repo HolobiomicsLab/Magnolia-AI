@@ -532,9 +532,9 @@ class AutomaticMemoryExtractor:
             return []
         return self._generate_candidates(events)
 
-    def commit(self, session_path: Path, project_dir: str) -> list[str]:
+    def commit(self, session_path: Path, project_dir: str) -> list[str] | None:
         """Compute candidate learnings, save them to staging, advance the cursor.
-        Returns the list of saved staging-entry paths."""
+        Return saved paths, or ``None`` when a concurrent commit requires retry."""
         events = self._read_events(session_path)
         if not events:
             return []
@@ -549,7 +549,7 @@ class AutomaticMemoryExtractor:
             if self._stored_cursor() != cursor_read:
                 print(f"[extraction] {session_path.name}: cursor moved during "
                       "extraction; nothing saved, the next pass retries", file=sys.stderr)
-                return []
+                return None
             saved = []
             for candidate in candidates:
                 candidate["run_ids"] = _link_run_ids(store, candidate)
