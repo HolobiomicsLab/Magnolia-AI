@@ -36,6 +36,12 @@ globalThis.setTimeout = (callback, delay, ...args) => {
   timeoutDelays.push(delay)
   return realSetTimeout(callback, delay, ...args)
 }
+const order = []
+const realClearTimeout = globalThis.clearTimeout
+globalThis.clearTimeout = (handle) => {
+  order.push("clear")
+  return realClearTimeout(handle)
+}
 globalThis.fetch = async (url, init) => {
   calls.push({
     url, headers: init.headers, body: JSON.parse(init.body),
@@ -45,7 +51,10 @@ globalThis.fetch = async (url, init) => {
   const data = replyKind === "anthropic"
     ? { content: [{ type: "text", text }] }
     : { choices: [{ message: { content: text } }] }
-  return { ok: Number(status) < 400, status: Number(status), json: async () => data }
+  return {
+    ok: Number(status) < 400, status: Number(status),
+    json: async () => { order.push("json"); return data },
+  }
 }
 const mod = await import(pluginPath)
 const report = "The binding energy is -9.3 kcal/mol and the pose ranks first. ".repeat(5)
@@ -59,6 +68,7 @@ const client = {
 }
 const hooks = await mod.default.server({ client, directory })
 if (hooks.event) await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+for (const call of calls) call.order = order
 process.stdout.write(JSON.stringify(calls))
 """
 
@@ -163,3 +173,11 @@ def test_judge_fetch_uses_python_route_timeout(tmp_path):
     assert calls[0]["hasSignal"] is True
     assert calls[0]["timeoutDelays"] == [60_000]
     assert len(rows) == 1 and errors == []
+
+
+def test_judge_timeout_covers_the_response_body(tmp_path):
+    calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"})
+
+    order = calls[0]["order"]
+    assert "json" in order and "clear" in order
+    assert order.index("json") < order.index("clear")
