@@ -406,10 +406,10 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert all(projected["codex"][role]["accepted"] for role in rows)
     assert rows["worker"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
-    ] == "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb"
+    ] == "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285"
     assert rows["reviewer"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
-    ] == "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f"
+    ] == "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6"
     for row in rows.values():
         host = row["cells"]["identity"]["value"]["code_mode_host"]
         assert host == {

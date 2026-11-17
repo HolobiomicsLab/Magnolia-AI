@@ -113,6 +113,7 @@ MEMORY_PROVIDER_ENV = frozenset(
     }
 )
 DEFAULT_GOVERNOR_CAP = 60
+CODEX_MCP_STARTUP_TIMEOUT_SECONDS = 30
 ROLE_CONFIG_NAMES = {
     "worker": "campaign-worker",
     "reviewer": "campaign-reviewer",
@@ -1390,6 +1391,8 @@ def _codex_mcp_servers(
         entry["tools"] = _codex_tool_approvals(
             "compchem-memory", mcp_payload
         )
+        entry["required"] = True
+        entry["startup_timeout_sec"] = CODEX_MCP_STARTUP_TIMEOUT_SECONDS
         servers["compchem-memory"] = entry
     servers["magnolia-read"] = {
         "command": context.python_executable,
@@ -1404,6 +1407,8 @@ def _codex_mcp_servers(
             "PYTHONPYCACHEPREFIX",
         ],
         "tools": _codex_tool_approvals("magnolia-read", mcp_payload),
+        "required": True,
+        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SECONDS,
     }
     return servers
 

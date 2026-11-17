@@ -66,13 +66,13 @@
             ],
             "components": {
               "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
-              "mcp": "1819a866791146d33eb5d31da5858b8b5432f588dcd242368946931ee75dd775",
-              "native_files": "5c8860ad883fa3ebb4ebe7a569685ddc885d770d10a02ab6b9a8b065234240ee",
+              "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+              "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
               "policy": "81cc77a40f81fff02be14421920a571158f0eb75eb29e43df04e0b6a68baf7fd",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -236,7 +236,8 @@
       "notes": [
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
-        "No additional role-specific live caveat."
+        "No additional role-specific live caveat.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -276,7 +277,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -434,7 +435,8 @@
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
-        "The first reviewer output failed the review schema; the R2 observation passed with followups exactly []."
+        "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -474,7 +476,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -631,7 +633,8 @@
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
-        "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted."
+        "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -671,7 +674,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -822,7 +825,8 @@
       "notes": [
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
-        "No additional role-specific live caveat."
+        "No additional role-specific live caveat.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -870,7 +874,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "ce93e584f28bc61686412e355c255bbc1a86ec8e0669b70ff9d83bf1fe99c262",
+            "configuration_identity_sha256": "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -902,13 +906,13 @@
                 }
               },
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
-              "mcp": "6f9d7130f764108a2489d355c8570a3aa52661827b2f9107fcec86d1871cfa14",
-              "native_files": "5dbb7bf83413b0e897051f860546c0b98c2b822a6b27862202494202212cd0a3",
+              "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
+              "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
               "policy": "7bf73caf903266d81004d446910c6d972089b45fb6bb909eb9159a506ae657b0",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1004,7 +1008,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "ce93e584f28bc61686412e355c255bbc1a86ec8e0669b70ff9d83bf1fe99c262",
+          "value": "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1095,7 +1099,8 @@
         "Accepted limitation: the code-mode catalog is wider than the worker allowlist; the required deny-unknown hook is the enforcement boundary.",
         "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
         "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
-        "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending."
+        "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -1143,7 +1148,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "fd4812074135b238d6c8d9ad06206f4baba7bf9db64bf3ca93a2d3539fe3cfe7",
+            "configuration_identity_sha256": "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -1176,12 +1181,12 @@
               },
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
-              "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
+              "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
               "policy": "642cb38be6931fbc2d09ba232b36d5e7e5129daf0b9d2aa2ded8b639aff2562b",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1277,7 +1282,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "fd4812074135b238d6c8d9ad06206f4baba7bf9db64bf3ca93a2d3539fe3cfe7",
+          "value": "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1362,7 +1367,8 @@
         "Live pass 1 re-observed the final role identity, tool catalog and policy boundary on the production prepare_launch path.",
         "Accepted limitation: the code-mode catalog is wider than the reviewer allowlist; the required deny-unknown hook is the enforcement boundary.",
         "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
-        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate."
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
       ]
     },
     {
@@ -1405,7 +1411,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1482,7 +1488,10 @@
           "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
         }
-      }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
     },
     {
       "client": "codex",
@@ -1524,7 +1533,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+              "hook_source": "77657a08f8e6b920288eee0c2915369ca657911772b9218f3c3421f7cb52bb19",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1601,7 +1610,10 @@
           "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
         }
-      }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
     },
     {
       "client": "vibe",
