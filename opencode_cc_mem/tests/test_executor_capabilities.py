@@ -333,8 +333,15 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     assert set(projected) == {"claude-code", "codex", "vibe"}
     assert len(changed_rows) == 8
     # Plan 4 Task 4 changed the hook adapter: the six accepted rows were rebound to the
-    # new hook_source and stay stale until Plan 4 Task 6 re-observes them live.
-    assert all(row["stale"] is True for row in changed_rows)
+    # new hook_source. Plan 4 Task 6 re-observed five of them live; the Claude Code worker
+    # stays stale until a live call attempts the denied outside write. Codex helper and
+    # evaluator stay refused (and stale).
+    stale_rows = {(row["client"], row["role"]) for row in changed_rows if row["stale"]}
+    assert stale_rows == {
+        ("claude-code", "worker"),
+        ("codex", "helper"),
+        ("codex", "evaluator"),
+    }
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
@@ -349,8 +356,15 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
     assert all(role["gate_accepted"] for role in projected["claude-code"].values())
-    assert not any(role["accepted"] for role in projected["claude-code"].values())
-    assert all(role["stale"] for role in projected["claude-code"].values())
+    assert {
+        name: (role["accepted"], role["stale"])
+        for name, role in projected["claude-code"].items()
+    } == {
+        "worker": (False, True),
+        "reviewer": (True, False),
+        "helper": (True, False),
+        "evaluator": (True, False),
+    }
     assert all("launch_identity" in role for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["codex"].values())
     assert all(
@@ -359,9 +373,9 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     )
     for role in ("worker", "reviewer"):
         assert projected["codex"][role]["gate_accepted"] is True
-        # Stale until Plan 4 Task 6 re-observes the rebound hook_source.
-        assert projected["codex"][role]["accepted"] is False
-        assert projected["codex"][role]["stale"] is True
+        # Re-observed live on the rebound hook_source in Plan 4 Task 6.
+        assert projected["codex"][role]["accepted"] is True
+        assert projected["codex"][role]["stale"] is False
         assert projected["codex"][role]["blocking_cells"] == []
     for role in ("helper", "evaluator"):
         assert projected["codex"][role]["accepted"] is False
@@ -399,8 +413,19 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
-    assert all(item["accepted"] is False for item in projected.values())
-    assert all(item["stale"] is True for item in projected.values())  # until Plan 4 Task 6
+    # Plan 4 Task 6: worker still stale (outside-write denial not re-observed live).
+    assert {name: item["stale"] for name, item in projected.items()} == {
+        "worker": True,
+        "reviewer": False,
+        "helper": False,
+        "evaluator": False,
+    }
+    assert {name: item["accepted"] for name, item in projected.items()} == {
+        "worker": False,
+        "reviewer": True,
+        "helper": True,
+        "evaluator": True,
+    }
     assert {
         row["role"]: row["gate"]["artifact"] for row in rows
     } == {
@@ -410,7 +435,8 @@ def test_claude_rows_accepted_from_live2a_gate():
         "evaluator": "opencode_cc_mem/docs/evidence/live2a/README.md",
     }
     reviewer = next(row for row in rows if row["role"] == "reviewer")
-    assert "evidence-path rule fixed by F-L3" in reviewer["notes"][-1]
+    assert any("evidence-path rule fixed by F-L3" in note for note in reviewer["notes"])
+    assert "Plan 4 Task 6 live re-observation" in reviewer["notes"][-1]
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
     assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(
@@ -449,8 +475,9 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert set(rows) == {"worker", "reviewer"}
     assert all(row["gate"]["status"] == "observed" for row in rows.values())
     assert all(projected["codex"][role]["gate_accepted"] for role in rows)
-    assert not any(projected["codex"][role]["accepted"] for role in rows)
-    assert all(projected["codex"][role]["stale"] for role in rows)  # until Plan 4 Task 6
+    # Re-observed live on the rebound hook_source in Plan 4 Task 6.
+    assert all(projected["codex"][role]["accepted"] for role in rows)
+    assert not any(projected["codex"][role]["stale"] for role in rows)
     assert rows["worker"]["gate"]["artifact"].endswith(
         "docs/evidence/live5/c1-worker-codex-review.json"
     )

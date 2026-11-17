@@ -43,7 +43,7 @@
       "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
     ]
   },
-  "note": "The accepted Claude Code worker/reviewer/helper/evaluator and Codex worker/reviewer rows are stale until live re-observation in Plan 4 Task 6 (hook adapter change). Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused and deferred.",
+  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. The Claude Code worker stays stale until a live call attempts the denied outside write. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused: the Plan 4 live gate (docs/evidence/live-p4/vibe) stopped on disabled tools still exposed and empty production output.",
   "rows": [
     {
       "client": "claude-code",
@@ -247,14 +247,15 @@
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
-        "Live pass 2a re-observed the worker identity, tool surface, policy boundaries and usage on the final role shape."
+        "Live pass 2a re-observed the worker identity, tool surface, policy boundaries and usage on the final role shape.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): identity matched; read, grep, secret and alias denials and work/ write and edit observed (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cw.json). Still stale: the model declined to attempt the outside write, so that denial was not re-observed; one live call that attempts it clears the row."
       ]
     },
     {
       "client": "claude-code",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
@@ -446,14 +447,15 @@
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
         "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
-        "Live pass 2a re-observed the reviewer identity and read-only policy boundaries. First-try review validation failed because the prompt omitted the run-directory evidence-path rule fixed by F-L3."
+        "Live pass 2a re-observed the reviewer identity and read-only policy boundaries. First-try review validation failed because the prompt omitted the run-directory evidence-path rule fixed by F-L3.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; read, grep, secret and alias reads denied, edit and write denied, valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json)."
       ]
     },
     {
       "client": "claude-code",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
@@ -644,14 +646,15 @@
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
         "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted.",
-        "Live pass 2a re-observed the native_read helper identity, docs-only boundary and usage."
+        "Live pass 2a re-observed the native_read helper identity, docs-only boundary and usage.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; bound native_read allowed, secret and alias reads denied; grep and write/edit absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ch.json)."
       ]
     },
     {
       "client": "claude-code",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
@@ -836,14 +839,15 @@
         "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
-        "Live pass 2a re-observed the no-tools evaluator identity, boundary and usage."
+        "Live pass 2a re-observed the no-tools evaluator identity, boundary and usage.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; one turn with no tools exposed; write absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ce.json)."
       ]
     },
     {
       "client": "codex",
       "role": "worker",
       "role_label": "worker",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
@@ -1110,14 +1114,15 @@
         "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
         "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
         "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending.",
-        "re-observation pending after final-review fix wave (2026-11-17)"
+        "re-observation pending after final-review fix wave (2026-11-17)",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; memory_get_context, read, search, secret and alias denied, apply_patch add/update in work/ allowed, outside apply_patch denied, bash denied (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xw.json)."
       ]
     },
     {
       "client": "codex",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
@@ -1378,7 +1383,8 @@
         "Accepted limitation: the code-mode catalog is wider than the reviewer allowlist; the required deny-unknown hook is the enforcement boundary.",
         "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
         "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
-        "re-observation pending after final-review fix wave (2026-11-17)"
+        "re-observation pending after final-review fix wave (2026-11-17)",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; read, search, secret and alias denied, apply_patch add/update denied, bash denied, valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xr.json)."
       ]
     },
     {
