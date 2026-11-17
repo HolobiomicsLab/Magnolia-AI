@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import fcntl
 import json
@@ -5,6 +6,7 @@ import os
 import signal
 import socket
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -12,6 +14,13 @@ from pathlib import Path
 import pytest
 
 from compchem_memory import memory_http, server
+from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_NAMES,
+    MEMORY_TOOL_PREFIX,
+    MUTATING_MEMORY_TOOLS,
+    READ_ONLY_MEMORY_TOOLS,
+    resolve_memory_tool_allowlist,
+)
 from compchem_memory.harness import memory_service
 from compchem_memory.harness.memory_service import (
     ensure_memory_service,
@@ -20,7 +29,7 @@ from compchem_memory.harness.memory_service import (
 )
 from fastmcp.server.middleware import MiddlewareContext
 from fastmcp.exceptions import ToolError
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
 from mcp import types as mt
 from types import SimpleNamespace
@@ -31,6 +40,17 @@ def _private_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv(
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        json.dumps(
+            [
+                f"{MEMORY_TOOL_PREFIX}memory_get_context",
+                f"{MEMORY_TOOL_PREFIX}memory_search",
+                f"{MEMORY_TOOL_PREFIX}memory_get_run_history",
+            ]
+        ),
+    )
+    monkeypatch.setenv("MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED", "1")
 
 
 def _watchdog_record(project, *, holders=None, provisional=False):
@@ -70,6 +90,164 @@ def test_memory_http_refuses_missing_or_wrong_bearer():
 
     assert asyncio.run(app.auth.verify_token("wrong-token")) is None
     assert asyncio.run(app.auth.verify_token("service-token")) is not None
+
+
+@pytest.mark.parametrize(
+    "supplied",
+    ("", "wrong-token", "Bearer service-token", "service-token-extra"),
+)
+def test_memory_http_bearer_verifier_rejects_missing_wrong_and_prefixed_tokens(
+    supplied, monkeypatch
+):
+    comparisons = []
+    original = memory_http.hmac.compare_digest
+    monkeypatch.setattr(
+        memory_http.hmac,
+        "compare_digest",
+        lambda left, right: comparisons.append((left, right)) or original(left, right),
+    )
+    app = memory_http.build_server("service-token")
+
+    assert asyncio.run(app.auth.verify_token(supplied)) is None
+    assert comparisons == [(supplied, "service-token")]
+
+
+def test_memory_http_requires_explicit_known_nonempty_allowlist(monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_MEMORY_TOOL_ALLOWLIST")
+    with pytest.raises(RuntimeError, match="allowlist"):
+        memory_http.build_server("service-token")
+
+    monkeypatch.setenv("MAGNOLIA_MEMORY_TOOL_ALLOWLIST", "[]")
+    with pytest.raises(RuntimeError, match="allowlist"):
+        memory_http.build_server("service-token")
+
+    monkeypatch.setenv(
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        json.dumps([f"{MEMORY_TOOL_PREFIX}memory_not_a_real_tool"]),
+    )
+    with pytest.raises(RuntimeError, match="unknown"):
+        memory_http.build_server("service-token")
+
+
+def test_memory_catalog_is_exact_and_legacy_unset_keeps_all_tools():
+    registered = tuple(tool.name for tool in asyncio.run(server.mcp.list_tools()))
+
+    assert frozenset(registered) == MEMORY_TOOL_NAMES
+    assert MUTATING_MEMORY_TOOLS.isdisjoint(READ_ONLY_MEMORY_TOOLS)
+    assert MUTATING_MEMORY_TOOLS | READ_ONLY_MEMORY_TOOLS == MEMORY_TOOL_NAMES
+    assert resolve_memory_tool_allowlist(
+        None, required=False, legacy_stdio=True
+    ).server_names == tuple(registered)
+
+
+def test_campaign_stdio_never_inherits_legacy_unset_behavior():
+    with pytest.raises(ValueError, match="allowlist is required"):
+        memory_http.resolve_memory_tool_environment(
+            {"MAGNOLIA_ROLE": "worker"}, legacy_stdio=True
+        )
+
+
+def test_memory_http_lists_and_dispatches_only_allowed_tools(monkeypatch):
+    allowed = (
+        f"{MEMORY_TOOL_PREFIX}memory_get_context",
+        f"{MEMORY_TOOL_PREFIX}memory_search",
+        f"{MEMORY_TOOL_PREFIX}memory_get_run_history",
+    )
+    monkeypatch.setenv("MAGNOLIA_MEMORY_TOOL_ALLOWLIST", json.dumps(allowed))
+    app = memory_http.build_server("service-token")
+
+    listed = {tool.name for tool in asyncio.run(app.list_tools())}
+    assert listed == {name.removeprefix(MEMORY_TOOL_PREFIX) for name in allowed}
+    with pytest.raises(ToolError, match="not allowed"):
+        asyncio.run(app.call_tool("memory_set_goal", {"goal": "refused"}))
+
+
+def test_stdio_and_http_use_the_same_exact_allowlist(monkeypatch):
+    allowed = (
+        f"{MEMORY_TOOL_PREFIX}memory_get_context",
+        f"{MEMORY_TOOL_PREFIX}memory_search",
+        f"{MEMORY_TOOL_PREFIX}memory_get_run_history",
+    )
+    resolved = resolve_memory_tool_allowlist(allowed, required=True)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_TOOL_ALLOWLIST", json.dumps(allowed))
+    http = memory_http.build_server("service-token")
+    stdio = FastMCP("stdio-parity")
+    stdio.add_middleware(memory_http.ToolAllowlistMiddleware(resolved.server_names))
+    stdio.mount(server.mcp)
+
+    http_names = {tool.name for tool in asyncio.run(http.list_tools())}
+    stdio_names = {tool.name for tool in asyncio.run(stdio.list_tools())}
+    assert http_names == stdio_names == set(resolved.server_names)
+    for app in (http, stdio):
+        with pytest.raises(ToolError, match="not allowed"):
+            asyncio.run(app.call_tool("memory_set_goal", {"goal": "refused"}))
+
+
+def test_two_concurrent_http_writers_are_idempotent_and_leave_valid_state(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(project))
+    monkeypatch.setattr(server, "PROJECT_DIR", str(project))
+    monkeypatch.setenv(
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        json.dumps([f"{MEMORY_TOOL_PREFIX}memory_record_learning"]),
+    )
+    original_create = server.ProjectManager.create_entry
+
+    def slow_create(*args, **kwargs):
+        time.sleep(0.05)
+        return original_create(*args, **kwargs)
+
+    monkeypatch.setattr(server.ProjectManager, "create_entry", slow_create)
+    app = memory_http.build_server("service-token")
+    arguments = {
+        "title": "Concurrent writer lesson",
+        "content": "The same durable observation.",
+        "project_dir": str(project),
+    }
+
+    async def write_twice():
+        return await asyncio.gather(
+            app.call_tool("memory_record_learning", arguments),
+            app.call_tool("memory_record_learning", arguments),
+        )
+
+    asyncio.run(write_twice())
+
+    entries = list((project / ".magnolia" / "staging").glob("*.md"))
+    assert len(entries) == 1
+    body = entries[0].read_text(encoding="utf-8")
+    assert "observation_count: 2" in body
+    assert body.count("---") == 2
+
+
+def test_read_tools_are_not_serialized_by_writer_lease(tmp_path):
+    middleware = memory_http.ProjectWriterLeaseMiddleware(tmp_path)
+    both_entered = asyncio.Event()
+    entered = 0
+
+    async def call_next(context):
+        nonlocal entered
+        entered += 1
+        if entered == 2:
+            both_entered.set()
+        await asyncio.wait_for(both_entered.wait(), timeout=0.2)
+        return context.message.name
+
+    async def exercise():
+        context = MiddlewareContext(
+            message=mt.CallToolRequestParams(name="memory_search", arguments={}),
+            method="tools/call",
+        )
+        return await asyncio.gather(
+            middleware.on_call_tool(context, call_next),
+            middleware.on_call_tool(context, call_next),
+        )
+
+    assert asyncio.run(exercise()) == ["memory_search", "memory_search"]
 
 
 def test_memory_http_two_projects_are_isolated(tmp_path):
@@ -821,6 +999,11 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
         holder_pid=os.getpid(),
         setup={"memory_provider": "deepseek", "memory_model": "test"},
         environment=environment,
+        tool_allowlist=(
+            f"{MEMORY_TOOL_PREFIX}memory_get_context",
+            f"{MEMORY_TOOL_PREFIX}memory_search",
+            f"{MEMORY_TOOL_PREFIX}memory_get_goal",
+        ),
     )
     handle = ensure_memory_service(context)
     try:
@@ -857,3 +1040,43 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
         assert str(other.resolve()) not in message
     finally:
         assert release_memory_service(handle) is True
+
+
+def test_production_service_acquire_callsites_pass_explicit_allowlist():
+    repository = Path(__file__).parents[3]
+    production_roots = (
+        repository / "campaign_runner",
+        repository / "mcp-servers" / "compchem-memory" / "src",
+    )
+    calls = {}
+    for root in production_roots:
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "id", None) or getattr(
+                    node.func, "attr", None
+                )
+                if name != "ensure_memory_service":
+                    continue
+                relative = path.relative_to(repository).as_posix()
+                calls[f"{relative}:{node.lineno}"] = {
+                    keyword.arg: ast.unparse(keyword.value)
+                    for keyword in node.keywords
+                }
+
+    expected_values = {
+        "campaign_runner/launch.py": "tools.neutral_names",
+        "mcp-servers/compchem-memory/src/compchem_memory/harness/__main__.py": (
+            "CANONICAL_MEMORY_TOOL_ALLOWLIST"
+        ),
+    }
+    assert {location.rsplit(":", 1)[0] for location in calls} == set(
+        expected_values
+    )
+    assert len(calls) == len(expected_values)
+    assert calls
+    for location, keywords in calls.items():
+        source = location.rsplit(":", 1)[0]
+        assert keywords["tool_allowlist"] == expected_values[source]

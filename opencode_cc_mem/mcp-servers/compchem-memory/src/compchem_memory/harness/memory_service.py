@@ -22,11 +22,16 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator, Mapping, Sequence
 
 from compchem_memory.hook.runner import repository_runner_path
 from compchem_memory.process_identity import (
     verified_process_start_token as _verified_process_start_token,
+)
+from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_ALLOWLIST_ENV,
+    MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+    resolve_memory_tool_allowlist,
 )
 
 try:
@@ -199,22 +204,42 @@ def private_state_dir(project_dir: Path) -> Path:
     return (Path.home() / ".magnolia" / "services" / digest).resolve()
 
 
-def ensure_memory_service(context: Any) -> ServiceHandle:
+def ensure_memory_service(
+    context: Any, *, tool_allowlist: Sequence[str] | None = None
+) -> ServiceHandle:
     """Acquire a ready, authenticated service bound to ``context.project_dir``."""
-    holder = _new_holder(_holder_pid(context))
     project = _context_project(context)
     environment = _server_environment(context)
     _require_provider_key(context, environment)
+    requested_tools = (
+        tool_allowlist
+        if tool_allowlist is not None
+        else getattr(context, "tool_allowlist", None)
+    )
+    try:
+        tools = resolve_memory_tool_allowlist(requested_tools, required=True)
+    except ValueError as exc:
+        raise ExecutorRefused(str(exc)) from exc
+    holder = _new_holder(_holder_pid(context))
     state = private_state_dir(project)
     _ensure_private_state_dir(state)
     with _state_lock(state):
         record = _read_record(state)
         if record is not None:
-            handle = _reuse(record, state, project, holder)
+            handle = _reuse(
+                record, state, project, holder, tool_allowlist=tools.neutral_names
+            )
             if handle is not None:
                 return handle
             _discard_record(record, state, project_digest(project))
-        return _start_service(context, project, state, environment, holder)
+        return _start_service(
+            context,
+            project,
+            state,
+            environment,
+            holder,
+            tool_allowlist=tools.neutral_names,
+        )
 
 
 def release_memory_service(handle: ServiceHandle) -> bool:
@@ -393,6 +418,8 @@ def _reuse(
     state: Path,
     project: Path,
     holder: dict[str, Any],
+    *,
+    tool_allowlist: tuple[str, ...] | None = None,
 ) -> ServiceHandle | None:
     expected_digest = project_digest(project)
     if record.get("provisional") is True:
@@ -406,6 +433,13 @@ def _reuse(
     except (KeyError, TypeError, ValueError, OSError):
         return None
     if record.get("project_digest") != expected_digest:
+        return None
+    expected_tools = (
+        tuple(record.get("tool_allowlist", ()))
+        if tool_allowlist is None
+        else tool_allowlist
+    )
+    if tuple(record.get("tool_allowlist", ())) != expected_tools:
         return None
     if token_file != (state / "bearer-token").resolve():
         return None
@@ -451,6 +485,8 @@ def _start_service(
     state: Path,
     environment: dict[str, str],
     holder: dict[str, Any],
+    *,
+    tool_allowlist: tuple[str, ...],
 ) -> ServiceHandle:
     setup = getattr(context, "setup", {}) or {}
     acquirer_pid = os.getpid()
@@ -484,6 +520,10 @@ def _start_service(
             "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY": acquirer_identity,
             "MAGNOLIA_SERVER_STARTED_AT": str(time.time()),
             TOKEN_ENV: token,
+            MEMORY_TOOL_ALLOWLIST_ENV: json.dumps(
+                tool_allowlist, separators=(",", ":")
+            ),
+            MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV: "1",
         }
     )
     command = [
@@ -515,6 +555,7 @@ def _start_service(
                     "process_identity": identity,
                     "service_identity": service_identity,
                     "token_file": str(token_file),
+                    "tool_allowlist": list(tool_allowlist),
                     "command": command,
                     "observed_command": observed_command,
                     "final_command": _final_service_command(command, observed_command),

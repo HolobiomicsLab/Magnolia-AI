@@ -28,6 +28,10 @@ from .runner import CampaignRunner, RunnerConfig
 from .service import ensure_service, merge_agent_steps, service_status, stop_service
 from .state import CampaignState, CampaignStore
 from .workers import InvocationGovernance, WorkerExecutor
+from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_ALLOWLIST_ENV,
+    MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+)
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +72,8 @@ def _memory_route(
             "MAGNOLIA_DISTILL_INTERVAL_MIN",
             "MAGNOLIA_MEMORY_MODEL",
             "MAGNOLIA_MEMORY_PROVIDER",
+            MEMORY_TOOL_ALLOWLIST_ENV,
+            MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
         ],
     }
 
