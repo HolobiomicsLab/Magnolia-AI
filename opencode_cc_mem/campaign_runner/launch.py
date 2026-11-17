@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import email.parser
 import hashlib
 import json
 import os
@@ -36,6 +37,42 @@ from compchem_memory.harness.render_common import (
     REQUIRED_HOOK_TIMEOUT_S,
     _required_pre_tool_command,
     policy_files,
+)
+
+
+# Canonical PEP 440 version pattern (Appendix B), fully anchored at call sites.
+_PEP440_VERSION_PATTERN = r"""
+    v?
+    (?:
+        (?:(?P<epoch>[0-9]+)!)?                           # epoch
+        (?P<release>[0-9]+(?:\.[0-9]+)*)                  # release segment
+        (?P<pre>                                          # pre-release
+            [-_\.]?
+            (?P<pre_l>alpha|a|beta|b|preview|pre|c|rc)
+            [-_\.]?
+            (?P<pre_n>[0-9]+)?
+        )?
+        (?P<post>                                         # post release
+            (?:-(?P<post_n1>[0-9]+))
+            |
+            (?:
+                [-_\.]?
+                (?P<post_l>post|rev|r)
+                [-_\.]?
+                (?P<post_n2>[0-9]+)?
+            )
+        )?
+        (?P<dev>                                          # dev release
+            [-_\.]?
+            (?P<dev_l>dev)
+            [-_\.]?
+            (?P<dev_n>[0-9]+)?
+        )?
+    )
+    (?:\+(?P<local>[a-z0-9]+(?:[-_\.][a-z0-9]+)*))?       # local version
+"""
+_PEP440_VERSION_RE = re.compile(
+    _PEP440_VERSION_PATTERN, re.VERBOSE | re.IGNORECASE
 )
 from compchem_memory.tool_catalog import (
     MEMORY_TOOL_ALLOWLIST_ARG,
@@ -805,7 +842,129 @@ def _installed_client_version(
         version, str
     ) and version:
         return version
+    if _looks_like_vibe_install(executable):
+        return _vibe_distribution_version(executable)
     raise ExecutorRefused("launched client version metadata is unavailable")
+
+
+def _looks_like_vibe_install(executable: Path) -> bool:
+    """Recognize a uv-tool style ``<env>/bin/vibe`` without running it."""
+    return executable.parent.name == "bin" and executable.name in {"vibe", "vibe.exe"}
+
+
+_VIBE_METADATA_MAX_BYTES = 1024 * 1024
+
+
+def _vibe_distribution_version(executable: Path) -> str:
+    """Read the unique ``mistral-vibe`` Version from the executable's own env."""
+    try:
+        resolved = executable.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused(
+            f"Vibe version metadata is unavailable for {executable}: the "
+            "installation could not be resolved; reinstall the Vibe installation"
+        ) from exc
+    environment_root = resolved.parent.parent
+    try:
+        environment_realpath = environment_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused(
+            f"Vibe version metadata is unavailable for {resolved}: the owning "
+            "installation could not be resolved; reinstall the Vibe installation"
+        ) from exc
+    candidates: list[Path] = []
+    for site_packages in sorted(
+        (environment_root / "lib").glob("python*/site-packages")
+    ):
+        for candidate in sorted(site_packages.glob("mistral_vibe-*.dist-info")):
+            try:
+                candidate_realpath = candidate.resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise ExecutorRefused(
+                    f"Vibe distribution metadata is unreadable for {resolved}: "
+                    "a candidate dist-info could not be resolved; reinstall or "
+                    "repair the Vibe installation"
+                ) from exc
+            if not candidate_realpath.is_relative_to(environment_realpath):
+                raise ExecutorRefused(
+                    f"Vibe distribution metadata is invalid for {resolved}: a "
+                    "candidate dist-info escapes the owning environment; repair "
+                    "the Vibe installation"
+                )
+            candidates.append(candidate_realpath)
+    if len(candidates) != 1:
+        raise ExecutorRefused(
+            f"Vibe version metadata is unavailable for {resolved}: "
+            f"{len(candidates)} candidate dist-info directories under the "
+            "owning environment; reinstall or repair the Vibe installation"
+        )
+    dist_info = candidates[0]
+    metadata_path = dist_info / "METADATA"
+    try:
+        metadata_realpath = metadata_path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is unreadable for {resolved}: "
+            f"{metadata_path} could not be resolved; reinstall or repair the "
+            "Vibe installation"
+        ) from exc
+    if not metadata_realpath.is_relative_to(dist_info):
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is invalid for {resolved}: "
+            f"{metadata_path} escapes the owning dist-info directory; repair "
+            "the Vibe installation"
+        )
+    try:
+        descriptor = os.open(
+            metadata_realpath,
+            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+        )
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise OSError("not a regular file")
+            chunks: list[bytes] = []
+            remaining = _VIBE_METADATA_MAX_BYTES + 1
+            while remaining > 0:
+                chunk = os.read(descriptor, min(remaining, 65536))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            metadata_bytes = b"".join(chunks)
+            if len(metadata_bytes) > _VIBE_METADATA_MAX_BYTES:
+                raise OSError("metadata larger than the supported bound")
+        finally:
+            os.close(descriptor)
+        metadata_text = metadata_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is unreadable for {resolved}: "
+            f"{metadata_path} could not be read; reinstall or repair the Vibe "
+            "installation"
+        ) from exc
+    headers = email.parser.HeaderParser().parsestr(metadata_text)
+    names = headers.get_all("Name") or []
+    versions = headers.get_all("Version") or []
+    if len(names) != 1 or names[0].strip().lower() != "mistral-vibe":
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is invalid for {resolved}: expected a "
+            f"single Name: mistral-vibe; reinstall or repair the Vibe "
+            f"installation ({metadata_path})"
+        )
+    if len(versions) != 1:
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is invalid for {resolved}: expected a "
+            f"single Version header; reinstall or repair the Vibe installation "
+            f"({metadata_path})"
+        )
+    version = versions[0]
+    if _PEP440_VERSION_RE.fullmatch(version) is None:
+        raise ExecutorRefused(
+            f"Vibe distribution metadata is invalid for {resolved}: the Version "
+            f"value {version!r} is not a valid PEP 440 version; reinstall or "
+            f"repair the Vibe installation ({metadata_path})"
+        )
+    return version
 
 
 def _settings_rule_digest(

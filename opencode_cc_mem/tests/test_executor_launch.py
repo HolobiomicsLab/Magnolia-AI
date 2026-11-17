@@ -2522,3 +2522,309 @@ def test_claude_relative_xdg_state_home_is_refused(tmp_path):
     )
     with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
         prepare_launch(context)
+
+
+def _fake_vibe_environment(tmp_path, name="vibe-env", *, version="3.1.2", python="python3.12"):
+    """Build an inert uv-tool-shaped Vibe environment; the binary never runs."""
+    environment = tmp_path / name
+    binary = environment / "bin" / "vibe"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    sentinel = environment / "vibe-was-executed"
+    binary.write_text(
+        f"#!/bin/sh\ntouch '{sentinel}'\nexit 0\n", encoding="utf-8"
+    )
+    binary.chmod(0o755)
+    site_packages = environment / "lib" / python / "site-packages"
+    site_packages.mkdir(parents=True, exist_ok=True)
+    if version is not None:
+        dist_info = site_packages / f"mistral_vibe-{version}.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text(
+            "Metadata-Version: 2.4\n"
+            "Name: mistral-vibe\n"
+            f"Version: {version}\n",
+            encoding="utf-8",
+        )
+    return binary, sentinel, site_packages
+
+
+def _write_vibe_metadata(site_packages, body, *, directory="mistral_vibe-3.1.2.dist-info"):
+    dist_info = site_packages / directory
+    dist_info.mkdir(parents=True, exist_ok=True)
+    (dist_info / "METADATA").write_text(body, encoding="utf-8")
+    return dist_info
+
+
+def test_installed_vibe_version_reads_owning_dist_info(tmp_path):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        binary, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+    assert not sentinel.exists(), "version discovery must not execute Vibe"
+
+
+def test_installed_vibe_version_ignores_other_environment_metadata(tmp_path):
+    from campaign_runner import launch as module
+
+    first, _, _ = _fake_vibe_environment(tmp_path, "first-env", version="3.1.2")
+    second, _, _ = _fake_vibe_environment(tmp_path, "second-env", version="9.9.9")
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+    assert module._installed_client_version(
+        second, invocation_dir=run, launch_env={}
+    ) == "9.9.9"
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "zero_directories",
+        "two_matching_distributions",
+        "wrong_name",
+        "missing_version",
+        "duplicate_version",
+        "empty_version",
+        "unreadable_metadata",
+        "release_double_dot",
+        "trailing_hyphen",
+        "epoch_without_release",
+        "whitespace_padded_version",
+    ),
+)
+def test_installed_vibe_version_refuses_missing_ambiguous_or_malformed_metadata(
+    tmp_path, case
+):
+    from campaign_runner import launch as module
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    if case == "two_matching_distributions":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n")
+        _write_vibe_metadata(
+            site_packages,
+            "Name: mistral-vibe\nVersion: 3.1.3\n",
+            directory="mistral_vibe-3.1.3.dist-info",
+        )
+    elif case == "wrong_name":
+        _write_vibe_metadata(site_packages, "Name: other-vibe\nVersion: 3.1.2\n")
+    elif case == "missing_version":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\n")
+    elif case == "duplicate_version":
+        _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\nVersion: 3.1.3\n"
+        )
+    elif case == "empty_version":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion:   \n")
+    elif case == "unreadable_metadata":
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        (dist_info / "METADATA").unlink()
+        (dist_info / "METADATA").mkdir()
+    elif case == "release_double_dot":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3..1\n")
+    elif case == "trailing_hyphen":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3.1.2-\n")
+    elif case == "epoch_without_release":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 1!\n")
+    elif case == "whitespace_padded_version":
+        _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2   \n"
+        )
+    run = tmp_path / "run"
+    run.mkdir()
+
+    with pytest.raises(
+        ExecutorRefused,
+        match=r"Vibe.*(metadata|dist-info).*(install|reinstall|repair)",
+    ):
+        module._installed_client_version(binary, invocation_dir=run, launch_env={})
+    assert not sentinel.exists()
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "escaping_metadata_symlink",
+        "broken_metadata_symlink",
+        "escaping_dist_info_symlink",
+    ),
+)
+def test_installed_vibe_version_refuses_escaping_or_broken_symlinks(tmp_path, case):
+    from campaign_runner import launch as module
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    if case == "escaping_metadata_symlink":
+        outside = tmp_path / "outside-metadata"
+        outside.write_text("Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8")
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        metadata = dist_info / "METADATA"
+        metadata.unlink()
+        metadata.symlink_to(outside)
+    elif case == "broken_metadata_symlink":
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        metadata = dist_info / "METADATA"
+        metadata.unlink()
+        metadata.symlink_to(tmp_path / "missing-metadata")
+    else:
+        outside_dir = tmp_path / "outside.dist-info"
+        outside_dir.mkdir()
+        (outside_dir / "METADATA").write_text(
+            "Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8"
+        )
+        (site_packages / "mistral_vibe-3.1.2.dist-info").symlink_to(
+            outside_dir, target_is_directory=True
+        )
+    run = tmp_path / "run"
+    run.mkdir()
+
+    with pytest.raises(
+        ExecutorRefused,
+        match=r"Vibe.*(metadata|dist-info).*(install|reinstall|repair)",
+    ):
+        module._installed_client_version(binary, invocation_dir=run, launch_env={})
+    assert not sentinel.exists()
+
+
+@pytest.mark.parametrize(
+    "version", ("3.2.0rc1", "3.1.2.post1", "1!3.1.2", "3.1.2+local.1")
+)
+def test_installed_vibe_version_accepts_valid_pep440_forms(tmp_path, version):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path, version=version)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        binary, invocation_dir=run, launch_env={}
+    ) == version
+    assert not sentinel.exists()
+
+
+def test_installed_vibe_version_follows_vibe_symlink_into_other_environment(tmp_path):
+    from campaign_runner import launch as module
+
+    first, first_sentinel, _ = _fake_vibe_environment(
+        tmp_path, "first-env", version="3.1.2"
+    )
+    second, second_sentinel, _ = _fake_vibe_environment(
+        tmp_path, "second-env", version="9.9.9"
+    )
+    first.unlink()
+    first.symlink_to(second)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "9.9.9"
+    assert not first_sentinel.exists()
+    assert not second_sentinel.exists()
+
+
+def test_vibe_normalized_launch_identity_names_installed_version(tmp_path):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    context = _context(
+        tmp_path,
+        client="vibe",
+        launch_argv=(str(binary),),
+        python_executable=sys.executable,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_PYTHON": sys.executable,
+        },
+    )
+    launch = prepare_launch(context)
+    native = {
+        str(path.relative_to(launch.invocation_dir)): body
+        for path, body in launch.files.items()
+        if str(path.relative_to(launch.invocation_dir)).startswith(".vibe/")
+    }
+
+    normalized = module._normalized_launch_identity(
+        context,
+        launch.invocation_dir,
+        launch.env,
+        launch.files[launch.invocation_dir / "settings.json"],
+        launch.files[launch.invocation_dir / "mcp.json"],
+        native,
+        launch.files[launch.invocation_dir / "policy.json"],
+    )
+
+    assert normalized["components"]["client_version"] == "3.1.2"
+    assert normalized["components"]["client_sha256"] == hashlib.sha256(
+        binary.read_bytes()
+    ).hexdigest()
+    assert not sentinel.exists(), "identity binding must not execute Vibe"
+
+
+
+def test_installed_vibe_version_refuses_metadata_substituted_before_open(
+    tmp_path, monkeypatch
+):
+    """A METADATA swapped to an outside symlink after the checks must refuse."""
+    from campaign_runner import launch as module
+    from pathlib import Path as _Path
+    import os as _os
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    dist_info = _write_vibe_metadata(
+        site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+    )
+    metadata = dist_info / "METADATA"
+    outside = tmp_path / "outside-metadata"
+    outside.write_text("Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8")
+    substituted = []
+
+    def substitute():
+        substituted.append(True)
+        metadata.unlink()
+        metadata.symlink_to(outside)
+
+    real_open = _os.open
+
+    def racing_open(path, flags, *args, **kwargs):
+        if not substituted and _os.fspath(path) == _os.fspath(metadata):
+            substitute()
+        return real_open(path, flags, *args, **kwargs)
+
+    real_read_bytes = _Path.read_bytes
+
+    def racing_read_bytes(self):
+        if not substituted and _os.fspath(self) == _os.fspath(metadata):
+            substitute()
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(module.os, "open", racing_open)
+    monkeypatch.setattr(_Path, "read_bytes", racing_read_bytes)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    try:
+        version = module._installed_client_version(
+            binary, invocation_dir=run, launch_env={}
+        )
+    except ExecutorRefused as exc:
+        assert "Vibe distribution metadata is unreadable" in str(exc)
+    else:
+        assert version == "3.1.2", version
+    assert substituted, "the substitution point was never exercised"
+    assert not sentinel.exists()
