@@ -335,3 +335,86 @@ def test_boot_context_recomputes_when_a_source_changes(
 
     assert calls == 2
     assert (store / "boot-context.md").read_text() == "new view"
+
+
+def test_boot_context_stops_after_three_moving_source_assemblies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from compchem_memory import boot_context
+
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    store.mkdir(parents=True)
+    output = store / "boot-context.md"
+    output.write_text("previous stable view")
+    assemblies = 0
+    fingerprints = 0
+
+    def assemble_context(**_kwargs):
+        nonlocal assemblies
+        assemblies += 1
+        return SimpleNamespace(
+            content=f"moving view {assemblies}",
+            sources=[],
+            tokens_used=2,
+        )
+
+    def changing_fingerprint(_project_dir: str):
+        nonlocal fingerprints
+        fingerprints += 1
+        if fingerprints > 6:
+            raise AssertionError("boot context exceeded three assemblies")
+        return {"source": str(fingerprints)}
+
+    monkeypatch.setattr(boot_context, "assemble_context", assemble_context)
+    monkeypatch.setattr(
+        boot_context,
+        "_boot_source_fingerprint",
+        changing_fingerprint,
+    )
+
+    boot_context.regenerate_boot_context(str(project))
+
+    assert assemblies == 3
+    assert output.read_text() == "previous stable view"
+    assert capsys.readouterr().err.splitlines() == [
+        "boot context regeneration reached the 3-assembly cap; "
+        "sources kept moving, skipped write"
+    ]
+
+
+def test_boot_context_ignores_active_session_appends_when_handover_is_used(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from compchem_memory import boot_context
+
+    project = tmp_path / "project"
+    store = project / ".magnolia"
+    sessions = store / "sessions"
+    sessions.mkdir(parents=True)
+    (store / ".handover-state.md").write_text("## To do\n- continue work\n")
+    (store / ".current-session-id").write_text("active")
+    active = sessions / "active.jsonl"
+    _write_tool_event(active, "2026-11-17T03:00:00Z", "first")
+    assemblies = 0
+
+    def assemble_context(**_kwargs):
+        nonlocal assemblies
+        assemblies += 1
+        with active.open("a") as stream:
+            stream.write(json.dumps({
+                "timestamp": "2026-11-17T03:01:00Z",
+                "event_type": "tool_call",
+                "tool": "second",
+            }) + "\n")
+        return SimpleNamespace(content="handover view", sources=[], tokens_used=2)
+
+    monkeypatch.setattr(boot_context, "assemble_context", assemble_context)
+
+    boot_context.regenerate_boot_context(str(project))
+
+    assert assemblies == 1
+    assert (store / "boot-context.md").read_text() == "handover view"
