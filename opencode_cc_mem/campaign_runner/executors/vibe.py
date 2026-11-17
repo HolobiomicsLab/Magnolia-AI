@@ -660,16 +660,31 @@ def _vibe_text(payload: Mapping[str, Any], stdout_text: str) -> tuple[str, str]:
         value = payload.get(key)
         if isinstance(value, str):
             return value, value
+    try:
+        events = json.loads(stdout_text)
+    except ValueError:
+        return "", ""
+    if not isinstance(events, list):
+        return "", ""
     messages: list[str] = []
-    for raw in stdout_text.splitlines():
-        try:
-            event = json.loads(raw)
-        except ValueError:
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("role") != "assistant":
             continue
-        if isinstance(event, Mapping):
-            value = event.get("text") or event.get("content")
-            if isinstance(value, str):
-                messages.append(value)
+        content = event.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = "".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, Mapping)
+                and part.get("type") == "text"
+                and isinstance(part.get("text"), str)
+            )
+        else:
+            continue
+        if text:
+            messages.append(text)
     return (messages[-1] if messages else "", "\n".join(messages))
 
 
