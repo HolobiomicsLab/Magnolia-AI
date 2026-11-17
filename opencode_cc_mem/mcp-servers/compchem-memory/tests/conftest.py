@@ -21,13 +21,15 @@ from pathlib import Path
 
 import pytest
 
+from compchem_memory.harness.memory_service import private_services_root
+
 
 _REAL_HOME_MARKER = "MAGNOLIA_PYTEST_REAL_HOME"
 _REAL_HOME = Path(os.environ.get(_REAL_HOME_MARKER, Path.home())).resolve()
 _OWNER_STATE_ROOTS = (
     _REAL_HOME / ".local" / "state" / "magnolia",
     _REAL_HOME / ".config" / "magnolia",
-    _REAL_HOME / ".magnolia",
+    private_services_root({**os.environ, "HOME": str(_REAL_HOME)}).parent,
 )
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="magnolia-memory-pytest-state-"))
 _ISOLATED_ENV = {

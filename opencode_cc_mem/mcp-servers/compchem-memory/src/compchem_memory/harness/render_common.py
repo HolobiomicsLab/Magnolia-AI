@@ -123,6 +123,12 @@ def policy_files(
     """The hook policy file and the environment variable that points the hook at it."""
     path = harness_dir(context, harness) / "policy.json"
     body = dict(context.role_policy or {})
+    deny_patterns = list(body.get("read_deny_patterns", ()))
+    if deny_patterns:
+        from compchem_memory.harness.memory_service import private_services_root
+
+        service_deny = f"{private_services_root(context.environment).as_posix()}/**"
+        body["read_deny_patterns"] = list(dict.fromkeys((*deny_patterns, service_deny)))
     body["deny_tools"] = sorted(neutral.deny_tools)
     env = {"MAGNOLIA_HOOK_POLICY": str(path.resolve())}
     if context.noninteractive:

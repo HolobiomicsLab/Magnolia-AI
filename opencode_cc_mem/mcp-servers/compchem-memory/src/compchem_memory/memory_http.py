@@ -563,7 +563,7 @@ def main(argv: list[str] | None = None) -> None:
     if supplied_state != canonical_state or canonical_state != expected_state:
         raise RuntimeError(
             "memory HTTP service state directory must be the canonical "
-            "~/.magnolia/services/<project-digest> path"
+            "private services-root path"
         )
     token = os.environ.get(TOKEN_ENV, "")
     port = int(os.environ.get("MAGNOLIA_MEMORY_SERVICE_PORT", "0"))

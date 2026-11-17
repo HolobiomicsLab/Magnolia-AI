@@ -336,7 +336,7 @@ def test_changed_claude_and_codex_rows_refuse_until_live_reobservation():
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
-    } == {"a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173"}
+    } == {"8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff"}
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
@@ -434,10 +434,10 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert all(projected["codex"][role]["stale"] for role in rows)
     assert rows["worker"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
-    ] == "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285"
+    ] == "89b1ba681c08d30bcc37758e6abe3c29fce009430d552036cc9eb47f1bc6f7c1"
     assert rows["reviewer"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
-    ] == "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6"
+    ] == "4756e61b9b26686c623fbf6dbc9ab5a747a19f170067932fa71ea95831a1928a"
     for row in rows.values():
         host = row["cells"]["identity"]["value"]["code_mode_host"]
         assert host == {

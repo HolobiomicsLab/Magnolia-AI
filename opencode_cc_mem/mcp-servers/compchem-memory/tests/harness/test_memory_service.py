@@ -26,11 +26,12 @@ def _private_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_STATE_HOME", "")
     original_state_dir = memory_service.private_state_dir
 
-    def keyed_state_dir(project, tool_allowlist=None):
+    def keyed_state_dir(project, tool_allowlist=None, environment=None):
         tools = _context(Path(project)).tool_allowlist if tool_allowlist is None else tool_allowlist
-        return original_state_dir(Path(project), tools)
+        return original_state_dir(Path(project), tools, environment=environment)
 
     monkeypatch.setattr(memory_service, "private_state_dir", keyed_state_dir)
 
@@ -90,6 +91,34 @@ def test_private_state_is_user_private_and_outside_project(tmp_path):
         / memory_service.tool_allowlist_digest(_context(project).tool_allowlist)
     )
     assert not state.is_relative_to(project)
+
+
+@pytest.mark.parametrize(
+    ("xdg_state_home", "uses_xdg"),
+    (("absolute", True), ("", False), ("relative/state", False)),
+)
+def test_private_state_root_follows_absolute_xdg_state_home(
+    tmp_path, xdg_state_home, uses_xdg
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    home = tmp_path / "launcher-home"
+    state_home = tmp_path / "launcher-state"
+    environment = {
+        "HOME": str(home),
+        "XDG_STATE_HOME": str(state_home) if xdg_state_home == "absolute" else xdg_state_home,
+    }
+
+    state = memory_service.private_state_dir(
+        project, _context(project).tool_allowlist, environment=environment
+    )
+
+    expected_root = (
+        state_home / "magnolia" / "services"
+        if uses_xdg
+        else home / ".magnolia" / "services"
+    )
+    assert state.parent.parent == expected_root.resolve()
 
 
 def test_provider_must_be_explicit_and_other_key_names_do_not_count():
@@ -461,6 +490,61 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert memory_service.release_memory_service(first) is False
     assert memory_service.release_memory_service(second) is True
     assert stopped == [(4101, "ps:4101:start")]
+
+
+def test_release_removes_empty_allowlist_and_project_state_dirs(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    context = _context(project)
+    context.environment.update(
+        HOME=str(tmp_path / "launcher-home"),
+        XDG_STATE_HOME=str(tmp_path / "launcher-state"),
+    )
+    started, _stopped = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+
+    handle = memory_service.ensure_memory_service(context)
+    state = Path(handle.state_dir)
+    project_state = state.parent
+
+    assert memory_service.release_memory_service(handle) is True
+    assert not state.exists()
+    assert not project_state.exists()
+
+
+def test_release_keeps_nonempty_state_dir_and_never_removes_sentinel(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    context = _context(project)
+    context.environment.update(
+        HOME=str(tmp_path / "launcher-home"),
+        XDG_STATE_HOME=str(tmp_path / "launcher-state"),
+    )
+    started, _stopped = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+    handle = memory_service.ensure_memory_service(context)
+    state = Path(handle.state_dir)
+    sentinel = state / "keep-me"
+    sentinel.write_text("not service state\n", encoding="utf-8")
+
+    assert memory_service.release_memory_service(handle) is True
+    assert state.is_dir()
+    assert sentinel.read_text(encoding="utf-8") == "not service state\n"
+
+
+def test_empty_state_cleanup_refuses_any_path_outside_services_root(tmp_path):
+    services_root = tmp_path / "state" / "magnolia" / "services"
+    outside = tmp_path / "outside" / ("a" * 64) / ("b" * 64)
+    outside.mkdir(parents=True)
+    sentinel = outside / "service.log"
+    sentinel.write_text("outside\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match="escaped"):
+        memory_service._remove_empty_service_dirs(outside, services_root)
+
+    assert sentinel.read_text(encoding="utf-8") == "outside\n"
 
 
 def test_memory_service_does_not_reuse_changed_runtime_route(tmp_path, monkeypatch):
