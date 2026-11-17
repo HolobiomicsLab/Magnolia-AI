@@ -1,10 +1,10 @@
 ---
 name: haddock3
-description: "HADDOCK3 docking rules: self-contained run dirs, config.cfg modules, restraints (ambig.tbl, actpass), Slurm memory sizing (2 GB/core), caprieval scoring incl. AIR-free formula, contact-map interaction typing. Use when preparing, running, or analyzing HADDOCK3 protein-protein/peptide/ligand docking (haddock3_run, config.cfg, caprieval, seletopclusts, contactmap, ambig.tbl). Do NOT use for gnina small-molecule docking or GROMACS MD."
+description: "HADDOCK3 docking rules: self-contained run dirs, config.cfg modules, restraints (ambig.tbl, actpass), Slurm memory sizing (2 GB/core), caprieval scoring incl. AIR-free formula and score comparability/size bias, contact-map interaction typing. Use when preparing, running, or analyzing HADDOCK3 protein-protein/peptide/ligand docking (haddock3_run, config.cfg, caprieval, seletopclusts, contactmap, ambig.tbl). Do NOT use for gnina small-molecule docking or GROMACS MD."
 metadata:
-  version: "1.2"
-  last_verified: "2026-06-18"
-  tags: "[haddock3, docking, protein-peptide, protein-protein, restraints, caprieval, ambig]"
+  version: "1.3"
+  last_verified: "2026-11-17"
+  tags: "[haddock3, docking, protein-peptide, protein-protein, restraints, caprieval, scoring, size-bias, ambig]"
 ---
 
 # HADDOCK3 Rules
@@ -144,6 +144,56 @@ score [X] − w_air × air [Y] = [RESULT]
 **Common mistakes:**
 - Subtracting full `air` instead of `w_air × air`. This produces values ~10× too negative when w_air=0.1. Always write the intermediate product explicitly.
 - Using w_air=0.01 for refinement-stage scores. The correct value for flexref/emref/mdref output is 0.1, not 0.01.
+
+## Score Comparability and Size Bias
+
+**Never compare HADDOCK scores (raw or AIR-free) across peptides of different
+length, or across different complexes.** AIR-free removes only the restraint
+penalty; it is **not** normalized by interface size. The HADDOCK authors state
+the score "is meant to rank models of the same complex" and "should not be used
+to compare the affinity of different complexes" (HADDOCK3 manual FAQ, "What does
+the HADDOCK score mean?"; Dos and Don'ts, `bpg/analysis.html`). Legitimate
+comparisons: same receptor, same peptide length, same restraints and cap state
+(e.g. Met→Nle or a point mutant).
+
+Why raw scores favor longer peptides:
+
+- The score is **extensive**: `w_vdw·vdw + w_elec·elec + w_desolv·desolv +
+  w_air·air` is summed over all interfacial contacts. More residues → more
+  contacts → more negative score.
+- **BSA scales with peptide length** (Trabelsi-Mescheloff et al., *J. Chem.
+  Inf. Model.* 2026, doi:10.1021/acs.jcim.6c00902; *Front. Immunol.* 2022,
+  13:910367).
+- HADDOCK2.4 includes `−0.01·BSA` in it0/it1 (rewards larger interfaces). In
+  HADDOCK3 water-stage scoring `w_bsa = 0`, but vdW/elec/desolv still scale with
+  contact count.
+- The manual warns that a flexible linker/extension contacting the partner "can
+  make contact with the partner molecule, resulting in lower total energy, and,
+  in that way, 'bad' solutions could still be kept" (FAQ, "Domain definition for
+  docking").
+- Interface-based metrics are known to be length-dependent and need explicit
+  normalization (IS-score, *Proteins* 2011, PMC3076516; random-docking p-value,
+  *Protein Sci.* 2023, doi:10.1002/pro.4853).
+
+If a cross-length comparison is unavoidable, present it as a sensitivity check,
+not as affinity. Report all four:
+
+1. `AIR-free / n_residues` (peptide length, excluding caps).
+2. `AIR-free / BSA` (per Å² buried).
+3. **Same binding mode only** — check the contact map (e.g. SBDβ vs NBD vs lid);
+   a longer peptide may win by contacting a different surface.
+4. True `clustfcc` population, not the capped `n` in `capri_clt.tsv`.
+
+Worked counter-example: a 9-mer scored AIR-free −96 vs a 14-mer −142; per
+residue −10.7 vs −10.2; per Å² BSA −0.077 vs −0.070; convergence 81/200 vs
+17/200. The 14-mer's 46-point advantage decomposed into ~−20 vdW, ~−40
+electrostatics, +14 desolvation, +8 restraint — extra contact area and
+unscreened charge, not affinity. The experimental FP/IP ranking favoured the
+9-mer.
+
+For actual affinity, use `[prodigyprotein]`/`[prodigyligand]` (caveat: trained
+mostly on protein–protein interfaces) or MM/PBSA/dMM-PBSA (*Front. Mol. Biosci.*
+2016, doi:10.3389/fmolb.2016.00046), not the HADDOCK score.
 
 ## Cluster Population and Convergence
 
