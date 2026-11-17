@@ -80,9 +80,10 @@ pending and production-gated.
 ## Bounded campaign protocols and invocation plan
 
 The five schema-valid, single-stage drafts are under
-`tests/fixtures/campaigns/harness-p3/`. Each asks for `work/result.txt`; the
-runner, not the prompt, writes the normal stage receipt. A reviewer is the
-stage's review phase, not a second stage.
+`tests/fixtures/campaigns/harness-p3/`. Their shared prompt is
+`prompts/prompt.md`, the asset layout copied by campaign `init`. Each asks for
+`work/result.txt`; the runner, not the prompt, writes the normal stage receipt.
+A reviewer is the stage's review phase, not a second stage.
 
 | Protocol | Planned worker | Planned reviewer | Current disposition |
 | --- | --- | --- | --- |
