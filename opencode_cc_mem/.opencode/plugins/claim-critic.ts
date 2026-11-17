@@ -196,17 +196,16 @@ async function judge(route: JudgeRoute, report: string, traceText: string): Prom
   }
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS)
-  const res = await (async () => {
-    try {
-      return await fetch(route.url, {
-        method: "POST", headers, body: JSON.stringify(body), signal: controller.signal,
-      })
-    } finally {
-      clearTimeout(timeout)
-    }
-  })()
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
-  const data: any = await res.json()
+  let data: any
+  try {
+    const res = await fetch(route.url, {
+      method: "POST", headers, body: JSON.stringify(body), signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
+    data = await res.json()  // the body read stays under the same timeout
+  } finally {
+    clearTimeout(timeout)
+  }
   const text = route.schema === "anthropic"
     ? (data?.content ?? []).find((b: any) => b?.type === "text")?.text ?? ""
     : data?.choices?.[0]?.message?.content ?? ""
