@@ -647,6 +647,7 @@ def _start_service(
     child_environment.update(
         {
             "HOME": child_environment.get("HOME", str(Path.home())),
+            "PYTHONPYCACHEPREFIX": str(state / "pycache"),
             "MAGNOLIA_PROJECT_DIR": str(project),
             "MAGNOLIA_PROJECT_BOUND": "1",
             "MAGNOLIA_MEMORY_SERVICE_PORT": str(port),
