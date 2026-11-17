@@ -816,13 +816,21 @@
           "client_identity": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
-            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            }
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "a5f58afaa3aa6fa7efd4949f048fa8cbbba155a0a68d035b8424d2e57d50fadb",
             "components": {
               "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "a719ceb67eddfd81fd4c86a423d87f5ba432573056181c610eaba10d915142f5",
               "native_files": "049f4736fbb896b01519154ccb7319a9756e177e65119141fedb143c407ea809",
@@ -835,24 +843,38 @@
             }
           }
         },
-        "reason": "Accepted by the lead after gate 4 met the complete worker role gate; enforcement is bound to the exercised client, model, normalized launch identity and required hook allowlist."
+        "reason": "Accepted by the lead after gate 4 met the complete worker role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
-            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            }
           },
-          "note": "The executable version and SHA-256 were exercised by gate 4; the tracked path is sanitized."
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
         },
         "argv": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
           "value": {
-            "entrypoint": ["codex", "-C", "<project>", "-s", "workspace-write", "-m", "gpt-5.6-luna", "exec", "--json"],
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "workspace-write",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
             "approval_policy": "never",
             "code_mode_host": true,
             "apps_disabled": true
@@ -956,7 +978,15 @@
             "scope": "physical invocation",
             "source": "codex-exec-json",
             "completeness": "complete",
-            "counters": ["input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "cache_write_tokens", "cost", "turns"]
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
           },
           "note": "One subscription ledger receipt retained the native token/cache counters."
         },
@@ -985,13 +1015,21 @@
           "client_identity": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
-            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            }
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
             "configuration_identity_sha256": "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f",
             "components": {
               "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
               "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
@@ -1004,24 +1042,38 @@
             }
           }
         },
-        "reason": "Accepted by the lead after gate 4 met the complete reviewer role gate; enforcement is bound to the exercised client, model, normalized launch identity and required hook allowlist."
+        "reason": "Accepted by the lead after gate 4 met the complete reviewer role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
           "value": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
-            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            }
           },
-          "note": "The executable version and SHA-256 were exercised by gate 4; the tracked path is sanitized."
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
         },
         "argv": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
           "value": {
-            "entrypoint": ["codex", "-C", "<project>", "-s", "read-only", "-m", "gpt-5.6-luna", "exec", "--json"],
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "read-only",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
             "approval_policy": "never",
             "code_mode_host": true,
             "apps_disabled": true
@@ -1073,7 +1125,11 @@
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
           "value": {
-            "capabilities": ["native_read", "native_glob", "native_grep"]
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
           },
           "note": "Allowed documentation and worker-result reads completed under the production hook."
         },
@@ -1116,7 +1172,15 @@
             "scope": "physical invocation",
             "source": "codex-exec-json",
             "completeness": "complete",
-            "counters": ["input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "cache_write_tokens", "cost", "turns"]
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
           },
           "note": "One subscription ledger receipt per reviewer invocation retained the native token/cache counters."
         },

@@ -75,7 +75,9 @@ WORKER_CAPABILITIES = (
 
 
 def _fake_codex_client(tmp_path):
-    binary = tmp_path / "codex"
+    package = tmp_path / "codex-package"
+    binary = package / "bin" / "codex"
+    binary.parent.mkdir(parents=True, exist_ok=True)
     binary.write_text(
         "#!/bin/sh\n"
         "if [ \"$1\" = \"--version\" ]; then\n"
@@ -84,6 +86,19 @@ def _fake_codex_client(tmp_path):
         encoding="utf-8",
     )
     binary.chmod(0o755)
+    host = binary.with_name("codex-code-mode-host")
+    host.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    host.chmod(0o755)
+    (package / "codex-package.json").write_text(
+        json.dumps({
+            "layoutVersion": 1,
+            "version": "0.154.0",
+            "target": "test-target",
+            "variant": "codex",
+            "entrypoint": "bin/codex",
+        }),
+        encoding="utf-8",
+    )
     return binary
 
 
@@ -332,9 +347,13 @@ def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
         launch_argv=(str(binary),),
     )
     launch = prepare_launch(context)
+    host = binary.with_name("codex-code-mode-host").resolve()
 
     assert launch.argv == (str(binary.resolve()),)
     assert launch.client_sha256 == hashlib.sha256(binary.read_bytes()).hexdigest()
+    assert launch.code_mode_host_path == host
+    assert launch.code_mode_host_sha256 == hashlib.sha256(host.read_bytes()).hexdigest()
+    assert launch.code_mode_host_version == "0.154.0"
 
     for path, body in launch.files.items():
         if path.name in {"config.toml", "hooks.json"}:
@@ -348,6 +367,60 @@ def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
     binary.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     with pytest.raises(ExecutorRefused, match="changed before spawn"):
         executor._verify_client_bytes()
+
+
+def test_codex_rechecks_code_mode_host_before_spawn(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+    launch = prepare_launch(context)
+    for path, body in launch.files.items():
+        if path.name in {"config.toml", "hooks.json"}:
+            target = context.project_dir / path.relative_to(launch.invocation_dir)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    executor = CodexExecutor(
+        launch, "selected-model", "worker", 30,
+        user_config_path=Path(context.setup["codex_user_config_path"]),
+    )
+    binary.with_name("codex-code-mode-host").write_text(
+        "#!/bin/sh\nexit 77\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ExecutorRefused, match="code-mode host changed before spawn"):
+        executor._verify_client_bytes()
+
+
+def test_codex_code_mode_host_selector_is_filtered_or_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODE_MODE_HOST", "grpc://127.0.0.1:9999")
+    monkeypatch.setenv("CODEX_EXEC_SERVER_URL", "ws://127.0.0.1:9998")
+    inherited = _context(tmp_path, client="codex", environment=None)
+
+    launch = prepare_launch(inherited)
+
+    assert "CODE_MODE_HOST" not in launch.env
+    assert "CODEX_EXEC_SERVER_URL" not in launch.env
+
+    explicit_root = tmp_path / "explicit"
+    explicit_root.mkdir()
+    for index, (name, value) in enumerate((
+        ("CODE_MODE_HOST", "grpc://127.0.0.1:9999"),
+        ("CODEX_EXEC_SERVER_URL", "ws://127.0.0.1:9998"),
+    )):
+        root = explicit_root / str(index)
+        root.mkdir()
+        explicit = _context(
+            root,
+            client="codex",
+            environment={"PATH": os.environ.get("PATH", ""), name: value},
+        )
+        with pytest.raises(ExecutorRefused, match="remote host/server selector"):
+            prepare_launch(explicit)
 
 
 def test_codex_version_probe_uses_run_owned_home_and_launch_path(tmp_path):

@@ -410,6 +410,19 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert rows["reviewer"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
     ] == "21acaebecfb171ce22b54550abcdceffa4b9ae359cbf7d306c5587847762485f"
+    for row in rows.values():
+        host = row["cells"]["identity"]["value"]["code_mode_host"]
+        assert host == {
+            "version": "0.169.0",
+            "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+        }
+        assert row["gate"]["value"]["configuration_binding"]["components"][
+            "code_mode_host"
+        ] == host
+        assert (
+            "identity extended after gate 4 (host binary bound); behaviour unchanged"
+            in row["cells"]["identity"]["note"]
+        )
 
 
 def test_codex_helper_evaluator_and_vibe_rows_still_refused():
