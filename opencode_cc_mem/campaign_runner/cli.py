@@ -104,7 +104,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "decline-followups",
         help="decline proposed follow-ups and accept an otherwise passing stage",
     )
-    decline.add_argument("run_dir")
+    _add_runtime_arguments(decline)
     decline.add_argument("--approver", required=True)
     decline.add_argument("--reason", required=True)
     decline.add_argument("--minutes", type=float, default=0)

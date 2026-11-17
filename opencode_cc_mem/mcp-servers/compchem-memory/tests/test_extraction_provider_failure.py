@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -187,6 +188,7 @@ def test_tool_event_provider_failure_stops_at_cap_unsealed_and_reported(
                     "attempts": 4,
                     "next_retry_at": "2026-01-01T00:00:00+00:00",
                     "exhausted": False,
+                    "fingerprint": hashlib.sha256(session.read_bytes()).hexdigest(),
                 }
             },
         }),
@@ -207,10 +209,59 @@ def test_tool_event_provider_failure_stops_at_cap_unsealed_and_reported(
     retry = yaml.safe_load(
         (project / "extraction-state.yaml").read_text()
     )["session_retries"]["closed.jsonl"]
-    assert retry == {"attempts": 5, "next_retry_at": None, "exhausted": True}
+    assert retry == {
+        "attempts": 5,
+        "next_retry_at": None,
+        "exhausted": True,
+        "fingerprint": hashlib.sha256(session.read_bytes()).hexdigest(),
+    }
     notices = distill_log.drain_distill_notices(str(project))
     assert len(notices) == 2
-    assert "manual" in notices[-1].lower()
+    assert "magnolia memory retry closed.jsonl" in notices[-1]
+
+
+def test_new_tool_event_activity_rearms_exhausted_retry(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    project = tmp_path / "project"
+    session = _tool_event_session(project)
+    old_fingerprint = hashlib.sha256(session.read_bytes()).hexdigest()
+    (project / "extraction-state.yaml").write_text(
+        yaml.safe_dump({
+            "last_cursor": "",
+            "session_retries": {
+                "closed.jsonl": {
+                    "attempts": 5,
+                    "next_retry_at": None,
+                    "exhausted": True,
+                    "fingerprint": old_fingerprint,
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+    with session.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+            "timestamp": "2026-11-17T08:31:00Z",
+            "event_type": "tool_success",
+            "tool": "new-tool",
+            "result_summary": "new result",
+        }) + "\n")
+    calls = []
+    monkeypatch.setattr("compchem_memory.extraction.is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        "compchem_memory.extraction.AutomaticMemoryExtractor._llm_distill",
+        lambda _self, events: calls.append(events),
+    )
+
+    startup_scan._distill_tool_events(project)
+
+    assert len(calls) == 1
+    retry = yaml.safe_load(
+        (project / "extraction-state.yaml").read_text()
+    )["session_retries"]["closed.jsonl"]
+    assert retry["attempts"] == 1
+    assert retry["exhausted"] is False
 
 
 def test_dialogue_provider_failure_keeps_progress_retryable_and_notices_once(
@@ -259,3 +310,52 @@ def test_dialogue_provider_failure_persists_backoff_without_retry_storm(
     assert progress["retry"]["attempts"] == 1
     assert progress["retry"]["exhausted"] is False
     assert progress["retry"]["next_retry_at"]
+
+
+def test_manual_dialogue_distill_bypasses_exhausted_retry(tmp_path: Path) -> None:
+    store = tmp_path / ".magnolia"
+    marker = store / "opencode-distilled" / "session.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({
+        "cursor": None,
+        "candidates": 0,
+        "done": False,
+        "retry": {"attempts": 5, "next_retry_at": None, "exhausted": True},
+    }) + "\n")
+    export = {
+        "messages": [{
+            "info": {"id": "m1", "role": "user"},
+            "parts": [{"type": "text", "text": "new evidence"}],
+        }],
+    }
+
+    result = opencode_ingest.distill_session_transcript(
+        str(store), "session", commit=True, force_retry=True,
+        exporter=lambda _sid: export, distiller=lambda _text: [],
+    )
+
+    assert result == {"status": "committed", "saved": []}
+    assert "retry" not in json.loads(marker.read_text())
+
+
+def test_success_does_not_erase_other_extractors_retry_state(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from compchem_memory.extraction import AutomaticMemoryExtractor
+
+    project = tmp_path / "project"
+    first = _tool_event_session(project)
+    second = first.with_name("second.jsonl")
+    second.write_text(first.read_text().replace("closed", "second"))
+    stale = AutomaticMemoryExtractor(str(project))
+    failing = AutomaticMemoryExtractor(str(project))
+    monkeypatch.setattr(failing, "_generate_candidates", lambda _events: None)
+    monkeypatch.setattr(stale, "_generate_candidates", lambda _events: [])
+
+    assert failing.commit(first, str(project)) is None
+    assert stale.commit(second, str(project)) == []
+
+    retries = yaml.safe_load(
+        (project / "extraction-state.yaml").read_text()
+    )["session_retries"]
+    assert retries["closed.jsonl"]["attempts"] == 1

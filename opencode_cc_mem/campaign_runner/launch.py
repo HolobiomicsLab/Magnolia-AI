@@ -2019,7 +2019,10 @@ def _reject_forbidden_data(
     ):
         raise ExecutorRefused("forbidden client environment name in launch contract")
     for name, value in provider_values:
-        if any(value in destination for destination in destinations):
+        if any(
+            _contains_value(destination, value, is_path=False)
+            for destination in destinations
+        ):
             raise ExecutorRefused(
                 "forbidden client environment value in launch contract: "
                 f"{name} provider credential leaked"

@@ -33,7 +33,10 @@ def retry_is_due(
 
 
 def next_retry(
-    retry: Mapping[str, Any] | None, *, now: datetime | None = None
+    retry: Mapping[str, Any] | None,
+    *,
+    now: datetime | None = None,
+    fingerprint: Any = None,
 ) -> dict[str, Any]:
     """Increment one session's retry state with capped exponential backoff."""
     prior = retry.get("attempts", 0) if retry else 0
@@ -41,8 +44,11 @@ def next_retry(
     exhausted = attempts >= MAX_EXTRACTION_ATTEMPTS
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     delay = min(BASE_RETRY_SECONDS * 2 ** (attempts - 1), MAX_RETRY_SECONDS)
-    return {
+    result = {
         "attempts": attempts,
         "next_retry_at": None if exhausted else (current + timedelta(seconds=delay)).isoformat(),
         "exhausted": exhausted,
     }
+    if fingerprint is not None:
+        result["fingerprint"] = fingerprint
+    return result

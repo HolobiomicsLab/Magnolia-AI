@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from campaign_runner.lease import AttemptLease  # noqa: E402
 from campaign_runner.reviewers import ReviewResult  # noqa: E402
 from campaign_runner.runner import CampaignRunner, RunnerConfig, RunnerError  # noqa: E402
 from campaign_runner.state import (  # noqa: E402
+    CampaignBusyError,
     CampaignStateChangedError,
     CampaignStore,
 )
@@ -325,6 +327,89 @@ def test_agent_alias_executes_complete_stage(tmp_path):
     assert len(worker.calls) == 1
 
 
+def test_daemon_worker_invocations_close_before_next_route(tmp_path):
+    source = tmp_path / "campaign"
+    source.mkdir()
+    payload = protocol_payload()
+    payload["stages"] = [
+        {
+            "id": f"stage-{index}",
+            "type": "agent",
+            "model": model,
+            "prompt": "prompts/analyze.md",
+            "outputs": ["work/analysis.md"],
+            "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+        for index, model in enumerate(
+            ("claude-code/sonnet", "codex/gpt-5.6-sol", "claude-code/sonnet"),
+            start=1,
+        )
+    ]
+    payload["reviewer"] = {"enabled": False}
+    protocol = source / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = source / "brief.md"
+    brief.write_text("brief")
+    (source / "prompts").mkdir()
+    (source / "prompts" / "analyze.md").write_text("Analyze")
+    store = CampaignStore(tmp_path / "project" / "runs" / "runner")
+    store.initialize(protocol, brief)
+    store.approve_start("tao", "start")
+    active_holders = []
+    closed_routes = []
+
+    class RouteWorker(FakeWorker):
+        def __init__(self, run_dir, model):
+            if active_holders:
+                raise RuntimeError("different route refused while old holder remains")
+            super().__init__(run_dir)
+            self.model = model
+            active_holders.append(model)
+
+        def close(self):
+            closed_routes.append(self.model)
+            active_holders.remove(self.model)
+
+    project = store.run_dir.parent.parent
+    runner = CampaignRunner(
+        store,
+        project,
+        RunnerConfig(
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: RouteWorker(store.run_dir, model),
+            jobs=JobController(store, project, FakeJobBackend()),
+            reviewer=None,
+        ),
+    )
+
+    for _ in range(3):
+        runner.run_once()
+
+    assert store.load().state == "completed"
+    assert active_holders == []
+    assert len(closed_routes) == 3
+
+
+def test_worker_executor_closes_when_run_crashes(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    closed = []
+
+    class CrashingWorker:
+        def run(self, *args, **kwargs):
+            raise RuntimeError("crash")
+
+        def close(self):
+            closed.append(True)
+
+    runner = make_runner(store, CrashingWorker(), FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+
+    assert closed == [True, True]
+
+
 def test_receipt_and_queue_keep_returned_session_identity(tmp_path):
     store = initialize(tmp_path)
     store.approve_start("tao", "start")
@@ -347,6 +432,35 @@ def test_receipt_and_queue_keep_returned_session_identity(tmp_path):
         (store.attempts_dir / "analyze" / "001" / "worker_result.json").read_text()
     )
     assert receipt["session_identity"]["client"] == "claude-code"
+
+
+def test_distill_queue_does_not_use_nonblocking_campaign_lock(tmp_path, monkeypatch):
+    store = initialize(tmp_path)
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    stage = next(stage for stage in runner.protocol.stages if stage.id == "analyze")
+    attempt_dir = runner._attempt_dir(stage, 1)
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "worker_result.json").write_text(json.dumps({
+        "session_id": "session-1",
+        "session_identity": {
+            "client": "claude-code",
+            "model": "sonnet",
+            "project_digest": "project",
+            "role": "worker",
+            "policy_digest": "policy",
+        },
+    }))
+
+    @contextmanager
+    def busy_campaign_lock():
+        raise CampaignBusyError("campaign lock is busy")
+        yield
+
+    monkeypatch.setattr(store, "lock", busy_campaign_lock)
+
+    runner._queue_distillation(stage, 1, None)
+
+    assert store.distill_queue_path.is_file()
 
 
 def test_startup_approval_is_required_before_any_stage(tmp_path):

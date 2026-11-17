@@ -1047,7 +1047,9 @@ def memory_distill_session(
             or (not ref.sealable and resolve_transcript(store, ref.key) is not None)
         )
     if ref and has_source:
-        res = distill_session_transcript(str(store), ref, commit=commit)
+        res = distill_session_transcript(
+            str(store), ref, commit=commit, force_retry=commit
+        )
         if res is not None:
             if res["status"] == "committed":
                 _safe_version_commit(store, f"manual distill: {len(res['saved'])} dialogue")

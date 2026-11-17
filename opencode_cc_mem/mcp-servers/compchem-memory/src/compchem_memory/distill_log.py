@@ -71,12 +71,15 @@ def push_extraction_failure_notice(project_dir: str) -> None:
     )
 
 
-def push_extraction_retry_exhausted_notice(project_dir: str) -> None:
+def push_extraction_retry_exhausted_notice(
+    project_dir: str, session_id: str,
+) -> None:
     """Surface one latched notice when automatic extraction retries stop."""
     push_distill_notice(
         project_dir,
         "The failed session remains unsealed so its transcript is preserved.",
-        "Memory extraction reached its retry cap; manual retry or provider repair is required",
+        "Memory extraction reached its retry cap; run "
+        f"magnolia memory retry {session_id} after repairing the provider",
     )
 
 

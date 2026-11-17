@@ -1,5 +1,6 @@
 """Automatic memory extraction: distill session logs into project-tier entries."""
 
+import hashlib
 import json
 import os
 import re
@@ -553,7 +554,10 @@ class AutomaticMemoryExtractor:
         if not events:
             return []
 
+        fingerprint = hashlib.sha256(session_path.read_bytes()).hexdigest()
         retry = self.session_retries.get(session_path.name)
+        if retry and retry.get("fingerprint") != fingerprint:
+            retry = None
         from compchem_memory.extraction_retry import retry_is_due
 
         if not retry_is_due(retry):
@@ -571,12 +575,17 @@ class AutomaticMemoryExtractor:
                 if self._stored_cursor() != cursor_read:
                     return None
                 self._load_state()
-                retry = next_retry(self.session_retries.get(session_path.name))
+                current_retry = self.session_retries.get(session_path.name)
+                if current_retry and current_retry.get("fingerprint") != fingerprint:
+                    current_retry = None
+                retry = next_retry(current_retry, fingerprint=fingerprint)
                 self.session_retries[session_path.name] = retry
                 self._save_state()
             distill_log.push_extraction_failure_notice(project_dir)
             if retry["exhausted"]:
-                distill_log.push_extraction_retry_exhausted_notice(project_dir)
+                distill_log.push_extraction_retry_exhausted_notice(
+                    project_dir, session_path.name
+                )
             return None
 
         with project_writer_lease(project_dir):
@@ -596,6 +605,7 @@ class AutomaticMemoryExtractor:
                 distill_log.append_distill_log(project_dir, quote, summary)
                 distill_log.push_distill_notice(project_dir, quote, summary)
 
+            self._load_state()
             self.session_retries.pop(session_path.name, None)
             self.last_cursor = all_events[-1].get("timestamp", "")
             self._save_state()

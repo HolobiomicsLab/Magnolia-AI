@@ -221,6 +221,68 @@ def test_evaluator_context_satisfies_native_launch_contract(tmp_path, monkeypatc
     assert context.environment["MAGNOLIA_DOORBELL"] == "0"
 
 
+def test_native_evaluator_usage_keeps_cache_read_tokens():
+    result = SimpleNamespace(
+        usage={
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "reasoning_tokens": 1,
+            "cache_read_tokens": 7,
+            "cache_write_tokens": 3,
+        },
+        attempts=1,
+        duration_seconds=0.1,
+        session_identity=None,
+    )
+
+    usage = GenerativeEvaluator._usage(result)
+
+    assert usage.cached_tokens == 7
+    assert usage.completeness == "complete"
+
+
+def test_evaluator_closes_executor_and_removes_per_call_directory(
+    tmp_path, monkeypatch,
+):
+    route = resolve_route("evaluator", {"model": "claude-code/claude-haiku-5-5"})
+    evaluator = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        project_dir=tmp_path,
+        role_capabilities=CAPABILITIES,
+    )
+    closed = []
+
+    class Executor:
+        def close(self):
+            closed.append(True)
+
+    def make_executor(_route, _role, context):
+        context.run_dir.mkdir(parents=True)
+        (context.run_dir / "materialized-config").write_text("temporary")
+        return Executor()
+
+    monkeypatch.setattr("router_runner.evaluator.executor_for", make_executor)
+    monkeypatch.setattr(
+        evaluator,
+        "_run_executor",
+        lambda *args: SimpleNamespace(
+            final_text='{"action":"ignore","project":null,"confidence":1,"reason":"ok"}',
+            outcome=RunOutcome("success"),
+            usage={},
+            attempts=1,
+            duration_seconds=0.01,
+            session_identity=None,
+        ),
+    )
+
+    result = evaluator._call_client("hello", {}, None, route=route)
+
+    assert result.outcome.kind == "success"
+    assert closed == [True]
+    runs = tmp_path / ".magnolia" / "evaluator-runs"
+    assert not runs.exists() or list(runs.iterdir()) == []
+
+
 def test_failed_evaluator_output_is_never_parsed_as_accept(tmp_path, monkeypatch):
     evaluator = GenerativeEvaluator(
         "claude-code/claude-haiku-5-5",

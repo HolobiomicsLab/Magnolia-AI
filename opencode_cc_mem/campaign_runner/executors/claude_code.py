@@ -7,6 +7,7 @@ import json
 import math
 import stat
 import uuid
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -258,6 +259,7 @@ class ClaudeCodeExecutor:
     resume_permitted: bool = False
     resume_artifact: ResumeArtifact | None = None
     quota_detector: QuotaDetector | None = None
+    _memory_service_finalizer: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         if not self.prepared.argv:
@@ -298,6 +300,29 @@ class ClaudeCodeExecutor:
             self.resume_permitted = False
             self._accept_resume_artifact(self.resume_artifact)
             self.resume_permitted = True
+        self._memory_service_finalizer = weakref.finalize(
+            self,
+            ClaudeCodeExecutor._release_prepared_memory_service,
+            self.prepared,
+        )
+
+    def close(self) -> None:
+        """Release the managed memory-service lease for this executor."""
+        finalizer = self._memory_service_finalizer
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+            return
+        self._release_prepared_memory_service(self.prepared)
+
+    @staticmethod
+    def _release_prepared_memory_service(prepared: Any) -> None:
+        handle = getattr(prepared, "memory_service_handle", None)
+        if handle is None:
+            return
+        from compchem_memory.harness.memory_service import release_memory_service
+
+        release_memory_service(handle)
+        object.__setattr__(prepared, "memory_service_handle", None)
 
     def run(
         self,

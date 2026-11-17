@@ -559,6 +559,7 @@ class CampaignStore:
         self.cancel_errors_path = self.control_dir / "cancel-errors.jsonl"
         self.start_approval_path = self.approvals_dir / "start.json"
         self.lock_path = self.control_dir / ".lock"
+        self.distill_queue_lock_path = self.control_dir / ".distill-queue.lock"
 
     def _ensure_dirs(self) -> None:
         for directory in (
@@ -583,6 +584,20 @@ class CampaignStore:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError as exc:
                 raise CampaignBusyError(f"campaign is locked: {self.run_dir}") from exc
+            yield
+        finally:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
+
+    @contextmanager
+    def distill_queue_lock(self) -> Iterator[None]:
+        """Wait for exclusive access to the append-only distillation queue."""
+        self.control_dir.mkdir(parents=True, exist_ok=True)
+        handle = self.distill_queue_lock_path.open("a+")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             yield
         finally:
             try:

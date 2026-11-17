@@ -83,11 +83,15 @@ def _probe_route(harness: str, model: str | None):
 
 def _probe_environment(source: dict[str, str], harness: str) -> dict[str, str]:
     """Filter billing credentials and config-home overrides from a probe."""
+    strips_provider_keys = harness != "opencode"
     environment = {
         name: value
         for name, value in source.items()
-        if name not in _SETUP_FORBIDDEN_ENV
-        and not is_provider_api_key_name(name)
+        if (
+            name not in _SETUP_FORBIDDEN_ENV
+            or (not strips_provider_keys and is_provider_api_key_name(name))
+        )
+        and (not strips_provider_keys or not is_provider_api_key_name(name))
         and not name.upper().endswith("_AUTH_TOKEN")
     }
     environment["MAGNOLIA_DOORBELL"] = "0"
@@ -135,7 +139,7 @@ def run_setup_probe(
     environment: dict[str, str] | None = None,
     timeout_seconds: int = 180,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one bounded, receipted connectivity probe with no inherited API key."""
+    """Run one bounded, receipted probe with the harness's documented environment."""
     route = _probe_route(harness, model)
     usage_governor = governor or Governor()
     project = Path(project_dir).resolve()
@@ -162,18 +166,19 @@ def run_setup_probe(
             on_start=lambda pid, pgid: admitted.mark_started(pid=pid, pgid=pgid),
             hold_before_exec=True,
         )
-        result = run_process(
-            argv, project, child_environment, timeout_seconds, output, errors, control,
-        )
-        stdout = output.read_text(encoding="utf-8", errors="replace")
-        stderr = errors.read_text(encoding="utf-8", errors="replace")
-        if result.client_started:
-            admitted.release(
-                usage=UsageRecord(turns=1, source="setup-probe"),
-                outcome=result.outcome,
+        with admitted:
+            result = run_process(
+                argv, project, child_environment, timeout_seconds, output, errors, control,
             )
-        else:
-            admitted.cancel_before_launch()
+            stdout = output.read_text(encoding="utf-8", errors="replace")
+            stderr = errors.read_text(encoding="utf-8", errors="replace")
+            if result.client_started:
+                admitted.release(
+                    usage=UsageRecord(turns=1, source="setup-probe"),
+                    outcome=result.outcome,
+                )
+            else:
+                admitted.cancel_before_launch()
         return subprocess.CompletedProcess(argv, result.returncode, stdout, stderr)
 
 
