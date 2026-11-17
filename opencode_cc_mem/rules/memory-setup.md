@@ -1,8 +1,8 @@
 ---
 name: memory-setup
 description: How to set up Magnolia's memory model when a user asks to "set up memory" — model roles, the magnolia memory command, verification, and the restart requirement.
-version: 1.0
-last_verified: 2026-09-11
+version: 1.1
+last_verified: 2026-11-17
 tags: [setup, llm, memory-model, onboarding]
 ---
 
@@ -63,6 +63,9 @@ Two triggers lead here — the flow below is the same for both:
    their env file themselves.
 4. **Run the command**:
    ```bash
+   # With OPENROUTER_API_KEY:
+   magnolia memory set deepseek/deepseek-v4.1-flash
+   # Otherwise, with DEEPSEEK_API_KEY:
    magnolia memory set deepseek-flash
    ```
    It makes one REAL test call before saving. On failure it writes nothing —
@@ -100,6 +103,12 @@ is used only when both `direct_fallback_provider` and
 fallback flags in `.magnolia/llm-setup.json`; the launcher
 passes them as `MAGNOLIA_DIRECT_FALLBACK_PROVIDER` and
 `MAGNOLIA_DIRECT_FALLBACK_MODEL`. The default is unset.
+
+The managed memory service admits API-key variables only for the selected
+memory provider, an explicitly configured critic provider and an explicitly
+configured direct-fallback provider. A critic failure on any configured
+provider queues one visible unavailable notice per session and writes its
+typed error row; this notice policy is not limited to OpenRouter.
 
 ## Why memory starts disabled
 

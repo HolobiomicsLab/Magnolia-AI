@@ -62,6 +62,11 @@ reused prefix; marking them would pay Anthropic's 1.25x five-minute cache-write 
 The memory selector supplies only the 15 best candidates per task (about 1,000 tokens), so candidate prompt
 order is immaterial in practice.
 
+Explicit OpenRouter memory and critic routes now fail visibly on missing keys,
+HTTP 429/5xx, transport errors and empty HTTP 200 replies. They emit typed
+telemetry plus one notice per session and never borrow a direct-provider key;
+only a separately configured direct provider/model pair can receive a retry.
+
 `.magnolia/llm-timing.jsonl` now adds any stated `prompt_tokens`, `cached_tokens`,
 `cache_write_tokens`, `completion_tokens` and `cost` at the top level. Claim-critic verdict and error rows
 store the same normalized fields under `usage`; omitted provider fields remain unknown rather than zero.

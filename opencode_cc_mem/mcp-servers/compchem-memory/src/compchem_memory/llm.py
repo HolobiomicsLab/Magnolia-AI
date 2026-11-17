@@ -935,12 +935,38 @@ def call_llm(
                 provider, key, model, system_prompt, user_content, max_tokens,
                 temperature, disable_thinking, cache_prefix)
             )
-        _record_timing(provider, model, (time.monotonic() - t0) * 1000,
-                       "ok" if out else "empty", resolved_model=resolved,
-                       chars=len(out) if out else 0,
-                       upstream_provider=upstream_provider,
-                       **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
-                       **(usage or {}))
+        if not out and provider == PROVIDER_OPENROUTER:
+            fallback = _direct_fallback_route("memory")
+            recovered = None
+            if fallback is not None:
+                recovered = call_route(
+                    fallback, system_prompt, user_content, max_tokens=max_tokens,
+                    temperature=temperature, disable_thinking=disable_thinking,
+                    cache_prefix=cache_prefix,
+                )
+            _record_timing(
+                provider, model, (time.monotonic() - t0) * 1000,
+                "fallback_ok" if recovered and recovered.text else "error",
+                resolved_model=resolved, chars=0, upstream_provider=upstream_provider,
+                status=200,
+                error=(recovered.error if recovered and recovered.error else "empty response"),
+                **({"fallback_provider": fallback.provider, "fallback_model": fallback.model}
+                   if fallback else {}),
+                **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+                **(recovered.usage if recovered and recovered.usage else usage or {}),
+            )
+            if recovered and recovered.text:
+                return ((recovered.text, recovered.finish_reason) if return_finish_reason
+                        else recovered.text)
+            _warn_openrouter_failure_once("memory", "empty response")
+            return (None, None) if return_finish_reason else None
+        _record_timing(
+            provider, model, (time.monotonic() - t0) * 1000,
+            "ok" if out else "empty", resolved_model=resolved,
+            chars=len(out) if out else 0, upstream_provider=upstream_provider,
+            **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+            **(usage or {}),
+        )
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         quality_floor_dropped = bool(
