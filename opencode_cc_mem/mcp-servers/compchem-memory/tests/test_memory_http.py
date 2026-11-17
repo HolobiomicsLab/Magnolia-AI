@@ -19,6 +19,7 @@ from compchem_memory.tool_catalog import (
     MEMORY_TOOL_PREFIX,
     MUTATING_MEMORY_TOOLS,
     READ_ONLY_MEMORY_TOOLS,
+    resolve_memory_server_launch,
     resolve_memory_tool_allowlist,
 )
 from compchem_memory.harness import memory_service
@@ -27,10 +28,14 @@ from compchem_memory.harness.memory_service import (
     release_memory_service,
     token_for_handle,
 )
+from compchem_memory.writer_lease import (
+    acquire_project_writer_lease,
+    release_project_writer_lease,
+)
 from fastmcp.server.middleware import MiddlewareContext
 from fastmcp.exceptions import ToolError
 from fastmcp import Client, FastMCP
-from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 from mcp import types as mt
 from types import SimpleNamespace
 
@@ -109,7 +114,14 @@ def test_memory_http_bearer_verifier_rejects_missing_wrong_and_prefixed_tokens(
     app = memory_http.build_server("service-token")
 
     assert asyncio.run(app.auth.verify_token(supplied)) is None
-    assert comparisons == [(supplied, "service-token")]
+    assert comparisons == [(supplied.encode(), b"service-token")]
+
+
+def test_memory_http_bearer_verifier_rejects_non_ascii_without_error():
+    app = memory_http.build_server("service-token")
+
+    assert asyncio.run(app.auth.verify_token("tokén")) is None
+    assert memory_http.constant_time_token_matches("Bearer tokén", "Bearer service-token") is False
 
 
 def test_memory_http_requires_explicit_known_nonempty_allowlist(monkeypatch):
@@ -183,6 +195,92 @@ def test_stdio_and_http_use_the_same_exact_allowlist(monkeypatch):
             asyncio.run(app.call_tool("memory_set_goal", {"goal": "refused"}))
 
 
+def test_stdio_and_http_hide_resources_templates_and_prompts_for_restricted_roles(
+    monkeypatch,
+):
+    allowed = (
+        f"{MEMORY_TOOL_PREFIX}memory_search",
+        f"{MEMORY_TOOL_PREFIX}memory_set_goal",
+    )
+    resolved = resolve_memory_tool_allowlist(allowed, required=True)
+    monkeypatch.setenv("MAGNOLIA_MEMORY_TOOL_ALLOWLIST", json.dumps(allowed))
+    http = memory_http.build_server("service-token")
+    stdio = FastMCP("stdio-resource-parity")
+    stdio.add_middleware(memory_http.ToolAllowlistMiddleware(resolved.server_names))
+    stdio.mount(server.mcp)
+
+    async def assert_filtered(app):
+        assert tuple(await app.list_resources()) == ()
+        assert tuple(await app.list_resource_templates()) == ()
+        assert tuple(await app.list_prompts()) == ()
+        with pytest.raises(ToolError, match="not allowed"):
+            await app.read_resource("memory://project/index")
+
+    for app in (http, stdio):
+        asyncio.run(assert_filtered(app))
+
+
+def test_stdio_launch_contract_argv_wins_over_forwarded_environment():
+    allowed = (f"{MEMORY_TOOL_PREFIX}memory_search",)
+    forwarded = {
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST": json.dumps(
+            [f"{MEMORY_TOOL_PREFIX}memory_set_goal"]
+        )
+    }
+
+    resolved = resolve_memory_server_launch(
+        ("--tool-allowlist-json", json.dumps(allowed)), forwarded
+    )
+
+    assert resolved.neutral_names == allowed
+
+
+@pytest.mark.asyncio
+async def test_real_stdio_transport_filters_resources_and_prompts(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    runner = Path(memory_http.__file__).with_name("hook") / "runner.py"
+    allowed = (
+        f"{MEMORY_TOOL_PREFIX}memory_search",
+        f"{MEMORY_TOOL_PREFIX}memory_set_goal",
+    )
+    transport = StdioTransport(
+        command=sys.executable,
+        args=[
+            "-I",
+            str(runner),
+            "--memory-server",
+            "--tool-allowlist-json",
+            json.dumps(allowed),
+        ],
+        env={
+            **os.environ,
+            "MAGNOLIA_PROJECT_DIR": str(project),
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        },
+        cwd=str(project),
+    )
+
+    async with Client(transport) as client:
+        assert tuple(await client.list_resources()) == ()
+        assert tuple(await client.list_resource_templates()) == ()
+        assert tuple(await client.list_prompts()) == ()
+        _leased_project, descriptor = acquire_project_writer_lease(project)
+        try:
+            write = asyncio.create_task(
+                client.call_tool(
+                    "memory_set_goal",
+                    {"goal": "stdio lease", "project_dir": str(project)},
+                )
+            )
+            await asyncio.sleep(0.1)
+            assert not write.done()
+        finally:
+            release_project_writer_lease(descriptor)
+        result = await asyncio.wait_for(write, timeout=2)
+        assert result.is_error is False
+
+
 def test_two_concurrent_http_writers_are_idempotent_and_leave_valid_state(
     tmp_path, monkeypatch
 ):
@@ -248,6 +346,76 @@ def test_read_tools_are_not_serialized_by_writer_lease(tmp_path):
         )
 
     assert asyncio.run(exercise()) == ["memory_search", "memory_search"]
+
+
+def test_cancelled_writer_waiter_returns_lease_after_holder_finishes(tmp_path):
+    middleware = memory_http.ProjectWriterLeaseMiddleware(tmp_path)
+    context = MiddlewareContext(
+        message=mt.CallToolRequestParams(name="memory_set_goal", arguments={}),
+        method="tools/call",
+    )
+
+    async def exercise():
+        holder_entered = asyncio.Event()
+        release_holder = asyncio.Event()
+
+        async def hold(_context):
+            holder_entered.set()
+            await release_holder.wait()
+            return "holder"
+
+        async def finish(_context):
+            return "finished"
+
+        holder = asyncio.create_task(middleware.on_call_tool(context, hold))
+        await holder_entered.wait()
+        waiter = asyncio.create_task(middleware.on_call_tool(context, finish))
+        await asyncio.sleep(0.05)
+        waiter.cancel()
+        release_holder.set()
+        assert await holder == "holder"
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(waiter, timeout=1)
+        return await asyncio.wait_for(
+            middleware.on_call_tool(context, finish), timeout=1
+        )
+
+    assert asyncio.run(exercise()) == "finished"
+
+
+def test_cancelled_writer_keeps_lease_until_sync_body_finishes(tmp_path):
+    middleware = memory_http.ProjectWriterLeaseMiddleware(tmp_path)
+    context = MiddlewareContext(
+        message=mt.CallToolRequestParams(name="memory_set_goal", arguments={}),
+        method="tools/call",
+    )
+    active = 0
+    maximum = 0
+    guard = threading.Lock()
+
+    def slow_body():
+        nonlocal active, maximum
+        with guard:
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.15)
+        with guard:
+            active -= 1
+        return "done"
+
+    async def call_next(_context):
+        return await asyncio.to_thread(slow_body)
+
+    async def exercise():
+        first = asyncio.create_task(middleware.on_call_tool(context, call_next))
+        await asyncio.sleep(0.03)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert await middleware.on_call_tool(context, call_next) == "done"
+
+    asyncio.run(exercise())
+    assert maximum == 1
 
 
 def test_memory_http_two_projects_are_isolated(tmp_path):
@@ -1024,13 +1192,19 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
                 },
             )
             async with Client(transport) as client:
-                return await client.call_tool(
-                    "memory_get_goal",
-                    {"project_dir": str(other)},
-                    raise_on_error=False,
+                return (
+                    await client.call_tool(
+                        "memory_get_goal",
+                        {"project_dir": str(other)},
+                        raise_on_error=False,
+                    ),
+                    tuple(await client.list_resources()),
+                    tuple(await client.list_resource_templates()),
+                    tuple(await client.list_prompts()),
                 )
 
-        refused = asyncio.run(cross_project_call())
+        refused, resources, templates, prompts = asyncio.run(cross_project_call())
+        assert resources == templates == prompts == ()
         message = " ".join(
             getattr(item, "text", "") for item in refused.content
         )

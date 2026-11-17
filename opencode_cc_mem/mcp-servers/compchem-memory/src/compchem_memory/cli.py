@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.storage import ensure_project_store, scaffold_obsidian_vault
+from compchem_memory.writer_lease import project_writer_lease
 
 
 def cmd_assess(args: argparse.Namespace) -> int:
@@ -407,7 +408,8 @@ def main() -> int:
     p_daily.set_defaults(func=cmd_generate_daily_note)
 
     args = parser.parse_args()
-    return args.func(args)
+    with project_writer_lease(args.project_dir or "."):
+        return args.func(args)
 
 
 if __name__ == "__main__":

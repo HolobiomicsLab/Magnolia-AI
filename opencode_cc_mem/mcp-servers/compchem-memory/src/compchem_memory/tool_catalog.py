@@ -39,6 +39,7 @@ MEMORY_TOOL_ORDER = (
 MEMORY_TOOL_NAMES = frozenset(MEMORY_TOOL_ORDER)
 MEMORY_TOOL_ALLOWLIST_ENV = "MAGNOLIA_MEMORY_TOOL_ALLOWLIST"
 MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV = "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED"
+MEMORY_TOOL_ALLOWLIST_ARG = "--tool-allowlist-json"
 CANONICAL_MEMORY_TOOL_ALLOWLIST = tuple(
     f"{MEMORY_TOOL_PREFIX}{name}" for name in MEMORY_TOOL_ORDER
 )
@@ -78,6 +79,7 @@ READ_ONLY_MEMORY_TOOLS = frozenset(
         "memory_get_goal",
     }
 )
+LEASED_READ_MEMORY_TOOLS = frozenset({"memory_get_context"})
 
 
 @dataclass(frozen=True)
@@ -147,8 +149,30 @@ def resolve_memory_tool_environment(
     )
 
 
+def resolve_memory_server_launch(
+    arguments: Sequence[str], environment: Mapping[str, str]
+) -> ResolvedMemoryToolAllowlist:
+    """Resolve a stdio server's argv-bound allowlist, with legacy env fallback."""
+    if not arguments:
+        return resolve_memory_tool_environment(environment, legacy_stdio=True)
+    if len(arguments) != 2 or arguments[0] != MEMORY_TOOL_ALLOWLIST_ARG:
+        raise ValueError("memory server launch arguments are invalid")
+    try:
+        entries = json.loads(arguments[1])
+    except json.JSONDecodeError as exc:
+        raise ValueError("memory tool allowlist is not valid JSON") from exc
+    return resolve_memory_tool_allowlist(entries, required=True)
+
+
 def memory_tool_is_mutating(
     name: str, arguments: Mapping[str, object] | None = None
 ) -> bool:
     """Return whether a tool can change durable project memory state."""
     return name in MUTATING_MEMORY_TOOLS
+
+
+def memory_tool_requires_lease(
+    name: str, arguments: Mapping[str, object] | None = None
+) -> bool:
+    """Return whether a call performs durable non-append-only store writes."""
+    return memory_tool_is_mutating(name, arguments) or name in LEASED_READ_MEMORY_TOOLS

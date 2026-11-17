@@ -40,6 +40,18 @@ ISOLATED_MEMORY_ARGS = [
     ),
     "--memory-server",
 ]
+WORKER_MEMORY_ARGS = [
+    *ISOLATED_MEMORY_ARGS,
+    "--tool-allowlist-json",
+    json.dumps(
+        [
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ],
+        separators=(",", ":"),
+    ),
+]
 RUNNER = Path(ISOLATED_MEMORY_ARGS[1])
 FIXTURES = ROOT / "tests" / "fixtures" / "executors" / "codex" / "live-p3"
 STRIPPED_ENV = {
@@ -388,7 +400,7 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
     if role == "worker":
         servers["compchem-memory"] = {
             "command": "/venv/bin/python",
-            "args": ISOLATED_MEMORY_ARGS,
+            "args": WORKER_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
             "tools": {
                 name: {"approval_mode": "approve"} for name in (
@@ -546,7 +558,7 @@ def test_codex_worker_pins_each_owner_isolation_setting(
     servers = {
         "compchem-memory": {
             "command": "/venv/bin/python",
-            "args": ISOLATED_MEMORY_ARGS,
+            "args": WORKER_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
             "tools": {
                 name: {"approval_mode": "approve"} for name in (

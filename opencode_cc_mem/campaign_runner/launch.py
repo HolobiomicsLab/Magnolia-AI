@@ -36,6 +36,7 @@ from compchem_memory.harness.render_common import (
     policy_files,
 )
 from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_ALLOWLIST_ARG,
     MEMORY_TOOL_ALLOWLIST_ENV,
     MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
     ResolvedMemoryToolAllowlist,
@@ -482,12 +483,13 @@ def _required_capabilities(
     policy: RolePolicy, context: ExecContext
 ) -> tuple[str, ...]:
     requested = tuple(dict.fromkeys(context.required_capabilities))
-    allowed = set(policy.allowed_native_capabilities) | set(policy.mcp_tool_allowlist)
+    memory_tools = _resolved_memory_tools(context, policy).neutral_names
+    allowed = set(policy.allowed_native_capabilities) | set(memory_tools)
     unsupported = sorted(set(requested) - allowed)
     if unsupported:
         raise ExecutorRefused("unsupported required capabilities: " + ", ".join(unsupported))
     if context.role in {"worker", "reviewer"}:
-        baseline = (*policy.allowed_native_capabilities, *policy.mcp_tool_allowlist)
+        baseline = (*policy.allowed_native_capabilities, *memory_tools)
         requested = tuple(dict.fromkeys((*baseline, *requested)))
     if context.role == "helper" and "native_read" in requested:
         if not context.capability_read_roots:
@@ -932,7 +934,12 @@ def _hook_source_digest(context: ExecContext) -> str:
     )
     hook_root = source_root / "hook"
     _hook_runner_path(context)
-    render_common = source_root / "harness" / "render_common.py"
+    bound_server_sources = (
+        source_root / "harness" / "render_common.py",
+        source_root / "memory_http.py",
+        source_root / "tool_catalog.py",
+        source_root / "writer_lease.py",
+    )
     bodies: list[tuple[str, bytes]] = []
     try:
         for path in sorted(hook_root.rglob("*")):
@@ -940,7 +947,9 @@ def _hook_source_digest(context: ExecContext) -> str:
             if "__pycache__" in relative.parts or not path.is_file():
                 continue
             bodies.append((relative.as_posix(), path.read_bytes()))
-        wrapper_source = render_common.read_text(encoding="utf-8")
+        wrapper_source = bound_server_sources[0].read_text(encoding="utf-8")
+        for path in bound_server_sources[1:]:
+            bodies.append((path.relative_to(source_root).as_posix(), path.read_bytes()))
     except OSError as exc:
         raise ExecutorRefused("hook source binding is unavailable") from exc
     if not bodies:
@@ -1359,12 +1368,10 @@ def _codex_mcp_servers(
             if isinstance(authorization, str):
                 entry["bearer_token_env_var"] = authorization
         else:
-            args = service.get("args", ())
-            if not isinstance(args, (list, tuple)):
-                raise ExecutorRefused("memory stdio route args must be a list")
+            args = _stdio_memory_args(service, mcp_payload)
             entry: dict[str, Any] = {
                 "command": service["command"],
-                "args": [str(arg) for arg in args],
+                "args": args,
             }
             env_vars = service.get("env_vars", ())
             if not isinstance(env_vars, (list, tuple)):
@@ -1425,16 +1432,14 @@ def _vibe_mcp_servers(mcp_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "api_key_env": authorization,
             }
     else:
-        args = service.get("args", ())
-        if not isinstance(args, (list, tuple)):
-            raise ExecutorRefused("memory stdio route args must be a list")
+        args = _stdio_memory_args(service, mcp_payload)
         entry = {
             "name": "compchem-memory",
             "transport": "stdio",
             "command": service["command"],
         }
         if args:
-            entry["args"] = [str(arg) for arg in args]
+            entry["args"] = args
     return [entry]
 
 
@@ -1452,16 +1457,37 @@ def _claude_mcp_servers(
                 "Authorization": f"Bearer ${{{authorization}}}"
             }
         return {"compchem-memory": entry}
-    args = service.get("args", ())
-    if not isinstance(args, (list, tuple)):
-        raise ExecutorRefused("memory stdio route args must be a list")
-    entry = {"command": service["command"], "args": [str(arg) for arg in args]}
+    args = _stdio_memory_args(service, mcp_payload)
+    entry = {"command": service["command"], "args": args}
     env_vars = service.get("env_vars", ())
     if not isinstance(env_vars, (list, tuple)):
         raise ExecutorRefused("memory stdio route env_vars must be a list")
     if env_vars:
         entry["env"] = {str(name): f"${{{name}}}" for name in env_vars}
     return {"compchem-memory": entry}
+
+
+def _stdio_memory_args(
+    service: Mapping[str, Any], mcp_payload: Mapping[str, Any]
+) -> list[str]:
+    """Bind the exact server allowlist in the stdio process launch contract."""
+    raw_arguments = service.get("args", ())
+    if not isinstance(raw_arguments, (list, tuple)):
+        raise ExecutorRefused("memory stdio route args must be a list")
+    arguments = [str(argument) for argument in raw_arguments]
+    allowlist = mcp_payload.get("tool_allowlist", ())
+    if not isinstance(allowlist, (list, tuple)):
+        raise ExecutorRefused("memory stdio tool_allowlist must be a list")
+    memory_tools = [
+        str(tool)
+        for tool in allowlist
+        if isinstance(tool, str) and tool.startswith("mcp:compchem-memory.")
+    ]
+    if memory_tools:
+        arguments.extend(
+            [MEMORY_TOOL_ALLOWLIST_ARG, json.dumps(memory_tools, separators=(",", ":"))]
+        )
+    return arguments
 
 
 def _validate_memory_service(context: ExecContext, service: Mapping[str, Any]) -> None:

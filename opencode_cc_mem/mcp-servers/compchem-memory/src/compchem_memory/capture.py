@@ -350,6 +350,17 @@ def captured(source: str):
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             project_dir = _resolve_project_dir(kwargs.get("project_dir"))
+            from compchem_memory.tool_catalog import memory_tool_requires_lease
+            from compchem_memory.writer_lease import (
+                has_project_writer_lease,
+                project_writer_lease,
+            )
+
+            if memory_tool_requires_lease(tool_name) and not has_project_writer_lease(
+                project_dir
+            ):
+                with project_writer_lease(project_dir):
+                    return wrapper(*args, **kwargs)
             mgr = None
             try:
                 mgr = get_session_manager(project_dir)

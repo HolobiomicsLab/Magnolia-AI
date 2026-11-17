@@ -144,15 +144,18 @@ def run_job(job_path: Path) -> None:
             )
         except (KeyError, OSError, ValueError, TypeError):
             return
-        lock_path = _worker_lock(store, harness, session_id)
-        private_mkdir(lock_path.parent)
-        with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
-            try:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return
-            while (job := _claim_next(store, harness, session_id)) is not None:
-                _run_turn(paths, payload, job)
+        from compchem_memory.writer_lease import project_writer_lease
+
+        with project_writer_lease(paths.project_dir):
+            lock_path = _worker_lock(store, harness, session_id)
+            private_mkdir(lock_path.parent)
+            with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
+                try:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return
+                while (job := _claim_next(store, harness, session_id)) is not None:
+                    _run_turn(paths, payload, job)
     finally:
         job_path.unlink(missing_ok=True)
 
@@ -651,7 +654,10 @@ def run_opencode_job(job_path: Path) -> None:
             store = Path(str(payload["store"]))
     except (OSError, ValueError, TypeError):
         pass
-    drain_opencode_payloads(store)
+    from compchem_memory.writer_lease import project_writer_lease, project_from_store
+
+    with project_writer_lease(project_from_store(store)):
+        drain_opencode_payloads(store)
 
 
 def main() -> None:

@@ -24,6 +24,7 @@ from compchem_memory.reflex_common import (
     pending_indices as _pending_indices,
 )
 from compchem_memory.staging_io import union_origins
+from compchem_memory.writer_lease import leased_source_writer, leased_store_writer
 
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
@@ -346,6 +347,7 @@ def _default_clusterer(payload: list[dict[str, Any]],
     return clusters
 
 
+@leased_store_writer
 def consolidate_project_findings(
     store_dir: str,
     *,
@@ -497,6 +499,7 @@ def _append_labels(store: Path, rows: list[dict[str, Any]]) -> None:
         print(f"[consolidation] label-log skipped: {e}")
 
 
+@leased_store_writer
 def apply_proposals(
     store_dir: str, accepted: list[int], reject: list[int] | None = None,
     via: str = "human", evidence: str = "",
@@ -601,6 +604,7 @@ def apply_proposals(
             "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
 
 
+@leased_store_writer
 def backfill_labels(store_dir: str) -> dict[str, Any]:
     """One-time import of proposals handled BEFORE the label store existed into
     reflex/labels.jsonl. Reads the artifact's applied/rejected/dismissed marks;
@@ -690,6 +694,7 @@ def _auto_band_ready(proposal: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
+@leased_store_writer
 def auto_apply_band(store_dir: str) -> dict[str, Any]:
     """Apply pending proposals in the auto band (see AUTO_BAND_MIN_CONFIDENCE).
 
@@ -789,6 +794,7 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
                 "error": str(e)}
 
 
+@leased_source_writer
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     """Apply one consolidation: re-read the still-present sources, merge them, write
     the merged entry OVER the canonical file, and remove the other sources. Re-reads
@@ -818,6 +824,7 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     return {"merged": canonical, "removed": removed, "skipped": False}
 
 
+@leased_store_writer
 def dismiss_stale_proposals(
     store_dir: str, *, via: str = "auto", evidence: str = ""
 ) -> list[int]:

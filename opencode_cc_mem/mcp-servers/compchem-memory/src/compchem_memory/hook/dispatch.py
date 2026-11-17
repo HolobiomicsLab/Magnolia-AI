@@ -885,10 +885,20 @@ def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
 
 def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled:
     """Bind and record an event, then return its neutral hook response."""
-    catchup_deadline = min(deadline, time.monotonic() + _CATCHUP_HOOK_LIMIT_SECONDS)
     paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
     if paths is None:
         return Handled(HookResponse(), None)
+    from compchem_memory.writer_lease import project_writer_lease
+
+    with project_writer_lease(paths.project_dir):
+        return _handle_bound(paths, event, env, deadline)
+
+
+def _handle_bound(
+    paths: ProjectPaths, event: HookEvent, env: Mapping[str, str], deadline: float
+) -> Handled:
+    """Handle one already-bound event while its project writer lease is held."""
+    catchup_deadline = min(deadline, time.monotonic() + _CATCHUP_HOOK_LIMIT_SECONDS)
     guard = _Guard(paths, event, env)
     completion_event = event.event in {"turn-end", "agent-end"}
     closing_session_end = event.event == "session-end" and event.harness in {"vibe", "claude"}

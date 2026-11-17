@@ -33,6 +33,18 @@ ISOLATED_MEMORY_ARGS = [
     ),
     "--memory-server",
 ]
+WORKER_MEMORY_ARGS = [
+    *ISOLATED_MEMORY_ARGS,
+    "--tool-allowlist-json",
+    json.dumps(
+        [
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ],
+        separators=(",", ":"),
+    ),
+]
 LIVE = ROOT / "tests/fixtures/executors/claude/live-p3"
 SYNTHETIC = ROOT / "tests/fixtures/executors/claude/synthetic"
 STRIPPED_ENV = {
@@ -318,7 +330,7 @@ def test_claude_effective_argv_env_model_and_cap(tmp_path):
         "mcpServers": {
             "compchem-memory": {
                 "command": context.python_executable,
-                "args": ISOLATED_MEMORY_ARGS,
+                "args": WORKER_MEMORY_ARGS,
                 "env": {"MAGNOLIA_PROJECT_DIR": "${MAGNOLIA_PROJECT_DIR}"},
             }
         }
