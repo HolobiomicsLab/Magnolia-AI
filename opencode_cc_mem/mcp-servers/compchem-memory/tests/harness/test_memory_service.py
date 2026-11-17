@@ -26,6 +26,13 @@ def _private_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    original_state_dir = memory_service.private_state_dir
+
+    def keyed_state_dir(project, tool_allowlist=None):
+        tools = _context(Path(project)).tool_allowlist if tool_allowlist is None else tool_allowlist
+        return original_state_dir(Path(project), tools)
+
+    monkeypatch.setattr(memory_service, "private_state_dir", keyed_state_dir)
 
 
 class FakeProcess:
@@ -80,6 +87,7 @@ def test_private_state_is_user_private_and_outside_project(tmp_path):
         / ".magnolia"
         / "services"
         / memory_service.project_digest(project)
+        / memory_service.tool_allowlist_digest(_context(project).tool_allowlist)
     )
     assert not state.is_relative_to(project)
 
@@ -290,6 +298,7 @@ def test_symlinked_home_acquire_reuse_release_uses_canonical_state(
         / ".magnolia"
         / "services"
         / memory_service.project_digest(project)
+        / memory_service.tool_allowlist_digest(_context(project).tool_allowlist)
     ).resolve()
     state_flag = started[0][0].index("--state-dir")
     assert Path(started[0][0][state_flag + 1]) == expected_state
@@ -452,6 +461,71 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert memory_service.release_memory_service(first) is False
     assert memory_service.release_memory_service(second) is True
     assert stopped == [(4101, "ps:4101:start")]
+
+
+def test_different_allowlists_get_independent_live_services(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    full = tuple(
+        f"mcp:compchem-memory.{name}"
+        for name in memory_service.resolve_memory_tool_allowlist(
+            None, required=False, legacy_stdio=True
+        ).server_names
+    )
+    worker = _context(project).tool_allowlist
+    identities = {
+        os.getpid(): f"ps:{os.getpid()}:test-launcher",
+        4101: "ps:4101:full",
+        4102: "ps:4102:worker",
+    }
+    started = []
+    commands = {}
+    stopped = []
+    ports = iter((43101, 43102))
+
+    def start(argv, cwd, environment, log_path):
+        pid = 4101 + len(started)
+        started.append((pid, dict(environment)))
+        commands[pid] = tuple(argv)
+        return FakeProcess(pid)
+
+    monkeypatch.setattr(memory_service, "_start_process", start)
+    monkeypatch.setattr(memory_service, "_choose_port", lambda requested=None: next(ports))
+    monkeypatch.setattr(memory_service, "_process_identity", identities.get)
+    monkeypatch.setattr(memory_service, "_process_command", commands.get)
+    monkeypatch.setattr(memory_service, "_listener_owned_by_pid", lambda pid, port: True)
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda url, token, timeout=2.0: {
+            "project_digest": memory_service.project_digest(project),
+            "process_identity": identities[4101 if ":43101/" in url else 4102],
+            "service_identity": started[0 if ":43101/" in url else 1][1][
+                "MAGNOLIA_MEMORY_SERVICE_IDENTITY"
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        memory_service,
+        "_terminate_owned",
+        lambda record: stopped.append(record["pid"]) or True,
+    )
+
+    interactive_handle = memory_service.ensure_memory_service(
+        _context(project), tool_allowlist=full
+    )
+    worker_handle = memory_service.ensure_memory_service(
+        _context(project), tool_allowlist=worker
+    )
+
+    assert len(started) == 2
+    assert interactive_handle.url != worker_handle.url
+    assert interactive_handle.token_file.parent != worker_handle.token_file.parent
+    assert memory_service.release_memory_service(worker_handle) is True
+    assert stopped == [4102]
+    assert interactive_handle.token_file.exists()
+    assert memory_service.release_memory_service(interactive_handle) is True
+    assert stopped == [4102, 4101]
 
 
 def test_release_preserves_holder_when_identity_probe_is_unknown(tmp_path, monkeypatch):
@@ -904,7 +978,11 @@ def test_sigint_during_readiness_leaves_no_service_or_record(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
     state = memory_service.private_state_dir(project)
+    # A shell's background job inherits SIGINT as SIG_IGN, which startup honours;
+    # this test is about an interruptible acquirer, so restore Python's handler.
     code = f"""
+import signal
+signal.signal(signal.SIGINT, signal.default_int_handler)
 from pathlib import Path
 from types import SimpleNamespace
 from compchem_memory.harness import memory_service
@@ -1376,8 +1454,10 @@ def test_signal_in_injected_spawn_window_leaves_no_unrecorded_service(tmp_path, 
     project.mkdir()
     marker, proceed = tmp_path / "spawned", tmp_path / "proceed"
     state = memory_service.private_state_dir(project)
+    # Restore Python's SIGINT handler: a background job inherits SIGINT as SIG_IGN.
     code = f"""
-import os, sys, time
+import os, signal, sys, time
+signal.signal(signal.SIGINT, signal.default_int_handler)
 from pathlib import Path
 from types import SimpleNamespace
 from compchem_memory.harness import memory_service as ms
@@ -1572,6 +1652,7 @@ def test_real_service_symlinked_home_acquire_reuse_release(tmp_path, monkeypatch
         / ".magnolia"
         / "services"
         / memory_service.project_digest(project)
+        / memory_service.tool_allowlist_digest(context.tool_allowlist)
     ).resolve()
     first = memory_service.ensure_memory_service(context)
     try:
@@ -1904,8 +1985,13 @@ import json, os, signal
 from pathlib import Path
 from types import SimpleNamespace
 from compchem_memory.harness import memory_service as ms
+TOOLS = (
+    'mcp:compchem-memory.memory_get_context',
+    'mcp:compchem-memory.memory_search',
+    'mcp:compchem-memory.memory_get_run_history',
+)
 def interrupt(*args):
-    record = json.loads((ms.private_state_dir(Path({str(project)!r})) / 'service.json').read_text())
+    record = json.loads((ms.private_state_dir(Path({str(project)!r}), TOOLS) / 'service.json').read_text())
     Path({str(marker)!r}).write_text(str(record['pid']))
     previous = signal.pthread_sigmask(signal.SIG_BLOCK, {{signal.SIGHUP, signal.SIGTERM}})
     os.kill(os.getpid(), signal.SIGHUP)
@@ -1916,11 +2002,7 @@ ms.ensure_memory_service(SimpleNamespace(
     project_dir=Path({str(project)!r}), python={sys.executable!r}, holder_pid={os.getpid()},
     setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
     environment={environment!r},
-    tool_allowlist=(
-        'mcp:compchem-memory.memory_get_context',
-        'mcp:compchem-memory.memory_search',
-        'mcp:compchem-memory.memory_get_run_history',
-    ),
+    tool_allowlist=TOOLS,
 ))
 """
     acquirer = subprocess.Popen(
@@ -1931,8 +2013,8 @@ ms.ensure_memory_service(SimpleNamespace(
     )
     service_pid = None
     try:
-        acquirer.communicate(timeout=20)
-        assert marker.exists()
+        _, stderr = acquirer.communicate(timeout=20)
+        assert marker.exists(), stderr.decode(errors="replace")[-2000:]
         service_pid = int(marker.read_text())
 
         deadline = time.monotonic() + 10

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import fcntl
 import hmac
 import logging
 import math
 import os
 import signal
-import stat
 import threading
 import time
 from dataclasses import dataclass, field
@@ -32,9 +30,11 @@ from compchem_memory.harness.memory_service import (
     project_digest,
 )
 from compchem_memory.tool_catalog import (
-    memory_tool_is_mutating,
+    MEMORY_TOOL_NAMES,
+    memory_tool_requires_lease,
     resolve_memory_tool_environment,
 )
+from compchem_memory.writer_lease import run_with_project_writer_lease
 
 
 WATCHDOG_ENV = "MAGNOLIA_MEMORY_SERVICE_WATCHDOG_S"
@@ -61,7 +61,7 @@ class ConstantTimeTokenVerifier(TokenVerifier):
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Return fixed service claims only after constant-time comparison."""
-        if not hmac.compare_digest(token, self.expected_token):
+        if not constant_time_token_matches(token, self.expected_token):
             return None
         return AccessToken(
             token=token,
@@ -89,42 +89,51 @@ class ToolAllowlistMiddleware(Middleware):
             raise ToolError(f"memory tool is not allowed by this role: {name}")
         return await call_next(context)
 
+    @property
+    def exposes_full_catalog(self) -> bool:
+        """Return whether non-tool surfaces may retain legacy full access."""
+        return self.allowed_tools == MEMORY_TOOL_NAMES
+
+    async def on_list_resources(self, context, call_next):
+        """Hide resources from every restricted role."""
+        return await call_next(context) if self.exposes_full_catalog else ()
+
+    async def on_list_resource_templates(self, context, call_next):
+        """Hide resource templates from every restricted role."""
+        return await call_next(context) if self.exposes_full_catalog else ()
+
+    async def on_list_prompts(self, context, call_next):
+        """Hide prompts from every restricted role."""
+        return await call_next(context) if self.exposes_full_catalog else ()
+
+    async def on_read_resource(self, context, call_next):
+        """Refuse direct resource reads by restricted roles."""
+        if not self.exposes_full_catalog:
+            raise ToolError("memory resource is not allowed by this role")
+        return await call_next(context)
+
+    async def on_get_prompt(self, context, call_next):
+        """Refuse direct prompt reads by restricted roles."""
+        if not self.exposes_full_catalog:
+            raise ToolError("memory prompt is not allowed by this role")
+        return await call_next(context)
+
 
 class ProjectWriterLeaseMiddleware(Middleware):
     """Serialize durable memory mutations with a process-safe project lease."""
 
-    def __init__(self, project_dir: Path) -> None:
-        self.project_dir = project_dir.expanduser().resolve()
-
-    def _acquire(self) -> int:
-        store = self.project_dir / ".magnolia"
-        store.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path = store.resolve() / ".writer.lock"
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(path, flags, 0o600)
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            os.close(descriptor)
-            raise RuntimeError("memory writer lease is not a regular file")
-        os.fchmod(descriptor, 0o600)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        return descriptor
-
-    @staticmethod
-    def _release(descriptor: int) -> None:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+    def __init__(self, project_dir: str | Path) -> None:
+        self.project_dir = Path(project_dir).expanduser().resolve()
 
     async def on_call_tool(self, context, call_next):
         """Lease mutating calls while allowing read calls to overlap."""
         name = getattr(context.message, "name", "")
         arguments = getattr(context.message, "arguments", None)
-        if not memory_tool_is_mutating(name, arguments):
+        if not memory_tool_requires_lease(name, arguments):
             return await call_next(context)
-        descriptor = await asyncio.to_thread(self._acquire)
-        try:
-            return await call_next(context)
-        finally:
-            await asyncio.to_thread(self._release, descriptor)
+        return await run_with_project_writer_lease(
+            self.project_dir, lambda: call_next(context)
+        )
 
 
 @dataclass
@@ -491,6 +500,11 @@ def health_payload(project_dir: Path, process_identity: str) -> dict[str, str]:
     }
 
 
+def constant_time_token_matches(supplied: str, expected: str) -> bool:
+    """Compare arbitrary Unicode bearer text as bytes without raising."""
+    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
 def build_server(token: str) -> FastMCP:
     """Wrap the existing memory app with bearer authentication and health."""
     if not token:
@@ -517,7 +531,7 @@ def build_server(token: str) -> FastMCP:
     @app.custom_route("/health", methods=["GET"])
     async def health(request: Request) -> JSONResponse:
         supplied = request.headers.get("authorization", "")
-        if not hmac.compare_digest(supplied, f"Bearer {token}"):
+        if not constant_time_token_matches(supplied, f"Bearer {token}"):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         identity = _process_identity(os.getpid())
         if not identity:
@@ -541,7 +555,11 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("memory HTTP service project argument differs from its binding")
     supplied_state = args.state_dir.expanduser()
     canonical_state = supplied_state.resolve()
-    expected_state = service_state.private_state_dir(bound)
+    try:
+        allowlist = resolve_memory_tool_environment(os.environ, legacy_stdio=False)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    expected_state = service_state.private_state_dir(bound, allowlist.neutral_names)
     if supplied_state != canonical_state or canonical_state != expected_state:
         raise RuntimeError(
             "memory HTTP service state directory must be the canonical "

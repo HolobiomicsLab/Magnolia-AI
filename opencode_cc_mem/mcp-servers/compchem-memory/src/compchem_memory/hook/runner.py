@@ -63,24 +63,33 @@ def main() -> None:
     sys.path[:] = [path for path in sys.path if os.path.realpath(path) != repository]
     _load_repository_package(source)
     if sys.argv[1:2] == [MEMORY_SERVER_MODE]:
+        launch_arguments = tuple(sys.argv[2:])
         sys.argv = [sys.argv[0], *sys.argv[2:]]
         from compchem_memory.server_start import install_stdio_guards
 
         install_stdio_guards(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
         from fastmcp import FastMCP
-        from compchem_memory.memory_http import ToolAllowlistMiddleware
+        from compchem_memory.memory_http import (
+            ProjectWriterLeaseMiddleware,
+            ToolAllowlistMiddleware,
+        )
         from compchem_memory.server import mcp
         from compchem_memory.tool_catalog import (
-            MEMORY_TOOL_ALLOWLIST_ENV,
-            resolve_memory_tool_environment,
+            resolve_memory_server_launch,
         )
 
-        allowlist = resolve_memory_tool_environment(os.environ, legacy_stdio=True)
-        if MEMORY_TOOL_ALLOWLIST_ENV not in os.environ:
+        allowlist = resolve_memory_server_launch(launch_arguments, os.environ)
+        sys.argv = [sys.argv[0]]
+        if not isinstance(mcp, FastMCP):
             mcp.run()
             return
         filtered = FastMCP("compchem-memory-stdio-role")
         filtered.add_middleware(ToolAllowlistMiddleware(allowlist.server_names))
+        filtered.add_middleware(
+            ProjectWriterLeaseMiddleware(
+                os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
+            )
+        )
         filtered.mount(mcp)
         filtered.run()
         return

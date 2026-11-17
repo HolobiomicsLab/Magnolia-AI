@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from compchem_memory.writer_lease import leased_store_writer
+
 ORIGIN_FIELDS = (
     "client", "session_id", "agent_id", "agent_type", "tool", "mcp_server",
     "model", "role",
@@ -60,6 +62,7 @@ def observed_session_ids(
     return sessions
 
 
+@leased_store_writer
 def save_candidate(
     store: Path,
     candidate: dict[str, Any],

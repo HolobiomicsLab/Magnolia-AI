@@ -26,6 +26,7 @@ import yaml
 from compchem_memory.reflex_common import (
     parse_frontmatter_file, pending_indices, prior_rejected_keys, fenced_preview,
 )
+from compchem_memory.writer_lease import leased_store_writer
 
 _PROMOTION_MIN_SESSIONS = 3      # eligibility gate: distinct sessions
 _PROMOTION_PANEL_PASSES = 3      # K independent consensus passes
@@ -545,6 +546,7 @@ def _archive_entry(source: str, store_dir: str) -> None:
         p.unlink(missing_ok=True)
 
 
+@leased_store_writer
 def apply_promotions(
     store_dir: str, rules_dir: str,
     accept: list[int] | None = None, reject: list[int] | None = None,

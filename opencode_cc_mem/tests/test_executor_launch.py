@@ -14,7 +14,10 @@ import pytest
 
 from campaign_runner.cli import _memory_route
 from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
-from campaign_runner.executors.capabilities import load_role_capabilities
+from campaign_runner.executors.capabilities import (
+    load_capability_table,
+    load_role_capabilities,
+)
 from campaign_runner.executors.codex import CodexExecutor
 from campaign_runner.launch import (
     _hook_source_digest,
@@ -1164,6 +1167,10 @@ def test_vibe_managed_memory_requires_explicit_accepted_capability_cell(
     assert policy_payload["mcp_tool_allowlist"] == []
     assert mcp_payload["tool_allowlist"] == []
     assert mcp_payload["memory_service"] is None
+    assert not any(
+        capability.startswith("mcp:compchem-memory.")
+        for capability in policy_payload["effective_capabilities"]
+    )
 
 
 @pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
@@ -1304,6 +1311,23 @@ def test_memory_route_depending_on_filtered_variable_is_refused(
                 },
             )
         )
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_memory_stdio_allowlist_is_bound_in_server_argv(tmp_path, client):
+    context = _context(
+        tmp_path,
+        client=client,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+
+    launch = prepare_launch(context)
+    rendered = _artifact_text(launch)
+
+    assert "--tool-allowlist-json" in rendered
+    for tool in WORKER_CAPABILITIES[-3:]:
+        assert tool in rendered
 
 
 def test_codex_rendered_config_refuses_stripped_key_value(tmp_path):
@@ -1545,8 +1569,11 @@ def test_claude_no_tools_helper_refuses_observed_read_binding(tmp_path):
         prepare_launch(context)
 
 
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
 @pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
-def test_bound_identity_matches_two_independent_installations(tmp_path, monkeypatch, role):
+def test_bound_identity_matches_two_independent_installations(
+    tmp_path, monkeypatch, client, role
+):
     from campaign_runner import launch as module
 
     actual = module._normalized_launch_identity
@@ -1565,14 +1592,54 @@ def test_bound_identity_matches_two_independent_installations(tmp_path, monkeypa
         return identity
 
     monkeypatch.setattr(module, "_normalized_launch_identity", capture)
+    monkeypatch.setattr(module, "_verify_bound_launch_identity", lambda *_args: None)
+    projected = load_role_capabilities()
+    rows = {
+        (row["client"], row["role"]): row
+        for row in load_capability_table()["rows"]
+    }
+    expected = projected[client][role]["launch_identity"]["components"]
+    monkeypatch.setattr(module, "_installed_client_version", lambda *args, **kwargs: expected["client_version"])
+    monkeypatch.setattr(module, "_file_digest", lambda *args, **kwargs: expected["client_sha256"])
     launches = []
     for name in ("first", "second installation"):
         location = tmp_path / name
         location.mkdir()
         context = _production_claude_context(location, role=role)
+        capabilities = copy.deepcopy(context.role_capabilities)
+        context = replace(context, role_capabilities=capabilities)
+        if client == "codex":
+            evidence = capabilities[client][role]
+            if not evidence["accepted"]:
+                contract = rows[(client, role)]["gate"]["value"][
+                    "configuration_binding"
+                ]["recompute_contract"]
+                evidence.update(
+                    accepted=True,
+                    gate_accepted=True,
+                    stale=False,
+                    trusted=True,
+                    blocking_cells=[],
+                    identity=contract["identity"],
+                    discovery_dir=contract["discovery_dir"],
+                    capabilities=contract["capabilities"],
+                    model_isolation=contract["model_isolation"],
+                )
+            route = ResolvedRoute(
+                client, expected["model"], "codex", client, role, "bound identity test"
+            )
+            context = replace(
+                context,
+                route=route,
+                launch_argv=(str(_fake_codex_client(location)),),
+                role_capabilities=capabilities,
+                memory_service=_memory_route(
+                    route, context.python_executable, context.installation_root
+                ),
+            )
         assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
         launches.append(prepare_launch(context))
-        assert identities[-1] == context.role_capabilities["claude-code"][role]["launch_identity"]["components"]
+        assert identities[-1] == expected
     assert identities[0] == identities[1]
     assert launches[0].required_capability_identity != launches[1].required_capability_identity
 
@@ -1861,6 +1928,8 @@ def test_hook_source_digest_covers_non_python_files_but_ignores_pycache(tmp_path
         repository_source / "harness" / "render_common.py",
         source / "harness" / "render_common.py",
     )
+    for name in ("memory_http.py", "tool_catalog.py", "writer_lease.py"):
+        shutil.copy2(repository_source / name, source / name)
     context = _production_claude_context(tmp_path)
     context = replace(context, installation_root=installation)
     baseline = _hook_source_digest(context)
@@ -1870,6 +1939,10 @@ def test_hook_source_digest_covers_non_python_files_but_ignores_pycache(tmp_path
 
     assert _hook_source_digest(context) == baseline
     (source / "hook" / "policy.cpython-312-darwin.so").write_bytes(b"extension")
+    assert _hook_source_digest(context) != baseline
+
+    baseline = _hook_source_digest(context)
+    (source / "tool_catalog.py").write_text("# changed server catalog\n", encoding="utf-8")
     assert _hook_source_digest(context) != baseline
 
 

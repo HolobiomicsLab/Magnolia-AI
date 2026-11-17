@@ -24,6 +24,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from compchem_memory.writer_lease import leased_store_writer
+
 
 # Conservative secret shapes. Do not use broad long-hex or long-base64 rules:
 # they destroy SHA-256 evidence and run identifiers.
@@ -608,6 +610,7 @@ def _session_ref(store_dir: str, session: Any) -> Any:
     return SessionRef("opencode", str(session), str(session), None, None, True)
 
 
+@leased_store_writer
 def distill_session_transcript(
     store_dir: str,
     sid: Any,
@@ -617,6 +620,8 @@ def distill_session_transcript(
     distiller: Callable[[str], list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any] | None:
     """Distil ONE session's new (post-cursor) dialogue, for the manual tool.
+
+    Call this when: ingesting a selected OpenCode session into project memory.
 
     ``commit=False`` previews: returns the candidates, saves nothing, leaves the
     cursor untouched. ``commit=True`` saves to staging and advances the cursor
@@ -686,6 +691,7 @@ def distill_session_transcript(
     return {"status": "committed", "saved": saved}
 
 
+@leased_store_writer
 def ingest_opencode_sessions(
     store_dir: str,
     mapping_path: str | None = None,

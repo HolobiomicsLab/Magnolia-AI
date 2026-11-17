@@ -149,6 +149,7 @@ class ServiceHandle:
     service_identity: str
     token_file: Path
     authorization_env: str = TOKEN_ENV
+    state_dir: Path | None = None
 
     def route(self) -> dict[str, str]:
         """Return the route plus private token-file pointer for launch preparation."""
@@ -171,6 +172,7 @@ def encode_handle(handle: ServiceHandle) -> str:
         "service_identity": handle.service_identity,
         "token_file": str(handle.token_file),
         "authorization_env": handle.authorization_env,
+        "state_dir": str(handle.state_dir or handle.token_file.parent),
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(body).decode("ascii")
@@ -189,6 +191,7 @@ def decode_handle(value: str) -> ServiceHandle:
             service_identity=str(payload["service_identity"]),
             token_file=Path(payload["token_file"]).resolve(),
             authorization_env=str(payload.get("authorization_env", TOKEN_ENV)),
+            state_dir=Path(payload.get("state_dir", Path(payload["token_file"]).parent)).resolve(),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ExecutorRefused("invalid memory service release handle") from exc
@@ -200,10 +203,20 @@ def project_digest(project_dir: Path) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def private_state_dir(project_dir: Path) -> Path:
-    """Return the non-work-tree state directory for this project's service."""
-    digest = project_digest(project_dir)
-    return (Path.home() / ".magnolia" / "services" / digest).resolve()
+def tool_allowlist_digest(tool_allowlist: Sequence[str]) -> str:
+    """Return the stable service-policy digest for one canonical allowlist."""
+    body = json.dumps(tuple(tool_allowlist), separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(body).hexdigest()
+
+
+def private_state_dir(
+    project_dir: Path, tool_allowlist: Sequence[str] | None = None
+) -> Path:
+    """Return private state keyed by project and, when supplied, allowlist."""
+    root = Path.home() / ".magnolia" / "services" / project_digest(project_dir)
+    if tool_allowlist is not None:
+        root /= tool_allowlist_digest(tool_allowlist)
+    return root.resolve()
 
 
 def ensure_memory_service(
@@ -223,7 +236,7 @@ def ensure_memory_service(
     except ValueError as exc:
         raise ExecutorRefused(str(exc)) from exc
     holder = _new_holder(_holder_pid(context))
-    state = private_state_dir(project)
+    state = private_state_dir(project, tools.neutral_names)
     _ensure_private_state_dir(state)
     with _state_lock(state):
         record = _read_record(state)
@@ -248,7 +261,7 @@ def release_memory_service(handle: ServiceHandle) -> bool:
     """Release one holder and stop only its verified service when references reach zero."""
     if handle.project_digest != project_digest(handle.project_dir):
         return False
-    state = private_state_dir(handle.project_dir)
+    state = (handle.state_dir or handle.token_file.parent).resolve()
     with _state_lock(state):
         record = _read_record(state)
         if not _handle_matches(handle, record):
@@ -686,6 +699,7 @@ def _handle(record: Mapping[str, Any], project: Path, holder_id: str) -> Service
         holder_id=holder_id,
         service_identity=str(record["service_identity"]),
         token_file=Path(str(record["token_file"])),
+        state_dir=Path(str(record["state_dir"])),
     )
 
 
@@ -830,8 +844,29 @@ def _remove_state_files(state: Path) -> None:
 
 
 def _ensure_private_state_dir(state: Path) -> None:
-    services = state.parent
-    for directory in (services, state):
+    resolved = state.resolve()
+    services = next(
+        (
+            parent
+            for parent in resolved.parents
+            if parent.name == "services" and parent.parent.name == ".magnolia"
+        ),
+        None,
+    )
+    if services is None:
+        raise ExecutorRefused("memory service state escaped its private root")
+    relative = resolved.relative_to(services)
+    if not 1 <= len(relative.parts) <= 2 or any(
+        len(part) != 64 or any(character not in "0123456789abcdef" for character in part)
+        for part in relative.parts
+    ):
+        raise ExecutorRefused("memory service state has an invalid private path")
+    directories = [services]
+    current = services
+    for part in relative.parts:
+        current /= part
+        directories.append(current)
+    for directory in directories:
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(directory, 0o700)
 
