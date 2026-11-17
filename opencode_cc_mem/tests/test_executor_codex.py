@@ -106,7 +106,9 @@ def _stub(
         "state": str(state),
         "linger_after_first": linger_after_first,
     }))
-    binary = tmp_path / "codex-stub"
+    package = tmp_path / "codex-package"
+    binary = package / "bin" / "codex-stub"
+    binary.parent.mkdir(parents=True)
     binary.write_text(
         """#!/usr/bin/env python3
 import json, os, pathlib, sys, time
@@ -121,7 +123,7 @@ index = len(list(state.glob("call-*.json")))
     "cwd": os.getcwd(),
     "client_env": {
         name: os.environ.get(name)
-        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
+        for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME", "CODEX_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "MISTRAL_API_KEY", "CODE_MODE_HOST", "CODEX_EXEC_SERVER_URL", "MAGNOLIA_OPENAI_API_KEY", "MAGNOLIA_MISTRAL_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_LLM_API_KEY", "MAGNOLIA_CRITIC_API_KEY",)
         if name in os.environ
     },
     "role": os.environ.get("MAGNOLIA_ROLE"),
@@ -135,6 +137,16 @@ raise SystemExit(config["returncodes"][index])
 """
     )
     binary.chmod(0o755)
+    host = binary.with_name("codex-code-mode-host")
+    host.write_text("#!/bin/sh\nexit 0\n")
+    host.chmod(0o755)
+    (package / "codex-package.json").write_text(json.dumps({
+        "layoutVersion": 1,
+        "version": "0.154.0",
+        "target": "test-target",
+        "variant": "codex",
+        "entrypoint": "bin/codex-stub",
+    }))
     return binary, config, state
 
 
@@ -157,7 +169,9 @@ def _context(
     (run / "control").mkdir(parents=True)
     (run / "work").mkdir()
     if binary is None:
-        binary = tmp_path / "codex-client"
+        package = tmp_path / "codex-package"
+        binary = package / "bin" / "codex-client"
+        binary.parent.mkdir(parents=True)
         binary.write_text(
             "#!/bin/sh\n"
             "if [ \"$1\" = \"--version\" ]; then\n"
@@ -166,6 +180,16 @@ def _context(
             encoding="utf-8",
         )
         binary.chmod(0o755)
+        host = binary.with_name("codex-code-mode-host")
+        host.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        host.chmod(0o755)
+        (package / "codex-package.json").write_text(json.dumps({
+            "layoutVersion": 1,
+            "version": "0.154.0",
+            "target": "test-target",
+            "variant": "codex",
+            "entrypoint": "bin/codex-client",
+        }))
     launch_context = LaunchContext(
         root=ROOT, project="project-fixture", project_dir=project,
         python="/venv/bin/python", tools_port=8123, model=model, setup={},
@@ -260,6 +284,58 @@ def _calls(state: Path) -> list[dict]:
         json.loads(path.read_text())
         for path in sorted(state.glob("call-*.json"))
     ]
+
+
+def _enable_campaign_role(context: ExecContext, role: str) -> None:
+    evidence = context.role_capabilities["codex"][role]
+    evidence["capabilities"] = (
+        ["native_read", "native_glob", "native_grep", "native_edit",
+         "mcp:compchem-memory.memory_get_context",
+         "mcp:compchem-memory.memory_search",
+         "mcp:compchem-memory.memory_get_run_history"]
+        if role == "worker"
+        else ["native_read", "native_glob", "native_grep"]
+    )
+    launch_context = LaunchContext(
+        root=ROOT, project="project-fixture", project_dir=context.project_dir,
+        python="/venv/bin/python", tools_port=8123, model=context.route.model,
+        setup={}, run_dir=context.run_dir, control_dir=context.control_dir,
+        work_dir=context.work_dir, role=role,
+        invocation_id=f"{role}-one", noninteractive=True,
+    )
+    servers = {}
+    if role == "worker":
+        servers["compchem-memory"] = {
+            "command": "/venv/bin/python",
+            "args": ISOLATED_MEMORY_ARGS,
+            "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
+            "tools": {
+                name: {"approval_mode": "approve"}
+                for name in (
+                    "memory_get_context", "memory_search", "memory_get_run_history",
+                )
+            },
+        }
+    servers["magnolia-read"] = {
+        "command": "/venv/bin/python",
+        "args": ["-I", str(RUNNER), "--read-server"],
+        "cwd": str(context.project_dir),
+        "env_vars": [
+            "MAGNOLIA_HOOK_POLICY",
+            "MAGNOLIA_HOOK_POLICY_REQUIRED",
+            "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_CONTROL_DIR",
+            "MAGNOLIA_PROJECT_DIR",
+            "PYTHONPYCACHEPREFIX",
+        ],
+        "tools": {
+            name: {"approval_mode": "approve"}
+            for name in ("read_file", "list_dir", "search")
+        },
+    }
+    for relative, body in native_artifacts(launch_context, servers).items():
+        (context.project_dir / relative).write_bytes(body)
+    evidence["identity"] = configuration_identity(context)
 
 
 def _governance(tmp_path: Path, role: str) -> InvocationGovernance:
@@ -1168,6 +1244,8 @@ def test_codex_refuses_invalid_resume_session_id(tmp_path, session_id):
         ["--ask-for-approval", "on-request"],
         ["--ask-for-approval=on-request"],
         ["--remote", "http://127.0.0.1:9999"],
+        ["--code-mode-host", "grpc://127.0.0.1:9999"],
+        ["--code-mode-host=grpc://127.0.0.1:9999"],
         ["--ignore-rules"],
         ["-p", "owner"],
         ["-powner"],
@@ -1226,18 +1304,42 @@ def test_codex_final_spawn_argv_refuses_each_bypass(tmp_path, dangerous_argv):
 
 @pytest.mark.parametrize("role", ("worker", "reviewer"))
 def test_codex_worker_reviewer_final_argv_refuses_code_mode_disable(
-    role,
+    tmp_path, role,
 ):
-    with pytest.raises(WorkerError, match="forbidden Codex launch"):
-        _validate_final_argv([
-            "codex",
-            "--enable",
-            "code_mode_host",
-            "--disable",
-            "code_mode_host",
-            "--",
-            "prompt",
-        ], role=role)
+    context = _context(tmp_path, role=role)
+    _enable_campaign_role(context, role)
+    executor = executor_for(context.route, role, context)
+    production_argv = executor._argv("prompt", None)
+
+    _validate_final_argv(production_argv, role=role)
+    separator = production_argv.index("--")
+    for override, refusal in (
+        (
+            ["--disable", "code_mode_host"],
+            "forbidden Codex launch feature override: code_mode_host",
+        ),
+        (
+            ["-c", "features.code_mode_host=false"],
+            "forbidden Codex launch pinned override: features.code_mode_host",
+        ),
+    ):
+        with pytest.raises(WorkerError) as exc_info:
+            _validate_final_argv([
+                *production_argv[:separator],
+                *override,
+                *production_argv[separator:],
+            ], role=role)
+        assert str(exc_info.value) == refusal
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_codex_production_argv_passes_guard(tmp_path, role):
+    context = _context(tmp_path, role=role)
+    if role in {"worker", "reviewer"}:
+        _enable_campaign_role(context, role)
+    executor = executor_for(context.route, role, context)
+
+    _validate_final_argv(executor._argv("prompt", None), role=role)
 
 
 def test_codex_refuses_sandbox_override_without_sandbox_flag(tmp_path):

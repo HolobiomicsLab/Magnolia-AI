@@ -58,10 +58,13 @@ FORBIDDEN_CLIENT_ENV = frozenset(
         "ANTHROPIC_AUTH_TOKEN",
         "OPENAI_API_KEY",
         "MISTRAL_API_KEY",
+        "CODE_MODE_HOST",
+        "CODEX_EXEC_SERVER_URL",
     }
 )
 FORBIDDEN_PATH_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CODEX_HOME", "VIBE_HOME"})
 FILTERED_CLIENT_ENV = FORBIDDEN_CLIENT_ENV | {"MAGNOLIA_MODEL"}
+CODEX_REMOTE_ENV = frozenset({"CODE_MODE_HOST", "CODEX_EXEC_SERVER_URL"})
 CLAUDE_BASE_ENV = frozenset(
     {
         "HOME",
@@ -128,6 +131,7 @@ CODEX_READ_SERVER_TOOLS = (
 LAUNCH_IDENTITY_COMPONENTS = (
     "client_version",
     "client_sha256",
+    "code_mode_host",
     "settings",
     "mcp",
     "native_files",
@@ -152,6 +156,9 @@ class PreparedLaunch:
     required_capability_identity: str
     protected_env_names: frozenset[str]
     client_sha256: str | None = None
+    code_mode_host_path: Path | None = None
+    code_mode_host_sha256: str | None = None
+    code_mode_host_version: str | None = None
     memory_service_handle: Any = None
 
 
@@ -210,6 +217,9 @@ def _prepare_launch(
         protected_names=protected_env_names,
     )
     client_sha256 = None
+    code_mode_host_path = None
+    code_mode_host_sha256 = None
+    code_mode_host_version = None
     if "launch_identity" in evidence:
         launch_identity = _normalized_launch_identity(
             context,
@@ -225,6 +235,13 @@ def _prepare_launch(
             context, launch_argv=(str(launch_identity["executable"]),)
         )
         client_sha256 = str(launch_identity["components"]["client_sha256"])
+        if route.client == "codex" and context.role in {"worker", "reviewer"}:
+            code_mode_host_path, code_mode_host_version = (
+                _resolved_codex_code_mode_host(Path(launch_identity["executable"]))
+            )
+            code_mode_host_sha256 = str(
+                launch_identity["components"]["code_mode_host"]["sha256"]
+            )
     else:
         expected_evidence_identity = (
             configuration_identity(evidence_context)
@@ -248,6 +265,11 @@ def _prepare_launch(
                         launch_env=env,
                     )
                 client_sha256 = _file_digest(executable)
+                if route.client == "codex" and context.role in {"worker", "reviewer"}:
+                    code_mode_host_path, code_mode_host_version = (
+                        _resolved_codex_code_mode_host(executable)
+                    )
+                    code_mode_host_sha256 = _file_digest(code_mode_host_path)
                 context = replace(context, launch_argv=(str(executable),))
     if context.resume_from is not None:
         return _resume_launch(
@@ -259,6 +281,9 @@ def _prepare_launch(
             config_digest,
             capability_identity,
             client_sha256,
+            code_mode_host_path,
+            code_mode_host_sha256,
+            code_mode_host_version,
             frozenset(protected_env_names),
             {
                 "policy.json": policy_body,
@@ -297,6 +322,9 @@ def _prepare_launch(
         config_digest,
         capability_identity,
         client_sha256,
+        code_mode_host_path,
+        code_mode_host_sha256,
+        code_mode_host_version,
         frozenset(protected_env_names),
     )
 
@@ -540,6 +568,12 @@ def _normalized_launch_identity(
     }
     if context.route is not None and context.route.client == "codex":
         components["model"] = context.route.model
+        if context.role in {"worker", "reviewer"}:
+            host_path, host_version = _resolved_codex_code_mode_host(executable)
+            components["code_mode_host"] = {
+                "version": host_version,
+                "sha256": _file_digest(host_path),
+            }
     return {
         "schema_version": "magnolia-normalized-launch-identity-v1",
         "executable": str(executable),
@@ -582,6 +616,33 @@ def _resolved_client_executable(
     if not executable.is_file():
         raise ExecutorRefused("launched client executable is not a regular file")
     return executable
+
+
+def _resolved_codex_code_mode_host(executable: Path) -> tuple[Path, str | None]:
+    """Resolve the packaged 0.169-style host beside the real Codex executable."""
+    try:
+        executable = executable.resolve(strict=True)
+        package_root = executable.parent.parent
+        manifest_path = package_root / "codex-package.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entrypoint = manifest.get("entrypoint")
+        expected_client = (package_root / str(entrypoint)).resolve(strict=True)
+        host = executable.with_name("codex-code-mode-host").resolve(strict=True)
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        raise ExecutorRefused(
+            "Codex code-mode host is unavailable from the client package"
+        ) from exc
+    if (
+        manifest.get("layoutVersion") != 1
+        or expected_client != executable
+        or not executable.is_file()
+        or not host.is_file()
+    ):
+        raise ExecutorRefused(
+            "Codex code-mode host does not match the client package layout"
+        )
+    version = manifest.get("version")
+    return host, version if isinstance(version, str) and version else None
 
 
 def _installed_client_version(
@@ -1353,6 +1414,22 @@ def _effective_environment(
 ) -> dict[str, str]:
     inherited = os.environ if context.environment is None else context.environment
     assert context.route is not None
+    if context.route.client == "codex":
+        explicit_selectors = sorted(
+            str(name)
+            for source in (
+                context.environment if context.environment is not None else {},
+                context.renderer_env,
+            )
+            for name in source
+            if str(name).upper() in CODEX_REMOTE_ENV
+            or "CODE_MODE_HOST" in str(name).upper()
+        )
+        if explicit_selectors:
+            raise ExecutorRefused(
+                "Codex launch environment has a remote host/server selector: "
+                + ", ".join(explicit_selectors)
+            )
     if context.route.client == "claude-code":
         redirecting = sorted(
             {
@@ -1399,12 +1476,26 @@ def _effective_environment(
             str(key): str(value)
             for key, value in inherited.items()
             if key not in FILTERED_CLIENT_ENV
+            and not (
+                context.route.client == "codex"
+                and (
+                    str(key).upper() in CODEX_REMOTE_ENV
+                    or "CODE_MODE_HOST" in str(key).upper()
+                )
+            )
         }
         env.update(
             {
                 str(key): str(value)
                 for key, value in context.renderer_env.items()
                 if key not in FILTERED_CLIENT_ENV
+                and not (
+                    context.route.client == "codex"
+                    and (
+                        str(key).upper() in CODEX_REMOTE_ENV
+                        or "CODE_MODE_HOST" in str(key).upper()
+                    )
+                )
             }
         )
     if (
@@ -1635,6 +1726,9 @@ def _resume_launch(
     config_digest: str,
     capability_identity: str,
     client_sha256: str | None,
+    code_mode_host_path: Path | None,
+    code_mode_host_sha256: str | None,
+    code_mode_host_version: str | None,
     protected_env_names: frozenset[str],
     expected_artifacts: Mapping[str, bytes],
 ) -> PreparedLaunch:
@@ -1694,6 +1788,9 @@ def _resume_launch(
         config_digest,
         capability_identity,
         client_sha256,
+        code_mode_host_path,
+        code_mode_host_sha256,
+        code_mode_host_version,
         protected_env_names,
     )
 
@@ -1772,6 +1869,9 @@ def _prepared(
     config_digest: str,
     capability_identity: str,
     client_sha256: str | None,
+    code_mode_host_path: Path | None,
+    code_mode_host_sha256: str | None,
+    code_mode_host_version: str | None,
     protected_env_names: frozenset[str],
 ) -> PreparedLaunch:
     return PreparedLaunch(
@@ -1785,6 +1885,9 @@ def _prepared(
         required_capability_identity=capability_identity,
         protected_env_names=protected_env_names & frozenset(env),
         client_sha256=client_sha256,
+        code_mode_host_path=code_mode_host_path,
+        code_mode_host_sha256=code_mode_host_sha256,
+        code_mode_host_version=code_mode_host_version,
         memory_service_handle=context.memory_service.get("_handle"),
     )
 

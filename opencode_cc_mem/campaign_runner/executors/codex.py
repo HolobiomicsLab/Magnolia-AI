@@ -32,9 +32,15 @@ if TYPE_CHECKING:
     from campaign_runner.launch import PreparedLaunch
 
 
-FORBIDDEN_ENV = frozenset({"CODEX_HOME", "CODEX_API_KEY"})
+FORBIDDEN_ENV = frozenset({
+    "CODEX_HOME",
+    "CODEX_API_KEY",
+    "CODE_MODE_HOST",
+    "CODEX_EXEC_SERVER_URL",
+})
 FORBIDDEN_FLAGS = frozenset({
     "--cyber-access-program",
+    "--code-mode-host",
     "--dangerously-bypass-approvals-and-sandbox",
     "--dangerously-bypass-hook-trust",
     "--dangerously-skip-permissions",
@@ -397,6 +403,11 @@ class CodexExecutor:
             or not self.prepared.client_sha256
         ):
             raise WorkerError("Codex prepared executable is not identity-bound")
+        if self.role in {"worker", "reviewer"} and (
+            self.prepared.code_mode_host_path is None
+            or not self.prepared.code_mode_host_sha256
+        ):
+            raise WorkerError("Codex code-mode host is not identity-bound")
         self._native_artifact(".codex/config.toml")
         self._native_artifact(".codex/hooks.json")
         self._verify_project_artifacts()
@@ -720,7 +731,7 @@ class CodexExecutor:
         return self.prepared.invocation_dir / "codex-session-bindings.json"
 
     def _verify_client_bytes(self) -> None:
-        """Re-hash the prepared Codex executable immediately before spawn."""
+        """Re-hash the prepared Codex executable and code-mode host before spawn."""
         executable = Path(self.prepared.argv[0])
         digest = hashlib.sha256()
         try:
@@ -733,6 +744,32 @@ class CodexExecutor:
             ) from exc
         if digest.hexdigest() != self.prepared.client_sha256:
             raise ExecutorRefused("Codex client executable changed before spawn")
+        if self.role not in {"worker", "reviewer"}:
+            return
+        from campaign_runner.launch import _resolved_codex_code_mode_host
+
+        try:
+            host, version = _resolved_codex_code_mode_host(executable)
+        except ExecutorRefused as exc:
+            raise ExecutorRefused(
+                "Codex code-mode host changed before spawn"
+            ) from exc
+        if (
+            host != self.prepared.code_mode_host_path
+            or version != self.prepared.code_mode_host_version
+        ):
+            raise ExecutorRefused("Codex code-mode host changed before spawn")
+        host_digest = hashlib.sha256()
+        try:
+            with host.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    host_digest.update(chunk)
+        except OSError as exc:
+            raise ExecutorRefused(
+                "Codex code-mode host changed before spawn"
+            ) from exc
+        if host_digest.hexdigest() != self.prepared.code_mode_host_sha256:
+            raise ExecutorRefused("Codex code-mode host changed before spawn")
 
     def _resume_artifact(self, session_id: str | None) -> ResumeArtifact | None:
         if session_id is None:

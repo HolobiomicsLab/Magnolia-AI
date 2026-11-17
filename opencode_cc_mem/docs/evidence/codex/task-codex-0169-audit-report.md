@@ -206,11 +206,15 @@ package ships the host and separate gRPC/legacy remote-session transports, while
 the offline feature inventory reports both host flags as stable and on. Disabling
 `code_mode_host_grpc` offline leaves `code_mode_host=true`, which proves the flags
 are independently configurable but does not prove that the next live 0.169.0
-session will select a working fallback. Enabling the installed default is therefore
-the fail-closed choice for the next gate.
+session will select a working fallback. Enabling both installed defaults is therefore
+the compatibility-preserving choice for the next gate; the hook and restricted
+inner-tool surface provide the fail-closed boundary.
 
-The surface-widening variants remain disabled. Offline 0.169.0 accepts each
-disable independently while leaving the host enabled:
+The delivery/search variants remain disabled. Offline 0.169.0 accepts each
+disable independently while leaving the host enabled. The values below are the
+post-disable values, not the client defaults: `incremental_tools` and
+`incremental_tools_legacy_gcp` are stable and default **on** in 0.169.0, so
+pinning them off is an explicit narrowing of the delivered tool surface.
 
 ```text
 code_mode_only_strict_3p_tools  under development  false
@@ -222,14 +226,15 @@ incremental_tools_legacy_gcp    stable             false
 ```
 
 The 0.169.0 host-disabled diagnostic names only `code_mode_host` (plus the host
-installation) as the requirement for `exec`; the optional flags above are
-independently accepted delivery/search variants, not host prerequisites. They
-therefore stay off pending the live gate. The earlier x10–x12 runs separately
-found that an enabled JavaScript host had no file-system, process or network API
-of its own. Every external effect went through an inner `tools.*` call; x5
-established that those inner calls reach PreToolUse. `code_mode_host_output_truncation`
-stays at the client's stable default because it changes output handling rather
-than tool reachability.
+installation) as the requirement for `exec`; the variants above are
+independently accepted delivery/search controls, not host prerequisites. They
+therefore stay off under the narrower production contract. The earlier x5 and
+x10–x12 probes ran on **0.154.0**: x10–x12 found that the enabled JavaScript host
+had no file-system, process or network API of its own, and x5 established that
+inner `tools.*` calls reach PreToolUse. Gate 4 then re-verified the no-direct-I/O
+property on **0.169.0** and recorded that every external effect was routed through
+an inner tool call. `code_mode_host_output_truncation` stays at the client's stable
+default because it changes output handling rather than tool reachability.
 
 The final-argv validator is now role-aware. A later `--disable code_mode_host`
 or equivalent feature override is refused for worker/reviewer, while the existing
@@ -254,5 +259,42 @@ tests produced the same result in both locations: `980 passed, 2 skipped, 14 fai
 limited to the established five daemon expectations, two sandbox-denied process-group
 cases, five sandbox/loopback service cases and two phase-1 assumptions. No modified
 Codex test failed.
+
+## Code-mode host identity extension (2026-11-17)
+
+The accepted worker and reviewer identities now bind the separate code-mode host
+that the 0.169.0 client starts. Offline package evidence establishes the selected
+file without a model call: the real client is under a layout-v1 package whose
+`codex-package.json` records version `0.169.0` and entrypoint `bin/codex`; its
+`bin/` contains `codex-code-mode-host`. Client strings place
+`CodexPackageManifest`, `codex-package.json`, `codex-code-mode-host`, `bin`,
+`/opt/homebrew`, `/usr/local` and `standalone` in the package-resolution surface.
+Magnolia binds the packaged sibling of the resolved client and refuses an
+incomplete or mismatched package instead of accepting a fallback.
+
+The host has no `--version` option, so the available host version is the package
+manifest version. Its resolved-file SHA-256 is
+`10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf`.
+Immediately before every worker/reviewer spawn Magnolia now re-resolves the host,
+rechecks the package version and realpath, and re-hashes its bytes. A changed host
+is refused before the client starts. The main client remains 0.169.0 at
+`739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002`.
+
+The 0.169.0 strings/help expose `CODE_MODE_HOST` — “Connect to a remote code-mode
+host instead of starting a local host” — and app-server
+`--code-mode-host <URL>`. Strings also identify `CODEX_EXEC_SERVER_URL` as
+“executor selection”. Inherited matching environment names are removed; explicit
+launch-environment keys are refused; both spellings of `--code-mode-host` are
+refused by the final-argv guard. No other code-mode-host or exec-server selector
+was found in the bounded strings/help inventory.
+
+Worker and reviewer change from the main-client-only identity
+`0.169.0 / 739cda86…d002` to that identity plus
+`code_mode_host={version: 0.169.0, sha256: 10feae2a…9bacf}`. Their configuration
+identities remain `a5f58afa…fadb` and `21acaebe…f85f`. The capability rows record:
+“identity extended after gate 4 (host binary bound); behaviour unchanged”. Gate 4
+did not record a host hash, so equality to a gate-time host hash cannot be claimed;
+the extension was rechecked against the host currently present beside the gated
+main binary in the same 0.169.0 package root.
 
 
