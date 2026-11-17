@@ -68,11 +68,11 @@
               "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
               "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
               "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
-              "policy": "81cc77a40f81fff02be14421920a571158f0eb75eb29e43df04e0b6a68baf7fd",
+              "policy": "f7986fae8b9c7e921c908d29cfb4e5dd8214a2bcf73dc2ea7ceceb5bbaf14fa3",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -273,11 +273,11 @@
               "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "a1b1eab67cd00365c91c2df21fff90e679be5aa2ae675df27b6c91618ac35fc0",
+              "policy": "3f16d5aeeec12e5903b1913e9d81326abef913caff76824e6eed427559e38446",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -472,11 +472,11 @@
               "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "a804ec277d79f4129846cd97a989f09047457a9d2e15dd6676094d1895853c5b",
+              "policy": "ef948b098a2887d4185df94160f8b07a05f4143c6705fdf3cc98d5594a43e258",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -670,11 +670,11 @@
               "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "db8b4a81dfc880dd8ee98447294a48c8eedbbc1670d983192a69207422293093",
+              "policy": "3617c9cd434c0d3239975e5949d31ab2cecba96666257503f9c3094a0a0e3e30",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -874,7 +874,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285",
+            "configuration_identity_sha256": "89b1ba681c08d30bcc37758e6abe3c29fce009430d552036cc9eb47f1bc6f7c1",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -908,11 +908,11 @@
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
               "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
-              "policy": "7bf73caf903266d81004d446910c6d972089b45fb6bb909eb9159a506ae657b0",
+              "policy": "b74fd423a2c1717376df27e864bb48bf650c29405b8e3170c171bac820c6a195",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1008,7 +1008,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "7ff1e347b98ceb410513354586316ad2b602ec9af426ff1abb32ce4f0cf40285",
+          "value": "89b1ba681c08d30bcc37758e6abe3c29fce009430d552036cc9eb47f1bc6f7c1",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1148,7 +1148,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6",
+            "configuration_identity_sha256": "4756e61b9b26686c623fbf6dbc9ab5a747a19f170067932fa71ea95831a1928a",
             "components": {
               "model": "gpt-5.6-luna",
               "code_mode_host": {
@@ -1182,11 +1182,11 @@
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
               "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
-              "policy": "642cb38be6931fbc2d09ba232b36d5e7e5129daf0b9d2aa2ded8b639aff2562b",
+              "policy": "1e4a5dae4bf78281baa09c741b716ca80b66375af060d7b751e4ae61613be5b4",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1282,7 +1282,7 @@
         "hook_policy_digest": {
           "status": "observed",
           "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
-          "value": "7ad61dbbeb9765c98af74fd4909eedf922e40255dacc35787670ea734adf40b6",
+          "value": "4756e61b9b26686c623fbf6dbc9ab5a747a19f170067932fa71ea95831a1928a",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
@@ -1388,7 +1388,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "0d035cc400932e704c17b4742c12681de7b4d40307ddc500c9afe5540979d5e9",
+            "configuration_identity_sha256": "55f97f96027eacbb37c8bf13cc285f3044206afa7754550bc93a8e011197dcd8",
             "recompute_contract": {
               "identity": "codex-refused-role-unobserved",
               "discovery_dir": {
@@ -1407,11 +1407,11 @@
               "settings": "32300abaf02d6aa0744eedf2a701867f4054523cc185e5020afc4071068a4498",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "a804ec277d79f4129846cd97a989f09047457a9d2e15dd6676094d1895853c5b",
+              "policy": "ef948b098a2887d4185df94160f8b07a05f4143c6705fdf3cc98d5594a43e258",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1510,7 +1510,7 @@
           },
           "configuration_binding": {
             "kind": "codex-role-shape-v1",
-            "configuration_identity_sha256": "f6625a927236280503f3bf9d1a669f26d668591f2ce96117b968557deb547856",
+            "configuration_identity_sha256": "aeba621094f64d266dc65aff40d597e632eddaefe237a1cfc3bc672307413cbe",
             "recompute_contract": {
               "identity": "codex-refused-role-unobserved",
               "discovery_dir": {
@@ -1529,11 +1529,11 @@
               "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "db8b4a81dfc880dd8ee98447294a48c8eedbbc1670d983192a69207422293093",
+              "policy": "3617c9cd434c0d3239975e5949d31ab2cecba96666257503f9c3094a0a0e3e30",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "a2e50e40a9401489035efac1be135d5b76e31d4aa52fff8cf7b452073263f173",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }

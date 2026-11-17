@@ -124,8 +124,8 @@ def test_worker_exact_three_memory_reads_reviewer_none():
 def test_service_state_deny_is_not_rendered_for_opencode(role):
     policy = roles.load_role(role)
 
-    assert "**/.magnolia/services/**" in policy.read_deny_patterns
-    assert "**/.magnolia/services/**" in policy.opencode_omitted_read_deny_patterns
+    assert "**/.magnolia/services/**" not in policy.read_deny_patterns
+    assert policy.opencode_omitted_read_deny_patterns == ()
     assert b"**/.magnolia/services/**" not in roles.render_opencode(role)
 
 

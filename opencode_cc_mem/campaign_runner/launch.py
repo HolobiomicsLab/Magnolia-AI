@@ -410,10 +410,7 @@ def _acquire_managed_memory_service(
             project_dir=context.project_dir,
             python=context.python_executable,
             setup=dict(context.setup),
-            environment={
-                **os.environ,
-                **({} if context.environment is None else dict(context.environment)),
-            },
+            environment=_launcher_environment(context),
             holder_pid=os.getpid(),
         ),
         tool_allowlist=tools.neutral_names,
@@ -1004,6 +1001,8 @@ def _file_digest(path: Path) -> str:
 def _identity_replacements(
     context: ExecContext, invocation_dir: Path
 ) -> tuple[tuple[str, str], ...]:
+    from compchem_memory.harness.memory_service import private_services_root
+
     named_paths = {
         "{invocation_dir}": invocation_dir,
         "{project_dir}": context.project_dir,
@@ -1023,6 +1022,8 @@ def _identity_replacements(
         replacements.append((context.python_executable, "{python_executable}"))
     if context.project_identity:
         replacements.append((context.project_identity, "{project_identity}"))
+    services_root = private_services_root(_launcher_environment(context))
+    replacements.append((str(services_root), "{services_root}"))
     return tuple(sorted(set(replacements), key=lambda item: len(item[0]), reverse=True))
 
 
@@ -1238,6 +1239,7 @@ def _policy_body(
         control_dir=context.control_dir,
         work_dir=context.work_dir,
         role=context.role,
+        environment=_launcher_environment(context),
         invocation_id=invocation_dir.name,
         noninteractive=True,
         role_policy=payload,
@@ -1248,6 +1250,15 @@ def _policy_body(
         context.route.hook_harness,
     )
     return next(iter(files.values()))
+
+
+def _launcher_environment(context: ExecContext) -> dict[str, str]:
+    """Return the launcher's effective source environment before client filtering."""
+    inherited = os.environ if context.environment is None else context.environment
+    return {
+        **{str(key): str(value) for key, value in inherited.items()},
+        **{str(key): str(value) for key, value in context.renderer_env.items()},
+    }
 
 
 def _settings_payload(

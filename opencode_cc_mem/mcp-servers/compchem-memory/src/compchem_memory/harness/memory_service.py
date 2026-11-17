@@ -57,6 +57,7 @@ SAFE_BASE_ENV = frozenset(
     {
         "PATH",
         "HOME",
+        "XDG_STATE_HOME",
         "PYTHONPATH",
         "VIRTUAL_ENV",
         "TMPDIR",
@@ -174,6 +175,7 @@ class ServiceHandle:
     token_file: Path
     authorization_env: str = TOKEN_ENV
     state_dir: Path | None = None
+    services_root: Path | None = None
 
     def route(self) -> dict[str, str]:
         """Return the route plus private token-file pointer for launch preparation."""
@@ -197,6 +199,7 @@ def encode_handle(handle: ServiceHandle) -> str:
         "token_file": str(handle.token_file),
         "authorization_env": handle.authorization_env,
         "state_dir": str(handle.state_dir or handle.token_file.parent),
+        "services_root": str(handle.services_root or private_services_root()),
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(body).decode("ascii")
@@ -216,6 +219,9 @@ def decode_handle(value: str) -> ServiceHandle:
             token_file=Path(payload["token_file"]).resolve(),
             authorization_env=str(payload.get("authorization_env", TOKEN_ENV)),
             state_dir=Path(payload.get("state_dir", Path(payload["token_file"]).parent)).resolve(),
+            services_root=Path(
+                payload.get("services_root", private_services_root())
+            ).resolve(),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ExecutorRefused("invalid memory service release handle") from exc
@@ -246,11 +252,27 @@ def service_environment_digest(environment: Mapping[str, str]) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
+def private_services_root(
+    environment: Mapping[str, str] | None = None,
+) -> Path:
+    """Return the launcher's canonical private service-state root."""
+    values = os.environ if environment is None else environment
+    configured = str(values.get("XDG_STATE_HOME", ""))
+    if configured and Path(configured).is_absolute():
+        return (Path(configured) / "magnolia" / "services").resolve()
+    home = str(values.get("HOME", ""))
+    base = Path(home).expanduser() if home else Path.home()
+    return (base / ".magnolia" / "services").resolve()
+
+
 def private_state_dir(
-    project_dir: Path, tool_allowlist: Sequence[str] | None = None
+    project_dir: Path,
+    tool_allowlist: Sequence[str] | None = None,
+    *,
+    environment: Mapping[str, str] | None = None,
 ) -> Path:
     """Return private state keyed by project and, when supplied, allowlist."""
-    root = Path.home() / ".magnolia" / "services" / project_digest(project_dir)
+    root = private_services_root(environment) / project_digest(project_dir)
     if tool_allowlist is not None:
         root /= tool_allowlist_digest(tool_allowlist)
     return root.resolve()
@@ -274,9 +296,12 @@ def ensure_memory_service(
     except ValueError as exc:
         raise ExecutorRefused(str(exc)) from exc
     holder = _new_holder(_holder_pid(context))
-    state = private_state_dir(project, tools.neutral_names)
-    _ensure_private_state_dir(state)
-    with _state_lock(state):
+    services_root = private_services_root(environment)
+    state = private_state_dir(
+        project, tools.neutral_names, environment=environment
+    )
+    _ensure_private_state_dir(state, services_root=services_root)
+    with _state_lock(state, services_root=services_root):
         record = _read_record(state)
         if record is not None:
             handle = _reuse(
@@ -318,7 +343,8 @@ def release_memory_service(handle: ServiceHandle) -> bool:
     if handle.project_digest != project_digest(handle.project_dir):
         return False
     state = (handle.state_dir or handle.token_file.parent).resolve()
-    with _state_lock(state):
+    services_root = (handle.services_root or private_services_root()).resolve()
+    with _state_lock(state, services_root=services_root):
         record = _read_record(state)
         if not _handle_matches(handle, record):
             return False
@@ -336,7 +362,9 @@ def release_memory_service(handle: ServiceHandle) -> bool:
             stopped = _terminate_owned(record)
         if stopped:
             _remove_state_files(state)
-        return stopped
+    if stopped:
+        _remove_empty_service_dirs(state, services_root)
+    return stopped
 
 
 def token_for_handle(handle: ServiceHandle) -> str:
@@ -440,9 +468,14 @@ def _require_provider_key(context: Any, environment: Mapping[str, str]) -> None:
 
 
 @contextmanager
-def _state_lock(state: Path, *, blocking: bool = True) -> Iterator[None]:
+def _state_lock(
+    state: Path,
+    *,
+    blocking: bool = True,
+    services_root: Path | None = None,
+) -> Iterator[None]:
     """Hold the private service lock, optionally refusing contention immediately."""
-    _ensure_private_state_dir(state)
+    _ensure_private_state_dir(state, services_root=services_root)
     path = state / "service.lock"
     descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     acquired = False
@@ -615,7 +648,7 @@ def _start_service(
     child_environment = dict(environment)
     child_environment.update(
         {
-            "HOME": str(Path.home()),
+            "HOME": child_environment.get("HOME", str(Path.home())),
             "MAGNOLIA_PROJECT_DIR": str(project),
             "MAGNOLIA_PROJECT_BOUND": "1",
             "MAGNOLIA_MEMORY_SERVICE_PORT": str(port),
@@ -656,6 +689,7 @@ def _start_service(
                     "project_digest": digest,
                     "project_dir": str(project),
                     "state_dir": str(state),
+                    "services_root": str(private_services_root(environment)),
                     "process_identity": identity,
                     "service_identity": service_identity,
                     "token_file": str(token_file),
@@ -766,6 +800,9 @@ def _handle(record: Mapping[str, Any], project: Path, holder_id: str) -> Service
         service_identity=str(record["service_identity"]),
         token_file=Path(str(record["token_file"])),
         state_dir=Path(str(record["state_dir"])),
+        services_root=Path(
+            str(record.get("services_root", private_services_root()))
+        ),
     )
 
 
@@ -917,24 +954,54 @@ def _remove_state_files(state: Path) -> None:
             pass
 
 
-def _ensure_private_state_dir(state: Path) -> None:
+def _remove_empty_service_dirs(state: Path, services_root: Path) -> None:
+    """Remove stopped-service directories only when no unknown entry remains."""
+    resolved, services, relative = _private_state_parts(state, services_root)
+    try:
+        entries = {path.name for path in resolved.iterdir()}
+    except FileNotFoundError:
+        return
+    owned = {"service.lock", "service.log"}
+    if entries - owned:
+        return
+    for name in owned:
+        try:
+            (resolved / name).unlink()
+        except FileNotFoundError:
+            pass
+    try:
+        resolved.rmdir()
+    except OSError:
+        return
+    if len(relative.parts) == 2:
+        try:
+            resolved.parent.rmdir()
+        except OSError:
+            pass
+    assert services == services_root.resolve()
+
+
+def _private_state_parts(
+    state: Path, services_root: Path | None = None
+) -> tuple[Path, Path, Path]:
     resolved = state.resolve()
-    services = next(
-        (
-            parent
-            for parent in resolved.parents
-            if parent.name == "services" and parent.parent.name == ".magnolia"
-        ),
-        None,
-    )
-    if services is None:
-        raise ExecutorRefused("memory service state escaped its private root")
-    relative = resolved.relative_to(services)
+    services = (services_root or private_services_root()).resolve()
+    try:
+        relative = resolved.relative_to(services)
+    except ValueError as exc:
+        raise ExecutorRefused("memory service state escaped its private root") from exc
     if not 1 <= len(relative.parts) <= 2 or any(
         len(part) != 64 or any(character not in "0123456789abcdef" for character in part)
         for part in relative.parts
     ):
         raise ExecutorRefused("memory service state has an invalid private path")
+    return resolved, services, relative
+
+
+def _ensure_private_state_dir(
+    state: Path, *, services_root: Path | None = None
+) -> None:
+    resolved, services, relative = _private_state_parts(state, services_root)
     directories = [services]
     current = services
     for part in relative.parts:

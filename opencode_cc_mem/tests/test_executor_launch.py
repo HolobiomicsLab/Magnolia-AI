@@ -27,6 +27,7 @@ from campaign_runner.launch import (
 )
 from campaign_runner.routing import ResolvedRoute
 from compchem_memory.harness import RENDERERS
+from compchem_memory.harness import memory_service
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.hook.doorbell import process_prompt
@@ -1291,11 +1292,17 @@ def test_vibe_managed_memory_requires_explicit_accepted_capability_cell(
 
 @pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
 def test_non_opencode_role_policy_denies_service_token_root(tmp_path, client):
+    state_home = tmp_path / "launcher-state"
     context = _context(
         tmp_path,
         client=client,
         role="worker",
         capabilities=WORKER_CAPABILITIES,
+        environment={
+            "HOME": str(tmp_path / "launcher-home"),
+            "PATH": os.environ.get("PATH", ""),
+            "XDG_STATE_HOME": str(state_home),
+        },
     )
     launch = prepare_launch(context)
     policy_path = Path(launch.env["MAGNOLIA_HOOK_POLICY"])
@@ -1304,11 +1311,12 @@ def test_non_opencode_role_policy_denies_service_token_root(tmp_path, client):
         expected_sha256=launch.policy_digest,
         control_dir=str(context.control_dir),
     )
-    token_path = context.project_dir / ".magnolia" / "services" / "probe" / "bearer-token"
+    services_root = memory_service.private_services_root(context.environment)
+    token_path = services_root / "probe" / "bearer-token"
     token_path.parent.mkdir(parents=True)
     token_path.write_text("sentinel\n", encoding="utf-8")
 
-    assert "**/.magnolia/services/**" in policy.deny_patterns
+    assert f"{services_root.as_posix()}/**" in policy.deny_patterns
     assert read_target_allowed(str(token_path), context.project_dir, policy) is False
 
 

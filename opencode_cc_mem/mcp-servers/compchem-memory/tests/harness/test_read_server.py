@@ -87,6 +87,27 @@ def test_read_server_confines_reads_to_policy_roots(tmp_path):
             server.read_file(path)
 
 
+def test_read_server_denies_rendered_xdg_service_root(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    services_root = tmp_path / "state" / "magnolia" / "services"
+    token = services_root / "project" / "allowlist" / "bearer-token"
+    token.parent.mkdir(parents=True)
+    token.write_text("sentinel\n", encoding="utf-8")
+    policy_path = _policy(tmp_path / "policy.json", tmp_path)
+    payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    payload["read_deny_patterns"].append(f"{services_root.as_posix()}/**")
+    policy_path.write_text(json.dumps(payload), encoding="utf-8")
+    server = ReadServer.from_policy_file(
+        policy_path,
+        cwd=tmp_path.resolve(),
+        control_dir=str(tmp_path / "control"),
+    )
+
+    with pytest.raises(ReadRefused, match="policy denied"):
+        server.read_file(str(token))
+
+
 def test_read_server_refuses_without_policy(tmp_path):
     with pytest.raises(ReadRefused, match="MAGNOLIA_HOOK_POLICY"):
         ReadServer.from_environment({}, cwd=tmp_path)
