@@ -102,6 +102,45 @@ def _candidate_role_capabilities():
     return project_role_capabilities(table)
 
 
+@pytest.mark.parametrize(
+    ("client", "role"),
+    (
+        *(
+            ("claude-code", role)
+            for role in ("worker", "reviewer", "helper", "evaluator")
+        ),
+        ("codex", "worker"),
+        ("codex", "reviewer"),
+    ),
+)
+def test_rebound_hook_source_rows_remain_stale_until_live_reobservation(tmp_path, client, role):
+    table = load_capability_table()
+    projected = project_role_capabilities(table)
+    evidence = projected[client][role]
+
+    assert evidence["gate_accepted"] is True
+    assert evidence["accepted"] is False
+    assert evidence["stale"] is True
+    assert "stale until live re-observation in Plan 4 Task 6 (hook adapter change)" in table["note"]
+
+    candidates = _candidate_role_capabilities()
+    assert candidates[client][role]["accepted"] is True
+    assert candidates[client][role]["stale"] is False
+    assert (
+        candidates[client][role]["launch_identity"]["components"]["hook_source"]
+        == evidence["launch_identity"]["components"]["hook_source"]
+    )
+
+    context = _context(
+        tmp_path,
+        client=client,
+        role=role,
+        role_capabilities=load_role_capabilities(),
+    )
+    with pytest.raises(ExecutorRefused, match="missing accepted launch capability evidence"):
+        prepare_launch(context)
+
+
 def _fake_codex_client(tmp_path):
     package = tmp_path / "codex-package"
     binary = package / "bin" / "codex"
@@ -1965,7 +2004,10 @@ def test_bound_identity_matches_two_independent_installations(
             )
         assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
         launches.append(prepare_launch(context))
-        assert identities[-1] == expected
+        if rows[(client, role)]["gate"]["status"] == "observed":
+            assert identities[-1] == expected
+        else:
+            assert identities[-1] == identities[0]
     assert identities[0] == identities[1]
     assert launches[0].required_capability_identity != launches[1].required_capability_identity
 

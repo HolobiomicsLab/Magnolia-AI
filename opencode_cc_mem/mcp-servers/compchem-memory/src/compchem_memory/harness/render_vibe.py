@@ -45,7 +45,26 @@ READ_ONLY_DISABLED_TOOLS = (
     "file_system.write_file",
     "process.start",
     "process.write",
+    "process.output",
+    "process.list",
+    "process.stop",
+    "agents.list",
+    "agents.spawn",
+    "agents.send_message",
+    "agents.interrupt",
 )
+
+
+def disabled_tools_for_role(role: str) -> tuple[str, ...]:
+    """Return the native tools disabled for one capability-admitted role."""
+    if role == "worker":
+        return tuple(
+            tool for tool in READ_ONLY_DISABLED_TOOLS
+            if tool == "file_system.bash" or not tool.startswith("file_system.")
+        )
+    if role in {"reviewer", "helper", "evaluator"}:
+        return READ_ONLY_DISABLED_TOOLS
+    raise ValueError(f"unknown Vibe role: {role}")
 
 
 def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
@@ -87,11 +106,7 @@ def native_artifacts(
     mcp_servers: list[Mapping[str, Any]],
 ) -> dict[str, bytes]:
     """Render immutable Vibe project files for one governed invocation."""
-    disabled_tools = (
-        READ_ONLY_DISABLED_TOOLS
-        if context.role in {"reviewer", "helper", "evaluator"}
-        else ("file_system.bash",)
-    )
+    disabled_tools = disabled_tools_for_role(context.role)
     config: dict[str, Any] = {
         "active_model": context.model or "",
         "disabled_tools": list(disabled_tools),

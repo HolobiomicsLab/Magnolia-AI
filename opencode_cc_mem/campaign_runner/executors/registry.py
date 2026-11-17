@@ -158,11 +158,6 @@ def executor_for(route: ResolvedRoute, role: str, context: ExecContext) -> Worke
             )
         if not _capable(context, route.client, role):
             raise ExecutorRefused(f"{route.client} lacks accepted {role} role capability")
-        if route.client == "vibe" and role == "worker":
-            raise ExecutorRefused(
-                "D4: Vibe worker refused because resume, hook-crash and the full "
-                "denial matrix are not observed"
-            )
         if route.client == "claude-code":
             from campaign_runner.launch import ROLE_CONFIG_NAMES, prepare_launch
             from campaign_runner.roles import load_role

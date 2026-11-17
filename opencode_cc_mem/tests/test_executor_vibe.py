@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import tomllib
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,12 +17,16 @@ from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
 from campaign_runner.executors.contracts import LimitInfo, RunOutcome
 from campaign_runner.executors.vibe import VibeExecutor, parse_vibe_export, require_vibe_trust
 from campaign_runner.governor import AdmissionRequest, Governor, Policy
-from campaign_runner.launch import configuration_identity
+from campaign_runner.launch import configuration_identity, prepare_launch
 from campaign_runner.process import ProcessControl
 from campaign_runner.routing import ResolvedRoute
 from campaign_runner.workers import InvocationGovernance
 from compchem_memory.harness.protocol import LaunchContext
-from compchem_memory.harness.render_vibe import native_artifacts
+from compchem_memory.harness.render_vibe import (
+    READ_ONLY_DISABLED_TOOLS,
+    disabled_tools_for_role,
+    native_artifacts,
+)
 
 
 ROOT = Path(__file__).parents[1]
@@ -50,6 +57,26 @@ PASSTHROUGH_ENV = {
     "MAGNOLIA_CRITIC_API_KEY": "forbidden-critic-key",
 }
 PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
+# Vibe 3.1.2: vibe/_process_actions.py, vibe/_subagents/_core_adapter.py,
+# vibe/_foreign_hooks.py and the legacy built-in task; pinned without importing Vibe.
+VIBE_312_DENIED_TOOL_NAMES = (
+    "file_system.bash",
+    "process.start",
+    "process.write",
+    "process.output",
+    "process.list",
+    "process.stop",
+    "agents.list",
+    "agents.spawn",
+    "agents.send_message",
+    "agents.interrupt",
+    "task",
+)
+VIBE_312_WORKER_DISABLED_TOOLS = frozenset(VIBE_312_DENIED_TOOL_NAMES[:-1])
+VIBE_312_MCP_TOOL_NAMES = (
+    "mcp_compchem-memory.memory_get_context",
+    "mcp_compchem-tools.run_shell",
+)
 PROXY_ENV = {
     name: f"{name.lower()}-proxy-sentinel"
     for name in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
@@ -176,6 +203,7 @@ if index == 0 and config["linger_after_first"]:
 def _context(
     tmp_path: Path,
     *,
+    role: str = "reviewer",
     binary: Path | None = None,
     governance: InvocationGovernance | None = None,
     environment: dict[str, str] | None = None,
@@ -190,7 +218,7 @@ def _context(
         root=ROOT, project="project-fixture", project_dir=project,
         python="/venv/bin/python", tools_port=8123, model="selected-model",
         setup={}, run_dir=run, control_dir=run / "control",
-        work_dir=run / "work", role="reviewer", invocation_id="reviewer-one",
+        work_dir=run / "work", role=role, invocation_id=f"{role}-one",
         noninteractive=True,
     )
     for relative, body in native_artifacts(launch_context, []).items():
@@ -200,15 +228,23 @@ def _context(
     trust = tmp_path / "trusted_folders.toml"
     trust.write_text(f'trusted = [{json.dumps(str(project.resolve()))}]\nuntrusted = []\n')
     route = ResolvedRoute(
-        "vibe", "selected-model", "family", "vibe", "reviewer", "test"
+        "vibe", "selected-model", "family", "vibe", role, "test"
     )
+    capabilities = ["native_read", "native_glob", "native_grep"]
+    if role == "worker":
+        capabilities += [
+            "native_edit",
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ]
     evidence = {
         "accepted": True, "trusted": True, "stale": False, "identity": "pending",
         "discovery_dir": {
             "scope": "launch-project",
             "configuration": "run-owned project config",
         },
-        "capabilities": ["native_read", "native_glob", "native_grep"],
+        "capabilities": capabilities,
         "model_isolation": {
             "accepted": True, "model": "selected-model", "identity": "fixture"
         },
@@ -216,18 +252,18 @@ def _context(
     if environment is None:
         environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
     context = ExecContext(
-        route=route, role="reviewer", project_dir=project, run_dir=run,
+        route=route, role=role, project_dir=project, run_dir=run,
         control_dir=run / "control", work_dir=run / "work",
         installation_root=ROOT, workspace_root=tmp_path,
         project_identity="project-fixture", python_executable="/venv/bin/python",
         tools_port=8123, launch_argv=(str(binary or "vibe-stub"),),
-        role_capabilities={"vibe": {"reviewer": evidence}},
+        role_capabilities={"vibe": {role: evidence}},
         environment=environment,
         renderer_env=renderer_env or {},
         setup={"vibe_trust_path": str(trust)},
         governance=governance,
         timeout_seconds=3,
-        invocation_id="reviewer-one",
+        invocation_id=f"{role}-one",
     )
     evidence["identity"] = configuration_identity(context)
     return context
@@ -235,6 +271,28 @@ def _context(
 
 def _calls(state: Path) -> list[dict]:
     return [json.loads(path.read_text()) for path in sorted(state.glob("call-*.json"))]
+
+
+def _vibe_pre_tool(executor, payload):
+    hook = next(
+        item for item in tomllib.loads(
+            (executor.prepared.invocation_dir / ".vibe" / "hooks.toml").read_text()
+        )["hooks"]
+        if item["type"] == "pre_tool"
+    )
+    environment = dict(os.environ)
+    environment.update(executor.prepared.env)
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (
+        str(ROOT),
+        str(ROOT / "mcp-servers" / "compchem-memory" / "src"),
+        str(ROOT / "mcp-servers" / "compchem-tools" / "src"),
+    )))
+    hook_command = hook["command"].replace("/venv/bin/python", sys.executable)
+    return subprocess.run(
+        ["sh", "-c", hook_command], input=json.dumps(payload), text=True,
+        capture_output=True, timeout=30, env=environment, check=False,
+    )
 
 
 def _governance(tmp_path: Path) -> InvocationGovernance:
@@ -277,10 +335,7 @@ def test_vibe_no_trust_bypass_and_required_policy_env(tmp_path):
         for index, value in enumerate(argv[:-1])
         if value == "--disabled-tools"
     ]
-    assert disabled == [
-        "file_system.bash", "file_system.edit", "file_system.write_file",
-        "process.start", "process.write",
-    ]
+    assert disabled == list(READ_ONLY_DISABLED_TOOLS)
     assert executor.prepared.env["VIBE_ENABLE_TELEMETRY"] == "false"
     assert "VIBE_DISABLE_TELEMETRY" not in executor.prepared.env
 
@@ -326,15 +381,348 @@ def test_vibe_refusal_after_prepare_releases_managed_memory(tmp_path, monkeypatc
     assert released == [handle]
 
 
-def test_vibe_worker_edits_require_D4_and_gate():
-    route = ResolvedRoute("vibe", "model", "family", "vibe", "worker", "test")
-    context = ExecContext(
-        route=route,
-        role="worker",
-        role_capabilities={"vibe": {"worker": {"accepted": True}}},
+def _worker_context(tmp_path: Path, **changes) -> ExecContext:
+    return _context(tmp_path, role="worker", **changes)
+
+
+def test_vibe_worker_requires_accepted_current_capability_row(tmp_path):
+    context = _worker_context(tmp_path)
+    for evidence in (
+        {"accepted": False},
+        {**context.role_capabilities["vibe"]["worker"], "stale": True},
+        {**context.role_capabilities["vibe"]["worker"], "identity": "stale"},
+    ):
+        unaccepted = replace(context, role_capabilities={"vibe": {"worker": evidence}})
+        with pytest.raises(ExecutorRefused, match="lacks accepted worker role capability|identity|stale"):
+            executor_for(context.route, "worker", unaccepted)
+
+
+def test_vibe_accepted_worker_constructs_without_hard_D4_refusal(tmp_path):
+    context = _worker_context(tmp_path)
+
+    executor = executor_for(context.route, "worker", context)
+
+    assert isinstance(executor, VibeExecutor)
+    assert executor.role == "worker"
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_vibe_disabled_tools_match_role_in_toml_and_argv(tmp_path, role):
+    context = _context(tmp_path, role=role)
+    expected = set(disabled_tools_for_role(role))
+    config = tomllib.loads(native_artifacts(
+        LaunchContext(
+            root=ROOT, project="project", project_dir=context.project_dir,
+            python="/venv/bin/python", tools_port=8123, model="selected-model",
+            setup={}, run_dir=context.run_dir, control_dir=context.control_dir,
+            work_dir=context.work_dir, role=role, invocation_id=f"{role}-one",
+            noninteractive=True,
+        ), [],
+    )[".vibe/config.toml"].decode())
+
+    assert set(config["disabled_tools"]) == expected
+    if role != "worker":
+        assert expected == set(READ_ONLY_DISABLED_TOOLS)
+    executor = executor_for(context.route, role, context)
+    argv = executor._argv("prompt", tmp_path / "out", 8)
+    disabled = [argv[index + 1] for index, value in enumerate(argv[:-1]) if value == "--disabled-tools"]
+    assert set(disabled) == expected
+
+
+def test_vibe_worker_retains_only_edit_and_write(tmp_path):
+    disabled = set(disabled_tools_for_role("worker"))
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+
+    assert disabled == VIBE_312_WORKER_DISABLED_TOOLS
+    assert not {"file_system.edit", "file_system.write_file"} & disabled
+    config = tomllib.loads(
+        (executor.prepared.invocation_dir / ".vibe" / "config.toml").read_text()
     )
-    with pytest.raises(ExecutorRefused, match="D4"):
-        executor_for(route, "worker", context)
+    assert set(config["disabled_tools"]) == disabled
+
+
+def test_vibe_nonworker_roles_retain_full_read_only_deny_set():
+    for role in ("reviewer", "helper", "evaluator"):
+        assert set(disabled_tools_for_role(role)) == set(READ_ONLY_DISABLED_TOOLS)
+        assert VIBE_312_WORKER_DISABLED_TOOLS <= set(disabled_tools_for_role(role))
+
+
+def _live_native_payload(tool: str, cwd: Path, target: object) -> dict:
+    filename = {
+        "read": "04-pre_tool-file_system.read_file.json",
+        "edit": "07-pre_tool-file_system.edit.json",
+        "write": "09-pre_tool-file_system.write_file.json",
+    }[tool]
+    recorded = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "live-p3" / "v1" / filename).read_text()
+    )["stdin"]
+    payload = json.loads(json.dumps(recorded))
+    payload["cwd"] = str(cwd)
+    if target is not None:
+        payload["tool_input"]["file_path"] = target
+    return payload
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_vibe_live_read_payload_follows_role_policy(tmp_path, role):
+    context = _context(tmp_path, role=role)
+    executor = executor_for(context.route, role, context)
+
+    result = _vibe_pre_tool(
+        executor, _live_native_payload("read", context.project_dir, "README.md")
+    )
+
+    assert result.returncode == 0
+    if role in {"worker", "reviewer"}:
+        assert result.stdout == ""
+    else:
+        assert json.loads(result.stdout)["decision"] == "deny"
+
+
+@pytest.mark.parametrize("tool", ("read", "edit", "write"))
+def test_vibe_live_worker_payloads_allow_work_targets(tmp_path, tool):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+
+    result = _vibe_pre_tool(
+        executor,
+        _live_native_payload(
+            tool,
+            context.project_dir,
+            "README.md" if tool == "read" else str(context.work_dir / "result.txt"),
+        ),
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+@pytest.mark.parametrize("tool", ("edit", "write"))
+@pytest.mark.parametrize("role", ("reviewer", "helper", "evaluator"))
+def test_vibe_live_nonworker_mutation_payloads_denied(tmp_path, role, tool):
+    context = _context(tmp_path, role=role)
+    executor = executor_for(context.route, role, context)
+
+    result = _vibe_pre_tool(
+        executor,
+        _live_native_payload(tool, context.project_dir, str(context.work_dir / "result.txt")),
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["decision"] == "deny"
+
+
+def test_vibe_live_payloads_deny_outside_secret_and_alias_targets(tmp_path):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    secret = context.project_dir / "secret"
+    secret.mkdir()
+    (secret / "token.txt").write_text("secret", encoding="utf-8")
+    (context.project_dir / "alias").symlink_to(secret, target_is_directory=True)
+    (context.project_dir / "alias.env").symlink_to(secret / "token.txt")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "loot.txt").write_text("outside", encoding="utf-8")
+    (context.project_dir / "link-out").symlink_to(outside, target_is_directory=True)
+
+    denied_targets = (
+        str(outside / "loot.txt"),
+        ".env",
+        "alias.env",
+        "link-out/loot.txt",
+    )
+    for tool in ("read", "edit", "write"):
+        for target in denied_targets:
+            result = _vibe_pre_tool(
+                executor, _live_native_payload(tool, context.project_dir, target)
+            )
+            assert result.returncode == 0
+            assert json.loads(result.stdout)["decision"] == "deny", (tool, target, result.stdout)
+
+
+@pytest.mark.parametrize("tool", ("read", "edit", "write"))
+def test_vibe_path_alone_is_not_a_native_file_target(tmp_path, tool):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    payload = _live_native_payload(tool, context.project_dir, None)
+    payload["tool_input"] = {"path": "work/result.txt"}
+
+    result = _vibe_pre_tool(executor, payload)
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["decision"] == "deny"
+
+
+def test_vibe_grep_decodes_search_scope_and_denies_unknown_glob(tmp_path):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "synthetic" / "native-tools.json").read_text()
+    )["grep"]
+    fixture["cwd"] = str(context.project_dir)
+    fixture["tool_input"]["path"] = "."
+
+    for payload in (fixture, {**fixture, "tool_input": {"pattern": "needle"}}):
+        allowed = _vibe_pre_tool(executor, payload)
+        assert allowed.returncode == 0
+        assert allowed.stdout == ""
+
+    for target in ("../outside", "", 17):
+        denied = _vibe_pre_tool(
+            executor, {**fixture, "tool_input": {"pattern": "needle", "path": target}}
+        )
+        assert denied.returncode == 0
+        assert json.loads(denied.stdout)["decision"] == "deny"
+
+    glob = _vibe_pre_tool(executor, {**fixture, "tool_name": "glob"})
+    assert glob.returncode == 0
+    assert json.loads(glob.stdout)["decision"] == "deny"
+
+
+def test_vibe_worker_work_edit_allowed_and_outside_edit_denied_by_pre_tool(tmp_path):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "synthetic" / "native-tools.json").read_text()
+    )
+    secret = context.project_dir / "secret"
+    secret.mkdir()
+    (secret / "token.txt").write_text("synthetic", encoding="utf-8")
+    (context.project_dir / "alias").symlink_to(secret, target_is_directory=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "loot.txt").write_text("synthetic", encoding="utf-8")
+    (outside / "outside.txt").write_text("synthetic", encoding="utf-8")
+    (context.project_dir / "link-out").symlink_to(outside, target_is_directory=True)
+
+    def payload(tool, path):
+        value = json.loads(json.dumps(fixture[tool]))
+        value["cwd"] = str(context.project_dir)
+        value["tool_input"]["file_path"] = str(path)
+        return value
+
+    for tool in ("edit", "write"):
+        allowed = _vibe_pre_tool(executor, payload(tool, context.work_dir / "new.txt"))
+        assert allowed.returncode == 0
+        assert allowed.stdout == ""
+    denied_paths = (
+        context.project_dir / "project.txt",
+        context.project_dir / ".env",
+        context.project_dir / "alias" / "token.txt",
+        context.project_dir / "conf.env.d" / "nested" / "key",
+        context.project_dir / "link-out" / ".." / "loot.txt",
+        outside / "outside.txt",
+    )
+    for tool in ("edit", "write"):
+        for path in denied_paths:
+            denied = _vibe_pre_tool(executor, payload(tool, path))
+            assert denied.returncode == 0
+            assert json.loads(denied.stdout)["decision"] == "deny"
+    assert not (context.work_dir / "new.txt").exists()
+    assert (outside / "outside.txt").read_text() == "synthetic"
+
+
+@pytest.mark.parametrize("tool", ("read", "edit", "write"))
+@pytest.mark.parametrize("target", (None, "", 17))
+def test_vibe_worker_malformed_or_missing_native_file_target_denied(tmp_path, tool, target):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "synthetic" / "native-tools.json").read_text()
+    )[tool]
+    fixture["cwd"] = str(context.project_dir)
+    key = "file_path"
+    if target is None:
+        del fixture["tool_input"][key]
+    else:
+        fixture["tool_input"][key] = target
+
+    denied = _vibe_pre_tool(executor, fixture)
+
+    assert denied.returncode == 0
+    assert json.loads(denied.stdout)["decision"] == "deny"
+
+
+@pytest.mark.parametrize("tool", ("read", "edit", "write"))
+def test_vibe_worker_ambiguous_native_file_target_denied(tmp_path, tool):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "synthetic" / "native-tools.json").read_text()
+    )[tool]
+    fixture["cwd"] = str(context.project_dir)
+    key = "file_path"
+    alternate = "path"
+    fixture["tool_input"][key] = str(context.work_dir / "allowed.txt")
+    fixture["tool_input"][alternate] = str(context.project_dir / "project.txt")
+
+    denied = _vibe_pre_tool(executor, fixture)
+
+    assert denied.returncode == 0
+    assert json.loads(denied.stdout)["decision"] == "deny"
+
+
+def test_vibe_worker_shell_process_delegation_and_unapproved_mcp_denied(tmp_path):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    base = {
+        "session_id": "synthetic-vibe-worker",
+        "parent_session_id": None,
+        "cwd": str(executor.prepared.discovery_dir),
+        "hook_event_name": "pre_tool",
+        "tool_call_id": "synthetic-denied",
+        "tool_input": {},
+    }
+    for tool in (*VIBE_312_DENIED_TOOL_NAMES, *VIBE_312_MCP_TOOL_NAMES):
+        denied = _vibe_pre_tool(executor, {**base, "tool_name": tool})
+        assert denied.returncode == 0
+        assert json.loads(denied.stdout)["decision"] == "deny"
+
+
+def test_vibe_312_disabled_tool_inventory_is_versioned_and_complete():
+    # Static inventory from Vibe 3.1.2 _process_actions.py and _subagents/_core_adapter.py.
+    assert VIBE_312_WORKER_DISABLED_TOOLS == {
+        "file_system.bash",
+        "process.start", "process.write", "process.output", "process.list", "process.stop",
+        "agents.list", "agents.spawn", "agents.send_message", "agents.interrupt",
+    }
+
+
+def test_vibe_worker_strict_hook_failure_fails_closed_before_spawn(tmp_path, monkeypatch):
+    context = _worker_context(tmp_path)
+    executor = executor_for(context.route, "worker", context)
+    calls = []
+    monkeypatch.setattr(
+        "campaign_runner.executors.vibe.run_process",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "executors" / "vibe" / "synthetic" / "native-tools.json").read_text()
+    )["write"]
+    fixture["cwd"] = str(context.project_dir)
+    fixture["tool_input"]["file_path"] = str(context.work_dir / "new.txt")
+    policy = executor.prepared.invocation_dir / "policy.json"
+    policy.chmod(0o644)
+    policy.write_text("{", encoding="utf-8")
+    policy.chmod(0o444)
+    denied = _vibe_pre_tool(executor, fixture)
+    assert denied.returncode == 0
+    assert json.loads(denied.stdout)["decision"] == "deny"
+    assert calls == []
+    assert not (context.work_dir / "new.txt").exists()
+
+
+def test_vibe_direct_validate_accepts_four_roles_and_rejects_other(tmp_path):
+    for role in ("worker", "reviewer", "helper", "evaluator"):
+        context = _context(tmp_path / role, role=role)
+        prepared = prepare_launch(context)
+        executor = VibeExecutor(prepared=prepared, model="selected-model", role=role, max_turns=8)
+        assert executor.role == role
+    context = _worker_context(tmp_path / "other")
+    prepared = prepare_launch(context)
+    with pytest.raises(ExecutorRefused, match="does not implement the other role"):
+        VibeExecutor(prepared=prepared, model="selected-model", role="other", max_turns=8)
 
 
 def test_vibe_real_export_selected_model_and_fallback_notice():
@@ -784,9 +1172,10 @@ def test_vibe_refuses_resume_session_rebound_in_store(tmp_path, field, value):
     assert len(_calls(state)) == 1
 
 
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
 @pytest.mark.parametrize("damage", ("hook", "mcp", "tool", "model"))
-def test_vibe_refuses_each_project_native_drift(tmp_path, damage):
-    context = _context(tmp_path)
+def test_vibe_refuses_each_project_native_drift(tmp_path, role, damage):
+    context = _context(tmp_path, role=role)
     if damage == "hook":
         path = context.project_dir / ".vibe" / "hooks.toml"
         path.write_text(path.read_text().replace("magnolia-pre-tool", "drifted-pre-tool"))
@@ -807,14 +1196,14 @@ def test_vibe_refuses_each_project_native_drift(tmp_path, damage):
                 for line in body.splitlines()
             ) + "\n"
         path.write_text(body)
-    context.role_capabilities["vibe"]["reviewer"]["identity"] = configuration_identity(context)
+    context.role_capabilities["vibe"][role]["identity"] = configuration_identity(context)
 
     with pytest.raises(ExecutorRefused, match="project.*Vibe|Vibe.*project|selected model"):
-        executor_for(context.route, "reviewer", context)
+        executor_for(context.route, role, context)
 
 
 def test_vibe_memory_released_once_after_worker_exit(tmp_path, monkeypatch):
-    """The worker gate (D4) refuses construction, so release is exercised directly."""
+    """Release is idempotent independently of worker construction."""
     prepared = type("Prepared", (), {"memory_service_handle": object()})()
     released = []
     monkeypatch.setattr(
@@ -890,7 +1279,7 @@ def test_vibe_memory_released_after_prepare_or_validation_refusal(tmp_path, monk
     launch = prepare_launch(context)
     prepared = replace(launch, memory_service_handle=handle)
     released.clear()
-    with pytest.raises(ExecutorRefused, match="D4"):
+    with pytest.raises(ExecutorRefused, match="Vibe project file.*differs"):
         VibeExecutor(
             prepared=prepared,
             model="selected-model",

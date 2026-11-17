@@ -17,7 +17,7 @@ from campaign_runner.governor import Admission, AdmissionRequest, QuotaWaiting, 
 from campaign_runner.process import ProcessControl, ProcessStartError, run_process
 from campaign_runner.security import redact_paths
 from campaign_runner.workers import InvocationGovernance, WorkerError, WorkerResult
-from compchem_memory.harness.render_vibe import READ_ONLY_DISABLED_TOOLS
+from compchem_memory.harness.render_vibe import disabled_tools_for_role
 
 from .contracts import (
     LimitInfo,
@@ -204,9 +204,7 @@ class VibeExecutor:
         )
 
     def _validate_prepared(self) -> None:
-        if self.role == "worker":
-            raise ExecutorRefused("D4: Vibe worker denial matrix and resume gate have not passed")
-        if self.role not in {"reviewer", "helper", "evaluator"}:
+        if self.role not in {"worker", "reviewer", "helper", "evaluator"}:
             raise ExecutorRefused(f"Vibe does not implement the {self.role} role")
         if not self.prepared.argv or len(self.prepared.argv) != 1:
             raise WorkerError("Vibe prepared argv must contain exactly one executable")
@@ -437,7 +435,7 @@ class VibeExecutor:
         if resume_session:
             self._require_bound_session(resume_session)
             argv.extend(["--resume", resume_session])
-        for tool in READ_ONLY_DISABLED_TOOLS:
+        for tool in disabled_tools_for_role(self.role):
             argv.extend(["--disabled-tools", tool])
         if self.max_price is not None:
             argv.extend(["--max-price", str(self.max_price)])

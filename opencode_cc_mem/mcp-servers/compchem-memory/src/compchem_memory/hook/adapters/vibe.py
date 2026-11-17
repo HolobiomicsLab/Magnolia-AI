@@ -91,7 +91,7 @@ def _is_mcp_post_tool(event: HookEvent) -> bool:
 
 
 def _decode_policy_targets(event: HookEvent) -> None:
-    """Decode only synthetic-only Vibe file-system shapes from Task 6."""
+    """Decode Vibe 3.1.2 native file and grep target shapes."""
     tool = event.tool
     if tool is None:
         return
@@ -105,8 +105,15 @@ def _decode_policy_targets(event: HookEvent) -> None:
         "edit": ("native_edit", "edit"),
     }.get(name)
     if shape is None:
+        if name == "grep":
+            root = tool.input.get("path", event.cwd)
+            if isinstance(root, str) and root:
+                tool.policy_action = "native_grep"
+                tool.targets = (ToolTarget(root, "search", broad=True),)
         return
-    path = tool.input.get("path")
-    if isinstance(path, str) and path:
+    path = tool.input.get("file_path")
+    alternate = tool.input.get("path")
+    ambiguous = alternate is not None and alternate != path
+    if isinstance(path, str) and path and not ambiguous:
         tool.policy_action = shape[0]
         tool.targets = (ToolTarget(path, shape[1]),)

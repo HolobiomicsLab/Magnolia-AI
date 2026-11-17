@@ -225,8 +225,7 @@ def _worker_policy(project, work):
 def _native_payload(client, fixture, path):
     payload = json.loads(json.dumps(fixture))
     payload["cwd"] = str(path.parent)
-    path_field = "path" if client == "vibe" else "file_path"
-    payload["tool_input"][path_field] = str(path)
+    payload["tool_input"]["file_path"] = str(path)
     return payload
 
 
