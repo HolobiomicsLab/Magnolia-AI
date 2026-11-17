@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "harness-p3-worker-vibe-review",
+  "project": "harness-p3-acceptance",
+  "worker": {
+    "model": "vibe/zai-glm-5-3-flash",
+    "agent": "campaign-worker",
+    "max_steps": 30,
+    "timeout_seconds": 600
+  },
+  "reviewer": {
+    "enabled": true,
+    "model": "claude-code/haiku",
+    "max_steps": 8,
+    "timeout_seconds": 600,
+    "repair_attempts": 1
+  },
+  "budget": {
+    "max_tokens": 100000,
+    "max_wall_hours": 1,
+    "max_core_hours": 0,
+    "max_attempts_per_stage": 1,
+    "max_parallel_jobs": 1,
+    "max_followups": 0
+  },
+  "stages": [
+    {
+      "id": "work",
+      "type": "agent",
+      "model": "vibe/zai-glm-5-3-flash",
+      "prompt": "prompt.md",
+      "outputs": ["work/result.txt"],
+      "gate": ["python3", "-c", "from pathlib import Path; raise SystemExit(0 if Path('work/result.txt').is_file() else 1)"],
+      "review": true,
+      "retry": "none",
+      "on_gate_fail": "human"
+    }
+  ]
+}
