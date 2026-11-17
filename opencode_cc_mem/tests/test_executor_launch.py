@@ -2083,18 +2083,18 @@ def test_client_version_reads_only_own_package_json(tmp_path):
         prepare_launch(context)
 
 
-def test_real_claude_2_1_325_identity_when_installed(tmp_path):
+def test_real_claude_2_1_326_identity_when_installed(tmp_path):
     binary_name = shutil.which("claude")
     if binary_name is None:
-        pytest.skip("Claude Code 2.1.325 is absent: executable not found")
+        pytest.skip("Claude Code 2.1.326 is absent: executable not found")
     binary = Path(binary_name).resolve()
     package = binary.parent.parent / "package.json"
     try:
         metadata = json.loads(package.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        pytest.skip("Claude Code 2.1.325 is absent: package metadata unavailable")
-    if metadata.get("name") != "@anthropic-ai/claude-code" or metadata.get("version") != "2.1.325":
-        pytest.skip("Claude Code 2.1.325 is absent: installed version differs")
+        pytest.skip("Claude Code 2.1.326 is absent: package metadata unavailable")
+    if metadata.get("name") != "@anthropic-ai/claude-code" or metadata.get("version") != "2.1.326":
+        pytest.skip("Claude Code 2.1.326 is absent: installed version differs")
     expected = load_role_capabilities()["claude-code"]["helper"]["launch_identity"]
     assert hashlib.sha256(binary.read_bytes()).hexdigest() == expected["components"][
         "client_sha256"

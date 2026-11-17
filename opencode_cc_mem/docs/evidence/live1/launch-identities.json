@@ -1,0 +1,159 @@
+{
+  "schema_version": "magnolia-live1-codex-launch-v1",
+  "observed_revision": "03333f9ced9e117aeae36b5dcfbafefd6e95b38f",
+  "client": {
+    "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+    "version": "0.169.0",
+    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+  },
+  "model": "gpt-5.6-luna",
+  "trust": {
+    "source": "persisted project and hook trust (owner config restored byte-identical afterwards)",
+    "project_hook_rows": 5,
+    "before_review": "untrusted",
+    "after_review": "trusted",
+    "bypass_flag_used": false,
+    "hooks_list_evidence_supplied_via": "installation .magnolia/llm-setup.json codex_hooks_list (read by campaign_runner.cli._memory_setup)"
+  },
+  "capability_table": "production load_role_capabilities() (no hand-built evidence)",
+  "roles": {
+    "worker": {
+      "sandbox": "workspace-write",
+      "effective_max_turns": 30,
+      "configuration_identity_sha256_observed": "ce93e584f28bc61686412e355c255bbc1a86ec8e0669b70ff9d83bf1fe99c262",
+      "configuration_identity_sha256_row": "ce93e584f28bc61686412e355c255bbc1a86ec8e0669b70ff9d83bf1fe99c262",
+      "equal": true,
+      "all_bound_components_equal": true,
+      "components_observed": {
+        "client_version": "0.169.0",
+        "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+        "code_mode_host": {
+          "version": "0.169.0",
+          "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+        },
+        "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
+        "mcp": "6f9d7130f764108a2489d355c8570a3aa52661827b2f9107fcec86d1871cfa14",
+        "native_files": "5dbb7bf83413b0e897051f860546c0b98c2b822a6b27862202494202212cd0a3",
+        "policy": "7bf73caf903266d81004d446910c6d972089b45fb6bb909eb9159a506ae657b0",
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "model": "gpt-5.6-luna"
+      },
+      "production_dry": "accepted (CodexExecutor)",
+      "argv_shape": {
+        "enable": [
+          "untrusted_as_tool_output",
+          "write_stdin_approval",
+          "hooks",
+          "guardian_approval",
+          "code_mode_host",
+          "code_mode_host_grpc",
+          "skip_host_skill_discovery"
+        ],
+        "disable_count": 74,
+        "disable_includes": [
+          "multi_agent",
+          "code_mode_only_strict_3p_tools",
+          "code_mode_tool_search",
+          "apps"
+        ],
+        "forbidden_flag_present": false
+      }
+    },
+    "reviewer": {
+      "sandbox": "read-only",
+      "effective_max_turns": 8,
+      "configuration_identity_sha256_observed": "fd4812074135b238d6c8d9ad06206f4baba7bf9db64bf3ca93a2d3539fe3cfe7",
+      "configuration_identity_sha256_row": "fd4812074135b238d6c8d9ad06206f4baba7bf9db64bf3ca93a2d3539fe3cfe7",
+      "equal": true,
+      "all_bound_components_equal": true,
+      "components_observed": {
+        "client_version": "0.169.0",
+        "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+        "code_mode_host": {
+          "version": "0.169.0",
+          "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+        },
+        "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
+        "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+        "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
+        "policy": "642cb38be6931fbc2d09ba232b36d5e7e5129daf0b9d2aa2ded8b639aff2562b",
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "927d59758b4af0c9ede020bad16e392ca3b6c74b88aaa4b770f229f9b31230c3",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "model": "gpt-5.6-luna"
+      },
+      "production_dry": "accepted (CodexExecutor)",
+      "argv_shape": {
+        "enable": [
+          "untrusted_as_tool_output",
+          "write_stdin_approval",
+          "hooks",
+          "guardian_approval",
+          "code_mode_host",
+          "code_mode_host_grpc",
+          "skip_host_skill_discovery"
+        ],
+        "disable_count": 74,
+        "disable_includes": [
+          "multi_agent",
+          "code_mode_only_strict_3p_tools",
+          "code_mode_tool_search",
+          "apps"
+        ],
+        "forbidden_flag_present": false
+      }
+    },
+    "helper": {
+      "production_dry": "ExecutorRefused: codex lacks accepted helper role capability"
+    },
+    "evaluator": {
+      "production_dry": "ExecutorRefused: codex lacks accepted evaluator role capability"
+    }
+  },
+  "ledger": [
+    {
+      "run_kind": "worker",
+      "client": "codex",
+      "billing": "subscription",
+      "resolved_model": "gpt-5.6-luna",
+      "effective_cap": 30,
+      "outcome": "success",
+      "usage": {
+        "input_tokens": 264631,
+        "cached_tokens": 242048,
+        "cache_write_tokens": 0,
+        "output_tokens": 1860,
+        "reasoning_tokens": 895,
+        "turns": 1,
+        "completeness": "complete",
+        "source": "codex-exec-json",
+        "cost": null
+      }
+    },
+    {
+      "run_kind": "reviewer",
+      "client": "codex",
+      "billing": "subscription",
+      "resolved_model": "gpt-5.6-luna",
+      "effective_cap": 8,
+      "outcome": "success",
+      "usage": {
+        "input_tokens": 182948,
+        "cached_tokens": 161664,
+        "cache_write_tokens": 0,
+        "output_tokens": 804,
+        "reasoning_tokens": 268,
+        "turns": 1,
+        "completeness": "complete",
+        "source": "codex-exec-json",
+        "cost": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+ "run": "E",
+ "init": {
+  "model": "claude-haiku-5-5",
+  "claude_code_version": "2.1.326",
+  "mcp_servers": [],
+  "tools": [],
+  "permissionMode": "default"
+ },
+ "hook_stream": [
+  {
+   "subtype": "hook_started",
+   "hook_name": "SessionStart:startup",
+   "exit_code": null,
+   "outcome": null,
+   "stdout_chars": 0,
+   "stderr": ""
+  },
+  {
+   "subtype": "hook_response",
+   "hook_name": "SessionStart:startup",
+   "exit_code": 0,
+   "outcome": "success",
+   "stdout_chars": 1506,
+   "stderr": ""
+  }
+ ],
+ "calls": [],
+ "hook_transcript": [
+  "session-start",
+  "injected",
+  "prompt",
+  "assistant",
+  "session-end"
+ ],
+ "result": {
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 1,
+  "total_cost_usd": 0.00088199,
+  "terminal_reason": "completed",
+  "models": [
+   "claude-haiku-5-5"
+  ]
+ },
+ "final_text": "EVAL-OK 4\nNONE"
+}

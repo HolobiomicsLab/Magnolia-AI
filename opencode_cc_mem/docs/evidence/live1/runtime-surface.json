@@ -1,0 +1,41 @@
+{
+  "schema_version": "magnolia-live1-codex-runtime-surface-v1",
+  "worker_catalog": [
+    "apply_patch",
+    "exec_command",
+    "list_mcp_resource_templates",
+    "list_mcp_resources",
+    "mcp__compchem_memory__memory_get_context",
+    "mcp__compchem_memory__memory_get_run_history",
+    "mcp__compchem_memory__memory_search",
+    "mcp__magnolia_read__list_dir",
+    "mcp__magnolia_read__read_file",
+    "mcp__magnolia_read__search",
+    "multi_agent_v1__close_agent",
+    "multi_agent_v1__resume_agent",
+    "multi_agent_v1__send_input",
+    "multi_agent_v1__spawn_agent",
+    "multi_agent_v1__wait_agent",
+    "read_mcp_resource",
+    "write_stdin"
+  ],
+  "reviewer_catalog": [
+    "apply_patch",
+    "exec_command",
+    "list_mcp_resource_templates",
+    "list_mcp_resources",
+    "mcp__magnolia_read__list_dir",
+    "mcp__magnolia_read__read_file",
+    "mcp__magnolia_read__search",
+    "multi_agent_v1__close_agent",
+    "multi_agent_v1__resume_agent",
+    "multi_agent_v1__send_input",
+    "multi_agent_v1__spawn_agent",
+    "multi_agent_v1__wait_agent",
+    "read_mcp_resource",
+    "write_stdin"
+  ],
+  "fix_b_effect": "worker catalog now has exactly the 3 allowlisted memory tools (gate 4: 26); memory_record_run absent; 17 keys vs 40 at gate 4",
+  "residual": "exec_command, write_stdin, 3 MCP-resource tools and 5 multi_agent_v1__* remain visible in both roles; every exercised one was hook-denied",
+  "code_mode_io_probe": "not repeated in this pass (gate 4 result stands)"
+}

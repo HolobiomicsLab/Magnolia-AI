@@ -1,0 +1,60 @@
+{
+  "schema_version": "magnolia-live1-codex-policy-v1",
+  "role": "reviewer",
+  "path": "production executor_for/prepare_launch, retries=0 (campaign-runner fallback)",
+  "hook_coverage": {
+    "routed_inner_calls": 6,
+    "pre_tool_use_rows": 6,
+    "allowed_rows": 2,
+    "denied_rows": 4,
+    "allowed_rows_with_post_tool_use": 2
+  },
+  "observations": [
+    {
+      "tool": "mcp__magnolia_read__read_file",
+      "target": "worker result",
+      "decision": "allow",
+      "result": "content returned"
+    },
+    {
+      "tool": "mcp__magnolia_read__read_file",
+      "target": "allowed documentation file",
+      "decision": "allow",
+      "result": "content returned"
+    },
+    {
+      "tool": "mcp__magnolia_read__read_file",
+      "target": "secret/.env",
+      "decision": "deny",
+      "result": "no content returned"
+    },
+    {
+      "tool": "apply_patch",
+      "target": "worker result",
+      "decision": "deny",
+      "result": "unchanged"
+    },
+    {
+      "tool": "exec_command",
+      "hook_name": "bash",
+      "target": "shell marker",
+      "decision": "deny",
+      "result": "marker absent"
+    },
+    {
+      "tool": "multi_agent_v1__spawn_agent",
+      "hook_name": "spawn_agent",
+      "target": "delegation",
+      "decision": "deny",
+      "result": "no agent"
+    }
+  ],
+  "review_json": {
+    "validated_by": "campaign_runner.reviewers.validate_review",
+    "valid": true,
+    "issues": 7,
+    "followups": 0,
+    "family_note": "Codex reviewing a Codex worker result: role observation only, NOT a different-family campaign review"
+  },
+  "catalog_probe_execs_without_tools_calls": 2
+}
