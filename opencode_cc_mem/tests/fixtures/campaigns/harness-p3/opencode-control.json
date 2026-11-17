@@ -10,7 +10,7 @@
   },
   "reviewer": {
     "enabled": true,
-    "model": "zai-coding-plan/glm-5.3",
+    "model": "opencode/glm-5.3-flash-free",
     "max_steps": 8,
     "timeout_seconds": 600,
     "repair_attempts": 1
