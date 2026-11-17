@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
@@ -124,6 +124,8 @@ class RunnerConfig:
     distill_db: str | None = None
     quota_governor: Governor | Any | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+    worker_routes: Mapping[str, Any] = field(default_factory=dict)
+    reviewer_routes: Mapping[str, Any] = field(default_factory=dict)
 
 
 class CampaignRunner:
@@ -700,6 +702,10 @@ class CampaignRunner:
         ).state
 
     def _worker_model(self, stage: Stage) -> str:
+        configured = self.config.worker_routes.get(stage.id)
+        if configured is not None and configured.model:
+            prefix = "" if configured.client == "opencode" else f"{configured.client}/"
+            return f"{prefix}{configured.model}"
         if stage.model:
             return stage.model
         if stage.hard and self.protocol.worker.hard_stage_model:
@@ -1218,13 +1224,18 @@ class CampaignRunner:
     ) -> ReviewResult:
         if self.config.reviewer is None:
             raise ReviewError("reviewer is not configured")
-        if not self.protocol.reviewer.model:
-            raise ReviewError("reviewer model is not configured")
-        model = choose_reviewer_model(
-            self._worker_model(stage),
-            self.protocol.reviewer.model,
-            self.protocol.reviewer.alternate_model,
-        )
+        configured = self.config.reviewer_routes.get(stage.id)
+        if configured is not None and configured.model:
+            prefix = "" if configured.client == "opencode" else f"{configured.client}/"
+            model = f"{prefix}{configured.model}"
+        else:
+            if not self.protocol.reviewer.model:
+                raise ReviewError("reviewer model is not configured")
+            model = choose_reviewer_model(
+                self._worker_model(stage),
+                self.protocol.reviewer.model,
+                self.protocol.reviewer.alternate_model,
+            )
         artifact_paths = [
             (self.store.run_dir / item).resolve() for item in stage.outputs
         ]

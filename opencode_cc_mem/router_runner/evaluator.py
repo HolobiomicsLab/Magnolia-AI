@@ -46,7 +46,7 @@ from campaign_runner.governor import (
 )
 from campaign_runner.process import ProcessControl, run_process
 from campaign_runner.roles import load_role
-from campaign_runner.routing import resolve_route
+from campaign_runner.routing import load_setup, resolve_route
 
 # The memory server's llm.py lives in a different package tree; load it by path.
 _LLM_PATH = (
@@ -66,6 +66,18 @@ EVALUATOR_SYSTEM_PROMPT = (
     "means follow up an existing Work Item; stop means stop it; ignore "
     "means no action. Never invent project names not present in context."
 )
+_INSTALLATION_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_evaluator_route(model: str | None = None, *, setup: dict | None = None):
+    """Resolve the evaluator's actual configured route without launching it."""
+    inputs = dict(load_setup(_INSTALLATION_ROOT) if setup is None else setup)
+    if model:
+        inputs["model"] = model
+    inputs.setdefault("api_fallback_model", "opencode-go/deepseek-v4.1-flash")
+    return resolve_route("evaluator", inputs)
+
+
 _QUOTA_TEXT = ("rate limit", "quota", "session limit", "weekly limit", "usage limit")
 
 
@@ -105,7 +117,7 @@ def _catalog_has_model(model: str) -> bool:
         "~/.local/share/magnolia-v2/bin/opencode"))
     db = os.path.expanduser("~/.local/share/opencode/opencode-v2.db")
     try:
-        route = resolve_route("evaluator", {"model": model})
+        route = resolve_evaluator_route(model)
         executor = executor_for(
             route,
             "evaluator",
@@ -193,7 +205,7 @@ class GenerativeEvaluator:
         if not self._uses_client():
             return llm.is_llm_available()
         try:
-            route = resolve_route("evaluator", {"model": self.model})
+            route = resolve_evaluator_route(self.model)
             load_role("evaluator")
             if not self._executable_available(self._binary(route.client)):
                 return False
@@ -210,7 +222,7 @@ class GenerativeEvaluator:
 
     def route_identity(self) -> dict[str, str | None]:
         """Return the durable evaluator route binding without launch side effects."""
-        route = resolve_route("evaluator", {"model": self.model})
+        route = resolve_evaluator_route(self.model)
         return {
             "client": route.client,
             "model": route.model,
@@ -284,7 +296,7 @@ class GenerativeEvaluator:
         )
 
     def _executor(self):
-        route = resolve_route("evaluator", {"model": self.model})
+        route = resolve_evaluator_route(self.model)
         context = self._execution_context(route)
         return route, context, executor_for(route, "evaluator", context)
 

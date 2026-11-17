@@ -1,7 +1,26 @@
+import importlib.util
+import json
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
+from campaign_runner.cli import resolve_campaign_routes
 from campaign_runner.reviewers import ReviewError, choose_reviewer_model, model_family
-from campaign_runner.routing import RouteError, resolve_route
+from campaign_runner.routing import RouteError, main as routing_main, resolve_route
+from router_runner import evaluator as evaluator_module
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DAEMON = ROOT / "softwares" / "bin" / "magnolia-agents-daemon"
+_DAEMON_SPEC = importlib.util.spec_from_file_location(
+    "routes_agents_daemon",
+    DAEMON,
+    loader=SourceFileLoader("routes_agents_daemon", str(DAEMON)),
+)
+agents_daemon = importlib.util.module_from_spec(_DAEMON_SPEC)
+_DAEMON_SPEC.loader.exec_module(agents_daemon)
 
 
 def test_route_precedence_per_role():
@@ -66,31 +85,73 @@ def test_helper_evaluator_and_interactive_precedence(monkeypatch):
     assert (unprefixed.client, unprefixed.model) == ("opencode", "opencode-go/glm-5.3")
 
 
-def test_all_five_real_consumers_share_resolver(monkeypatch):
+def test_all_five_real_consumers_share_resolver(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("MAGNOLIA_AGENTS_MODEL", raising=False)
     monkeypatch.delenv("MAGNOLIA_EVAL_MODEL", raising=False)
-    inputs = {
-        "harness": "claude",
-        "main_model": "openai/gpt-oss",
-        "models": {"claude": "sonnet"},
+    selected = "codex/gpt-5.6-sol"
+    setup = {
         "routes": {
-            "interactive": "codex/gpt-5.6-sol",
-            "worker": "vibe/zai-glm-5.2",
-            "reviewer": "claude-code/opus",
-            "helper": "opencode-go/kimi-k3",
-            "evaluator": "codex/gpt-5.6-sol",
+            "interactive": selected,
+            "worker": selected,
+            "reviewer": selected,
+            "helper": selected,
+            "evaluator": selected,
         },
     }
+    install = tmp_path / "install" / "opencode_cc_mem"
+    (install / ".magnolia").mkdir(parents=True)
+    (install / ".magnolia" / "llm-setup.json").write_text(json.dumps(setup))
+    lane = install / "projects" / "literature"
+    lane.mkdir(parents=True)
 
-    resolved = {role: resolve_route(role, inputs) for role in (
-        "interactive", "worker", "reviewer", "helper", "evaluator"
-    )}
+    assert routing_main([
+        "--root", str(install), "--role", "interactive",
+    ]) == 0
+    interactive = json.loads(capsys.readouterr().out)
 
-    assert resolved["interactive"].client == "codex"
-    assert resolved["worker"].client == "vibe"
-    assert resolved["reviewer"].client == "claude-code"
-    assert resolved["helper"].subscription_key == "opencode:opencode-go"
-    assert resolved["evaluator"].source == "routes.evaluator"
+    worker_stage = SimpleNamespace(
+        id="worker", type="opencode", model=None, hard=False, review=False
+    )
+    worker_protocol = SimpleNamespace(
+        worker=SimpleNamespace(model=None, hard_stage_model=None),
+        reviewer=SimpleNamespace(enabled=False, model=None, alternate_model=None),
+        stages=(worker_stage,),
+    )
+    reviewer_stage = SimpleNamespace(
+        id="reviewer",
+        type="opencode",
+        model="claude-code/opus",
+        hard=False,
+        review=True,
+    )
+    reviewer_protocol = SimpleNamespace(
+        worker=SimpleNamespace(model=None, hard_stage_model=None),
+        reviewer=SimpleNamespace(enabled=True, model=None, alternate_model=None),
+        stages=(reviewer_stage,),
+    )
+    campaign_worker = resolve_campaign_routes(
+        worker_protocol, setup=setup, require_reviewers=True
+    )
+    campaign_reviewer = resolve_campaign_routes(
+        reviewer_protocol, setup=setup, require_reviewers=True
+    )
+    helper = agents_daemon._resolve_helper_route(str(tmp_path / "install"), str(lane), None)
+    evaluator = evaluator_module.resolve_evaluator_route(setup=setup)
+
+    routes = (
+        (interactive["client"], interactive["model"]),
+        (
+            campaign_worker.worker["worker"].client,
+            campaign_worker.worker["worker"].model,
+        ),
+        (
+            campaign_reviewer.reviewer["reviewer"].client,
+            campaign_reviewer.reviewer["reviewer"].model,
+        ),
+        (helper.client, helper.model),
+        (evaluator.client, evaluator.model),
+    )
+    assert routes == (("codex", "gpt-5.6-sol"),) * 5
 
 
 def test_subscription_key_strings_are_exact():

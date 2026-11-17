@@ -21,10 +21,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Render one launch, returning the protocol's process exit code."""
     try:
         args = _parse(argv)
-        if args.command == "route":
-            return _print_route(args)
-        if args.command == "validate-route":
-            return _validate_route(args)
         if args.command == "usage":
             return _usage(args)
         launch, renderer = _render(args)
@@ -64,27 +60,26 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     launch.add_argument("--holder-pid", required=True, type=int)
     launch.add_argument("--model")
     launch.add_argument("--route-resolved", action="store_true")
-    route = subcommands.add_parser("route")
-    route.add_argument("--root", required=True, type=Path)
-    route.add_argument("--harness", choices=("opencode", "claude", "codex", "vibe"))
-    route.add_argument("--model")
-    validate_route = subcommands.add_parser("validate-route")
-    validate_route.add_argument("--root", required=True, type=Path)
-    validate_route.add_argument(
-        "--role", required=True,
-        choices=("interactive", "worker", "reviewer", "helper", "evaluator"),
+    usage = subcommands.add_parser(
+        "usage",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Subscription keys are claude-code, codex, vibe, or opencode:<provider>.\n"
+            "Two logins of one client share a key; projects share its budget.\n"
+            "Policy and ledger files are per OS user."
+        ),
     )
-    validate_route.add_argument("--model", required=True)
-    usage = subcommands.add_parser("usage")
     usage.add_argument("--root", required=True, type=Path)
-    usage.add_argument("action", nargs="?", choices=("resume",))
+    usage.add_argument("action", nargs="?")
     usage.add_argument("subscription_key", nargs="?")
     return parser.parse_args(argv)
 
 
 class _ArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
-        raise ValueError(message)
+        if message.startswith("the following arguments are required:"):
+            raise ValueError(message)
+        raise ValueError("invalid command line")
 
 
 def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
@@ -159,26 +154,6 @@ def _resolve_interactive(root: Path, setup: dict, harness: str | None, model: st
     return resolve_route("interactive", inputs)
 
 
-def _print_route(args: argparse.Namespace) -> int:
-    root = args.root.resolve()
-    route = _resolve_interactive(root, _setup(root), args.harness, args.model)
-    harness = "claude" if route.client == "claude-code" else route.client
-    print(json.dumps({
-        "harness": harness,
-        "client": route.client,
-        "model": route.model,
-        "source": route.source,
-        "native_default": route.native_default,
-    }, separators=(",", ":")))
-    return 0
-
-
-def _validate_route(args: argparse.Namespace) -> int:
-    _, resolve_route = _campaign_modules(args.root.resolve())
-    resolve_route(args.role, {"routes": {args.role: args.model}})
-    return 0
-
-
 _SUBSCRIPTION_KEY = re.compile(
     r"(?:claude-code|codex|vibe|opencode:[A-Za-z0-9._-]+)\Z"
 )
@@ -193,6 +168,8 @@ def _usage(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     Governor, resolve_route = _campaign_modules(root)
     governor = Governor()
+    if args.action not in (None, "resume"):
+        raise ValueError("usage accepts only the optional resume action")
     if args.action == "resume":
         key = args.subscription_key
         if not isinstance(key, str) or _SUBSCRIPTION_KEY.fullmatch(key) is None:

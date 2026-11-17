@@ -56,7 +56,6 @@ class Policy:
     max_runs_per_day: int = DEFAULT_MAX_RUNS_PER_DAY
     max_turns_per_run: int = DEFAULT_MAX_TURNS_PER_RUN
     min_seconds_between_runs: int = DEFAULT_MIN_SECONDS_BETWEEN_RUNS
-    max_price_per_run: float | None = None
     client_native_budgets: tuple[tuple[str, float], ...] = ()
     api_key_providers: tuple[str, ...] = ()
 
@@ -70,16 +69,6 @@ class Policy:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise PolicyError(f"{name} must be a positive integer")
-        price = self.max_price_per_run
-        if price is not None and (
-            isinstance(price, bool)
-            or not isinstance(price, (int, float))
-            or not math.isfinite(price)
-            or price <= 0
-        ):
-            raise PolicyError(
-                "max_price_per_run must be positive and finite when configured"
-            )
         providers = self.api_key_providers
         if isinstance(providers, list):
             providers = tuple(providers)
@@ -474,17 +463,17 @@ class Governor:
         )
 
     def report(self, day: date) -> dict[str, Any]:
-        """Return selected-day, seven-day, and current-wait accounting."""
-        with self._locked() as state:
-            self._recover_pending(state)
-            for key in tuple(state["cooldowns"]):
-                self._clear_due_cooldown(state, key, self._now())
-            waits = list(state["waits"].values())
-            holds = [
-                {"key": key, **hold}
-                for key, hold in state["cooldowns"].items()
-            ]
-            rows = self._ledger_rows()
+        """Return accounting without creating or modifying governor state."""
+        state = self._load_state()
+        _prune_stale_waits(state)
+        for key in tuple(state["cooldowns"]):
+            self._clear_due_cooldown(state, key, self._now())
+        waits = list(state["waits"].values())
+        holds = [
+            {"key": key, **hold}
+            for key, hold in state["cooldowns"].items()
+        ]
+        rows = self._ledger_rows(repair=False)
         first_day = day - timedelta(days=6)
         selected = [row for row in rows if _row_day(row) == day]
         week = [row for row in rows if first_day <= _row_day(row) <= day]
@@ -774,7 +763,7 @@ class Governor:
             handle.flush()
             os.fsync(handle.fileno())
 
-    def _ledger_rows(self) -> list[dict[str, Any]]:
+    def _ledger_rows(self, *, repair: bool = True) -> list[dict[str, Any]]:
         try:
             body = self.ledger_path.read_bytes()
         except FileNotFoundError:
@@ -793,7 +782,8 @@ class Governor:
                 value = json.loads(line)
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 if has_torn_tail and index == len(chunks) - 1:
-                    self._quarantine_torn_tail(encoded, body[: -len(encoded)])
+                    if repair:
+                        self._quarantine_torn_tail(encoded, body[: -len(encoded)])
                     return rows
                 raise RuntimeError(
                     f"invalid usage ledger row {line_number}: {exc}"

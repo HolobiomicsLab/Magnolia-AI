@@ -237,10 +237,11 @@ def test_unknown_harness_is_an_error(tmp_path):
     ws = make_workspace(tmp_path)
     proc = run_raw(ws, ["--harness", "emacs", PROJECT])
     assert proc.returncode == 1
-    assert "emacs" in proc.stderr and proc.stdout == ""
+    assert "unknown harness" in proc.stderr and "emacs" not in proc.stderr
+    assert proc.stdout == ""
     write_setup(ws, {"harness": "emacs"})
     proc = run_raw(ws, [PROJECT])
-    assert proc.returncode == 1 and "emacs" in proc.stderr
+    assert proc.returncode == 1 and "emacs" not in proc.stderr
 
 
 def test_missing_client_binary_exits_before_daemons(tmp_path):
@@ -593,6 +594,19 @@ def test_setup_route_preserves_other_keys(tmp_path):
     }
 
 
+def test_setup_route_refuses_corrupt_setup_without_replacing_it(tmp_path):
+    ws = make_workspace(tmp_path)
+    path = write_setup(ws, {"kept": True})
+    corrupt = b'{"kept": true'
+    path.write_bytes(corrupt)
+
+    proc = run_raw(ws, ["setup", "--route", "reviewer=claude-code/opus", PROJECT])
+
+    assert proc.returncode == 1
+    assert "corrupt" in proc.stderr.lower()
+    assert path.read_bytes() == corrupt
+
+
 def test_interactive_explicit_flags_and_per_harness_default(tmp_path):
     ws = make_workspace(tmp_path)
     write_setup(ws, {
@@ -636,8 +650,7 @@ def test_interactive_launch_never_acquires_slot(tmp_path):
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert not (state / "magnolia" / "usage-ledger.jsonl").exists()
-    assert not (state / "magnolia" / "usage-state.json").exists()
+    assert not list(state.rglob("*"))
 
 
 def test_memory_critic_api_calls_never_acquire_slot(tmp_path):
@@ -645,39 +658,74 @@ def test_memory_critic_api_calls_never_acquire_slot(tmp_path):
     state = tmp_path / "xdg-state"
     config = tmp_path / "xdg-config"
     api_calls = tmp_path / "api-calls"
-    package = (
+    package_root = (
         ws / "opencode_cc_mem" / "mcp-servers" / "compchem-memory" / "src"
-        / "compchem_memory"
     )
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text("")
-    (package / "llm.py").write_text(
-        "import os\n"
+    shutil.copytree(PKG_SRC / "compchem_memory", package_root / "compchem_memory")
+    network_stub = tmp_path / "network-stub"
+    network_stub.mkdir()
+    (network_stub / "httpx.py").write_text(
+        "import json, os\n"
         "from pathlib import Path\n"
-        "def _resolve_call(): return ('openai', 'fixture')\n"
-        "def call_llm(system, user, **kwargs):\n"
-        "    path = Path(os.environ['API_CALLS'])\n"
-        "    with path.open('a') as stream:\n"
-        "        stream.write(('critic' if os.environ.get('MAGNOLIA_CRITIC') else 'memory') + '\\n')\n"
-        "    return user.rsplit(': ', 1)[-1].upper()\n",
+        "class Response:\n"
+        "    status_code = 200\n"
+        "    text = ''\n"
+        "    def __init__(self, payload): self._payload = payload\n"
+        "    def json(self): return self._payload\n"
+        "    def raise_for_status(self): return None\n"
+        "def post(url, headers=None, json=None, timeout=None):\n"
+        "    is_critic = bool(json.get('response_format'))\n"
+        "    with Path(os.environ['API_CALLS']).open('a') as stream:\n"
+        "        stream.write(('critic' if is_critic else 'memory') + '\\n')\n"
+        "    if is_critic:\n"
+        "        content = '{\"flag\":false,\"severity\":\"none\",\"unsupported_claims\":[],\"why\":\"ok\"}'\n"
+        "    else:\n"
+        "        content = json['messages'][-1]['content'].rsplit(': ', 1)[-1].upper()\n"
+        "    return Response({'model':'fixture','choices':[{'message':{'content':content},'finish_reason':'stop'}]})\n",
         encoding="utf-8",
     )
-    opencode = tmp_path / "stubbin" / "opencode-v2"
-    opencode.write_text(
-        "#!/bin/bash\n"
-        "if [ \"${1:-}\" = --version ]; then echo 'stub 0.0'; exit 0; fi\n"
-        "\"$PYTHON_CMD\" -c \"from compchem_memory.llm import call_llm; call_llm('s', 'critic')\"\n",
+    client = tmp_path / "stubbin" / "opencode-v2"
+    client.write_text(
+        f"""#!{sys.executable}
+import json
+import os
+import sys
+from pathlib import Path
+if sys.argv[1:] == ['--version']:
+    print('stub 0.0')
+    raise SystemExit(0)
+sys.path[:0] = [{str(network_stub)!r}, {str(package_root)!r}]
+os.environ['OPENAI_API_KEY'] = 'fixture-key'
+os.environ['API_CALLS'] = {str(api_calls)!r}
+os.environ['MAGNOLIA_CRITIC_PROVIDER'] = 'openai'
+os.environ['MAGNOLIA_CRITIC_MODEL'] = 'fixture'
+from compchem_memory.hook.critic import run_critic
+from compchem_memory.hook.project import ProjectPaths
+store = Path.cwd() / '.magnolia'
+transcript = store / 'transcripts' / 'opencode' / 'session.jsonl'
+transcript.parent.mkdir(parents=True, exist_ok=True)
+rows = [
+    {{'kind': 'prompt', 'text': 'check this report'}},
+    {{'kind': 'assistant', 'text': 'A' * 240}},
+]
+transcript.write_text(''.join(json.dumps(row) + '\\n' for row in rows))
+paths = ProjectPaths(Path.cwd().parent.parent, Path.cwd(), store, Path.cwd().name, True)
+outcome = run_critic(paths, 'opencode', 'session', None, 'turn-1')
+raise SystemExit(0 if outcome.kind == 'verdict' else 2)
+""",
         encoding="utf-8",
     )
-    opencode.chmod(0o755)
+    client.chmod(0o755)
     env = {
         "XDG_STATE_HOME": str(state),
         "XDG_CONFIG_HOME": str(config),
         "OPENAI_API_KEY": "fixture-key",
         "MAGNOLIA_SETUP_NONCE": "fixture-probe",
         "API_CALLS": str(api_calls),
-        "PYTHON_CMD": sys.executable,
-        "PYTHONPATH": str(package.parent),
+        "MAGNOLIA_CRITIC": "1",
+        "MAGNOLIA_CRITIC_PROVIDER": "openai",
+        "MAGNOLIA_CRITIC_MODEL": "fixture",
+        "PYTHONPATH": f"{network_stub}:{package_root}",
     }
 
     memory = run_raw(ws, ["memory", "set", "fixture", "--provider", "openai"], env=env)
@@ -686,5 +734,4 @@ def test_memory_critic_api_calls_never_acquire_slot(tmp_path):
     assert memory.returncode == 0, memory.stderr
     assert critic.returncode == 0, critic.stderr
     assert api_calls.read_text().splitlines() == ["memory", "critic"]
-    assert not (state / "magnolia" / "usage-ledger.jsonl").exists()
-    assert not (state / "magnolia" / "usage-state.json").exists()
+    assert not list(state.rglob("*"))

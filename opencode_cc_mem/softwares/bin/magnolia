@@ -408,9 +408,9 @@ if sp.exists():
     try:
         d = json.loads(sp.read_text())
     except (OSError, json.JSONDecodeError):
-        d = {}
+        raise SystemExit("error: setup file is corrupt; refusing to replace it")
     if not isinstance(d, dict):
-        d = {}
+        raise SystemExit("error: setup file is corrupt; refusing to replace it")
 parts = sys.argv[1].split(".")
 node = d
 for part in parts[:-1]:
@@ -762,7 +762,7 @@ setup_run_harness() {
     reply="$("${cmd[@]}" 2>/dev/null </dev/null)" || rc=$?
     # The transformed answer never appears in the prompt, so echoing cannot pass.
     if [ "$rc" -ne 0 ] || ! reply_has_exact_line "$reply" "$expected"; then
-        echo "error: $harness did not pass the check${model:+ with model '$model'} (exit $rc); log in to $harness yourself and check the model id." >&2
+        echo "error: client did not pass the setup check; log in yourself and check the model id." >&2
         return 1
     fi
     # models.<H> first: a failed second write never leaves a harness without its model.
@@ -772,7 +772,7 @@ setup_run_harness() {
         setup_set_json "models.$harness" "$quoted"
     fi
     setup_set_json harness "\"$harness\""
-    echo "setup: $harness checked on your own $harness login (its subscription); recorded harness=$harness${model:+ model=$model}."
+    echo "setup: $harness checked on your own login; recorded harness selection."
 }
 
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -860,7 +860,7 @@ while [ "$#" -gt 0 ]; do
             ROUTE_FLAG="$1"
             ;;
         --route=*) ROUTE_FLAG="${1#--route=}" ;;
-        --*) echo "error: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
+        --*) echo "error: unknown option" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
             if [ -n "$PROJECT" ]; then
                 echo "error: expected exactly one project argument" >&2
@@ -909,7 +909,7 @@ case "$HARNESS" in
     opencode) CLIENT_NAME="opencode" ;;
     claude|codex|vibe) CLIENT_NAME="$HARNESS" ;;
     *)
-        echo "error: unknown harness '$HARNESS' (opencode|claude|codex|vibe)" >&2
+        echo "error: unknown harness (opencode|claude|codex|vibe)" >&2
         exit 1
         ;;
 esac
@@ -1082,7 +1082,7 @@ apply_profile() {
             : "${MAGNOLIA_RETIREMENT:=1}"
             ;;
         *)
-            echo "error: unknown profile '$1' (plain|soak|full)" >&2
+            echo "error: unknown profile (plain|soak|full)" >&2
             exit 1
             ;;
     esac

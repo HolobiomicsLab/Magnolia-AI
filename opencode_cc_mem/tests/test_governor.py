@@ -250,10 +250,9 @@ def test_xdg_and_missing_vs_invalid_policy(tmp_path, monkeypatch):
         Policy.load()
 
 
-@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
-def test_policy_rejects_non_finite_price(price):
-    with pytest.raises(PolicyError, match="finite"):
-        Policy(max_price_per_run=price)
+def test_policy_has_no_legacy_max_price_per_run_field():
+    with pytest.raises(TypeError, match="max_price_per_run"):
+        Policy(max_price_per_run=1.0)
 
 
 @pytest.mark.parametrize("kind", ["failure", "timeout", "cancelled"])
@@ -552,8 +551,8 @@ def test_pending_completion_recovery_does_not_duplicate(tmp_path, monkeypatch):
         admitted.release(outcome=RunOutcome("failure"))
     monkeypatch.setattr(usage, "_append_once", append_once)
 
-    usage.report(date(2026, 11, 15))
-    usage.report(date(2026, 11, 15))
+    usage.resume_key("codex")
+    usage.resume_key("codex")
     assert len((tmp_path / "usage-ledger.jsonl").read_text().splitlines()) == 1
 
 
