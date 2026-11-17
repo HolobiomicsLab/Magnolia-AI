@@ -373,11 +373,14 @@ def consolidate_project_findings(
     while the clusterer ran (nothing is written then)."""
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
-    entries = _load_findings(store / "staging", types)
+    staging = store / "staging"
     artifact = store / "reflex" / "consolidation-proposal.json"
     # Clustering calls an LLM, so it runs outside the project writer lease; the
-    # write below re-validates every file read here under the lease.
-    read_set = file_fingerprint([*(e["path"] for e in entries), artifact])
+    # write below re-validates every file read here under the lease. Fingerprint
+    # before loading so a write between the read and fingerprint is detectable.
+    finding_paths = [p for p in sorted(staging.glob("*.md")) if p.name != "INDEX.md"]
+    read_set = file_fingerprint([*finding_paths, artifact])
+    entries = _load_findings(staging, types)
     # Read prior rejections BEFORE clustering: they both seed the judge (below,
     # MAGNOLIA_CONSOLIDATION_SEED) and durably auto-reject re-proposals (below).
     prior_rejected_keys = _prior_rejected_keys(artifact)

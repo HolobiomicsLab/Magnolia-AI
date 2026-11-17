@@ -880,6 +880,14 @@ def memory_extract_from_session(
         return json.dumps({"status": "threshold_not_met", "extracted": 0})
 
     saved = extractor.commit(session_path, pd)
+    if saved is None:
+        return json.dumps({
+            "status": "skipped",
+            "reason": "concurrent write",
+            "retry": True,
+            "extracted": 0,
+            "paths": [],
+        }, indent=2)
     return json.dumps(
         {
             "status": "extracted",
@@ -1026,6 +1034,12 @@ def memory_distill_session(
                      "reflection": pick_quote("closing")},
                     indent=2,
                 )
+            if res["status"] == "skipped":
+                return json.dumps(
+                    {**res, "source": "dialogue",
+                     "reflection": pick_quote("closing")},
+                    indent=2,
+                )
             return json.dumps(
                 {"status": "preview", "candidate_count": len(res["candidates"]),
                  "candidates": res["candidates"], "source": "dialogue",
@@ -1045,6 +1059,19 @@ def memory_distill_session(
 
     if commit:
         saved = extractor.commit(session_path, pd)
+        if saved is None:
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "concurrent write",
+                    "retry": True,
+                    "saved_count": 0,
+                    "paths": [],
+                    "source": "tool_event",
+                    "reflection": pick_quote("closing"),
+                },
+                indent=2,
+            )
         _safe_version_commit(Path(pd) / ".magnolia", f"manual distill: {len(saved)} tool-event")
         return json.dumps(
             {

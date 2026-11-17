@@ -26,8 +26,8 @@ from typing import Any, Awaitable, Callable, Iterable, Iterator
 _ACTIVE_PROJECTS: contextvars.ContextVar[frozenset[Path]] = contextvars.ContextVar(
     "magnolia_writer_lease_projects", default=frozenset()
 )
-# An unwritable project or store has no lease to take: its writers fail on
-# their own write exactly as they did before the lease existed.
+# A genuinely read-only project or store has no lease to take: its writers fail
+# on their own write exactly as they did before the lease existed.
 _READ_ONLY_ERRORS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
 _POLL_FIRST_SECONDS = 0.002
 _POLL_MAX_SECONDS = 0.05
@@ -53,10 +53,11 @@ def holds_any_project_writer_lease() -> bool:
 
 
 def _store_is_read_only(project: Path) -> bool:
-    """Return whether an existing store has no write bits for any principal."""
+    """Return whether the store, or its project before creation, is read-only."""
     store = project / ".magnolia"
     try:
-        return store.is_dir() and not stat.S_IMODE(store.stat().st_mode) & 0o222
+        target = store if store.exists() else project
+        return target.is_dir() and not stat.S_IMODE(target.stat().st_mode) & 0o222
     except OSError:
         return False
 
@@ -70,7 +71,7 @@ def _open_lock(project: Path) -> int | None:
         flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(path, flags, 0o600)
     except OSError as error:
-        if error.errno in _READ_ONLY_ERRORS:
+        if error.errno in _READ_ONLY_ERRORS and _store_is_read_only(project):
             return None
         raise
     try:
