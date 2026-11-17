@@ -1048,8 +1048,10 @@ def test_codex_recorded_stream_cache_and_resume_identity():
     assert first.session_id == "ses-fixture-1"
     assert first.final_text.startswith("1. BLOCKED")
     assert first.usage.cached_tokens == 123648
+    assert first.usage.uncached_input_tokens == 14_684
     assert resumed.usage.input_tokens == 426576 - 138332
     assert resumed.usage.cached_tokens == 387968 - 123648
+    assert resumed.usage.uncached_input_tokens == 23_924
     assert resumed.cumulative_usage.input_tokens == 426576
 
 

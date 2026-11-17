@@ -102,6 +102,7 @@ class WorkerExecutor(Protocol):
 def empty_usage() -> dict[str, float]:
     return {
         "input_tokens": 0.0,
+        "uncached_input_tokens": 0.0,
         "output_tokens": 0.0,
         "reasoning_tokens": 0.0,
         "cache_read_tokens": 0.0,
@@ -113,7 +114,9 @@ def empty_usage() -> dict[str, float]:
 def _add_usage(total: dict[str, float], event_part: Mapping[str, Any]) -> None:
     tokens = event_part.get("tokens")
     if isinstance(tokens, dict):
-        total["input_tokens"] += float(tokens.get("input", 0) or 0)
+        input_tokens = float(tokens.get("input", 0) or 0)
+        total["input_tokens"] += input_tokens
+        total["uncached_input_tokens"] += input_tokens
         total["output_tokens"] += float(tokens.get("output", 0) or 0)
         total["reasoning_tokens"] += float(tokens.get("reasoning", 0) or 0)
         cache = tokens.get("cache")
@@ -570,6 +573,7 @@ def _merge_usage(total: dict[str, float], item: Mapping[str, Any]) -> None:
 def _merge_usage_record(total: dict[str, float], usage: UsageRecord) -> None:
     values = {
         "input_tokens": usage.input_tokens,
+        "uncached_input_tokens": usage.uncached_input_tokens,
         "output_tokens": usage.output_tokens,
         "reasoning_tokens": usage.reasoning_tokens,
         "cache_read_tokens": usage.cached_tokens,

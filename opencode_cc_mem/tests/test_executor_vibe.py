@@ -331,6 +331,7 @@ def test_vibe_real_export_selected_model_and_fallback_notice():
 def test_vibe_export_usage_cache_and_redaction():
     parsed = parse_vibe_export(json.dumps(_real_export(outcome="price_limit", exit_code=3)))
     assert parsed.usage.input_tokens == 135962
+    assert parsed.usage.uncached_input_tokens == 20506
     assert parsed.usage.cached_tokens == 115456
     assert parsed.usage.cost == pytest.approx(0.0540174)
     assert parsed.outcome.kind == "price_limit"

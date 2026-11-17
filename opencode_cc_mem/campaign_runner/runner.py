@@ -420,31 +420,41 @@ class CampaignRunner:
         if minutes < 0:
             raise RunnerError("minutes must be >= 0")
         state = self.store.load()
-        if state.state != "waiting_human":
+        recovery = (
+            None
+            if state.state == "waiting_human"
+            else self._decline_recovery(state, approver, reason, minutes)
+        )
+        if recovery is None and state.state != "waiting_human":
             raise RunnerError("campaign is not waiting for a human decision")
-        stage = self.protocol.stage(state.stage)
-        attempt_dir = self._attempt_dir(stage, state.attempt)
-        review = self._declinable_review(attempt_dir)
+        if recovery is None:
+            stage = self.protocol.stage(state.stage)
+            attempt = state.attempt
+            review = self._declinable_review(self._attempt_dir(stage, attempt))
+        else:
+            stage, attempt = recovery
+            review = self._review_checkpoint(self._attempt_dir(stage, attempt))
         blocker = next(
             (item for item in review.issues if item.get("severity") == "blocker"),
             None,
         )
         if blocker is not None:
             raise RunnerError(f"review blocker prevents acceptance: {blocker['claim']}")
+        attempt_dir = self._attempt_dir(stage, attempt)
         outputs, errors = check_outputs(self.store.run_dir, stage.outputs)
         if errors:
             raise RunnerError("stage outputs failed: " + "; ".join(errors))
         gate = run_gate(
             self.store.run_dir,
             stage.gate,
-            self._context(stage, state.attempt),
+            self._context(stage, attempt),
             attempt_dir,
             timeout_seconds=stage.timeout_seconds or 300,
         )
         if not gate.passed:
             raise RunnerError("stage gate failed; follow-ups cannot be declined")
         payload = self._receipt_payload(
-            stage, state.attempt, "passed", outputs, [], review, gate
+            stage, attempt, "passed", outputs, [], review, gate
         )
         payload["human_decision"] = {
             "decision": "decline_followups",
@@ -453,28 +463,68 @@ class CampaignRunner:
             "minutes": float(minutes),
             "declined": len(review.followups),
         }
-        write_receipt(attempt_dir / "receipt.json", payload)
-        if minutes:
-            self.store.update_usage(
-                {"human_minutes": float(minutes)},
-                f"follow-ups declined by {approver}",
+        if recovery is None:
+            next_stage = self.protocol.next_stage_id(stage.id)
+            target = "completed" if next_stage is None else "queued"
+            completed = self.store.transition_if_current(
+                target,
+                f"follow-ups declined by {approver}: {reason}",
+                expected_state="waiting_human",
+                expected_stage=stage.id,
+                expected_attempt=attempt,
+                stage=next_stage or stage.id,
+                attempt=0 if next_stage is not None else attempt,
+                allow_human_exit=True,
+                event_details={
+                    **payload["human_decision"],
+                    "stage": stage.id,
+                    "attempt": attempt,
+                    "target": target,
+                },
+                usage_delta={"human_minutes": float(minutes)} if minutes else None,
             )
-        self._queue_distillation(stage, state.attempt, review)
-        next_stage = self.protocol.next_stage_id(stage.id)
-        target = "completed" if next_stage is None else "queued"
-        completed = self.store.transition_if_current(
-            target,
-            f"follow-ups declined by {approver}: {reason}",
-            expected_state="waiting_human",
-            expected_stage=stage.id,
-            expected_attempt=state.attempt,
-            stage=next_stage or stage.id,
-            attempt=0 if next_stage is not None else state.attempt,
-            allow_human_exit=True,
-        )
+        else:
+            completed = state
+            target = str(
+                next(
+                    event["human_decision"]["target"]
+                    for event in reversed(self.store.read_events())
+                    if self._matches_decline_event(event, approver, reason, minutes)
+                )
+            )
+        write_receipt(attempt_dir / "receipt.json", payload)
+        self._queue_distillation(stage, attempt, review)
         if target == "completed":
             self._drain_memory_queue()
         return completed
+
+    def _decline_recovery(
+        self,
+        state: CampaignState,
+        approver: str,
+        reason: str,
+        minutes: float,
+    ) -> tuple[Stage, int] | None:
+        """Find a committed decline whose receipt or queue may be incomplete."""
+        for event in reversed(self.store.read_events()):
+            if self._matches_decline_event(event, approver, reason, minutes):
+                decision = event["human_decision"]
+                return self.protocol.stage(str(decision["stage"])), int(
+                    decision["attempt"]
+                )
+        return None
+
+    @staticmethod
+    def _matches_decline_event(
+        event: Mapping[str, Any], approver: str, reason: str, minutes: float
+    ) -> bool:
+        decision = event.get("human_decision")
+        return isinstance(decision, Mapping) and (
+            decision.get("decision"),
+            decision.get("approver"),
+            decision.get("reason"),
+            float(decision.get("minutes", -1)),
+        ) == ("decline_followups", approver, reason, float(minutes))
 
     def _declinable_review(self, attempt_dir: Path) -> ReviewResult:
         """Restore the valid review that caused an excess-follow-up hold."""
@@ -491,6 +541,10 @@ class CampaignRunner:
             and errors[0].startswith("reviewer proposed ")
         ):
             raise RunnerError("campaign is not waiting on excess review follow-ups")
+        return self._review_checkpoint(attempt_dir)
+
+    def _review_checkpoint(self, attempt_dir: Path) -> ReviewResult:
+        """Restore and validate the review checkpoint for a committed decision."""
         checkpoint = self._read_reviewer_checkpoint(attempt_dir)
         issues, followups = validate_review(
             {
@@ -721,10 +775,25 @@ class CampaignRunner:
             "session_ids": sorted(set(legacy_session_ids)),
             "unavailable": unavailable,
         }
-        self.store.distill_queue_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.store.distill_queue_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
-            handle.flush()
+        with self.store.lock():
+            try:
+                queued = [
+                    json.loads(line)
+                    for line in self.store.distill_queue_path.read_text().splitlines()
+                    if line.strip()
+                ]
+            except FileNotFoundError:
+                queued = []
+            if any(
+                item.get("stage") == stage.id and item.get("attempt") == attempt
+                for item in queued
+                if isinstance(item, Mapping)
+            ):
+                return
+            self.store.distill_queue_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.store.distill_queue_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+                handle.flush()
 
     def _wait_for_quota(
         self,
@@ -1820,14 +1889,9 @@ class CampaignRunner:
 
     def _budget_exceeded(self, state: CampaignState) -> str:
         usage = state.usage
-        input_tokens = float(usage.get("input_tokens", 0))
-        cached_tokens = min(
-            input_tokens,
-            max(0.0, float(usage.get("cache_read_tokens", 0))),
-        )
         tokens = (
-            input_tokens
-            - cached_tokens
+            float(usage.get("uncached_input_tokens", 0))
+            + float(usage.get("cache_write_tokens", 0))
             + float(usage.get("output_tokens", 0))
             + float(usage.get("reasoning_tokens", 0))
         )

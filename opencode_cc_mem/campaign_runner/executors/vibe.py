@@ -677,12 +677,13 @@ def _vibe_outcome(value: str | None, exit_code: int | None) -> RunOutcome:
 
 
 def _unknown_usage() -> dict[str, float | None]:
-    return {"input_tokens": None, "output_tokens": None, "reasoning_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cost_usd": None}
+    return {"input_tokens": None, "uncached_input_tokens": None, "output_tokens": None, "reasoning_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cost_usd": None}
 
 
 def _merge_usage(total: dict[str, float | None], usage: UsageRecord) -> None:
     for key, value in {
         "input_tokens": usage.input_tokens,
+        "uncached_input_tokens": usage.uncached_input_tokens,
         "output_tokens": usage.output_tokens,
         "reasoning_tokens": usage.reasoning_tokens,
         "cache_read_tokens": usage.cached_tokens,
