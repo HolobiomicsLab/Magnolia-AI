@@ -362,8 +362,6 @@ def release_memory_service(handle: ServiceHandle) -> bool:
             stopped = _terminate_owned(record)
         if stopped:
             _remove_state_files(state)
-    if stopped:
-        _remove_empty_service_dirs(state, services_root)
     return stopped
 
 
@@ -952,33 +950,6 @@ def _remove_state_files(state: Path) -> None:
             (state / name).unlink()
         except FileNotFoundError:
             pass
-
-
-def _remove_empty_service_dirs(state: Path, services_root: Path) -> None:
-    """Remove stopped-service directories only when no unknown entry remains."""
-    resolved, services, relative = _private_state_parts(state, services_root)
-    try:
-        entries = {path.name for path in resolved.iterdir()}
-    except FileNotFoundError:
-        return
-    owned = {"service.lock", "service.log"}
-    if entries - owned:
-        return
-    for name in owned:
-        try:
-            (resolved / name).unlink()
-        except FileNotFoundError:
-            pass
-    try:
-        resolved.rmdir()
-    except OSError:
-        return
-    if len(relative.parts) == 2:
-        try:
-            resolved.parent.rmdir()
-        except OSError:
-            pass
-    assert services == services_root.resolve()
 
 
 def _private_state_parts(

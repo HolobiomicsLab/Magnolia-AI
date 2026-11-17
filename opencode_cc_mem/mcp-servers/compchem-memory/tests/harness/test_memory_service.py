@@ -492,7 +492,7 @@ def test_memory_service_reuse_requires_identity_and_readiness(tmp_path, monkeypa
     assert stopped == [(4101, "ps:4101:start")]
 
 
-def test_release_removes_empty_allowlist_and_project_state_dirs(tmp_path, monkeypatch):
+def test_release_keeps_service_lock_and_state_directories(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()
     context = _context(project)
@@ -506,45 +506,16 @@ def test_release_removes_empty_allowlist_and_project_state_dirs(tmp_path, monkey
     handle = memory_service.ensure_memory_service(context)
     state = Path(handle.state_dir)
     project_state = state.parent
+    lock = state / "service.lock"
 
-    assert memory_service.release_memory_service(handle) is True
-    assert not state.exists()
-    assert not project_state.exists()
-
-
-def test_release_keeps_nonempty_state_dir_and_never_removes_sentinel(
-    tmp_path, monkeypatch
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    context = _context(project)
-    context.environment.update(
-        HOME=str(tmp_path / "launcher-home"),
-        XDG_STATE_HOME=str(tmp_path / "launcher-state"),
-    )
-    started, _stopped = _stub_runtime(monkeypatch)
-    _healthy_for(monkeypatch, project, started)
-    handle = memory_service.ensure_memory_service(context)
-    state = Path(handle.state_dir)
-    sentinel = state / "keep-me"
-    sentinel.write_text("not service state\n", encoding="utf-8")
+    assert lock.is_file()
 
     assert memory_service.release_memory_service(handle) is True
     assert state.is_dir()
-    assert sentinel.read_text(encoding="utf-8") == "not service state\n"
-
-
-def test_empty_state_cleanup_refuses_any_path_outside_services_root(tmp_path):
-    services_root = tmp_path / "state" / "magnolia" / "services"
-    outside = tmp_path / "outside" / ("a" * 64) / ("b" * 64)
-    outside.mkdir(parents=True)
-    sentinel = outside / "service.log"
-    sentinel.write_text("outside\n", encoding="utf-8")
-
-    with pytest.raises(ExecutorRefused, match="escaped"):
-        memory_service._remove_empty_service_dirs(outside, services_root)
-
-    assert sentinel.read_text(encoding="utf-8") == "outside\n"
+    assert project_state.is_dir()
+    assert lock.is_file()
+    assert not (state / "service.json").exists()
+    assert not (state / "bearer-token").exists()
 
 
 def test_memory_service_does_not_reuse_changed_runtime_route(tmp_path, monkeypatch):
