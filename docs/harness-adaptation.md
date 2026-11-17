@@ -10,11 +10,13 @@ correction `1eed4a7` and Bash parser correction `812b1b5` (11 September 2026). O
 targets, not tested Magnolia configurations. Begin with the manual path below, then
 add automation one responsibility at a time.
 
-A harness-neutral hook core and adapters for Claude Code, Codex and Mistral Vibe exist on
-branch `feat/harness-adapters-p2` (stacked on `feat/hook-core-p0-p1`; nothing pushed, awaiting
-review). Design: [`harness-neutral-agents-design.md`](../opencode_cc_mem/docs/harness-neutral-agents-design.md);
+A harness-neutral hook core and adapters for Claude Code, Codex and Mistral Vibe are
+implemented through local Plan 3 revision `c38d1fa`; publication and release acceptance
+remain separate. Design: [`harness-neutral-agents-design.md`](../opencode_cc_mem/docs/harness-neutral-agents-design.md);
 probes: [`harness-probes-2026-11.md`](../opencode_cc_mem/docs/harness-probes-2026-11.md); live
-acceptance: [`harness-acceptance-2026-11.md`](../opencode_cc_mem/docs/harness-acceptance-2026-11.md).
+acceptance: [`harness-acceptance-2026-11.md`](../opencode_cc_mem/docs/harness-acceptance-2026-11.md);
+Plan 3 acceptance draft:
+[`harness-acceptance-p3-2026-11.md`](../opencode_cc_mem/docs/harness-acceptance-p3-2026-11.md).
 OpenCode still uses the TypeScript plugins described below; none changed.
 
 ## Running Magnolia in Claude Code, Codex or Vibe
@@ -60,9 +62,11 @@ clients read those skill bodies natively. A skill that names an OpenCode-form to
 `compchem-tools_run_shell` therefore keeps that spelling until the skill itself documents client-specific
 names.
 
-The hook command is `python -m compchem_memory.hook <harness> <event>`. It never breaks the
-client: a failure is logged to `.magnolia/hook-errors.jsonl` and the event passes, except that a
-configured shell policy still denies the built-in shell.
+Interactive hook failures are logged to `.magnolia/hook-errors.jsonl` and normally pass.
+Required non-interactive roles use a fail-closed wrapper: missing, stale or crashing policy
+enforcement denies every affected operation, including reads. The launch binds the hook runner,
+source, policy, required environment and selected interpreter rather than trusting the client to
+convert an internal error into a denial.
 
 Known limits, from the live acceptance: Claude Code and Codex Stop hooks are synchronous only long enough
 to recover replies and launch Magnolia's detached critic worker; the worker records its verdict at
@@ -80,6 +84,33 @@ catalog-removal switch; `--disable multi_agent` did not remove the v1 tools in t
 Changing other feature overrides would alter argv and requires a new gate. The sanitized evidence
 and accepted limitation are recorded in
 [`docs/evidence/codex/gate4/`](../opencode_cc_mem/docs/evidence/codex/gate4/README.md).
+
+Claude Code's earlier live worker/reviewer/helper/evaluator observations predate the Task 14
+hook-source identity digest and therefore require re-observation for Plan 3 phase acceptance.
+Codex worker/reviewer are observed on 0.169.0; Codex helper/evaluator are refused. Every Vibe role
+is pending. These dispositions are evidence states, not claims that the adapters are absent.
+
+## Plan 3 release note: OpenCode governor effects
+
+OpenCode keeps its existing campaign retries, dedicated service, parser/result behavior,
+reviewer database fallback, helper recipe and evaluator plain-output compatibility. The usage
+governor changes exactly three externally visible behaviors:
+
+1. admission and daily-limit waits can hold a non-interactive run before launch;
+2. the effective turn cap is the minimum of the role/client cap and the governor cap;
+3. a typed quota signal stops empty-output, JSON, campaign and stale-session repair and preserves
+   the phase for a governed resume.
+
+The defaults are two concurrent invocations, 50 physical invocations per UTC day, 60 turns per
+invocation and 30 seconds between starts, shared by subscription key across projects for one OS
+user. Interactive use and API-billed memory/critic calls do not acquire a slot. Optional monetary
+budgets are client-native (`--max-budget-usd` for Claude, `--max-price` for Vibe); Codex 0.169.0
+has no equivalent flag and is not refused for that. OpenCode plugins are not rewritten as shims.
+
+For a future same-user role-isolation review, the proposed OpenCode deny is
+`.magnolia/services/**`. It is documented for Tao but is **not applied** by Plan 3: mode `0600`
+alone does not prevent another role of the same OS user from reading a bearer-token file, and a
+real denial probe is still required.
 
 ## Choose the integration level
 

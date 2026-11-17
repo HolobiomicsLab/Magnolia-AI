@@ -120,7 +120,7 @@ Anti-goals (a failure even if it works)
 | Claim critic | `turn-end` | yes | synchronous Stop recovers replies and starts a detached worker | Stop hook | `post_agent` defers recovery; the next main prompt or session end starts a detached worker |
 | Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | `additional_context` at the next `pre_agent` or `post_tool` |
 | Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | child `session_id` + `parent_session_id`, `agent_name` |
-| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | `--disabled-tools file_system.bash` + a `strict` `pre_tool` deny (P0: no sandbox; an out-of-project write succeeded) |
+| Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` plus the required fail-closed hook | worker `workspace-write`, reviewer `read-only`; `exec_command` is hook-denied; reads use the confined `magnolia-read` server and worker edits use hooked `apply_patch` | `--disabled-tools file_system.bash` + a `strict` `pre_tool` deny; no role is accepted yet because Vibe has no sandbox |
 
 ### 5.1 What P0 observed
 
@@ -169,6 +169,24 @@ Source: `harness-probes-2026-11.md` (Claude Code 2.1.325, Codex 0.154.0, Mistral
 - Prompts: the doorbell, the session-start directive and the notices act only on the person's
   prompts. A prompt event that carries a sub-agent (`agent` set) is captured in the transcript and
   otherwise ignored, so a helper's instructions never ring a letter or receive the person's notices.
+
+### 5.2 Plan 3 capability disposition at `c38d1fa`
+
+The machine-readable source is `campaign_runner/executors/capabilities-p3.json`; the
+human proof matrix is `docs/harness-acceptance-p3-2026-11.md`.
+
+- Claude Code 2.1.325 passed all four live role gates, but Task 14 changed the bound
+  hook-source digest. The earlier observations remain evidence; the current identities
+  require re-observation before phase acceptance.
+- Codex CLI 0.169.0 worker and reviewer passed gate 4 with normal persisted trust and
+  model `gpt-5.6-luna`. The full package identity now binds the client, code-mode host,
+  manifest, exec server and packaged `rg`. The accepted residual is a wider visible tool
+  catalog: the required deny-unknown hook, not catalog removal, enforces the role list.
+  Codex helper and evaluator remain refused pending their own 0.169.0 live gates.
+- Every Vibe role remains pending. D3 HTTP memory and D4 guarded worker edits are
+  conditional designs, not accepted capabilities.
+- OpenCode remains the compatibility path. Plan 3 adds no plugin shim and claims no
+  current live role campaign from offline fixtures.
 
 ## 6. The core
 
@@ -287,7 +305,7 @@ when their resolved families differ; the route prefix is stripped before family 
 
 ### 8.1 Executors
 
-`WorkerFactory` returns an executor chosen by the model id prefix: `claude-code/<model>`,
+The shared executor registry returns an executor chosen by the model id prefix: `claude-code/<model>`,
 `codex/<model>`, `vibe/<model>`; any other id stays OpenCode. All return the existing
 `WorkerResult`.
 
@@ -304,13 +322,15 @@ cannot enforce them does not run that role:
   tools; path rules enforced by a PreToolUse hook that returns `block` for reads of the
   excluded files and for edits outside `work/**`; `--max-turns` from the stage's
   `max_steps`; `--resume` for the same-session retry. Parses `system/init`, assistant
-  and tool events, `result`.
-- `CodexExecutor`: D2 refuses both worker and reviewer unless Task 0 proves the complete role
-  matrix through normal persisted trust: permitted reads, denied secret reads, no shell and
-  confined worker edits; reviewer additionally permits no edits. `-s read-only` or changing the
-  working directory is not sufficient. Helper/evaluator remain separate contracts.
-  `codex exec --json` in the project with its `.codex/` layer, `codex exec resume <id>`
-  for evidenced retries. Parses `thread.started`, `item.completed`, `turn.completed` usage.
+  and tool events, `result`. All four historical live gates require re-observation after
+  the Task 14 hook-source identity change.
+- `CodexExecutor`: D2 is accepted for worker and reviewer on CLI 0.169.0. Both keep the
+  code-mode host enabled; its runtime has no direct file, process or network API. A dedicated
+  per-invocation `magnolia-read` server provides confined read/list/search, `apply_patch` is
+  worker-only, and every inner call is governed by the required hook. The complete installed
+  Codex package is re-hashed before spawn. The visible catalog is wider than the role list;
+  unknown tools are denied rather than removed. Helper/evaluator remain separate refused
+  contracts. Resume always re-supplies the model and preserves the bound identity.
 - `VibeExecutor`: `vibe -p --output json --auto-approve --output-dir <run>` with
   `--disabled-tools` for the shell and a `strict` `pre_tool` hook enforcing the role's path
   rules, since Vibe has no sandbox (P0). D4 permits guarded worker edits under its own
@@ -318,10 +338,10 @@ cannot enforce them does not run that role:
   writes disabled. `--max-turns` and optional `--max-price` come from proved policy; usage and
   outcome are read from `export.json`.
 
-Stage type `"opencode"` gains the alias `"agent"`; `model_family` learns the prefixes so
+Stage type `"opencode"` has the alias `"agent"`; `model_family` knows the prefixes so
 reviewer independence works across clients (a Codex worker can be reviewed by Claude).
-The agents daemon and the router evaluator use the same registry, which removes their
-duplicated event parsers. The evaluator's existing `JevEvaluator._api_key()` reads
+Campaign workers/reviewers, the agents daemon and the router evaluator resolve through
+the same route and executor registry. The evaluator's existing `JevEvaluator._api_key()` reads
 OpenCode's `auth.json` and the OAuth token in `opencode-v2.db` to call `opencode.ai`
 directly; that conflicts with anti-goal A1 but is Tao's router code and outside this
 design. It is reported to Tao as a separate item and left unchanged here (*builder
@@ -346,18 +366,24 @@ A4 is relaxed here by LFX's decision; the change is announced in the release not
 `magnolia usage` shows waiting runs).
 
 - Policy file `~/.config/magnolia/usage-policy.yaml`, per subscription key: `max_concurrent`
-  (default 1), `max_runs_per_day` (default 20), `max_turns_per_run` (default 40),
-  `min_seconds_between_runs` (default 60). Defaults are the builder's proposal and LFX's
-  to confirm.
+  (default 2), `max_runs_per_day` (default 50), `max_turns_per_run` (default 60),
+  `min_seconds_between_runs` (default 30). These are LFX's D1 values. A run is one physical
+  invocation, so resumes and repairs reserve separately. Fifty is a ceiling, not a target.
 - Limit signals end the run without retry: Claude `system/api_retry` with
   `rate_limit` or `billing_error`, result text "You've hit your session limit" or
   "weekly limit"; Codex `turn.failed` or `error` events (texts recorded in P0); Vibe in
   P0. The stage goes to a new state `waiting_quota` with the reset time when the text
   gives one, and resumes only after that time or on a person's command.
-- Ledger `~/.local/state/magnolia/usage-ledger.jsonl`: client, model, run kind, project,
-  turns, tokens, duration, outcome. `magnolia usage` prints the day and week.
+- Ledger `~/.local/state/magnolia/usage-ledger.jsonl`: client, model, run kind, project
+  digest, nullable token/cache/cost counters, duration and outcome. `magnolia usage` prints
+  day/week totals, per-project digest groups and live waits without exposing paths or keys.
 - API-key routes (memory model, critic judge) are separate billing and stay outside the
   governor.
+
+There is no universal monetary cap. Optional `client_native_budgets` map to Claude
+`--max-budget-usd` and Vibe `--max-price`; Codex 0.169.0 is not refused for lacking such
+a flag. OpenCode's only approved behavior changes are exactly: admission/daily-limit
+waits, governor caps, and quota-stop behavior.
 
 ## 9. Phases and proof
 
@@ -365,10 +391,10 @@ A4 is relaxed here by LFX's decision; the change is announced in the release not
 |---|---|---|
 | P0 (done) | Probes, no Magnolia change: each client's hooks around an MCP tool call and inside a sub-agent, tool-name format, size limit of injected context, Codex shell-tool control, Vibe install and files, usage-limit texts where documented | probe report in `opencode_cc_mem/docs/` with commands and captured payloads |
 | P1 (done) | `magnolia-hook`, normalised schema, Python behaviours, Magnolia transcript; OpenCode plugins untouched | parity tests: on recorded OpenCode payloads the core produces what the TS plugins produce; existing suites green |
-| P2 | Claude Code adapter + `--harness` launcher + `setup` support | live session on a demo project: boot context visible, retrieval note after a `run_shell` call, capture rows, critic row, transcript file; distillation of that session compared with an OpenCode session on the same task (same candidate kinds found) |
-| P3 | Codex adapter | same live checklist |
-| P4 | Executor registry, governor, campaigns and daemon on Claude Code and Codex | unit tests on recorded event streams; one small campaign per client; governor stops on a simulated limit |
-| P5 | Vibe adapter and executor | live checklist on Vibe |
+| P2 (built; identity recheck pending) | Claude Code adapter + `--harness` launcher + `setup` support | historical live role gates plus recorded fixtures; current hook-source identity still needs re-observation |
+| P3 (built) | Codex adapter | interactive probes plus tracked CLI 0.169.0 gate-4 worker/reviewer evidence; helper/evaluator remain refused |
+| P4 (offline complete, live campaigns pending) | Shared routes, executor registry, governor, campaigns, daemon and evaluator | recorded-stream/stub suites, usage reports and Plan 3 acceptance matrix; bounded one-stage campaigns are drafted but not run |
+| P5 (built, acceptance pending) | Vibe adapter, executor and D3 HTTP memory path | recorded fixtures and offline tests only for current Plan 3 roles; no role is accepted live |
 | P6 | Optional: OpenCode plugins as shims over the core | Tao's call |
 
 Status of P0 and P1 (branch `feat/hook-core-p0-p1`, nothing pushed, awaiting Tao's review):
@@ -392,8 +418,12 @@ Status after Plan 2 (branch `feat/harness-adapters-p2`, stacked on P0/P1, nothin
   clients. Open: the critic judge returned no JSON object in two of three calls. Claude's Stop
   now launches a detached worker, injected action notes are excluded from distillation, and Vibe
   carries MCP action notes to a later deliverable event.
-- Not done: P4 (executors, governor), the Vibe executor, OpenCode itself live (not installed on
-  the test Mac).
+- Plan 3 Tasks 1–14 are integrated through `c38d1fa`: contracts, role policies,
+  governor/state, callers, shared routing/reporting, learning provenance, Codex gate-4
+  acceptance and complete Codex-package binding. Task 15 supplies the offline proof matrix,
+  campaign drafts and documentation. Live campaign execution remains a separate bounded step.
+- The acceptance draft records every cell as observed, stub-only, refused or pending. It
+  never upgrades synthetic quota streams or an unavailable role into a pass.
 
 Each phase ends with Tao's review on its own branch.
 
