@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
 
-from compchem_memory.hook.notices import commit_notices, peek_notices
+from compchem_memory.hook.notices import commit_notices, peek_notices, release_notices
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState
 from compchem_memory.job_notices import push_job_notice
@@ -59,12 +61,14 @@ def test_peek_consumes_nothing(tmp_path):
     state = SimpleNamespace(data={"unshown_notices": ["critic warning"]})
 
     first = peek_notices(paths, state)
+    release_notices(first)
     second = peek_notices(paths, state)
 
-    assert first is not None and first.text == second.text
+    assert first is not None and second is not None and first.text == second.text
     assert first.text.splitlines() == ["✅ dock finished (done) — run …r1", "critic warning"]
     assert state.data == {"unshown_notices": ["critic warning"]}
     assert (paths.store / ".job-notices.jsonl").exists()
+    release_notices(second)
 
 
 def test_commit_keeps_notices_added_after_peek(tmp_path):
@@ -74,12 +78,36 @@ def test_commit_keeps_notices_added_after_peek(tmp_path):
     with SessionState.open(paths.store, "claude", "s1") as state:
         notices = peek_notices(paths, state)
 
-    push_job_notice(str(paths.project_dir), run_id="r2", tool="later", state="done", category="success")
+    writer = threading.Thread(
+        target=push_job_notice,
+        args=(str(paths.project_dir),),
+        kwargs={"run_id": "r2", "tool": "later", "state": "done", "category": "success"},
+    )
+    writer.start()
+    time.sleep(0.05)
+    assert writer.is_alive()  # the append waits for the peek-to-commit lock
     with SessionState.open(paths.store, "claude", "s1") as state:
         state.data["unshown_notices"].append("critic later")
     commit_notices(paths, "claude", "s1", notices)
+    writer.join(timeout=1)
 
+    assert not writer.is_alive()
     assert _deliver(paths).splitlines() == ["✅ later finished (done) — run …r2", "critic later"]
+
+
+def test_second_consumer_cannot_peek_same_notice(tmp_path):
+    paths = _paths(tmp_path)
+    push_job_notice(str(paths.project_dir), run_id="r1", tool="dock", state="done", category="success")
+    state = SimpleNamespace(data={})
+
+    first = peek_notices(paths, state)
+    second = peek_notices(paths, state)
+
+    assert first is not None
+    assert second is None  # first still owns the peek-to-commit queue lock
+    commit_notices(paths, "claude", "s1", first)
+    assert peek_notices(paths, state) is None
+    assert not (paths.store / ".job-notices.jsonl").exists()
 
 
 def test_notices_malformed_rows_and_switch(tmp_path, monkeypatch):
@@ -115,3 +143,4 @@ def test_notices_are_defensive_and_cap_lines(tmp_path):
     assert len(notices.text) == 160
     assert notices.text.startswith("⚠️ ")
     assert notices.critic == []
+    release_notices(notices)

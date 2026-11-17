@@ -27,16 +27,51 @@
  * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
  * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 const ENABLED = process.env.MAGNOLIA_JOB_NOTIFY !== "0"
 const POLL_INTERVAL_MS = 30_000
 const MAX_PER_TICK = 10 // cap toasts per tick; the rest wait for the next one
 
+// Self-locate the Magnolia root and its venv. MAGNOLIA_PYTHON is the portable
+// override for tests and nonstandard installations; no native Node lock module.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
+const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
+const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
+const PYTHONPATH = join(REPO_ROOT, "opencode_cc_mem", "mcp-servers", "compchem-memory", "src")
+
 type Toast = (title: string, message: string, variant?: string) => void
 
-function startPolling(noticesPath: string, toast: Toast): () => void {
+function drainNotices(noticesPath: string): any[] {
+  if (!existsSync(noticesPath)) return []
+  // Delegate locking and atomic replacement to the same implementation used
+  // by the hook and poller. A failed drain is retried on the next tick.
+  const projectDir = dirname(dirname(noticesPath))
+  const result = spawnSync(
+    PYTHON,
+    ["-m", "compchem_memory.job_notices", "--drain", projectDir, "--limit", String(MAX_PER_TICK)],
+    {
+      encoding: "utf8",
+      env: { ...process.env, PYTHONPATH },
+    },
+  )
+  if (result.error || result.status !== 0) return []
+  try {
+    const rows = JSON.parse(result.stdout)
+    return Array.isArray(rows) ? rows : []
+  } catch {
+    return []
+  }
+}
+
+export function startPolling(
+  noticesPath: string,
+  toast: Toast,
+  pollIntervalMs = POLL_INTERVAL_MS,
+): () => void {
   const ICONS: Record<string, string> = {
     success: "✅",
     science_failure: "❌",
@@ -44,43 +79,7 @@ function startPolling(noticesPath: string, toast: Toast): () => void {
   }
 
   function poll(): void {
-    let lines: string[]
-    try {
-      lines = readFileSync(noticesPath, "utf-8").split("\n")
-    } catch {
-      return // absent (normal steady state) or unreadable — nothing to do
-    }
-    const taken: any[] = []
-    const kept: string[] = []
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      if (taken.length >= MAX_PER_TICK) {
-        kept.push(trimmed)
-        continue
-      }
-      try {
-        const rec = JSON.parse(trimmed)
-        if (rec && typeof rec === "object") taken.push(rec)
-      } catch {
-        /* malformed line: drop rather than stall the queue */
-      }
-    }
-    if (taken.length === 0) {
-      // Nothing consumable: only touch the file if it held only malformed
-      // lines (clean them up); otherwise leave it untouched.
-      if (lines.some((l) => l.trim()) && kept.length === 0) {
-        try {
-          unlinkSync(noticesPath)
-        } catch {}
-      }
-      return
-    }
-    try {
-      if (kept.length > 0) writeFileSync(noticesPath, kept.join("\n") + "\n")
-      else unlinkSync(noticesPath)
-    } catch {}
-    for (const rec of taken) {
+    for (const rec of drainNotices(noticesPath)) {
       const icon = ICONS[String(rec.category)] ?? "🔔"
       const tool = String(rec.tool ?? "job")
       const state = String(rec.state ?? "")
@@ -92,8 +91,8 @@ function startPolling(noticesPath: string, toast: Toast): () => void {
   }
 
   poll() // catch notices that piled up before this session started
-  const timer = setInterval(poll, POLL_INTERVAL_MS)
-  // Do not keep the process alive just for the timer.
+  const timer = setInterval(poll, pollIntervalMs)
+  // Do not keep the process alive for the timer.
   ;(timer as any)?.unref?.()
   return () => clearInterval(timer)
 }

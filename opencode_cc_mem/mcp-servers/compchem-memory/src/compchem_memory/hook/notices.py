@@ -1,9 +1,14 @@
 """Job completions and unshown critic warnings for a hook response.
 
-Notices are consumed only after delivery: ``peek_notices`` reads without side
-effects, and the CLI calls ``commit_notices`` once the adapter reports that it
-emitted the ``notice`` field. A notice the client could not show stays queued
-for the next event.
+Notices are consumed only after delivery: ``peek_notices`` reads without
+removing queue lines, and the CLI calls ``commit_notices`` once the adapter
+reports that it emitted the ``notice`` field. A notice the client could not
+show stays queued for the next event.
+
+The job queue's shared mkdir lock is held from peek through delivery and
+commit. This prevents another consumer from displaying the same lines in the
+intervening interval; ``release_notices`` unlocks an undelivered response
+without consuming it.
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ from dataclasses import dataclass, field
 from compchem_memory.atomic_io import atomic_write_text
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState
-from compchem_memory.job_notices import _notices_path
+from compchem_memory.job_notices import JobNoticeLock, _notices_path
 
 
 _ICONS = {
@@ -33,6 +38,7 @@ class Notices:
     text: str
     job_lines: list[str] = field(default_factory=list)
     critic: list[str] = field(default_factory=list)
+    job_lock: JobNoticeLock | None = field(default=None, repr=False)
 
 
 def _job_line(row: dict) -> str:
@@ -44,47 +50,67 @@ def _job_line(row: dict) -> str:
     return f"{icon} {tool} finished ({state}) — run …{run_id[-24:]}"[:160]
 
 
-def _peek_jobs(project_dir: str, limit: int) -> tuple[list[dict], list[str]]:
-    """Read up to ``limit`` job notices without removing them.
+def _peek_jobs(project_dir: str, limit: int) -> tuple[list[dict], list[str], JobNoticeLock | None]:
+    """Read up to ``limit`` job notices under the shared queue lock.
 
-    Returns the parsed rows and the raw queue lines a commit removes: the rows
-    shown and the malformed lines met before the limit, which the legacy drain
-    (``job_notices.drain_job_notices``) also drops.
+    Returns the parsed rows, the raw queue lines a commit removes, and the
+    held lock. The caller must commit or release that lock. The raw lines
+    include malformed lines met before the limit, matching the legacy drain.
     """
+    lock = JobNoticeLock(project_dir, wait=0.2)
+    if not lock.acquire():
+        return [], [], None
     try:
-        lines = _notices_path(project_dir).read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return [], []
-    rows: list[dict] = []
-    consumed: list[str] = []
-    for line in lines:
-        if len(rows) >= limit:
-            break
-        consumed.append(line)
         try:
-            parsed = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(parsed, dict):
-            rows.append(parsed)
-    return rows, consumed
+            lines = _notices_path(project_dir).read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            lock.release()
+            return [], [], None
+        rows: list[dict] = []
+        consumed: list[str] = []
+        for line in lines:
+            if len(rows) >= limit:
+                break
+            consumed.append(line)
+            try:
+                parsed = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+        if not consumed:
+            lock.release()
+            return [], [], None
+        return rows, consumed, lock
+    except Exception:
+        lock.release()
+        raise
 
 
 def peek_notices(paths: ProjectPaths, state: SessionState) -> Notices | None:
-    """Return up to ten job notices and the queued critic warnings; consume nothing."""
+    """Return up to ten job notices and queued critic warnings.
+
+    Queue contents are not removed until delivery, but their lock remains
+    held. The CLI must call ``commit_notices`` or ``release_notices``.
+    """
+    job_lock: JobNoticeLock | None = None
     try:
         jobs: list[dict] = []
         job_lines: list[str] = []
         if os.environ.get("MAGNOLIA_JOB_NOTIFY") != "0":
-            jobs, job_lines = _peek_jobs(str(paths.project_dir), JOB_LIMIT)
+            jobs, job_lines, job_lock = _peek_jobs(str(paths.project_dir), JOB_LIMIT)
         lines = [_job_line(row) for row in jobs]
         queued = state.data.get("unshown_notices")
         critic = [str(notice) for notice in queued] if isinstance(queued, list) else []
         lines.extend(critic)
         if not lines:
+            if job_lock is not None:
+                job_lock.release()
             return None
-        return Notices("\n".join(lines), job_lines, critic)
+        return Notices("\n".join(lines), job_lines, critic, job_lock)
     except Exception:  # noqa: BLE001 - notices must never break a hook
+        if job_lock is not None:
+            job_lock.release()
         return None
 
 
@@ -97,19 +123,32 @@ def _without(items: list[str], taken: list[str]) -> list[str]:
     return remaining
 
 
+def release_notices(notices: Notices) -> None:
+    """Release an undelivered response without consuming either notice kind."""
+    if notices.job_lock is not None:
+        notices.job_lock.release()
+        notices.job_lock = None
+
+
 def commit_notices(paths: ProjectPaths, harness: str, session_id: str, notices: Notices) -> None:
-    """Consume delivered notices: their job-queue lines and their critic warnings."""
+    """Consume delivered notices, then release the lock held since peek."""
     if notices.job_lines:
-        path = _notices_path(str(paths.project_dir))
+        lock = notices.job_lock
+        if lock is None or not lock.held:
+            raise RuntimeError("job notices were not locked at peek")
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except FileNotFoundError:
-            lines = []
-        kept = _without(lines, notices.job_lines)
-        if kept:
-            atomic_write_text(path, "\n".join(kept) + "\n")
-        else:
-            path.unlink(missing_ok=True)
+            path = _notices_path(str(paths.project_dir))
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except FileNotFoundError:
+                lines = []
+            kept = _without(lines, notices.job_lines)
+            if kept:
+                atomic_write_text(path, "\n".join(kept) + "\n")
+            else:
+                path.unlink(missing_ok=True)
+        finally:
+            release_notices(notices)
     if notices.critic:
         with SessionState.open(paths.store, harness, session_id) as state:
             queued = state.data.get("unshown_notices")

@@ -34,23 +34,35 @@ def _commit_delivered(rendered: Any, handled: Any, event: Any) -> None:
             discard_note(handled.pending)
     notices = getattr(handled, "notices", None)
     paths = getattr(handled, "paths", None)
-    if notices is not None and paths is not None and "notice" in rendered.emitted:
-        from compchem_memory.hook.notices import commit_notices
+    if notices is not None:
+        if paths is not None and "notice" in rendered.emitted:
+            from compchem_memory.hook.notices import commit_notices
 
-        commit_notices(paths, event.harness, event.session_id, notices)
+            commit_notices(paths, event.harness, event.session_id, notices)
+        else:
+            from compchem_memory.hook.notices import release_notices
+
+            release_notices(notices)
 
 
 def _release_unsettled(handled: Any) -> None:
-    """Release an action note a failure left unsettled; never raise."""
+    """Release action-note and notice reservations after a failure; never raise."""
     pending = getattr(handled, "pending", None)
-    if pending is None:
-        return
-    try:
-        from compchem_memory.hook.action_retrieval import discard_note
+    if pending is not None:
+        try:
+            from compchem_memory.hook.action_retrieval import discard_note
 
-        discard_note(pending)
-    except Exception:  # noqa: BLE001 - the error row is already written
-        pass
+            discard_note(pending)
+        except Exception:  # noqa: BLE001 - the error row is already written
+            pass
+    notices = getattr(handled, "notices", None)
+    if notices is not None:
+        try:
+            from compchem_memory.hook.notices import release_notices
+
+            release_notices(notices)
+        except Exception:  # noqa: BLE001 - process exit also permits stale recovery
+            pass
 
 
 def _write_rendered(rendered: Any, handled: Any, event: Any) -> None:
