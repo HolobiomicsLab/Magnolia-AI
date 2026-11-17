@@ -83,11 +83,16 @@ def _slug(request: str, now: datetime) -> str:
     return f"{stamp[:10]}_{slug_words}_{stamp[11:19].replace(':', '')}"
 
 
+def _title(request: str) -> str:
+    """Return a single safe line for the letter's task heading."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+", " ", request).strip()[:80]
+
+
 def _letter(request: str, source: str, now: datetime) -> str:
     stamp = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     return "\n".join(
         [
-            f"# Task: {request[:80]}",
+            f"# Task: {_title(request)}",
             "",
             f"- from: {source}",
             f"- date: {stamp}",
@@ -104,7 +109,7 @@ def _letter(request: str, source: str, now: datetime) -> str:
 
 def _append_letter(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o666)
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     with os.fdopen(descriptor, "wb", closefd=True) as letter:
         os.write(letter.fileno(), content.encode("utf-8"))
 
