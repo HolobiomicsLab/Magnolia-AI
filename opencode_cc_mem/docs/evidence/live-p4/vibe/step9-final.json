@@ -1,0 +1,20 @@
+{
+ "proxy": "exact pid stopped after command-line check; gone",
+ "owner_state": {"listing_cmp": "identical", "sha16": "2b51e037798666fd", "paths": ["~/.local/state/magnolia", "~/.config/magnolia", "~/.magnolia", "~/.magnolia/services"]},
+ "opencode_data": {"before": {"size_kb": 25844, "files": 80, "manifest_sha256": "c22932c2809b0cd906afe881bda168cad72d81927234694ee2f45d271871668b"}, "after": "identical"},
+ "codex_config_toml": {"before_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159", "after_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159", "size": 28569, "mode": "0600", "cmp_with_backup": "byte-identical", "backup_deleted_after_cmp": true},
+ "vibe_trusted_folders_toml": {"before_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980", "gate_written_sha256": "a1fb54ac5f93b9627410908faa88da3d2a9d8288545f0474fac76298681dafc2", "restored_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980", "cmp": "byte-identical", "size": 28, "mode": "0600", "mtime_preserved": true, "backup_deleted": true},
+ "listening_ports": "identical to the before listing",
+ "gate_processes_left": 0,
+ "free_disk_kb": {"before": 76833572, "after": 76833552},
+ "pytest_basetemps": "deleted",
+ "pyc_in_snapshot_source": 0,
+ "pyc_note": "18135 .pyc exist only under production per-invocation PYTHONPYCACHEPREFIX dirs runs/*/control/executors/*/pycache-* (15 dirs) inside the throwaway project",
+ "usage_ledger_rows": {"vibe": 9, "claude-code": 4, "codex": 2, "all_success_subscription": true},
+ "spawns": {"vibe-model": 9, "claude-model": 4, "codex-model": 2, "codex-appserver": 13, "codex-appserver_blocked_by_gate_guard": 2, "memory-server": 4},
+ "openrouter": {"calls": 29, "refused": 0, "cost_usd": 0.00595774},
+ "bearer_token_scan": {"method": "sha256 of every 20-200 char token-like string in 2135 gate files vs recorded token digest", "hits": 0},
+ "planted_files": 0,
+ "outside_dir_contents": ["credential.txt"],
+ "vibe_session_data_under_home_vibe": "written by Vibe itself; not read, listed or cleaned by the gate"
+}

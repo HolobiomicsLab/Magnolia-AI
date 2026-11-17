@@ -102,43 +102,55 @@ def _candidate_role_capabilities():
     return project_role_capabilities(table)
 
 
-@pytest.mark.parametrize(
-    ("client", "role"),
-    (
-        *(
-            ("claude-code", role)
-            for role in ("worker", "reviewer", "helper", "evaluator")
-        ),
-        ("codex", "worker"),
-        ("codex", "reviewer"),
-    ),
-)
-def test_rebound_hook_source_rows_remain_stale_until_live_reobservation(tmp_path, client, role):
+def test_claude_worker_remains_stale_until_outside_write_is_reobserved(tmp_path):
     table = load_capability_table()
     projected = project_role_capabilities(table)
-    evidence = projected[client][role]
+    evidence = projected["claude-code"]["worker"]
 
     assert evidence["gate_accepted"] is True
     assert evidence["accepted"] is False
     assert evidence["stale"] is True
-    assert "stale until live re-observation in Plan 4 Task 6 (hook adapter change)" in table["note"]
+    assert "Claude Code worker stays stale" in table["note"]
 
     candidates = _candidate_role_capabilities()
-    assert candidates[client][role]["accepted"] is True
-    assert candidates[client][role]["stale"] is False
+    assert candidates["claude-code"]["worker"]["accepted"] is True
+    assert candidates["claude-code"]["worker"]["stale"] is False
     assert (
-        candidates[client][role]["launch_identity"]["components"]["hook_source"]
+        candidates["claude-code"]["worker"]["launch_identity"]["components"]["hook_source"]
         == evidence["launch_identity"]["components"]["hook_source"]
     )
 
     context = _context(
         tmp_path,
-        client=client,
-        role=role,
+        client="claude-code",
+        role="worker",
         role_capabilities=load_role_capabilities(),
     )
     with pytest.raises(ExecutorRefused, match="missing accepted launch capability evidence"):
         prepare_launch(context)
+
+
+@pytest.mark.parametrize(
+    ("client", "role"),
+    (
+        *(
+            ("claude-code", role)
+            for role in ("reviewer", "helper", "evaluator")
+        ),
+        ("codex", "worker"),
+        ("codex", "reviewer"),
+    ),
+)
+def test_reobserved_rebound_rows_are_accepted_on_the_new_hook_source(client, role):
+    projected = project_role_capabilities(load_capability_table())
+    evidence = projected[client][role]
+
+    assert evidence["gate_accepted"] is True
+    assert evidence["accepted"] is True
+    assert evidence["stale"] is False
+    assert evidence["launch_identity"]["components"]["hook_source"] == (
+        "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+    )
 
 
 def _fake_codex_client(tmp_path):

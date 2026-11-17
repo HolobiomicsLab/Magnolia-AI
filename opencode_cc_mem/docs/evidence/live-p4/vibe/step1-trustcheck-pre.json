@@ -1,0 +1,15 @@
+{
+  "production/evaluator": "refused: vibe lacks accepted evaluator role capability",
+  "production/helper": "refused: vibe lacks accepted helper role capability",
+  "production/reviewer": "refused: vibe lacks accepted reviewer role capability",
+  "production/worker": "refused: vibe lacks accepted worker role capability",
+  "require_vibe_trust": {
+    "error": "Vibe project is not persistently trusted; trust it interactively without --trust",
+    "result": "refused"
+  },
+  "synthetic_untrusted_path": "refused: Vibe project is not persistently trusted; trust it interactively without --trust",
+  "vibe/evaluator": "refused: Vibe project is not persistently trusted; trust it interactively without --trust",
+  "vibe/helper": "refused: Vibe project is not persistently trusted; trust it interactively without --trust",
+  "vibe/reviewer": "refused: Vibe project is not persistently trusted; trust it interactively without --trust",
+  "vibe/worker": "refused: Vibe project is not persistently trusted; trust it interactively without --trust"
+}
