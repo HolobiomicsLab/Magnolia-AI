@@ -150,8 +150,11 @@ def drain_queue(
         if result is None:
             unavailable.append(display)
             continue
-        if result.get("status") == "skipped" and result.get("retry") is True:
-            retryable.append(display)
+        if result.get("status") == "skipped":
+            if result.get("retry") is True:
+                retryable.append(display)
+            else:
+                unavailable.append(display)
             continue
         if commit:
             _append_done(run / "control", session, result)

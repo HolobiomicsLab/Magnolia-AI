@@ -240,10 +240,11 @@ def _print_period(label: str, period: dict) -> None:
     fields = (
         ("turns", "turns"),
         ("input_tokens", "input"),
+        ("uncached_input_tokens", "uncached-input"),
         ("output_tokens", "output"),
         ("reasoning_tokens", "reasoning"),
-        ("cached_tokens", "cache-read"),
-        ("cache_write_tokens", "cache-write"),
+        ("cache_read_tokens", "cache-read"),
+        ("cache_creation_tokens", "cache-create"),
         ("cost", "cost"),
     )
     values = " ".join(f"{shown}={_number(usage[name])}" for name, shown in fields)
@@ -265,7 +266,7 @@ def _print_groups(groups: dict) -> None:
         print(
             f"      {name}: runs={summary['runs']} input={_number(usage['input_tokens'])} "
             f"output={_number(usage['output_tokens'])} "
-            f"cache-read={_number(usage['cached_tokens'])} unknown={unknown}"
+            f"cache-read={_number(usage['cache_read_tokens'])} unknown={unknown}"
         )
 
 

@@ -51,9 +51,10 @@ def test_usage_day_week_routes_cache_and_unknowns(tmp_path):
     now = datetime.now(timezone.utc)
     env = _usage_env(tmp_path, [
         _row(when=now, key="codex", project="p-a1b2", usage={
-            "turns": 2, "input_tokens": 100, "output_tokens": 20,
-            "reasoning_tokens": None, "cached_tokens": 40,
-            "cache_write_tokens": None, "cost": None, "duration_seconds": 2,
+            "turns": 2, "input_tokens": 100, "uncached_input_tokens": 60,
+            "output_tokens": 20, "reasoning_tokens": None,
+            "cache_read_tokens": 40, "cache_creation_tokens": 5,
+            "cost": None, "duration_seconds": 2,
             "source": "codex", "completeness": "partial",
         }),
         _row(when=now - timedelta(days=2), key="vibe", project="p-c3d4", usage=None),
@@ -66,6 +67,8 @@ def test_usage_day_week_routes_cache_and_unknowns(tmp_path):
     assert "worker" in proc.stdout and "routes.worker" in proc.stdout
     assert "day" in proc.stdout and "week" in proc.stdout
     assert "cache-read=40" in proc.stdout
+    assert "uncached-input=60" in proc.stdout
+    assert "cache-create=5" in proc.stdout
     assert "unknown" in proc.stdout
 
 

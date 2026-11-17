@@ -406,6 +406,7 @@ class AutomaticMemoryExtractor:
 
     def __init__(self, project_dir: str | None = None):
         self.last_cursor: str = ""
+        self.session_retries: dict[str, dict[str, Any]] = {}
         self.state_path: Path | None = None
         if project_dir:
             self.state_path = Path(project_dir) / "extraction-state.yaml"
@@ -535,7 +536,7 @@ class AutomaticMemoryExtractor:
     def preview(self, session_path: Path) -> list[dict[str, Any]]:
         """Compute candidate learnings and return them. Saves nothing, advances
         no cursor. The read-only inspection mode."""
-        events = self._read_events(session_path)
+        events = self._extractable_events(self._read_events(session_path))
         if not events:
             return []
         return self._generate_candidates(events) or []
@@ -547,9 +548,16 @@ class AutomaticMemoryExtractor:
         commit requires a later retry. A successful zero-candidate extraction
         returns ``[]`` and advances normally.
         """
-        events = self._read_events(session_path)
+        all_events = self._read_events(session_path)
+        events = self._extractable_events(all_events)
         if not events:
             return []
+
+        retry = self.session_retries.get(session_path.name)
+        from compchem_memory.extraction_retry import retry_is_due
+
+        if not retry_is_due(retry):
+            return None
 
         store = ensure_project_store(project_dir)
         cursor_read = self._stored_cursor()
@@ -557,7 +565,18 @@ class AutomaticMemoryExtractor:
         # writer lease; the save re-validates the cursor it started from.
         candidates = self._generate_candidates(events)
         if candidates is None:
+            from compchem_memory.extraction_retry import next_retry
+
+            with project_writer_lease(project_dir):
+                if self._stored_cursor() != cursor_read:
+                    return None
+                self._load_state()
+                retry = next_retry(self.session_retries.get(session_path.name))
+                self.session_retries[session_path.name] = retry
+                self._save_state()
             distill_log.push_extraction_failure_notice(project_dir)
+            if retry["exhausted"]:
+                distill_log.push_extraction_retry_exhausted_notice(project_dir)
             return None
 
         with project_writer_lease(project_dir):
@@ -577,7 +596,8 @@ class AutomaticMemoryExtractor:
                 distill_log.append_distill_log(project_dir, quote, summary)
                 distill_log.push_distill_notice(project_dir, quote, summary)
 
-            self.last_cursor = events[-1].get("timestamp", "")
+            self.session_retries.pop(session_path.name, None)
+            self.last_cursor = all_events[-1].get("timestamp", "")
             self._save_state()
 
         return saved
@@ -597,6 +617,12 @@ class AutomaticMemoryExtractor:
             try:
                 data = yaml.safe_load(self.state_path.read_text()) or {}
                 self.last_cursor = data.get("last_cursor", "")
+                retries = data.get("session_retries", {})
+                self.session_retries = (
+                    {str(key): dict(value) for key, value in retries.items()
+                     if isinstance(value, dict)}
+                    if isinstance(retries, dict) else {}
+                )
             except (yaml.YAMLError, OSError):
                 pass
 
@@ -607,6 +633,8 @@ class AutomaticMemoryExtractor:
             "last_cursor": self.last_cursor,
             "last_extraction": datetime.now(timezone.utc).isoformat(),
         }
+        if self.session_retries:
+            state["session_retries"] = self.session_retries
         try:
             self.state_path.write_text(yaml.dump(state, default_flow_style=False))
         except OSError:
@@ -718,6 +746,12 @@ class AutomaticMemoryExtractor:
         except OSError:
             pass
         return events
+
+    @staticmethod
+    def _extractable_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop lifecycle-only rows that cannot yield a memory candidate."""
+        lifecycle = {"session_start", "session_end", "boot"}
+        return [event for event in events if event.get("event_type") not in lifecycle]
 
 
 def _link_run_ids(store: Path, candidate: dict[str, Any]) -> list[str]:

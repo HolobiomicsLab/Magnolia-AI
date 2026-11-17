@@ -1,0 +1,3 @@
+11:11:17 proxy restarted (state write fix); calls reset to 6 from log
+11:13:27 budget corrected codex=1 (guard misclassified the c2 reviewer exec as codex-other; fixed audit.py)
+11:14:19 STOP: memory extraction budget exhausted (10/10 real calls; 11th refused locally by the gate proxy at 11:13:58) before run 3 model launch

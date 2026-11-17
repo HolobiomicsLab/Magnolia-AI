@@ -34,10 +34,16 @@
       "opencode_cc_mem/docs/evidence/live2a/README.md",
       "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
       "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
-      "opencode_cc_mem/docs/evidence/live2a/run2-opencode-control.json"
+      "opencode_cc_mem/docs/evidence/live2a/run2-opencode-control.json",
+      "opencode_cc_mem/docs/evidence/live3/cont-run2-worker-codex-review.json",
+      "opencode_cc_mem/docs/evidence/live5/pass-summary.json",
+      "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+      "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+      "opencode_cc_mem/docs/evidence/live5/c3-opencode-control.json",
+      "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
     ]
   },
-  "note": "Live pass 2a re-observed all four Claude Code 2.1.326 role identities and boundaries, so those rows are current. The reviewer policy held, but first-try review validation failed on the evidence-path rule fixed by F-L3. All four Codex rows stay stale. OpenCode is the production baseline rather than a row in this alternate-client matrix: its worker passed, its reviewer reached a genuine provider quota event, and the campaign correctly entered waiting_quota without a repair retry. Vibe roles remain refused.",
+  "note": "On the final tree, all four Claude Code 2.1.326 identities remain equal to live pass 2a. Live pass 5 re-observed the Claude campaign roles and the Codex 0.169.0 worker/reviewer on their exact recorded identities, so only those two Codex rows are no longer stale. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused and deferred.",
   "rows": [
     {
       "client": "claude-code",
@@ -46,7 +52,7 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
@@ -157,7 +163,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "role": "worker",
             "source": "Claude live role gate / What was established"
@@ -166,7 +172,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -182,7 +188,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "actions": [
               "secret and recursive reads",
@@ -207,7 +213,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "effective_max_turns": 25,
             "ledger_matches_argv": true
@@ -216,7 +222,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -251,7 +257,7 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
@@ -362,7 +368,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "role": "reviewer",
             "source": "Claude live role gate / What was established"
@@ -371,7 +377,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -383,7 +389,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "actions": [
               "all edits and writes",
@@ -405,7 +411,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "effective_max_turns": 8,
             "ledger_matches_argv": true
@@ -414,7 +420,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -837,10 +843,10 @@
       "client": "codex",
       "role": "worker",
       "role_label": "worker",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
@@ -926,7 +932,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -964,7 +970,7 @@
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "entrypoint": [
               "codex",
@@ -985,7 +991,7 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "accepted": true,
             "model": "gpt-5.6-luna",
@@ -1005,19 +1011,19 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live3/cont-run2-worker-codex-review.json",
           "value": true,
           "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live3/cont-run2-worker-codex-review.json",
           "value": {
             "role": "worker",
             "source": "live pass 1 code-mode catalog and routed calls"
@@ -1026,7 +1032,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -1042,7 +1048,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "actions": [
               "secret and symlink-alias reads",
@@ -1066,7 +1072,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "effective_max_turns": 30,
             "ledger_matches_launch": true
@@ -1075,7 +1081,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
           "value": {
             "scope": "physical invocation",
             "source": "codex-exec-json",
@@ -1111,10 +1117,10 @@
       "client": "codex",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": true,
+      "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
@@ -1200,7 +1206,7 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
             "version": "0.169.0",
@@ -1238,7 +1244,7 @@
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "entrypoint": [
               "codex",
@@ -1259,7 +1265,7 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "accepted": true,
             "model": "gpt-5.6-luna",
@@ -1279,19 +1285,19 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": true,
           "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
           "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "role": "reviewer",
             "source": "live pass 1 code-mode catalog and routed calls"
@@ -1300,7 +1306,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -1312,7 +1318,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "actions": [
               "all edits and writes",
@@ -1335,7 +1341,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "effective_max_turns": 8,
             "ledger_matches_launch": true
@@ -1344,7 +1350,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
           "value": {
             "scope": "physical invocation",
             "source": "codex-exec-json",

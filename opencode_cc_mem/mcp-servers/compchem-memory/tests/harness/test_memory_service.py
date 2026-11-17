@@ -165,6 +165,14 @@ def test_service_environment_is_provider_specific_allowlist():
     assert "UNRELATED_SECRET" not in environment
 
 
+@pytest.mark.parametrize(
+    "name",
+    ("VENDOR_SPECIFIC_API_KEY", "vendor_specific_api_key", "Magnolia_Custom_Api_Key"),
+)
+def test_provider_key_name_matches_every_case_insensitive_suffix(name):
+    assert memory_service.is_provider_api_key_name(name)
+
+
 def test_managed_service_bytecode_stays_in_private_state(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()

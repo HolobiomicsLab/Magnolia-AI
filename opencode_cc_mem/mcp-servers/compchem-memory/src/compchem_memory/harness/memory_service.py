@@ -147,9 +147,7 @@ PROVIDER_API_KEY_NAMES = frozenset(
 def is_provider_api_key_name(name: str) -> bool:
     """Return whether an environment name carries a provider API key."""
     normalized = str(name).upper()
-    return normalized in PROVIDER_API_KEY_NAMES or (
-        normalized.startswith("MAGNOLIA_") and normalized.endswith("_API_KEY")
-    )
+    return normalized in PROVIDER_API_KEY_NAMES or normalized.endswith("_API_KEY")
 
 
 SERVICE_ROUTE_ENV = frozenset(

@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = ROOT / "opencode_cc_mem"
 ACCEPTANCE_DOC = PACKAGE_ROOT / "docs" / "harness-acceptance-p3-2026-11.md"
 PROTOCOL_ROOT = PACKAGE_ROOT / "tests" / "fixtures" / "campaigns" / "harness-p3"
-STATUSES = {"observed", "stub-only", "refused", "pending"}
+STATUSES = {"observed", "refused", "deferred"}
 CLIENT_ROLES = {
     (client, role)
     for client in ("opencode", "claude-code", "codex", "vibe")
