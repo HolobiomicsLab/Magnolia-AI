@@ -79,7 +79,16 @@ READ_ONLY_MEMORY_TOOLS = frozenset(
         "memory_get_goal",
     }
 )
-LEASED_READ_MEMORY_TOOLS = frozenset({"memory_get_context"})
+# Mutating tools whose body can call an LLM (directly or through extraction,
+# distillation or compaction). They are not leased as a whole: each of their
+# store writes takes the project lease for its short critical section only.
+SELF_LEASED_MEMORY_TOOLS = frozenset(
+    {
+        "memory_extract_from_session",
+        "memory_compact_session",
+        "memory_distill_session",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -174,5 +183,13 @@ def memory_tool_is_mutating(
 def memory_tool_requires_lease(
     name: str, arguments: Mapping[str, object] | None = None
 ) -> bool:
-    """Return whether a call performs durable non-append-only store writes."""
-    return memory_tool_is_mutating(name, arguments) or name in LEASED_READ_MEMORY_TOOLS
+    """Return whether a whole call runs under the project writer lease.
+
+    Short mutating tools are leased as a whole. Tools that can call an LLM lease
+    only their store writes; read tools, ``memory_get_context`` included, write
+    nothing but append-only telemetry and are never leased.
+    """
+    return (
+        memory_tool_is_mutating(name, arguments)
+        and name not in SELF_LEASED_MEMORY_TOOLS
+    )

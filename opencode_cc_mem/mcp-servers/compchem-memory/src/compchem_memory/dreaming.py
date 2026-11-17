@@ -42,6 +42,7 @@ from typing import Any, Callable
 import yaml
 
 from .atomic_io import atomic_write_text
+from .writer_lease import leased_store_writer, project_writer_lease
 from .reflex_common import parse_frontmatter_file, pending_indices
 
 VERDICTS = ("confirmed", "stale", "wrong", "unverifiable")
@@ -371,7 +372,9 @@ def propose_dreaming(
         "rejected": [],
         "dismissed": [],
     }
-    atomic_write_text(reflex / PROPOSAL_FILE, json.dumps(artifact, indent=2))
+    # The judge calls above run outside the lease; apply re-checks each hash.
+    with project_writer_lease(project_dir):
+        atomic_write_text(reflex / PROPOSAL_FILE, json.dumps(artifact, indent=2))
     return artifact
 
 
@@ -401,6 +404,7 @@ def _correction_section(proposal: dict[str, Any], checked_at: str) -> str:
     )
 
 
+@leased_store_writer
 def apply_dreaming(
     project_dir: str | Path,
     artifact: dict[str, Any] | None = None,
@@ -412,7 +416,8 @@ def apply_dreaming(
     frontmatter stamp, an append-only ``wrong`` correction, and the receipt
     log. A ``wrong`` verdict without corrected_text or evidence is never
     applied. A hash mismatch dismisses the proposal instead of mutating a file
-    that changed since the pass started.
+    that changed since the pass started. Verify, rewrite and the version commit
+    run as one short critical section under the project writer lease.
     """
     store = Path(project_dir) / ".magnolia"
     reflex = store / "reflex"

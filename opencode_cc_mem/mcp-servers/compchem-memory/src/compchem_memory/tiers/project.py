@@ -12,6 +12,7 @@ import yaml
 from compchem_memory.atomic_io import atomic_write_text
 from compchem_memory.contradictions import ConflictCandidatesError
 from compchem_memory.storage import backup_file
+from compchem_memory.writer_lease import leased_project_method
 
 
 def _keyword_score(haystack_lower: str, keyword: str) -> int:
@@ -122,6 +123,7 @@ class ProjectManager:
     def _runs_index_path(self, project_dir: str) -> Path:
         return self._runs_dir(project_dir) / "INDEX.yaml"
 
+    @leased_project_method
     def create_entry(
         self,
         project_dir: str,
@@ -343,6 +345,7 @@ class ProjectManager:
             entry.pop("_sort_date", None)
         return result[:limit]
 
+    @leased_project_method
     def confirm_staging(
         self,
         project_dir: str,
@@ -430,6 +433,7 @@ class ProjectManager:
                 return False
         return True
 
+    @leased_project_method
     def auto_promote_staging(self, project_dir: str) -> list[str]:
         """Auto-promote staging entries with observation_count >= 2, confidence >= 0.85,
         AND observed_in_sessions containing >= 2 distinct session_ids.
@@ -476,6 +480,7 @@ class ProjectManager:
                     self._notice_held_promotion(project_dir, f, e)
         return promoted
 
+    @leased_project_method
     def auto_confirm_staging(self, project_dir: str) -> dict[str, list[str]]:
         """R7 auto-confirm (2026-10-06): promote staging entries corroborated in
         >=3 distinct sessions (observation_count >= 3). Cross-session
@@ -550,6 +555,7 @@ class ProjectManager:
             ),
         )
 
+    @leased_project_method
     def bump_observation_count(
         self,
         project_dir: str,
@@ -592,6 +598,7 @@ class ProjectManager:
                 return True
         return False
 
+    @leased_project_method
     def set_parked(
         self, project_dir: str, entry_name: str, parked: bool = True
     ) -> str | None:
@@ -704,6 +711,7 @@ class ProjectManager:
             return None
         return best_match
 
+    @leased_project_method
     def record_run(
         self,
         project_dir: str,
@@ -746,6 +754,7 @@ class ProjectManager:
         self._update_runs_index(project_dir)
         return str(fpath)
 
+    @leased_project_method
     def update_run(
         self,
         project_dir: str,
@@ -770,6 +779,7 @@ class ProjectManager:
         self._update_runs_index(project_dir)
         return str(fpath)
 
+    @leased_project_method
     def upsert_run(
         self,
         project_dir: str,
@@ -832,6 +842,7 @@ class ProjectManager:
         except Exception:
             return None
 
+    @leased_project_method
     def begin_restart(
         self, project_dir: str, run_id: str, remote: dict[str, Any],
         resources: dict[str, Any] | None = None,
@@ -1125,6 +1136,7 @@ class ProjectManager:
 
     # ── Goal management ──────────────────────────────────────────────────
 
+    @leased_project_method
     def decrement_confidence_for_tool(
         self, project_dir: str, tool: str, delta: float = 0.05
     ) -> int:
@@ -1170,6 +1182,7 @@ class ProjectManager:
             return goal_path.read_text()
         return None
 
+    @leased_project_method
     def set_goal(self, project_dir: str, content: str) -> str:
         """Write or update the project goal. Returns path."""
         goal_path = self._project_store(project_dir) / "GOAL.md"
