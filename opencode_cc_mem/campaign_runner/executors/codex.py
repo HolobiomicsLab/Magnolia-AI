@@ -7,6 +7,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import tomllib
 import uuid
 from dataclasses import dataclass, field
@@ -287,24 +288,91 @@ def parse_codex_stream(
     return parsed
 
 
-def require_codex_trust(project_dir: Path, setup: Mapping[str, Any]) -> None:
-    """Read normal persisted Codex trust; never start a client or modify it."""
+def _fresh_codex_hook_rows(
+    project_dir: Path,
+    executable: Path,
+    expected_files: Mapping[Path, bytes],
+    environment: Mapping[str, str],
+) -> list[Mapping[str, Any]]:
+    """Ask Codex for current hook trust without starting a model session."""
+    governed = tuple(
+        project_dir / relative
+        for relative in (".codex/config.toml", ".codex/hooks.json")
+    )
+    before = {}
+    for path in governed:
+        expected = expected_files.get(path)
+        body = path.read_bytes()
+        if expected is None or body != expected:
+            raise ExecutorRefused("Codex project files changed before hooks/list")
+        before[path] = body
+    requests = (
+        {
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {
+                    "name": "magnolia",
+                    "title": "Magnolia",
+                    "version": "1",
+                }
+            },
+        },
+        {"method": "initialized", "params": {}},
+        {"id": 2, "method": "hooks/list", "params": {"cwds": [str(project_dir)]}},
+    )
+    try:
+        completed = subprocess.run(
+            [str(executable), "app-server", "-c", "notify=[]"],
+            input="".join(json.dumps(request) + "\n" for request in requests),
+            text=True,
+            capture_output=True,
+            cwd=project_dir,
+            env=dict(environment),
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ExecutorRefused("Codex hooks/list evidence is unavailable") from exc
+    if completed.returncode != 0:
+        raise ExecutorRefused("Codex hooks/list evidence is unavailable")
+    response = None
+    for line in completed.stdout.splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, Mapping) and value.get("id") == 2:
+            response = value
+    try:
+        rows = response["result"]["data"][0]["hooks"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise ExecutorRefused("Codex hooks/list returned invalid evidence") from exc
+    if not isinstance(rows, list):
+        raise ExecutorRefused("Codex hooks/list returned invalid evidence")
+    if any(path.read_bytes() != body for path, body in before.items()):
+        raise ExecutorRefused("Codex project files changed during hooks/list")
+    return [row for row in rows if isinstance(row, Mapping)]
+
+
+def require_codex_trust(
+    project_dir: Path,
+    setup: Mapping[str, Any],
+    executable: Path,
+    expected_files: Mapping[Path, bytes],
+    environment: Mapping[str, str],
+) -> None:
+    """Verify normal persisted trust against fresh client-produced hook rows."""
     config_path = Path(
         str(setup.get("codex_user_config_path", Path.home() / ".codex" / "config.toml"))
     )
-    rows_value = setup.get("codex_hooks_list")
-    if isinstance(rows_value, (str, Path)):
-        try:
-            rows_value = json.loads(Path(rows_value).read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError) as exc:
-            raise ExecutorRefused("cannot read persisted Codex hook trust evidence") from exc
-    rows = rows_value.get("hooks") if isinstance(rows_value, Mapping) else rows_value
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ExecutorRefused(
             "Codex project trust is absent; trust the project and review its hooks with /hooks"
         ) from exc
+    _refuse_owner_redirects(config)
     project = str(project_dir.resolve())
     projects = config.get("projects")
     entry = projects.get(project) if isinstance(projects, Mapping) else None
@@ -312,6 +380,9 @@ def require_codex_trust(project_dir: Path, setup: Mapping[str, Any]) -> None:
         raise ExecutorRefused(
             "Codex project is not normally trusted; trust it and review its hooks with /hooks"
         )
+    rows = _fresh_codex_hook_rows(
+        project_dir, executable, expected_files, environment
+    )
     state = config.get("hooks", {}).get("state", {}) if isinstance(config.get("hooks"), Mapping) else {}
     if not isinstance(rows, list) or not rows:
         raise ExecutorRefused(
@@ -386,6 +457,7 @@ class CodexExecutor:
     quota_detector: QuotaDetector | None = None
     reasoning_effort: str = "low"
     user_config_path: Path | None = None
+    trust_setup: Mapping[str, Any] = field(default_factory=dict)
     _disable_overrides: tuple[str, ...] = field(default=(), init=False, repr=False)
     _owner_config_digest: str = field(default="", init=False, repr=False)
 
@@ -458,7 +530,6 @@ class CodexExecutor:
         tool_calls = 0
         identity = self._identity(session_id)
         for attempt_index in range(retry_limit + 1):
-            self._refresh_owner_config()
             if session_id:
                 self._require_bound_session(session_id)
             admission = self._admit(attempt_index, stem, identity, control)
@@ -476,18 +547,21 @@ class CodexExecutor:
             baseline = self._usage_baseline(session_id)
             try:
                 with admission or _NoAdmission():
+                    self._verify_client_bytes()
+                    self._verify_discovered_configuration()
                     argv = self._argv(current_prompt, session_id)
                     self._verify_client_bytes()
                     _validate_final_argv(argv, role=self.role)
-                    process = run_process(
-                        argv,
-                        cwd,
-                        self.prepared.env,
-                        self.timeout_seconds,
-                        stdout_path,
-                        stderr_path,
-                        self._control(control, admission, effective_cap),
-                    )
+                    try:
+                        process = run_process(
+                            argv, cwd, self.prepared.env, self.timeout_seconds,
+                            stdout_path, stderr_path,
+                            self._control(control, admission, effective_cap),
+                        )
+                    except ProcessStartError:
+                        if admission is not None:
+                            admission._cancel_before_client_exec()
+                        raise
                     if admission is not None and not process.client_started:
                         admission._cancel_before_client_exec()
                     if process.client_started:
@@ -599,6 +673,29 @@ class CodexExecutor:
             relevant, sort_keys=True, separators=(",", ":"), default=str
         ).encode()
         self._owner_config_digest = hashlib.sha256(body).hexdigest()
+
+    def _verify_discovered_configuration(self) -> None:
+        """Recheck every mutable discovery source at the spawn boundary."""
+        self._verify_project_artifacts()
+        self._refresh_owner_config()
+        owner_digest = self._owner_config_digest
+        expected = {
+            self.prepared.discovery_dir / relative: self.prepared.files[
+                self.prepared.invocation_dir / relative
+            ]
+            for relative in (".codex/config.toml", ".codex/hooks.json")
+        }
+        require_codex_trust(
+            self.prepared.discovery_dir,
+            self.trust_setup,
+            Path(self.prepared.argv[0]),
+            expected,
+            self.prepared.env,
+        )
+        self._verify_project_artifacts()
+        self._refresh_owner_config()
+        if self._owner_config_digest != owner_digest:
+            raise ExecutorRefused("Codex owner configuration changed during discovery")
 
     def _discovered_disable_overrides(
         self, *, owner_payload: Mapping[str, Any] | None = None

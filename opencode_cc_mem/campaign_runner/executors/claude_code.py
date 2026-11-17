@@ -9,6 +9,7 @@ import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from campaign_runner.governor import (
@@ -356,19 +357,28 @@ class ClaudeCodeExecutor:
             stderr_path = attempt_dir / f"{stem}_{attempt_index + 1}.err.log"
             try:
                 with admission or _NoAdmission():
+                    from campaign_runner.launch import _refuse_claude_project_settings
+
+                    _refuse_claude_project_settings(
+                        SimpleNamespace(
+                            project_dir=self.prepared.discovery_dir,
+                            run_dir=Path(self.prepared.env["MAGNOLIA_RUN_DIR"]),
+                            work_dir=Path(self.prepared.env["MAGNOLIA_WORK_DIR"]),
+                        )
+                    )
                     argv = self._argv(current_prompt, session_id, effective_cap)
                     invocation_control = self._control(control, admission)
                     was_resumed = session_id is not None
                     self._verify_client_bytes()
-                    process = run_process(
-                        argv,
-                        cwd,
-                        self.prepared.env,
-                        self.timeout_seconds,
-                        stdout_path,
-                        stderr_path,
-                        invocation_control,
-                    )
+                    try:
+                        process = run_process(
+                            argv, cwd, self.prepared.env, self.timeout_seconds,
+                            stdout_path, stderr_path, invocation_control,
+                        )
+                    except ProcessStartError:
+                        if admission is not None:
+                            admission._cancel_before_client_exec()
+                        raise
                     if admission is not None and not process.client_started:
                         admission._cancel_before_client_exec()
                     if process.client_started:

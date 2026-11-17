@@ -645,7 +645,15 @@ def test_legacy_managed_service_without_caps_requests_idle_restart(
 ):
     monkeypatch.setattr(
         "campaign_runner.executors.registry.read_service",
-        lambda project: {"port": 4111, "running": True},
+        lambda project: {
+            "port": 4111,
+            "running": True,
+            "project_path": str(tmp_path.resolve()),
+        },
+    )
+    monkeypatch.setattr(
+        "campaign_runner.executors.registry.service_status",
+        lambda project: {"running": True},
     )
     route = _route("worker")
     context = ExecContext(
@@ -673,8 +681,13 @@ def test_managed_service_with_excess_caps_requests_idle_restart(
         lambda project: {
             "port": 4111,
             "running": True,
+            "project_path": str(tmp_path.resolve()),
             "agent_steps": {"campaign-worker": 30},
         },
+    )
+    monkeypatch.setattr(
+        "campaign_runner.executors.registry.service_status",
+        lambda project: {"running": True},
     )
     route = _route("worker")
     context = ExecContext(

@@ -244,6 +244,24 @@ def _synthetic_quota_event(*, partial="", reset_at=None):
     return event
 
 
+def test_claude_rechecks_project_settings_after_admission(tmp_path):
+    stream = _jsonl(tmp_path / "stream.jsonl", [{
+        "type": "result", "subtype": "success", "is_error": False,
+        "session_id": "late-settings", "result": "ok",
+    }])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary, config, role="helper")
+    executor = executor_for(context.route, "helper", context)
+    settings = context.project_dir / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match="settings.json"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert _calls(state) == []
+
+
 def _synthetic_quota_detector(event):
     if event.get("synthetic") is not True or event.get("subtype") != "error":
         return None

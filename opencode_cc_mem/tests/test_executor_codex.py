@@ -127,6 +127,16 @@ import json, os, pathlib, sys, time
 if sys.argv[1:] == ["--version"]:
     print("codex-cli 0.154.0")
     raise SystemExit(0)
+if sys.argv[1:2] == ["app-server"]:
+    rows = json.loads(pathlib.Path(os.environ["CODEX_STUB_HOOK_ROWS"]).read_text())
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request.get("id") == 1:
+            print(json.dumps({"id": 1, "result": {}}), flush=True)
+        elif request.get("id") == 2:
+            print(json.dumps({"id": 2, "result": {"data": [{"hooks": rows}]}}), flush=True)
+            break
+    raise SystemExit(0)
 config = json.loads(pathlib.Path(os.environ["CODEX_STUB_CONFIG"]).read_text())
 state = pathlib.Path(config["state"])
 index = len(list(state.glob("call-*.json")))
@@ -185,10 +195,16 @@ def _context(
         binary = package / "bin" / "codex-client"
         binary.parent.mkdir(parents=True)
         binary.write_text(
-            "#!/bin/sh\n"
-            "if [ \"$1\" = \"--version\" ]; then\n"
-            "  printf '%s\\n' 'codex-cli 0.154.0'\n"
-            "fi\n",
+            "#!/usr/bin/env python3\n"
+            "import json, os, pathlib, sys\n"
+            "if sys.argv[1:] == ['--version']:\n"
+            " print('codex-cli 0.154.0'); raise SystemExit(0)\n"
+            "if sys.argv[1:2] == ['app-server']:\n"
+            " rows=json.loads(pathlib.Path(os.environ['CODEX_STUB_HOOK_ROWS']).read_text())\n"
+            " for line in sys.stdin:\n"
+            "  request=json.loads(line)\n"
+            "  if request.get('id') == 1: print(json.dumps({'id':1,'result':{}}), flush=True)\n"
+            "  elif request.get('id') == 2: print(json.dumps({'id':2,'result':{'data':[{'hooks':rows}]}}), flush=True); break\n",
             encoding="utf-8",
         )
         binary.chmod(0o755)
@@ -253,6 +269,8 @@ def _context(
             "",
         ])
     trust.write_text("\n".join(trust_body))
+    hook_rows = tmp_path / "codex-hooks-list.json"
+    hook_rows.write_text(json.dumps(rows), encoding="utf-8")
     route = ResolvedRoute("codex", model, "family", "codex", role, "test")
     evidence = {
         "accepted": True, "trusted": True, "stale": False, "identity": "pending",
@@ -263,6 +281,7 @@ def _context(
         "model_isolation": {"accepted": True, "model": model, "identity": "fixture"},
     }
     environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
+    environment["CODEX_STUB_HOOK_ROWS"] = str(hook_rows)
     if stub_config is not None:
         environment["CODEX_STUB_CONFIG"] = str(stub_config)
     context = ExecContext(
@@ -1641,14 +1660,17 @@ def test_codex_refuses_each_project_native_drift(tmp_path, damage):
         executor_for(context.route, "helper", context)
 
 
-@pytest.mark.parametrize("damage", ("missing_row", "missing_hash"))
+@pytest.mark.parametrize("damage", ("missing_row", "missing_hash", "changed_hash"))
 def test_codex_required_hook_trust_fails_closed(tmp_path, damage):
     context = _context(tmp_path)
     rows = context.setup["codex_hooks_list"]
     pre_tool = next(row for row in rows if row["eventName"] == "preToolUse")
     if damage == "missing_row":
         rows.remove(pre_tool)
-    else:
+        Path(context.environment["CODEX_STUB_HOOK_ROWS"]).write_text(
+            json.dumps(rows), encoding="utf-8"
+        )
+    elif damage == "missing_hash":
         trust = Path(context.setup["codex_user_config_path"])
         body = trust.read_text()
         marker = f'[hooks.state.{json.dumps(pre_tool["key"])}]\n'
@@ -1656,6 +1678,11 @@ def test_codex_required_hook_trust_fails_closed(tmp_path, damage):
         value_start = body.index("trusted_hash", start)
         value_end = body.index("\n", value_start)
         trust.write_text(body[:value_start] + body[value_end + 1:])
+    else:
+        pre_tool["currentHash"] += "-changed-command"
+        Path(context.environment["CODEX_STUB_HOOK_ROWS"]).write_text(
+            json.dumps(rows), encoding="utf-8"
+        )
 
     with pytest.raises(ExecutorRefused, match="/hooks|trust"):
         executor_for(context.route, "helper", context)
@@ -1674,7 +1701,17 @@ def test_codex_required_hook_trust_matches_each_handler_key(tmp_path):
     rows.append(duplicate)
 
     with pytest.raises(ExecutorRefused, match="key|hooks"):
-        require_codex_trust(context.project_dir, context.setup)
+        executor_for(context.route, "helper", context)
+
+
+def test_codex_launch_produces_fresh_hook_evidence_without_setup_rows(tmp_path):
+    context = _context(tmp_path)
+    setup = dict(context.setup)
+    setup.pop("codex_hooks_list")
+
+    executor = executor_for(context.route, "helper", replace(context, setup=setup))
+
+    assert isinstance(executor, CodexExecutor)
 
 
 def test_codex_user_config_change_is_disabled_without_changing_run_identity(tmp_path):
@@ -1705,7 +1742,58 @@ def test_codex_rechecks_owner_redirect_immediately_before_spawn(tmp_path):
     with pytest.raises(ExecutorRefused, match="openai_base_url"):
         executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
 
+
+def test_codex_rechecks_project_hook_bytes_after_admission(tmp_path):
+    stream = _jsonl(tmp_path / "stream.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "turn.completed", "usage": {"input_tokens": 1}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+    hooks = context.project_dir / ".codex" / "hooks.json"
+    payload = json.loads(hooks.read_text())
+    payload["hooks"] = {}
+    hooks.write_text(json.dumps(payload) + "\n")
+
+    with pytest.raises(ExecutorRefused, match="project file|hooks/list"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
     assert _calls(state) == []
+
+
+def test_codex_cancels_preexec_failure_before_admission_exit(tmp_path, monkeypatch):
+    from campaign_runner.process import ProcessStartError
+
+    stream = _jsonl(tmp_path / "stream.jsonl", [])
+    binary, config, _state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary=binary, stub_config=config)
+    executor = executor_for(context.route, "helper", context)
+
+    class Admission:
+        effective_cap = 1
+        cancelled = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            assert self.cancelled
+
+        def _cancel_before_client_exec(self):
+            self.cancelled = True
+
+    admission = Admission()
+    monkeypatch.setattr(executor, "_admit", lambda *_args: admission)
+    monkeypatch.setattr(
+        "campaign_runner.executors.codex.run_process",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ProcessStartError("preexec")),
+    )
+
+    with pytest.raises(WorkerError, match="cannot start Codex"):
+        executor.run("prompt", context.project_dir, tmp_path / "attempt", retries=0)
+
+    assert admission.cancelled is True
 
 
 def test_codex_session_binding_records_relevant_owner_config_digest(tmp_path):

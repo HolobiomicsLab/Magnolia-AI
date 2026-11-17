@@ -283,6 +283,7 @@ def ensure_service(
         )
     record = {
         "project": project.name,
+        "project_path": str(project),
         "port": port,
         "db": db_path,
         "pid": process.pid,
