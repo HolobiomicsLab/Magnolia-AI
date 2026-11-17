@@ -2,6 +2,7 @@
 
 import json
 import re
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,6 +52,19 @@ def test_doorbell_writes_letter_and_rewrites(tmp_path, monkeypatch):
         "",
     ]
     assert letter.read_text(encoding="utf-8").endswith("metabolomics.\n\n")
+    assert stat.S_IMODE(letter.stat().st_mode) == 0o600
+
+
+def test_doorbell_title_replaces_newlines_and_control_characters():
+    now = datetime(2026, 11, 17, tzinfo=timezone.utc)
+    request = "safe title\n# Injected: value\x00after\rnext\tend\x85more\u2028again\u2029last"
+
+    letter = _letter(request, "alpha", now)
+    title = letter.splitlines()[0]
+
+    assert title == "# Task: safe title # Injected: value after next end more again last"
+    assert not re.search(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]", title)
+    assert f"## Request\n\n{request}\n\n" in letter
 
 
 def test_doorbell_appends_colliding_letters(tmp_path, monkeypatch):
