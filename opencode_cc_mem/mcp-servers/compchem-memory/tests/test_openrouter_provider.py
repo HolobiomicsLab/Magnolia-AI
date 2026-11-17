@@ -238,6 +238,9 @@ def test_invalid_provider_json_uses_default_floor_with_one_stderr_line(monkeypat
 
 def test_openrouter_session_id_is_stable_per_project_and_role(monkeypatch, tmp_path):
     _clear_provider_env(monkeypatch)
+    # resolve_project() looks at the working directory first; run from a neutral one so
+    # MAGNOLIA_PROJECT_DIR decides, wherever the suite is launched from.
+    monkeypatch.chdir(tmp_path)
     first_project = tmp_path / "LFX private project"
     second_project = tmp_path / "other project"
     first_project.mkdir()
