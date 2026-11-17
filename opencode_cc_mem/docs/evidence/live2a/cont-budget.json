@@ -1,0 +1,7 @@
+{
+  "claude": 4,
+  "nonmodel": [
+    "09:28:41 run2 opencode-serve serve --hostname 127.0.0.1"
+  ],
+  "opencode": 2
+}

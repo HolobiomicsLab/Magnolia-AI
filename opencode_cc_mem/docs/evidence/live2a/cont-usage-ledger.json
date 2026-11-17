@@ -1,0 +1,182 @@
+[
+  {
+    "actual_work": {
+      "pgid": 21370,
+      "pid": 21370,
+      "process_start_token": "ps:21370:Tue Nov 17 08:37:13 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 30,
+    "ended_at": "2026-11-17T08:37:29.139068+00:00",
+    "invocation_id": "live2a:live2a-W:worker:1:eb612ee1cdec42be885d04118a9ac07c",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live2a:live2a-W",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:37:13.635732+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "c8632f4aa933a0baf8257fdbf292ab5d5e3611c5044effa290acf0d4ac81814f",
+      "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+      "role": "worker",
+      "session_id": "<session>"
+    },
+    "started_at": "2026-11-17T08:37:13.977507+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_write_tokens": 18676,
+      "cached_tokens": 98675,
+      "completeness": "complete",
+      "cost": 0.005985250000000001,
+      "duration_seconds": 15.338838084600866,
+      "input_tokens": 8,
+      "output_tokens": 2525,
+      "reasoning_tokens": 578,
+      "source": "claude-stream-json",
+      "turns": 14
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 25851,
+      "pid": 25851,
+      "process_start_token": "ps:25851:Tue Nov 17 08:38:51 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 8,
+    "ended_at": "2026-11-17T08:39:07.664531+00:00",
+    "invocation_id": "live2a:live2a-R:reviewer:1:35ff90e6d07549b48ad11f2545572277",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live2a:live2a-R",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:38:51.330368+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "38cab66f80d6f07c28d35c1a8302dd80ed2af3f36743963d4fac2f19c3535a8d",
+      "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+      "role": "reviewer",
+      "session_id": "<session>"
+    },
+    "started_at": "2026-11-17T08:38:51.684327+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_write_tokens": 15018,
+      "cached_tokens": 67317,
+      "completeness": "complete",
+      "cost": 0.00497537,
+      "duration_seconds": 16.16466070804745,
+      "input_tokens": 6,
+      "output_tokens": 2596,
+      "reasoning_tokens": 732,
+      "source": "claude-stream-json",
+      "turns": 3
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 28110,
+      "pid": 28110,
+      "process_start_token": "ps:28110:Tue Nov 17 08:39:37 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 40,
+    "ended_at": "2026-11-17T08:39:46.348187+00:00",
+    "invocation_id": "live2a:live2a-H:helper:1:42fa5f165a8d42859344080f73a7789b",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live2a:live2a-H",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:39:37.141343+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "helper",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "dd6072a81506aa22b98b7951dd56a8d0be6b5c2445792cf3a50698ad3854f80c",
+      "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+      "role": "helper",
+      "session_id": "<session>"
+    },
+    "started_at": "2026-11-17T08:39:37.510583+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_write_tokens": 11114,
+      "cached_tokens": 13313,
+      "completeness": "complete",
+      "cost": 0.00303033,
+      "duration_seconds": 9.023009458556771,
+      "input_tokens": 4,
+      "output_tokens": 1348,
+      "reasoning_tokens": 636,
+      "source": "claude-stream-json",
+      "turns": 4
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 28651,
+      "pid": 28651,
+      "process_start_token": "ps:28651:Tue Nov 17 08:40:07 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 1,
+    "ended_at": "2026-11-17T08:40:12.060262+00:00",
+    "invocation_id": "live2a:live2a-E:evaluator:1:ec95b1970e3443ff9541b9f69b0170df",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live2a:live2a-E",
+    "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+    "reserved_at": "2026-11-17T08:40:07.512627+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "evaluator",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "282b32d78ce6ce4ebc111471b901c64f0278bcd6410ea5c729fbcfe67af47953",
+      "project_digest": "34bc59c677098c607e82081229e6344b98abb91120409aa6541c23f3a0fa0786",
+      "role": "evaluator",
+      "session_id": "<session>"
+    },
+    "started_at": "2026-11-17T08:40:07.873188+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_write_tokens": 9836,
+      "cached_tokens": 649,
+      "completeness": "complete",
+      "cost": 0.00210839,
+      "duration_seconds": 4.374557875096798,
+      "input_tokens": 2,
+      "output_tokens": 269,
+      "reasoning_tokens": 243,
+      "source": "claude-stream-json",
+      "turns": 1
+    }
+  }
+]

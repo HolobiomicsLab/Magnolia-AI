@@ -665,6 +665,9 @@ def distill_session_transcript(
         candidates = []
     distillation_failed = candidates is None
     if distillation_failed:
+        from compchem_memory import distill_log
+
+        distill_log.push_extraction_failure_notice(str(store.parent))
         return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
     _attach_transcript_origins(kept, new_msgs, ref)
@@ -804,6 +807,9 @@ def ingest_opencode_sessions(
         if candidates is None:
             # Distillation FAILED (LLM error / overflow), distinct from succeeding
             # with nothing ([]). Don't advance the cursor — retry next sweep.
+            from compchem_memory import distill_log
+
+            distill_log.push_extraction_failure_notice(str(store.parent))
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]

@@ -1,0 +1,18 @@
+{
+  "codex-config-sha": {
+    "after": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159\n28569 1794866952 -rw-------\n",
+    "identical": true
+  },
+  "opencode-manifest": {
+    "after": "80 files",
+    "identical": true
+  },
+  "opencode-share": {
+    "after": "size_kb 25952\nfiles 80\nmanifest_sha256 71cf7d5ee7c597f642571e3a0dce16dea8762e765239c48d39463b403e5bac2b\n",
+    "identical": true
+  },
+  "owner-state": {
+    "after": "== ~/.local/state/magnolia\n~/.local/state/magnolia 96 1794865991 drwx------\n~/.local/state/magnolia/bindings 64 1794868284 drwx------\n== ~/.config/magnolia\nABSENT\n== ~/.magnolia\nABSENT\n== ~/.magnolia/services\nABSENT\n",
+    "identical": true
+  }
+}

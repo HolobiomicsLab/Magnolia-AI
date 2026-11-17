@@ -307,13 +307,17 @@ class AutomaticMemoryExtractor:
             out.append(ev)
         return out
 
-    def _llm_distill(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Use LLM to extract structured knowledge from session events."""
+    def _llm_distill(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]] | None:
+        """Extract knowledge, preserving ``None`` as a retryable LLM failure."""
         events = self.stub_memory_write_events(events)
         events_json = json.dumps(events, indent=2, default=str)
         result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000,
                                disable_thinking=True)
-        if not result or not isinstance(result, list):
+        if result is None:
+            return None
+        if not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
 
@@ -453,7 +457,9 @@ class AutomaticMemoryExtractor:
             or has_significant_result(since, project_dir)
         )
 
-    def _generate_candidates(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _generate_candidates(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]] | None:
         """Shared candidate generation: LLM-first, heuristic fallback.
         Pure — reads nothing, writes nothing."""
         candidates: list[dict[str, Any]] = []
@@ -461,6 +467,8 @@ class AutomaticMemoryExtractor:
         # Try LLM-based extraction first
         if is_llm_available():
             llm_candidates = self._llm_distill(events)
+            if llm_candidates is None:
+                return None
             if llm_candidates:
                 candidates = llm_candidates
 
@@ -530,11 +538,15 @@ class AutomaticMemoryExtractor:
         events = self._read_events(session_path)
         if not events:
             return []
-        return self._generate_candidates(events)
+        return self._generate_candidates(events) or []
 
     def commit(self, session_path: Path, project_dir: str) -> list[str] | None:
-        """Compute candidate learnings, save them to staging, advance the cursor.
-        Return saved paths, or ``None`` when a concurrent commit requires retry."""
+        """Compute candidates, persist them, and advance the extraction cursor.
+
+        Return saved paths, or ``None`` when provider failure or a concurrent
+        commit requires a later retry. A successful zero-candidate extraction
+        returns ``[]`` and advances normally.
+        """
         events = self._read_events(session_path)
         if not events:
             return []
@@ -544,6 +556,9 @@ class AutomaticMemoryExtractor:
         # Candidate generation can call an LLM, so it runs outside the project
         # writer lease; the save re-validates the cursor it started from.
         candidates = self._generate_candidates(events)
+        if candidates is None:
+            distill_log.push_extraction_failure_notice(project_dir)
+            return None
 
         with project_writer_lease(project_dir):
             if self._stored_cursor() != cursor_read:
