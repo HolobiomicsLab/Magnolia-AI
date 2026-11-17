@@ -25,6 +25,13 @@ class RouteError(ValueError):
     """Raised when a role has no usable configured model."""
 
 
+class _ArgumentParser(argparse.ArgumentParser):
+    """Keep user-supplied route values out of parser diagnostics."""
+
+    def error(self, _message: str) -> None:
+        self.exit(2, f"{self.prog}: invalid command line\n")
+
+
 @dataclass(frozen=True)
 class ResolvedRoute:
     client: str
@@ -165,22 +172,26 @@ def resolve_route(role: str, inputs: Mapping[str, Any]) -> ResolvedRoute:
     return _route(selected, role, source, client, required=True)
 
 
+def load_setup(root: Path) -> dict[str, Any]:
+    """Load checkout-local route setup, treating unreadable input as absent."""
+    setup_path = root / ".magnolia" / "llm-setup.json"
+    try:
+        setup = json.loads(setup_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return setup if isinstance(setup, dict) else {}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Small launcher bridge that keeps Bash on the shared resolver."""
-    parser = argparse.ArgumentParser(prog="python -m campaign_runner.routing")
+    parser = _ArgumentParser(prog="python -m campaign_runner.routing")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--role", required=True, choices=ROLES)
     parser.add_argument("--harness")
     parser.add_argument("--model")
     parser.add_argument("--validate", action="store_true")
     args = parser.parse_args(argv)
-    setup_path = args.root / ".magnolia" / "llm-setup.json"
-    try:
-        setup = json.loads(setup_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        setup = {}
-    if not isinstance(setup, dict):
-        setup = {}
+    setup = load_setup(args.root)
     if args.validate:
         inputs = {"routes": {args.role: args.model}}
     else:

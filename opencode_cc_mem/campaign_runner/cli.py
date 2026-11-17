@@ -228,11 +228,13 @@ class CampaignRoutes:
 def resolve_campaign_routes(
     protocol: Protocol,
     *,
+    setup: Mapping[str, Any] | None = None,
     require_reviewers: bool = False,
 ) -> CampaignRoutes:
     """Resolve stage and reviewer routes before any service or client launch."""
     workers: dict[str, ResolvedRoute] = {}
     reviewers: dict[str, ResolvedRoute] = {}
+    defaults = dict(setup or {})
     worker_config = {
         "model": protocol.worker.model,
         "hard_stage_model": protocol.worker.hard_stage_model,
@@ -244,6 +246,7 @@ def resolve_campaign_routes(
             worker_route = resolve_route(
                 "worker",
                 {
+                    **defaults,
                     "worker": worker_config,
                     "stage": {"model": stage.model, "hard": stage.hard},
                     "hard": stage.hard,
@@ -254,20 +257,27 @@ def resolve_campaign_routes(
         workers[stage.id] = worker_route
         if not stage.review or not protocol.reviewer.enabled:
             continue
-        if protocol.reviewer.model is None:
-            if require_reviewers:
-                raise ProtocolError(
-                    f"stage {stage.id} reviewer route: no reviewer model configured"
-                )
-            continue
         try:
+            primary = resolve_route(
+                "reviewer",
+                {
+                    **defaults,
+                    "reviewer": {"model": protocol.reviewer.model},
+                },
+            )
+            primary_id = (
+                f"{primary.client}/{primary.model}"
+                if primary.client != "opencode"
+                else primary.model or ""
+            )
             selected = choose_reviewer_model(
                 worker_route.model or "",
-                protocol.reviewer.model,
+                primary_id,
                 protocol.reviewer.alternate_model,
             )
             reviewers[stage.id] = resolve_route(
-                "reviewer", {"reviewer": {"model": selected}}
+                "reviewer",
+                {**defaults, "reviewer": {"model": selected}},
             )
         except (ReviewError, RouteError) as exc:
             if require_reviewers:
@@ -341,7 +351,9 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         "MAGNOLIA_ROOT": str(project_dir.parents[1]),
     }
     memory_setup = _memory_setup()
-    routes = resolve_campaign_routes(protocol, require_reviewers=True)
+    routes = resolve_campaign_routes(
+        protocol, setup=memory_setup, require_reviewers=True
+    )
     service_roles = opencode_service_roles(routes)
     governor = Governor()
     governor_cap = governor.policy.max_turns_per_run
@@ -502,6 +514,8 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             distill_on_complete=getattr(args, "distill_on_complete", False),
             distill_db=database,
             quota_governor=governor,
+            worker_routes=routes.worker,
+            reviewer_routes=routes.reviewer,
         ),
     )
 

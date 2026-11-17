@@ -150,11 +150,49 @@ def test_usage_and_errors_never_print_keys(tmp_path):
     env["OPENAI_API_KEY"] = sentinel
 
     report = run_raw(ws, ["usage"], env=env)
-    error = run_raw(ws, ["usage", "resume", sentinel], env=env)
+    errors = [
+        run_raw(ws, ["usage", sentinel], env=env),
+        run_raw(ws, ["usage", "resume", sentinel], env=env),
+        run_raw(ws, ["usage", "resume", "codex", sentinel], env=env),
+        run_raw(ws, ["setup", f"--{sentinel}", PROJECT], env=env),
+        run_raw(ws, ["setup", "--route", sentinel, PROJECT], env=env),
+        run_raw(
+            ws,
+            ["setup", "--harness", "claude", "--model", sentinel, PROJECT],
+            env={**env, "STUB_SAY": "wrong", "STUB_EXIT": "1"},
+        ),
+    ]
 
     assert report.returncode == 0, report.stderr
-    assert error.returncode == 1
-    assert sentinel not in report.stdout + report.stderr + error.stdout + error.stderr
+    assert all(error.returncode == 1 for error in errors)
+    output = report.stdout + report.stderr + "".join(
+        error.stdout + error.stderr for error in errors
+    )
+    assert sentinel not in output
+
+
+def test_usage_report_creates_no_state_or_lock_file(tmp_path):
+    ws = make_workspace(tmp_path)
+    state = tmp_path / "fresh-state"
+    config = tmp_path / "fresh-config"
+
+    proc = run_raw(ws, ["usage"], env={
+        "XDG_STATE_HOME": str(state),
+        "XDG_CONFIG_HOME": str(config),
+    })
+
+    assert proc.returncode == 0, proc.stderr
+    assert not list(state.rglob("*"))
+
+
+def test_usage_help_includes_key_sharing_text(tmp_path):
+    ws = make_workspace(tmp_path)
+
+    proc = run_raw(ws, ["usage", "-h"])
+
+    assert proc.returncode == 0, proc.stderr
+    assert "Two logins of one client share a key" in proc.stdout
+    assert "per OS user" in proc.stdout
 
 
 def test_policy_uses_optional_client_native_budgets(tmp_path):

@@ -190,6 +190,14 @@ def test_launch_help_accepts_all_named_clients():
     assert exit_info.value.code == 0
 
 
+@pytest.mark.parametrize("command", ("route", "validate-route"))
+def test_harness_cli_has_no_duplicate_route_subcommands(command, capsysbinary):
+    assert launch_cli.main([command]) == 1
+    captured = capsysbinary.readouterr()
+    assert captured.out == b""
+    assert captured.err == b"invalid command line\n"
+
+
 def test_launch_escapes_real_template_substitutions(tmp_path, monkeypatch, capsysbinary):
     root = _root(tmp_path)
     renderer = FakeRenderer()
@@ -319,7 +327,7 @@ def test_argparse_error_is_one_stderr_line_and_exit_one(capsysbinary):
     captured = capsysbinary.readouterr()
 
     assert captured.out == b""
-    assert captured.err.startswith(b"argument command: invalid choice: 'unknown'")
+    assert captured.err == b"invalid command line\n"
     assert captured.err.endswith(b"\n")
     assert captured.err.count(b"\n") == 1
 
