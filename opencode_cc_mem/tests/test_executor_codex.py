@@ -17,6 +17,7 @@ from campaign_runner.executors.codex import (
     CodexExecutor,
     REQUIRED_FEATURES,
     RESTRICTED_FEATURES,
+    _fresh_codex_hook_rows,
     _relevant_owner_config,
     _validate_final_argv,
     parse_codex_stream,
@@ -178,6 +179,50 @@ raise SystemExit(config["returncodes"][index])
         "entrypoint": "bin/codex-stub",
     }))
     return binary, config, state
+
+
+def _hook_stub(tmp_path: Path, behavior: str) -> Path:
+    """Create an app-server stub with selectable hooks/list timing."""
+    binary = tmp_path / f"codex-hooks-{behavior}"
+    binary.write_text(
+        """#!/usr/bin/env python3
+import json, os, select, sys, time
+behavior = os.environ["HOOK_STUB_BEHAVIOR"]
+for line in sys.stdin:
+    request = json.loads(line)
+    if request.get("id") == 1:
+        print(json.dumps({"id": 1, "result": {}}), flush=True)
+    if request.get("id") != 2:
+        continue
+    if behavior == "needs-open-stdin":
+        readable, _, _ = select.select([sys.stdin], [], [], 0.2)
+        if readable and sys.stdin.read(1) == "":
+            raise SystemExit(0)
+    elif behavior == "hang":
+        time.sleep(60)
+    print(json.dumps({"id": 2, "result": {"data": [{"hooks": [{"key": "ok"}]}]}}), flush=True)
+    break
+""",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    return binary
+
+
+def _probe_hook_rows(tmp_path: Path, behavior: str):
+    project = tmp_path / behavior
+    config = project / ".codex" / "config.toml"
+    hooks = project / ".codex" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    config.write_text('model = "fixture"\n', encoding="utf-8")
+    hooks.write_text('{"hooks": {}}\n', encoding="utf-8")
+    expected = {config: config.read_bytes(), hooks: hooks.read_bytes()}
+    return _fresh_codex_hook_rows(
+        project,
+        _hook_stub(tmp_path, behavior),
+        expected,
+        {"PATH": os.environ.get("PATH", ""), "HOOK_STUB_BEHAVIOR": behavior},
+    )
 
 
 def _event_name(native: str) -> str:
@@ -1030,7 +1075,7 @@ def test_codex_x7_evaluator_cap_one_succeeds_through_run(tmp_path):
     assert result.final_text == "EVAL-OK 4"
     assert result.attempts == 1
     (call,) = _calls(state)
-    assert call["client_env"] == PASSTHROUGH_ENV
+    assert call["client_env"] == {}
     assert call["role"] == "evaluator"
 
 
@@ -1728,6 +1773,20 @@ def test_codex_launch_produces_fresh_hook_evidence_without_setup_rows(tmp_path):
     executor = executor_for(context.route, "helper", replace(context, setup=setup))
 
     assert isinstance(executor, CodexExecutor)
+
+
+@pytest.mark.parametrize("behavior", ("answers", "needs-open-stdin"))
+def test_codex_hooks_list_keeps_stdin_open_until_response(tmp_path, behavior):
+    assert _probe_hook_rows(tmp_path, behavior) == [{"key": "ok"}]
+
+
+def test_codex_hooks_list_timeout_fails_closed_and_reaps(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "campaign_runner.executors.codex.CODEX_HOOK_LIST_TIMEOUT_SECONDS", 0.05
+    )
+
+    with pytest.raises(ExecutorRefused, match="timed out"):
+        _probe_hook_rows(tmp_path, "hang")
 
 
 def test_codex_user_config_change_is_disabled_without_changing_run_identity(tmp_path):

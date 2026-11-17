@@ -20,7 +20,9 @@ from campaign_runner.executors.capabilities import (
     project_role_capabilities,
 )
 from campaign_runner.executors.codex import CodexExecutor
+from campaign_runner.executors.opencode import OpenCodeHelperExecutor
 from campaign_runner.launch import (
+    _effective_environment,
     _hook_source_digest,
     configuration_identity,
     prepare_launch,
@@ -28,6 +30,7 @@ from campaign_runner.launch import (
 from campaign_runner.routing import ResolvedRoute
 from compchem_memory.harness import RENDERERS
 from compchem_memory.harness import memory_service
+from compchem_memory.harness.memory_service import PROVIDER_KEYS
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.hook.doorbell import process_prompt
@@ -59,6 +62,17 @@ PASSTHROUGH_CLIENT_ENV = {
     "MAGNOLIA_CRITIC_API_KEY": "MAGNOLIA-CRITIC-KEY-SENTINEL",
 }
 PARENT_CLIENT_ENV = {**STRIPPED_CLIENT_ENV, **PASSTHROUGH_CLIENT_ENV}
+ALL_PROVIDER_KEYS = {
+    name: f"{name}-SENTINEL"
+    for names in PROVIDER_KEYS.values()
+    for name in names
+}
+ALL_PROVIDER_KEYS.update(
+    {
+        "MAGNOLIA_CRITIC_API_KEY": "MAGNOLIA-CRITIC-SENTINEL",
+        "MAGNOLIA_EXPERIMENT_API_KEY": "MAGNOLIA-EXPERIMENT-SENTINEL",
+    }
+)
 ROOT = Path(__file__).parents[1]
 ISOLATED_MEMORY_ARGS = [
     "-I",
@@ -935,13 +949,51 @@ def test_effective_environment_strips_only_client_credentials(tmp_path, client):
         assert name not in resumed.env
         assert sentinel not in combined
     for name, sentinel in PASSTHROUGH_CLIENT_ENV.items():
-        if client == "claude-code":
-            assert name not in launch.env
-            assert name not in resumed.env
-        else:
-            assert launch.env[name] == sentinel
-            assert resumed.env[name] == sentinel
+        assert name not in launch.env
+        assert name not in resumed.env
+        assert sentinel not in combined
     assert all(path.stat().st_mode & 0o222 == 0 for path in launch.files)
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+@pytest.mark.parametrize("transport", ("none", "stdio", "http", "managed"))
+def test_subscription_client_never_receives_provider_api_keys(
+    tmp_path, client, role, transport
+):
+    service = {
+        "none": {},
+        "stdio": {"transport": "stdio"},
+        "http": {"transport": "http"},
+        "managed": {"transport": "managed"},
+    }[transport]
+    context = _context(tmp_path, client=client)
+    context = replace(
+        context,
+        role=role,
+        memory_service=service,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            **ALL_PROVIDER_KEYS,
+        },
+    )
+
+    environment = _effective_environment(
+        context,
+        tmp_path / "policy.json",
+        "policy-digest",
+    )
+
+    assert not (set(ALL_PROVIDER_KEYS) & set(environment))
+
+
+def test_opencode_api_client_keeps_provider_api_keys():
+    executor = OpenCodeHelperExecutor("opencode", "provider/model")
+
+    environment = executor.environment_with_cap(ALL_PROVIDER_KEYS)
+
+    assert set(ALL_PROVIDER_KEYS) <= set(environment)
 
 
 @pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
@@ -956,7 +1008,7 @@ def test_inherited_forbidden_value_cannot_survive_under_other_name(
         renderer_env={"COPIED_VALUE": sentinel},
     )
 
-    if name.startswith("ANTHROPIC_"):
+    if name == "ANTHROPIC_AUTH_TOKEN":
         with pytest.raises(ExecutorRefused, match=name):
             prepare_launch(context)
     else:
@@ -967,7 +1019,11 @@ def test_inherited_forbidden_value_cannot_survive_under_other_name(
 
 @pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
 def test_forbidden_value_in_argv_is_refused(tmp_path, name):
-    message = name if name.startswith("ANTHROPIC_") else "forbidden client environment"
+    message = (
+        name
+        if name in ALL_PROVIDER_KEYS or name.startswith("ANTHROPIC_")
+        else "forbidden client environment"
+    )
     with pytest.raises(ExecutorRefused, match=message):
         prepare_launch(
             _context(

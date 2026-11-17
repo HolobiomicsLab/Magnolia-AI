@@ -17,6 +17,10 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from compchem_memory.harness.neutral import NeutralConfig
+from compchem_memory.harness.memory_service import (
+    PROVIDER_API_KEY_NAMES,
+    is_provider_api_key_name,
+)
 from compchem_memory.harness.ownership import is_magnolia_hook_command, parse_hook_command
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.harness.render_claude import (
@@ -95,23 +99,7 @@ CLAUDE_REDIRECT_ENV = frozenset(
         "NODE_OPTIONS",
     }
 )
-MEMORY_PROVIDER_ENV = frozenset(
-    {
-        "MAGNOLIA_LLM_API_KEY",
-        "MAGNOLIA_CRITIC_API_KEY",
-        "DEEPSEEK_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "MAGNOLIA_OPENAI_API_KEY",
-        "OPENAI_API_KEY",
-        "KIMI_PLAN_MAGNOLIA_API_KEY",
-        "KIMI_API_KEY",
-        "OPENROUTER_API_KEY",
-        "MAGNOLIA_MISTRAL_API_KEY",
-        "MISTRAL_API_KEY",
-        "ZHIPU_API_KEY",
-        "ZAI_API_KEY",
-    }
-)
+MEMORY_PROVIDER_ENV = PROVIDER_API_KEY_NAMES
 DEFAULT_GOVERNOR_CAP = 60
 CODEX_MCP_STARTUP_TIMEOUT_SECONDS = 30
 ROLE_CONFIG_NAMES = {
@@ -1523,7 +1511,9 @@ def _validate_memory_service(context: ExecContext, service: Mapping[str, Any]) -
     env_vars = service.get("env_vars", ())
     if isinstance(env_vars, (list, tuple)):
         dependencies.extend(str(value) for value in env_vars)
-        provider_keys = sorted(set(str(value) for value in env_vars) & MEMORY_PROVIDER_ENV)
+        provider_keys = sorted(
+            str(value) for value in env_vars if is_provider_api_key_name(str(value))
+        )
         if provider_keys:
             raise ExecutorRefused(
                 "filtered provider credential cannot enter the client environment: "
@@ -1617,7 +1607,10 @@ def _effective_environment(
                 name
                 for name in (*inherited, *context.renderer_env)
                 if name in CLAUDE_REDIRECT_ENV
-                or name.startswith("ANTHROPIC_")
+                or (
+                    name.startswith("ANTHROPIC_")
+                    and not is_provider_api_key_name(name)
+                )
                 or (
                     name.startswith("CLAUDE_CODE_")
                     and name != "CLAUDE_CODE_OAUTH_TOKEN"
@@ -1679,9 +1672,10 @@ def _effective_environment(
                 )
             }
         )
-    if context.memory_service.get("transport") == "http":
-        for name in MEMORY_PROVIDER_ENV:
-            env.pop(name, None)
+    if context.route.client in {"claude-code", "codex", "vibe"}:
+        for name in tuple(env):
+            if is_provider_api_key_name(name):
+                env.pop(name)
     if protected_names is not None:
         protected_names.update(
             str(name) for name in context.renderer_env if str(name) in env
@@ -2003,6 +1997,11 @@ def _reject_forbidden_data(
 ) -> None:
     """Refuse filtered names or whole credential tokens in launch outputs."""
     inherited = os.environ if context.environment is None else context.environment
+    provider_values = {
+        (str(name), str(value))
+        for name, value in inherited.items()
+        if value and is_provider_api_key_name(str(name))
+    }
     values = {
         (name, str(inherited[name]))
         for name in FORBIDDEN_CLIENT_ENV
@@ -2010,8 +2009,21 @@ def _reject_forbidden_data(
     }
     destinations = [*context.launch_argv, *env.keys(), *env.values()]
     destinations.extend(body.decode("utf-8", errors="replace") for body in bodies)
-    if any(_contains_token(destination, name) for destination in destinations for name in FORBIDDEN_CLIENT_ENV):
+    forbidden_names = FORBIDDEN_CLIENT_ENV | frozenset(
+        name for name, _value in provider_values
+    )
+    if any(
+        _contains_token(destination, name)
+        for destination in destinations
+        for name in forbidden_names
+    ):
         raise ExecutorRefused("forbidden client environment name in launch contract")
+    for name, value in provider_values:
+        if any(value in destination for destination in destinations):
+            raise ExecutorRefused(
+                "forbidden client environment value in launch contract: "
+                f"{name} provider credential leaked"
+            )
     if any(
         _contains_value(destination, value, is_path=name in FORBIDDEN_PATH_ENV)
         for destination in destinations

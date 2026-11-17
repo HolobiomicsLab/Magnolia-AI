@@ -6,8 +6,10 @@ import hashlib
 import json
 import os
 import re
+import selectors
 import stat
 import subprocess
+import time
 import tomllib
 import uuid
 from dataclasses import dataclass, field
@@ -143,6 +145,7 @@ RESTRICTED_FEATURES = (
     "view_image",
     "wake_on_agent_messages",
 )
+CODEX_HOOK_LIST_TIMEOUT_SECONDS = 15.0
 ISOLATION_OVERRIDES = (
     'web_search="disabled"',
     "sandbox_workspace_write.network_access=false",
@@ -288,6 +291,99 @@ def parse_codex_stream(
     return parsed
 
 
+def _stop_app_server(process: subprocess.Popen[bytes]) -> None:
+    """Close app-server input and ensure the child is reaped."""
+    if process.stdin is not None and not process.stdin.closed:
+        process.stdin.close()
+    if process.poll() is not None:
+        process.wait()
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=0.5)
+
+
+def _read_json_rpc_response(
+    process: subprocess.Popen[bytes], response_id: int, deadline: float
+) -> Mapping[str, Any] | None:
+    """Read one JSON-RPC response while keeping app-server stdin open."""
+    assert process.stdout is not None
+    assert process.stderr is not None
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ, True)
+    selector.register(process.stderr, selectors.EVENT_READ, False)
+    stdout_buffer = bytearray()
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(process.args, 0)
+            ready = selector.select(remaining)
+            if not ready:
+                raise subprocess.TimeoutExpired(process.args, 0)
+            for key, _events in ready:
+                chunk = os.read(key.fileobj.fileno(), 65_536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                if not key.data:
+                    continue
+                stdout_buffer.extend(chunk)
+                while b"\n" in stdout_buffer:
+                    raw_line, _, remainder = stdout_buffer.partition(b"\n")
+                    stdout_buffer = bytearray(remainder)
+                    try:
+                        value = json.loads(raw_line)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        continue
+                    if isinstance(value, Mapping) and value.get("id") == response_id:
+                        return value
+        return None
+    finally:
+        selector.close()
+
+
+def _query_codex_hooks(
+    project_dir: Path,
+    executable: Path,
+    environment: Mapping[str, str],
+    requests: tuple[Mapping[str, Any], ...],
+) -> Mapping[str, Any] | None:
+    """Send hooks/list without signaling EOF until Codex has answered."""
+    process: subprocess.Popen[bytes] | None = None
+    deadline = time.monotonic() + CODEX_HOOK_LIST_TIMEOUT_SECONDS
+    try:
+        process = subprocess.Popen(
+            [str(executable), "app-server", "-c", "notify=[]"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=project_dir,
+            env=dict(environment),
+        )
+        assert process.stdin is not None
+        payload = "".join(json.dumps(request) + "\n" for request in requests)
+        process.stdin.write(payload.encode())
+        process.stdin.flush()
+        response = _read_json_rpc_response(process, 2, deadline)
+        process.stdin.close()
+        process.stdin = None
+        process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        if process.returncode != 0:
+            raise ExecutorRefused("Codex hooks/list evidence is unavailable")
+        return response
+    except subprocess.TimeoutExpired as exc:
+        raise ExecutorRefused("Codex hooks/list timed out") from exc
+    except OSError as exc:
+        raise ExecutorRefused("Codex hooks/list evidence is unavailable") from exc
+    finally:
+        if process is not None:
+            _stop_app_server(process)
+
+
 def _fresh_codex_hook_rows(
     project_dir: Path,
     executable: Path,
@@ -321,29 +417,7 @@ def _fresh_codex_hook_rows(
         {"method": "initialized", "params": {}},
         {"id": 2, "method": "hooks/list", "params": {"cwds": [str(project_dir)]}},
     )
-    try:
-        completed = subprocess.run(
-            [str(executable), "app-server", "-c", "notify=[]"],
-            input="".join(json.dumps(request) + "\n" for request in requests),
-            text=True,
-            capture_output=True,
-            cwd=project_dir,
-            env=dict(environment),
-            timeout=15,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ExecutorRefused("Codex hooks/list evidence is unavailable") from exc
-    if completed.returncode != 0:
-        raise ExecutorRefused("Codex hooks/list evidence is unavailable")
-    response = None
-    for line in completed.stdout.splitlines():
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, Mapping) and value.get("id") == 2:
-            response = value
+    response = _query_codex_hooks(project_dir, executable, environment, requests)
     try:
         rows = response["result"]["data"][0]["hooks"]
     except (KeyError, IndexError, TypeError) as exc:

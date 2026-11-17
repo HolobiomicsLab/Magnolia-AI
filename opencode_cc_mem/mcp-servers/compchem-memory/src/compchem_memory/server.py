@@ -14,6 +14,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+
+def _project_bound_role_mode() -> bool:
+    """Return whether this server is restricted to one campaign role."""
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1":
+        return True
+    return "--tool-allowlist-json" in sys.argv[1:]
+
+
+def _default_opencode_db_path() -> Path:
+    """Resolve OpenCode's default database under the XDG data directory."""
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if data_home:
+        return Path(data_home).expanduser() / "opencode" / "opencode.db"
+    return Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+
+
 def _newest_session_main_model(db_path: str | None = None) -> dict | None:
     """Read-only probe of the shared opencode DB: the newest session's main
     model. Stamped onto boot-timing 'total' rows so launch latency can be
@@ -24,10 +40,13 @@ def _newest_session_main_model(db_path: str | None = None) -> dict | None:
     try:
         import sqlite3
         from compchem_memory import opencode_cli
+        if not db_path:
+            db_path = os.environ.get("OPENCODE_DB")
+        if not db_path and _project_bound_role_mode():
+            return None
         if not db_path and opencode_cli.is_v2():
             db_path = opencode_cli.v2_db_path()
-        db = Path(db_path) if db_path else (
-            Path.home() / ".local" / "share" / "opencode" / "opencode.db")
+        db = Path(db_path) if db_path else _default_opencode_db_path()
         if not db.exists():
             return None
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
