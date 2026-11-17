@@ -484,17 +484,56 @@ def test_memory_service_does_not_reuse_changed_runtime_route(tmp_path, monkeypat
     first = memory_service.ensure_memory_service(_context(project))
     changed = _context(project)
     changed.setup["memory_model"] = "changed-model"
-    second = memory_service.ensure_memory_service(changed)
 
-    assert len(started) == 2
-    assert first.service_identity != second.service_identity
-    assert stopped == [(4101, "ps:4101:first")]
+    with pytest.raises(ExecutorRefused, match="runtime.*live holder"):
+        memory_service.ensure_memory_service(changed)
+
+    assert len(started) == 1
+    assert stopped == []
     record = json.loads(
         (memory_service.private_state_dir(project) / "service.json").read_text()
     )
     assert len(record["runtime_digest"]) == 64
     assert "provider-secret" not in json.dumps(record)
-    assert memory_service.release_memory_service(second) is True
+    assert memory_service.release_memory_service(first) is True
+    assert stopped == [(4101, "ps:4101:first")]
+
+
+def test_runtime_fingerprint_ignores_process_environment_noise():
+    route = {
+        "PATH": "/first/bin",
+        "TMPDIR": "/first/tmp",
+        "MAGNOLIA_MEMORY_PROVIDER": "openai",
+        "MAGNOLIA_MEMORY_MODEL": "model",
+        "OPENAI_API_KEY": "secret",
+    }
+    noisy = dict(route, PATH="/second/bin", TMPDIR="/second/tmp")
+
+    assert memory_service.service_environment_digest(route) == (
+        memory_service.service_environment_digest(noisy)
+    )
+    assert memory_service.service_environment_digest(route) != (
+        memory_service.service_environment_digest(dict(route, OPENAI_API_KEY="rotated"))
+    )
+
+
+def test_pre_fingerprint_service_with_live_holder_is_not_replaced(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    started, stopped = _stub_runtime(monkeypatch)
+    _healthy_for(monkeypatch, project, started)
+    first = memory_service.ensure_memory_service(_context(project))
+    state = memory_service.private_state_dir(project)
+    record = json.loads((state / "service.json").read_text(encoding="utf-8"))
+    record.pop("runtime_digest")
+    memory_service._write_record(state, record)
+
+    with pytest.raises(ExecutorRefused, match="runtime.*live holder"):
+        memory_service.ensure_memory_service(_context(project))
+
+    assert len(started) == 1
+    assert stopped == []
+    assert memory_service.release_memory_service(first) is True
 
 
 def test_different_allowlists_get_independent_live_services(tmp_path, monkeypatch):

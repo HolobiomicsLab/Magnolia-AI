@@ -19,6 +19,7 @@ from compchem_memory.writer_lease import holds_any_project_writer_lease
 # .handover-state.md is tracked since 2026-09-16: the merge ages items out
 # (Done cap, stale expiry), and drops must stay recoverable from git.
 _GITIGNORE = "/*\n!/.gitignore\n!/entries/\n!/staging/\n!/.handover-state.md\n"
+GIT_TIMEOUT_SECONDS = 30.0
 
 
 def _git(store: Path, *args: str) -> subprocess.CompletedProcess:
@@ -26,10 +27,19 @@ def _git(store: Path, *args: str) -> subprocess.CompletedProcess:
         raise RuntimeError("git subprocess refused while the project writer lease is held")
     # check=False is intentional: git failures (e.g. git missing) surface to the
     # caller via is_repo()/exit codes rather than raising mid-operation.
-    return subprocess.run(
-        ["git", "-C", str(store), *args],
-        capture_output=True, text=True, stdin=subprocess.DEVNULL,
-    )
+    try:
+        return subprocess.run(
+            ["git", "-C", str(store), *args],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        operation = args[0] if args else "command"
+        raise RuntimeError(
+            f"git {operation} timed out after {GIT_TIMEOUT_SECONDS:g} seconds"
+        ) from exc
 
 
 def is_repo(store: str | Path) -> bool:

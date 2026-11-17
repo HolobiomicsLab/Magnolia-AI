@@ -1,8 +1,25 @@
 # tests/test_versioning.py
-from pathlib import Path
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from compchem_memory import versioning
+
+
+def test_git_subprocess_timeout_is_bounded_and_visible(tmp_path, monkeypatch):
+    observed = {}
+
+    def timeout(*args, **kwargs):
+        observed.update(kwargs)
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(versioning.subprocess, "run", timeout)
+
+    with pytest.raises(RuntimeError, match="git init timed out"):
+        versioning._git(tmp_path, "init", "-q")
+
+    assert observed["timeout"] == versioning.GIT_TIMEOUT_SECONDS
 
 
 def _git(store, *args):

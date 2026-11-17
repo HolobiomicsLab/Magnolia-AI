@@ -259,8 +259,17 @@ class ControlStore:
             changed = self.conn.execute(
                 "UPDATE eval_waiters SET state = 'running', updated_at = ?, "
                 "owner_pid = ?, owner_start_token = ? "
-                "WHERE waiter_id = ? AND state IN ('pending', 'running')",
-                (now, owner_pid, owner_token, waiter_id),
+                "WHERE waiter_id = ? AND state = ? "
+                "AND owner_pid IS ? AND owner_start_token IS ?",
+                (
+                    now,
+                    owner_pid,
+                    owner_token,
+                    waiter_id,
+                    row["state"],
+                    row.get("owner_pid"),
+                    row.get("owner_start_token"),
+                ),
             )
             return row if changed.rowcount == 1 else None
 

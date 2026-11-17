@@ -135,6 +135,30 @@ PROVIDER_KEYS = {
     "mistral": ("MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
     "zai": ("ZHIPU_API_KEY", "ZAI_API_KEY"),
 }
+SERVICE_ROUTE_ENV = frozenset(
+    {
+        "ANTHROPIC_BASE_URL",
+        "DEEPSEEK_BASE_URL",
+        "KIMI_BASE_URL",
+        "MAGNOLIA_CRITIC_BASE_URL",
+        "MAGNOLIA_CRITIC_MODEL",
+        "MAGNOLIA_CRITIC_PROVIDER",
+        "MAGNOLIA_DIRECT_FALLBACK_MODEL",
+        "MAGNOLIA_DIRECT_FALLBACK_PROVIDER",
+        "MAGNOLIA_LLM_MODEL",
+        "MAGNOLIA_LLM_PROVIDER",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_OPENROUTER_PROVIDER",
+        "MAGNOLIA_OPENROUTER_STICKY",
+        "MISTRAL_BASE_URL",
+        "OPENAI_BASE_URL",
+        "OPENCODE_DB",
+        "OPENROUTER_BASE_URL",
+        "ZAI_BASE_URL",
+        *(name for names in PROVIDER_KEYS.values() for name in names),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -210,9 +234,13 @@ def tool_allowlist_digest(tool_allowlist: Sequence[str]) -> str:
 
 
 def service_environment_digest(environment: Mapping[str, str]) -> str:
-    """Fingerprint the exact secret-bearing runtime without storing its values."""
+    """Fingerprint route selectors and credentials without storing their values."""
     body = json.dumps(
-        sorted((str(key), str(value)) for key, value in environment.items()),
+        sorted(
+            (str(key), str(value))
+            for key, value in environment.items()
+            if key in SERVICE_ROUTE_ENV
+        ),
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(body).hexdigest()
@@ -261,6 +289,11 @@ def ensure_memory_service(
             )
             if handle is not None:
                 return handle
+            if _has_live_holder(record.get("holders", [])):
+                raise ExecutorRefused(
+                    "existing memory service still has a live holder; "
+                    "refusing unsafe replacement"
+                )
             _discard_record(record, state, project_digest(project))
         return _start_service(
             context,
@@ -498,6 +531,11 @@ def _reuse(
     if tuple(record.get("tool_allowlist", ())) != expected_tools:
         return None
     if runtime_digest is not None and record.get("runtime_digest") != runtime_digest:
+        if _active_holders(record.get("holders", [])):
+            raise ExecutorRefused(
+                "memory service runtime differs while a live holder remains; "
+                "refusing acquisition without stopping the active service"
+            )
         return None
     if token_file != (state / "bearer-token").resolve():
         return None
@@ -818,6 +856,14 @@ def _active_holders(value: Any) -> list[dict[str, Any]]:
             continue
         active.append(holder)
     return active
+
+
+def _has_live_holder(value: Any) -> bool:
+    """Return whether a record names at least one verified-live holder."""
+    return isinstance(value, list) and any(
+        isinstance(holder, dict) and _holder_liveness(holder) == "live"
+        for holder in value
+    )
 
 
 def _handle_matches(handle: ServiceHandle, record: Any) -> bool:
