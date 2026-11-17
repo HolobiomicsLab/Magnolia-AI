@@ -289,7 +289,14 @@ def ensure_memory_service(
             )
             if handle is not None:
                 return handle
-            if _has_live_holder(record.get("holders", [])):
+            # Only a complete record whose service process is verifiably alive
+            # protects live holders. A provisional record was never handed out,
+            # and holders of a dead service hold nothing, so both are replaced.
+            if (
+                record.get("provisional") is not True
+                and _service_process_matches(record)
+                and _has_live_holder(record.get("holders", []))
+            ):
                 raise ExecutorRefused(
                     "existing memory service still has a live holder; "
                     "refusing unsafe replacement"
@@ -531,7 +538,7 @@ def _reuse(
     if tuple(record.get("tool_allowlist", ())) != expected_tools:
         return None
     if runtime_digest is not None and record.get("runtime_digest") != runtime_digest:
-        if _active_holders(record.get("holders", [])):
+        if _active_holders(record.get("holders", [])) and _service_process_matches(record):
             raise ExecutorRefused(
                 "memory service runtime differs while a live holder remains; "
                 "refusing acquisition without stopping the active service"

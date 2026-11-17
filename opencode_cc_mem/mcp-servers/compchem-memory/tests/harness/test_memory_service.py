@@ -536,6 +536,44 @@ def test_pre_fingerprint_service_with_live_holder_is_not_replaced(tmp_path, monk
     assert memory_service.release_memory_service(first) is True
 
 
+def test_dead_service_with_recorded_live_holder_is_replaced(tmp_path, monkeypatch):
+    """A holder whose service died holds nothing, so replacement is safe (fix-N m7)."""
+    project = tmp_path / "project"
+    project.mkdir()
+    identities = {
+        os.getpid(): f"ps:{os.getpid()}:test-launcher",
+        4101: "ps:4101:first",
+    }
+    started, stopped = _stub_runtime(monkeypatch, identities)
+    monkeypatch.setattr(
+        memory_service,
+        "_health",
+        lambda url, token, timeout=2.0: {
+            "project_digest": memory_service.project_digest(project),
+            "process_identity": identities.get(4101),
+            "service_identity": started[-1][1]["MAGNOLIA_MEMORY_SERVICE_IDENTITY"],
+        },
+    )
+    first = memory_service.ensure_memory_service(_context(project))
+    assert first is not None
+    identities.pop(4101)  # the service died; the first holder is still alive
+    real_start = memory_service._start_process
+
+    def restart(argv, cwd, environment, log_path):
+        identities[4101] = "ps:4101:second"
+        return real_start(argv, cwd, environment, log_path)
+
+    monkeypatch.setattr(memory_service, "_start_process", restart)
+    changed = _context(project)
+    changed.setup["memory_model"] = "changed-model"
+
+    second = memory_service.ensure_memory_service(changed)
+
+    assert second is not None
+    assert len(started) == 2
+    assert stopped == []
+
+
 def test_different_allowlists_get_independent_live_services(tmp_path, monkeypatch):
     project = tmp_path / "project"
     project.mkdir()
