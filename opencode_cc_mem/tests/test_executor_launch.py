@@ -2926,3 +2926,323 @@ def test_installed_vibe_version_refuses_metadata_substituted_before_open(
         assert version == "3.1.2", version
     assert substituted, "the substitution point was never exercised"
     assert not sentinel.exists()
+
+
+def _managed_vibe_handle(token_file, port=43101):
+    return SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": f"http://127.0.0.1:{port}/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+
+
+def _managed_vibe_context(tmp_path, *, vibe_memory=True, **changes):
+    return _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            **PARENT_CLIENT_ENV,
+            "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+        },
+        vibe_memory=vibe_memory,
+        **changes,
+    )
+
+
+def test_vibe_memory_candidate_worker_dry_run_end_to_end(tmp_path, monkeypatch):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = _managed_vibe_handle(token_file)
+    acquired = []
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, *, tool_allowlist: acquired.append(
+            (context, tool_allowlist)
+        ) or handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    launch = prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert len(acquired) == 1
+    assert acquired[0][0].project_dir == tmp_path / "project"
+    assert acquired[0][1] == WORKER_CAPABILITIES[-3:]
+    assert launch.memory_service_handle is handle
+    assert released == []
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp_payload["memory_service"] == {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert mcp_payload["tool_allowlist"] == list(WORKER_CAPABILITIES[-3:])
+    assert "token_file" not in (launch.invocation_dir / "mcp.json").read_text()
+    server = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )["mcp_servers"][0]
+    assert server["name"] == "compchem-memory"
+    assert server["transport"] == "http"
+    assert server["url"].startswith("http://127.0.0.1:")
+    assert server["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    assert "service-bearer-sentinel" not in _artifact_text(launch)
+    assert str(token_file) not in _artifact_text(launch)
+
+
+def test_vibe_memory_unaccepted_cell_never_acquires_or_reads_token(
+    tmp_path, monkeypatch
+):
+    missing_token = tmp_path / "never-read-token"
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: acquired.append((context, kwargs)),
+    )
+    context = _managed_vibe_context(tmp_path, vibe_memory=False)
+    context = replace(
+        context,
+        memory_service={
+            "transport": "http",
+            "url": "http://127.0.0.1:43101/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(missing_token),
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert acquired == []
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp_payload["memory_service"] is None
+    assert mcp_payload["tool_allowlist"] == []
+    assert "MAGNOLIA_MEMORY_SERVICE_TOKEN" not in launch.env
+    server_config = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )
+    assert server_config["mcp_servers"] == []
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_non_vibe_reviewer_still_validates_and_injects_memory_bearer(
+    tmp_path, client
+):
+    root = tmp_path / client
+    root.mkdir()
+    token_file = root / "managed-token"
+    token_file.write_text("legacy-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    route = {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "token_file": str(token_file),
+    }
+
+    def reviewer(service):
+        return _context(
+            root,
+            client=client,
+            role="reviewer",
+            capabilities=("native_read", "native_glob", "native_grep"),
+            memory_service=service,
+            environment={
+                "PATH": os.environ.get("PATH", ""),
+                "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+            },
+        )
+
+    launch = prepare_launch(reviewer(route))
+
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert not [
+        name
+        for name in mcp_payload["tool_allowlist"]
+        if name.startswith("mcp:compchem-memory.")
+    ]
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "legacy-bearer-sentinel"
+    assert "legacy-bearer-sentinel" not in _artifact_text(launch)
+
+    with pytest.raises(ExecutorRefused, match="unavailable"):
+        prepare_launch(reviewer({**route, "token_file": str(root / "absent")}))
+
+    token_file.chmod(0o644)
+    with pytest.raises(ExecutorRefused, match="0600"):
+        prepare_launch(reviewer(route))
+
+
+def test_vibe_memory_candidate_rejects_nonloopback_url(tmp_path, monkeypatch):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": "http://10.0.0.5:9000/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    with pytest.raises(ExecutorRefused, match="loopback"):
+        prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert released == [handle]
+
+
+def test_vibe_memory_candidate_token_requires_0600_and_never_enters_artifacts(
+    tmp_path, monkeypatch
+):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o644)
+    handle = _managed_vibe_handle(token_file)
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    with pytest.raises(ExecutorRefused, match="0600"):
+        prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert released == [handle]
+
+    token_file.chmod(0o600)
+    launch = prepare_launch(_managed_vibe_context(tmp_path))
+    rendered = _artifact_text(launch)
+    assert "service-bearer-sentinel" not in rendered
+    assert str(token_file) not in rendered
+    assert "token_file" not in (launch.invocation_dir / "mcp.json").read_text()
+
+
+def test_vibe_memory_identity_normalizes_ephemeral_url_but_binds_enabled_route(
+    tmp_path, monkeypatch
+):
+    from campaign_runner import launch as launch_module
+
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    ports = iter((43101, 43102))
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: _managed_vibe_handle(token_file, next(ports)),
+    )
+    identities = []
+    monkeypatch.setattr(
+        launch_module,
+        "_verify_bound_launch_identity",
+        lambda _evidence, identity: identities.append(identity["components"]),
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: True,
+    )
+
+    def prepare(root, *, vibe_memory):
+        root.mkdir()
+        binary, _, _ = _fake_vibe_environment(root)
+        context = _managed_vibe_context(
+            root,
+            vibe_memory=vibe_memory,
+            launch_argv=(str(binary),),
+            python_executable=sys.executable,
+        )
+        context = replace(
+            context,
+            environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+        )
+        context.role_capabilities["vibe"]["worker"]["launch_identity"] = {
+            "schema_version": "magnolia-normalized-launch-identity-v1",
+            "components": {},
+        }
+        prepare_launch(context)
+
+    prepare(tmp_path / "first", vibe_memory=True)
+    prepare(tmp_path / "second", vibe_memory=True)
+    prepare(tmp_path / "unaccepted", vibe_memory=False)
+
+    assert identities[0]["mcp"] == identities[1]["mcp"]
+    assert identities[0]["native_files"] == identities[1]["native_files"]
+    assert identities[0]["mcp"] != identities[2]["mcp"]
+    assert identities[0]["native_files"] != identities[2]["native_files"]
+
+
+def test_vibe_memory_candidate_table_serialization_stays_unobserved(tmp_path):
+    from campaign_runner.executors.capabilities import validate_capability_table
+
+    candidate = copy.deepcopy(load_capability_table())
+    for row in candidate["rows"]:
+        if row["client"] != "vibe":
+            continue
+        for name in (
+            "argv", "model_delivery", "discovery_dir", "trust",
+            "hook_policy_digest", "native_schemas", "allowed_actions",
+            "denied_actions", "resume", "caps", "usage_semantics",
+        ):
+            row["cells"][name]["status"] = "observed"
+            row["cells"][name]["value"] = "CANDIDATE-UNOBSERVED"
+        row["cells"]["model_delivery"]["value"] = {
+            "accepted": True,
+            "model": "CANDIDATE-UNOBSERVED",
+            "identity": "CANDIDATE-UNOBSERVED",
+        }
+        row["cells"]["allowed_actions"]["value"] = ["CANDIDATE-UNOBSERVED"]
+        row["cells"]["trust"]["value"] = True
+        row["cells"]["discovery_dir"]["value"] = {
+            "scope": "launch-project",
+            "configuration": "CANDIDATE-UNOBSERVED",
+        }
+        row["cells"]["vibe_memory"]["status"] = "observed"
+        row["cells"]["vibe_memory"]["value"] = {
+            "accepted": True,
+            "marker": "CANDIDATE-UNOBSERVED",
+        }
+        for cell in row["cells"].values():
+            if cell.get("status") == "observed":
+                cell["artifact"] = "opencode_cc_mem/docs/harness-probes-2026-11.md"
+        row["gate"]["status"] = "observed"
+        row["gate"]["reason"] = "CANDIDATE-UNOBSERVED"
+        row["gate"]["value"] = {"marker": "CANDIDATE-UNOBSERVED"}
+        row["gate"]["artifact"] = "opencode_cc_mem/docs/harness-probes-2026-11.md"
+
+    serialized = json.loads(json.dumps(candidate))
+    validate_capability_table(serialized)
+    projected = project_role_capabilities(serialized)
+    for role in ("worker", "reviewer", "helper", "evaluator"):
+        assert projected["vibe"][role]["accepted"] is True
+        assert projected["vibe"][role]["vibe_memory"] is True
+
+    real = project_role_capabilities(load_capability_table())
+    for role in ("worker", "reviewer", "helper", "evaluator"):
+        assert real["vibe"][role]["accepted"] is False
+        assert real["vibe"][role]["vibe_memory"] is False
