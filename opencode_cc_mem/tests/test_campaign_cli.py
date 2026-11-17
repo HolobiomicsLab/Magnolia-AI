@@ -131,6 +131,30 @@ def test_approve_command(tmp_path, capsys):
     assert '"state": "queued"' in output
 
 
+def test_decline_followups_command_uses_runner_state_api(tmp_path, capsys, monkeypatch):
+    protocol, brief = make_inputs(tmp_path)
+    run_dir = tmp_path / "project" / "runs" / "run"
+    store = CampaignStore(run_dir)
+    store.initialize(protocol, brief)
+    store.transition("running", "start")
+    store.transition("waiting_human", "review followups need a decision")
+    calls = []
+
+    class Runner:
+        def decline_followups(self, approver, reason, minutes=0):
+            calls.append((approver, reason, minutes))
+            return store.transition("completed", "declined followups")
+
+    monkeypatch.setattr("campaign_runner.cli._build_runner", lambda _args: Runner())
+
+    assert main([
+        "decline-followups", str(run_dir), "--approver", "tao",
+        "--reason", "stage is sufficient", "--minutes", "2",
+    ]) == 0
+    assert calls == [("tao", "stage is sufficient", 2.0)]
+    assert '"state": "completed"' in capsys.readouterr().out
+
+
 def test_invalid_protocol_returns_two(tmp_path, capsys):
     protocol, _ = make_inputs(tmp_path)
     protocol.write_text("{}", encoding="utf-8")

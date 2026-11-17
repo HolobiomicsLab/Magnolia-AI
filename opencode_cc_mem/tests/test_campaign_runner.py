@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 from campaign_runner.jobs import FakeJobBackend, JobController, JobStatus  # noqa: E402
 from campaign_runner.lease import AttemptLease  # noqa: E402
 from campaign_runner.reviewers import ReviewResult  # noqa: E402
-from campaign_runner.runner import CampaignRunner, RunnerConfig  # noqa: E402
+from campaign_runner.runner import CampaignRunner, RunnerConfig, RunnerError  # noqa: E402
 from campaign_runner.state import CampaignStore  # noqa: E402
 from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
 from campaign_runner.executors.contracts import SessionIdentity  # noqa: E402
@@ -25,6 +25,7 @@ def protocol_payload(
     prepare_gate="raise SystemExit(0)",
     hard_analyze=False,
     max_cost_usd=None,
+    analyze_gate="raise SystemExit(0)",
 ):
     payload = {
         "schema": 1,
@@ -69,7 +70,7 @@ def protocol_payload(
                 "model": "kimi-code-plan-cn/k3.1-pro#high",
                 "prompt": "prompts/analyze.md",
                 "outputs": ["work/analysis.md"],
-                "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+                "gate": [sys.executable, "-c", analyze_gate],
                 "review": True,
                 "retry": retry,
                 "on_gate_fail": "repair" if retry == "repair_once" else "human",
@@ -102,6 +103,7 @@ def initialize(
     prepare_gate="raise SystemExit(0)",
     hard_analyze=False,
     max_cost_usd=None,
+    analyze_gate="raise SystemExit(0)",
 ):
     source = tmp_path / "campaign"
     source.mkdir()
@@ -114,6 +116,7 @@ def initialize(
                 prepare_gate,
                 hard_analyze,
                 max_cost_usd,
+                analyze_gate,
             )
         )
     )
@@ -492,10 +495,98 @@ def test_reviewer_followup_limit_is_enforced(tmp_path):
     store.approve("tao", "start")
     result = runner.run_once()
     assert result["state"]["state"] == "waiting_human"
-    receipt = json.loads(
-        (store.attempts_dir / "analyze" / "001" / "receipt.json").read_text()
-    )
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    receipt = json.loads(receipt_path.read_text())
     assert any("followups" in error for error in receipt["errors"])
+
+
+def test_decline_followups_passes_stage_and_queues_distillation(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    state = runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert state.state == "queued"
+    assert state.stage == "dock"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["status"] == "passed"
+    assert receipt["human_decision"]["decision"] == "decline_followups"
+    queued = [
+        json.loads(line) for line in store.distill_queue_path.read_text().splitlines()
+    ]
+    assert queued[-1]["session_ids"] == ["ses_fake", "ses_review"]
+
+
+def test_decline_followups_refuses_blocking_review(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    evidence = store.run_dir / "work" / "analysis.md"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text("analysis")
+    blocker = {
+        "severity": "blocker",
+        "claim": "unsupported",
+        "evidence": ["work/analysis.md"],
+        "suggested_action": "fix",
+    }
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(issues=[blocker], followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    with pytest.raises(RunnerError, match="blocker"):
+        runner.decline_followups("tao", "accept as is")
+
+    assert store.load().state == "waiting_human"
+
+
+def test_decline_followups_refuses_failed_stage_gate(tmp_path):
+    store = initialize(tmp_path, analyze_gate="raise SystemExit(4)")
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    with pytest.raises(RunnerError, match="stage gate failed"):
+        runner.decline_followups("tao", "accept as is")
+
+    assert store.load().state == "waiting_human"
 
 
 def test_gate_failure_repairs_once_then_waits(tmp_path):
@@ -519,6 +610,26 @@ def test_budget_exceeded_halts(tmp_path):
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
     result = runner.run_once()
     assert result["state"]["state"] == "halted"
+
+
+def test_cached_codex_input_does_not_exhaust_token_budget(tmp_path):
+    store = initialize(tmp_path, max_tokens=100_000)
+    store.approve_start("tao", "start")
+    store.update_usage(
+        {
+            "input_tokens": 284_906,
+            "cache_read_tokens": 255_360,
+            "output_tokens": 2_000,
+            "reasoning_tokens": 3_000,
+        },
+        "recorded Codex usage",
+    )
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "waiting_human"
+    assert store.load().usage["cache_read_tokens"] == 255_360
 
 
 def test_cost_budget_exceeded_halts(tmp_path):

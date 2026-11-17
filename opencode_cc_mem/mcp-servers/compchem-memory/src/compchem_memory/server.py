@@ -130,7 +130,7 @@ class ProjectBindingError(ValueError):
 
 
 def _enforce_http_project_binding(project_dir: str | None) -> str:
-    """Resolve one request target and reject a different strict HTTP project."""
+    """Resolve one target; bound tool arguments collapse to the service pin."""
     requested = project_context.effective_project_dir(project_dir)
     if os.environ.get("MAGNOLIA_PROJECT_BOUND") != "1":
         return requested
@@ -423,9 +423,13 @@ def _write_guard(project_dir: str | None, allow_cross_project: bool) -> str | No
     caller's assertion that project_dir is intentional — needed when opencode
     v2's shared service has pinned this server to another project (2026-11-10).
     """
-    _enforce_http_project_binding(project_dir)
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
+    requested = _enforce_http_project_binding(project_dir)
+    pinned = (
+        requested
+        if project_context._is_project_bound()
+        else PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    )
+    guard = check_project(requested, pinned_dir=pinned, is_write=True)
     if guard.kind != "cross_write":
         return None
     if not allow_cross_project:

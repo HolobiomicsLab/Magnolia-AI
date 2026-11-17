@@ -798,6 +798,7 @@ class CampaignStore:
         expected_attempt: int,
         stage: str | None = None,
         attempt: int | None = None,
+        allow_human_exit: bool = False,
     ) -> CampaignState:
         """Transition only when the campaign still matches the loaded state."""
         with self.lock():
@@ -809,7 +810,13 @@ class CampaignStore:
                     "campaign state changed while acquiring the attempt lease: "
                     f"expected {expected}, found {actual}"
                 )
-            return self._transition_locked(target, reason, stage, attempt)
+            return self._transition_locked(
+                target,
+                reason,
+                stage,
+                attempt,
+                allow_human_exit=allow_human_exit,
+            )
 
     def _transition_locked(
         self,

@@ -24,7 +24,13 @@ from .lease import (
 from .models import Stage
 from .governor import Governor, _reservation_process_alive
 from .process import ProcessControl, run_process
-from .reviewers import ReviewError, ReviewResult, build_review_prompt, choose_reviewer_model
+from .reviewers import (
+    ReviewError,
+    ReviewResult,
+    build_review_prompt,
+    choose_reviewer_model,
+    validate_review,
+)
 from .security import redact_paths, redact_structure
 from .routing import resolve_route
 from .state import CampaignBusyError, CampaignState, CampaignStore, QuotaWait
@@ -401,6 +407,120 @@ class CampaignRunner:
                 continue
             raise RunnerError(f"unhandled campaign state: {state.state}")
         return {"state": state.to_dict(), "actions": actions}
+
+    def decline_followups(
+        self,
+        approver: str,
+        reason: str,
+        minutes: float = 0,
+    ) -> CampaignState:
+        """Decline a review's excess follow-ups and accept a passing stage."""
+        if not approver.strip() or not reason.strip():
+            raise RunnerError("approver and reason must not be empty")
+        if minutes < 0:
+            raise RunnerError("minutes must be >= 0")
+        state = self.store.load()
+        if state.state != "waiting_human":
+            raise RunnerError("campaign is not waiting for a human decision")
+        stage = self.protocol.stage(state.stage)
+        attempt_dir = self._attempt_dir(stage, state.attempt)
+        review = self._declinable_review(attempt_dir)
+        blocker = next(
+            (item for item in review.issues if item.get("severity") == "blocker"),
+            None,
+        )
+        if blocker is not None:
+            raise RunnerError(f"review blocker prevents acceptance: {blocker['claim']}")
+        outputs, errors = check_outputs(self.store.run_dir, stage.outputs)
+        if errors:
+            raise RunnerError("stage outputs failed: " + "; ".join(errors))
+        gate = run_gate(
+            self.store.run_dir,
+            stage.gate,
+            self._context(stage, state.attempt),
+            attempt_dir,
+            timeout_seconds=stage.timeout_seconds or 300,
+        )
+        if not gate.passed:
+            raise RunnerError("stage gate failed; follow-ups cannot be declined")
+        payload = self._receipt_payload(
+            stage, state.attempt, "passed", outputs, [], review, gate
+        )
+        payload["human_decision"] = {
+            "decision": "decline_followups",
+            "approver": approver,
+            "reason": reason,
+            "minutes": float(minutes),
+            "declined": len(review.followups),
+        }
+        write_receipt(attempt_dir / "receipt.json", payload)
+        if minutes:
+            self.store.update_usage(
+                {"human_minutes": float(minutes)},
+                f"follow-ups declined by {approver}",
+            )
+        self._queue_distillation(stage, state.attempt, review)
+        next_stage = self.protocol.next_stage_id(stage.id)
+        target = "completed" if next_stage is None else "queued"
+        completed = self.store.transition_if_current(
+            target,
+            f"follow-ups declined by {approver}: {reason}",
+            expected_state="waiting_human",
+            expected_stage=stage.id,
+            expected_attempt=state.attempt,
+            stage=next_stage or stage.id,
+            attempt=0 if next_stage is not None else state.attempt,
+            allow_human_exit=True,
+        )
+        if target == "completed":
+            self._drain_memory_queue()
+        return completed
+
+    def _declinable_review(self, attempt_dir: Path) -> ReviewResult:
+        """Restore the valid review that caused an excess-follow-up hold."""
+        receipt_path = attempt_dir / "receipt.json"
+        try:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RunnerError("missing failed receipt for follow-up decision") from exc
+        errors = receipt.get("errors") if isinstance(receipt, Mapping) else None
+        if not (
+            isinstance(errors, list)
+            and len(errors) == 1
+            and isinstance(errors[0], str)
+            and errors[0].startswith("reviewer proposed ")
+        ):
+            raise RunnerError("campaign is not waiting on excess review follow-ups")
+        checkpoint = self._read_reviewer_checkpoint(attempt_dir)
+        issues, followups = validate_review(
+            {
+                "issues": checkpoint.get("issues", []),
+                "followups": checkpoint.get("followups", []),
+            },
+            self.store.run_dir,
+        )
+        if len(followups) <= self.protocol.budget.max_followups:
+            raise RunnerError("review does not contain excess follow-ups")
+        identity = checkpoint.get("session_identity")
+        session_identity = None
+        if isinstance(identity, Mapping) and identity.get("client"):
+            session_identity = SessionIdentity(
+                client=str(identity["client"]),
+                model=str(identity["model"]) if identity.get("model") else None,
+                session_id=str(identity.get("session_id") or checkpoint.get("session_id") or ""),
+                project_digest=str(identity.get("project_digest") or "unknown"),
+                role=str(identity.get("role") or "reviewer"),
+                policy_digest=str(identity.get("policy_digest") or "unknown"),
+            )
+        return ReviewResult(
+            issues=issues,
+            followups=followups,
+            session_id=str(checkpoint.get("session_id") or "") or None,
+            session_identity=session_identity,
+            model=str(checkpoint.get("model") or ""),
+            usage=dict(checkpoint.get("usage") or {}),
+            attempts=int(checkpoint.get("attempts") or 0),
+        )
 
     def run_forever(
         self,
@@ -1700,8 +1820,14 @@ class CampaignRunner:
 
     def _budget_exceeded(self, state: CampaignState) -> str:
         usage = state.usage
+        input_tokens = float(usage.get("input_tokens", 0))
+        cached_tokens = min(
+            input_tokens,
+            max(0.0, float(usage.get("cache_read_tokens", 0))),
+        )
         tokens = (
-            float(usage.get("input_tokens", 0))
+            input_tokens
+            - cached_tokens
             + float(usage.get("output_tokens", 0))
             + float(usage.get("reasoning_tokens", 0))
         )
