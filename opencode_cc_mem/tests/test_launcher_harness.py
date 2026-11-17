@@ -13,6 +13,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 OPENCODE_DIR = HERE.parent
 LAUNCHER = OPENCODE_DIR / "softwares" / "bin" / "magnolia"
@@ -477,6 +479,28 @@ def _helper_source(script: Path, name: str) -> str:
     return "\n".join(lines[start:end + 1]) + "\n"
 
 
+def _run_memory_setup_function(ws: Path, function: str, commands: str):
+    """Run one launcher setup function with successful, non-network probes."""
+    script = ws / "opencode_cc_mem/softwares/bin/magnolia"
+    names = [
+        "setup_get", "setup_set", "provider_key_name", "memory_provider_for_model",
+        "memory_setup_default", function,
+    ]
+    driver = (
+        f'LLM_SETUP="{ws}/opencode_cc_mem/.magnolia/llm-setup.json"\n'
+        f'PYTHON_CMD="{ws}/.venv/bin/python3"\nCONFIG="{ws}/missing.json"\n'
+        + "".join(_helper_source(script, name) for name in names)
+        + "_read_from_tty() { return 1; }\n"
+        + "probe_memory() { return 0; }\n"
+        + "render_active_project() { :; }\n"
+        + commands
+    )
+    return subprocess.run(
+        ["/bin/bash", "-c", driver], capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin"},
+    )
+
+
 def test_new_memory_setup_prefers_openrouter_and_preserves_existing(tmp_path):
     script = make_workspace(tmp_path) / "opencode_cc_mem/softwares/bin/magnolia"
     helpers = _helper_source(script, "memory_provider_for_model") + _helper_source(
@@ -499,6 +523,52 @@ def test_new_memory_setup_prefers_openrouter_and_preserves_existing(tmp_path):
     assert select({"OPENROUTER_API_KEY": "stub", "CURRENT_MODEL": "k3", "CURRENT_PROVIDER": "kimi"}) == [
         "k3", "kimi",
     ]
+
+
+@pytest.mark.parametrize("probe_status", [0, 1])
+@pytest.mark.parametrize("critic", [
+    {},
+    {"critic_provider": "mistral", "critic_model": "mistral-small-latest"},
+])
+def test_setup_rerun_keeps_existing_memory_route_and_does_not_add_critic(
+    tmp_path, probe_status, critic,
+):
+    ws = make_workspace(tmp_path)
+    configured = {
+        "memory_model": "deepseek-v4-flash",
+        "memory_provider": "openrouter",
+        "memory_enabled": True,
+        **critic,
+    }
+    path = write_setup(ws, configured)
+
+    commands = f"probe_memory() {{ return {probe_status}; }}\nsetup_run\n"
+    proc = _run_memory_setup_function(ws, "setup_run", commands)
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == configured
+
+
+def test_memory_set_only_adds_critic_default_to_new_configuration(tmp_path):
+    ws = make_workspace(tmp_path)
+    existing = write_setup(ws, {
+        "memory_model": "k3", "memory_provider": "kimi", "memory_enabled": True,
+    })
+    new_setup = ws / "opencode_cc_mem/.magnolia/new-llm-setup.json"
+    commands = (
+        "cmd_memory_set k3 --provider kimi\n"
+        f'LLM_SETUP="{new_setup}"\n'
+        "cmd_memory_set deepseek/deepseek-v4.1-flash --provider openrouter\n"
+    )
+
+    proc = _run_memory_setup_function(ws, "cmd_memory_set", commands)
+
+    assert proc.returncode == 0, proc.stderr
+    assert "critic_provider" not in json.loads(existing.read_text())
+    assert json.loads(new_setup.read_text()) | {
+        "critic_provider": "openrouter",
+        "critic_model": "deepseek/deepseek-v4.1-flash",
+    } == json.loads(new_setup.read_text())
 
 
 def test_memory_setup_keeps_mistral_and_zai_selectable(tmp_path):

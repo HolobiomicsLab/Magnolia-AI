@@ -678,6 +678,8 @@ cmd_memory_set() {
         echo "error: direct fallback provider cannot be openrouter" >&2
         exit 1
     fi
+    local had_memory_model
+    had_memory_model="$(setup_get memory_model)"
     [ -n "$provider" ] || provider="$(memory_provider_for_model "$model")"
     echo "route: ${provider:-autodetect} via $(provider_key_name "$provider")"
     echo "verifying memory model '$model' with one real call…"
@@ -687,7 +689,7 @@ cmd_memory_set() {
         exit 1
     fi
     local settings=("memory_model=$model" "memory_provider=$provider" "memory_enabled=true")
-    if [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+    if [ -z "$had_memory_model" ] && [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
         settings+=("critic_provider=$provider" "critic_model=$model")
     fi
     if [ -n "$fallback_provider" ]; then
@@ -777,9 +779,11 @@ except Exception:
     echo
     echo "Step 2 — memory model (background only: distillation, handover, re-ranking)."
     echo "  Cheap is recommended; new setups prefer OpenRouter when its key is available."
-    local cur_mem cur_provider def_mem def_provider
+    local cur_mem cur_provider def_mem def_provider is_new_memory_setup
     cur_mem="$(setup_get memory_model)"
     cur_provider="$(setup_get memory_provider)"
+    is_new_memory_setup=false
+    [ -n "$cur_mem" ] || is_new_memory_setup=true
     local memory_default
     memory_default="$(memory_setup_default "$cur_mem" "$cur_provider")"
     def_mem="${memory_default%%$'\t'*}"
@@ -787,17 +791,23 @@ except Exception:
     ans="$(_read_from_tty "  memory model [$def_mem]: " || true)"
     local mem="${ans:-$def_mem}"
     local mem_provider
-    mem_provider="$(memory_provider_for_model "$mem")"
-    [ -n "$mem_provider" ] || mem_provider="$def_provider"
+    if [ "$mem" = "$cur_mem" ] && [ -n "$cur_provider" ]; then
+        mem_provider="$cur_provider"
+    else
+        mem_provider="$(memory_provider_for_model "$mem")"
+        [ -n "$mem_provider" ] || mem_provider="$def_provider"
+    fi
     echo "  route: $mem_provider via $(provider_key_name "$mem_provider")"
     echo "  verifying with one real call…"
     if probe_memory "$mem" "$mem_provider"; then
         local setup_values=("memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=true")
-        if [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+        if [ "$is_new_memory_setup" = true ] && [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
             setup_values+=("critic_provider=$mem_provider" "critic_model=$mem")
         fi
         setup_set "${setup_values[@]}"
         echo "  OK — memory verified and enabled."
+    elif [ "$is_new_memory_setup" = false ] && [ "$mem" = "$cur_mem" ] && [ "$mem_provider" = "$cur_provider" ]; then
+        echo "  verification FAILED — existing memory configuration left unchanged." >&2
     else
         setup_set "memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=false"
         echo "  verification FAILED — memory left OFF (main model still works)." >&2
