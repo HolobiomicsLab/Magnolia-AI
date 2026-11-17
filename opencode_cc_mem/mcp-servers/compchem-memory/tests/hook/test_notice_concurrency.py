@@ -166,3 +166,41 @@ def test_typescript_and_python_consumers_never_lose_or_duplicate(tmp_path, monke
         "node_stderr": stderr,
     }
     assert not queue.exists()
+
+
+def test_typescript_streams_notice_batch_larger_than_spawn_buffer(tmp_path):
+    """A valid multi-megabyte drain must not disappear behind ENOBUFS."""
+    node = _node_with_type_stripping()
+    plugin = Path(__file__).resolve().parents[4] / ".opencode" / "plugins" / "magnolia-job-notify.ts"
+    project = tmp_path / "project"
+    queue = _notices_path(str(project))
+    queue.parent.mkdir(parents=True)
+    output = tmp_path / "large-deliveries.txt"
+    run_ids = [f"large-{index}-" + "x" * 200_000 + f"-tail-{index}" for index in range(10)]
+    for run_id in run_ids:
+        push_job_notice(str(project), run_id=run_id, tool="xtb", state="done", category="success")
+
+    driver = tmp_path / "large-notice-driver.ts"
+    driver.write_text(
+        f'import {{ appendFileSync }} from "node:fs";\n'
+        f'import {{ startPolling }} from "{plugin.as_uri()}";\n'
+        "const [queue, output] = process.argv.slice(2);\n"
+        "const stop = startPolling(queue, (_title, message) => {\n"
+        '  appendFileSync(output, message + "\\n");\n'
+        "}, 20);\n"
+        "setTimeout(stop, 1500);\n",
+        encoding="utf-8",
+    )
+    process = subprocess.run(
+        [node, str(driver), str(queue), str(output)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env={**dict(os.environ), "MAGNOLIA_PYTHON": sys.executable},
+    )
+
+    assert process.returncode == 0, process.stderr
+    messages = output.read_text(encoding="utf-8").splitlines()
+    delivered_tails = [re.search(r"run …(\S+)$", message).group(1) for message in messages]
+    assert Counter(delivered_tails) == Counter({run_id[-24:]: 1 for run_id in run_ids})
+    assert not queue.exists()

@@ -27,7 +27,7 @@
  * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
  * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
-import { spawnSync } from "node:child_process"
+import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -45,26 +45,38 @@ const PYTHONPATH = join(REPO_ROOT, "opencode_cc_mem", "mcp-servers", "compchem-m
 
 type Toast = (title: string, message: string, variant?: string) => void
 
-function drainNotices(noticesPath: string): any[] {
-  if (!existsSync(noticesPath)) return []
+function drainNotices(noticesPath: string): Promise<any[]> {
+  if (!existsSync(noticesPath)) return Promise.resolve([])
   // Delegate locking and atomic replacement to the same implementation used
-  // by the hook and poller. A failed drain is retried on the next tick.
+  // by the hook and poller. Stream stdout: spawnSync's fixed maxBuffer could
+  // reject a valid large batch after the Python side had already drained it.
   const projectDir = dirname(dirname(noticesPath))
-  const result = spawnSync(
-    PYTHON,
-    ["-m", "compchem_memory.job_notices", "--drain", projectDir, "--limit", String(MAX_PER_TICK)],
-    {
-      encoding: "utf8",
-      env: { ...process.env, PYTHONPATH },
-    },
-  )
-  if (result.error || result.status !== 0) return []
-  try {
-    const rows = JSON.parse(result.stdout)
-    return Array.isArray(rows) ? rows : []
-  } catch {
-    return []
-  }
+  return new Promise((resolve) => {
+    const child = spawn(
+      PYTHON,
+      ["-m", "compchem_memory.job_notices", "--drain", projectDir, "--limit", String(MAX_PER_TICK)],
+      { env: { ...process.env, PYTHONPATH } },
+    )
+    let stdout = ""
+    child.stdout.setEncoding("utf8")
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.resume()
+    child.on("error", () => resolve([]))
+    child.on("close", (code) => {
+      if (code !== 0) {
+        resolve([])
+        return
+      }
+      try {
+        const rows = JSON.parse(stdout)
+        resolve(Array.isArray(rows) ? rows : [])
+      } catch {
+        resolve([])
+      }
+    })
+  })
 }
 
 export function startPolling(
@@ -78,20 +90,27 @@ export function startPolling(
     infra_failure: "⚠️",
   }
 
-  function poll(): void {
-    for (const rec of drainNotices(noticesPath)) {
-      const icon = ICONS[String(rec.category)] ?? "🔔"
-      const tool = String(rec.tool ?? "job")
-      const state = String(rec.state ?? "")
-      const runId = String(rec.run_id ?? "")
-      const tail = runId.length > 24 ? runId.slice(-24) : runId
-      const message = `${icon} ${tool} finished (${state}) — run …${tail}`.slice(0, 160)
-      toast("job-finished", message, rec.category === "success" ? undefined : "warning")
+  let polling = false
+  async function poll(): Promise<void> {
+    if (polling) return // do not accumulate Python children on a slow filesystem
+    polling = true
+    try {
+      for (const rec of await drainNotices(noticesPath)) {
+        const icon = ICONS[String(rec.category)] ?? "🔔"
+        const tool = String(rec.tool ?? "job")
+        const state = String(rec.state ?? "")
+        const runId = String(rec.run_id ?? "")
+        const tail = runId.length > 24 ? runId.slice(-24) : runId
+        const message = `${icon} ${tool} finished (${state}) — run …${tail}`.slice(0, 160)
+        toast("job-finished", message, rec.category === "success" ? undefined : "warning")
+      }
+    } finally {
+      polling = false
     }
   }
 
-  poll() // catch notices that piled up before this session started
-  const timer = setInterval(poll, pollIntervalMs)
+  void poll() // catch notices that piled up before this session started
+  const timer = setInterval(() => void poll(), pollIntervalMs)
   // Do not keep the process alive for the timer.
   ;(timer as any)?.unref?.()
   return () => clearInterval(timer)
