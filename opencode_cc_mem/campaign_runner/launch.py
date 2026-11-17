@@ -129,6 +129,30 @@ CLAUDE_BASE_ENV = frozenset(
         "NODE_EXTRA_CA_CERTS",
     }
 )
+VIBE_BASE_ENV = frozenset(
+    {
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "PATH",
+        # Magnolia's hook writes its bindings here; no other XDG location is forwarded.
+        "XDG_STATE_HOME",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "SSL_CERT_FILE",
+        "NODE_EXTRA_CA_CERTS",
+    }
+)
 CLAUDE_REDIRECT_ENV = frozenset(
     {
         "CLAUDE_CODE_USE_BEDROCK",
@@ -1804,6 +1828,8 @@ def _effective_environment(
                 if key in inherited_allowlist and key != "MAGNOLIA_MODEL"
             }
         )
+    elif context.route.client == "vibe":
+        env = _vibe_inherited_environment(context, inherited)
     else:
         env = {
             str(key): str(value)
@@ -1859,6 +1885,24 @@ def _effective_environment(
     if protected_names is not None:
         protected_names.update(explicit)
     env.update({key: str(value) for key, value in explicit.items()})
+    return env
+
+
+def _vibe_inherited_environment(
+    context: ExecContext, inherited: Mapping[str, str]
+) -> dict[str, str]:
+    """Keep only process basics and network proxies for Vibe's own account store."""
+    state_home = {**inherited, **context.renderer_env}.get("XDG_STATE_HOME")
+    if state_home is not None and not os.path.isabs(str(state_home)):
+        raise ExecutorRefused(
+            "Vibe client environment has a relative XDG_STATE_HOME; use an absolute path"
+        )
+    env = {
+        str(key): str(value)
+        for source in (inherited, context.renderer_env)
+        for key, value in source.items()
+        if key in VIBE_BASE_ENV
+    }
     return env
 
 

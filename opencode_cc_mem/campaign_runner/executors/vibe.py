@@ -32,6 +32,9 @@ from .registry import ExecutorRefused
 
 FORBIDDEN_ENV = frozenset({"VIBE_HOME", "ANTHROPIC_API_KEY"})
 _FALLBACK_MODEL = re.compile(r"Model '.+?' is not available [—-]+ running '([^']+)'", re.I)
+_MISTRAL_CREDENTIALS_MISSING = re.compile(
+    r"Authentication failed: Mistral API key not found in Vibe configuration or keyring\."
+)
 
 
 @dataclass
@@ -77,6 +80,14 @@ def parse_vibe_export(
         if match:
             parsed.reported_model = match.group(1)
         parsed.diagnostics.append({"kind": "client_notice", "message": notice})
+        if _MISTRAL_CREDENTIALS_MISSING.fullmatch(notice):
+            parsed.diagnostics.append({
+                "kind": "mistral_setup_required",
+                "message": (
+                    "Vibe could not find the member's Mistral credentials in its own store; "
+                    "run Vibe's own setup once before retrying Magnolia."
+                ),
+            })
     parsed.final_text, parsed.all_text = _vibe_text(payload, stdout_text)
     usage = payload.get("usage") if isinstance(payload.get("usage"), Mapping) else {}
     raw = {
@@ -340,22 +351,36 @@ class VibeExecutor:
                     outcome = RunOutcome("model_mismatch")
                 elif process.returncode != 0 and outcome.kind == "success":
                     outcome = RunOutcome("failure")
-                if parsed.session_id:
-                    if resume_session and parsed.session_id != resume_session:
-                        parsed.diagnostics.append(
-                            {
-                                "kind": "resume_identity_mismatch",
-                                "expected": resume_session,
-                                "observed": parsed.session_id,
-                            }
-                        )
-                        outcome = RunOutcome("refused")
-                    elif not resume_session:
+                model_unaccepted = any(
+                    item["kind"] in {"model_unverified", "model_mismatch"}
+                    for item in parsed.diagnostics
+                )
+                if (
+                    resume_session
+                    and parsed.session_id
+                    and parsed.session_id != resume_session
+                ):
+                    parsed.diagnostics.append(
+                        {
+                            "kind": "resume_identity_mismatch",
+                            "expected": resume_session,
+                            "observed": parsed.session_id,
+                        }
+                    )
+                    outcome = RunOutcome("refused")
+                if model_unaccepted:
+                    identity = None
+                elif parsed.session_id:
+                    if not resume_session:
                         self._bind_session(parsed.session_id)
                     identity = self._identity(parsed.session_id)
                 usage = self._usage(parsed.usage, identity, admission, process.duration_seconds, outcome)
                 if admission is not None and process.client_started:
-                    admission.release(usage=usage, outcome=outcome)
+                    admission.release(
+                        usage=usage,
+                        outcome=outcome,
+                        suppress_session_identity=model_unaccepted,
+                    )
         except ProcessStartError as exc:
             if admission is not None:
                 admission._cancel_before_client_exec()
@@ -368,12 +393,7 @@ class VibeExecutor:
         redact_paths(paths)
         total_usage = _unknown_usage()
         _merge_usage(total_usage, parsed.usage)
-        result_session_id = parsed.session_id or resume_session
-        artifact_session_id = (
-            resume_session
-            if resume_session is not None and outcome.kind == "refused"
-            else result_session_id
-        )
+        result_session_id = None if model_unaccepted else parsed.session_id or resume_session
         return WorkerResult(
             process.returncode,
             process.timed_out,
@@ -390,7 +410,7 @@ class VibeExecutor:
             parsed.diagnostics,
             outcome,
             identity,
-            self._resume_artifact(artifact_session_id),
+            self._resume_artifact(result_session_id),
         )
 
     def _argv(

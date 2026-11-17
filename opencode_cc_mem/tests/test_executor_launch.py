@@ -1286,6 +1286,65 @@ def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
     )
 
 
+def test_vibe_memory_token_is_only_secret_in_child_env(tmp_path):
+    token_file = tmp_path / "memory-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        memory_service={
+            "transport": "http",
+            "url": "http://127.0.0.1:9876/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        },
+        vibe_memory=True,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            **PARENT_CLIENT_ENV,
+            "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    assert not {name for name in launch.env if name.endswith("_API_KEY")}
+    assert not {name for name in launch.env if name.endswith(("_BASE_URL", "_API_BASE"))}
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_claude_and_codex_prepared_env_names_stay_byte_identical(tmp_path, client):
+    baseline = {
+        "claude-code": [
+            "CLAUDE_CODE_OAUTH_TOKEN", "COMPCHEM_TOOLS_PORT", "MAGNOLIA_CLIENT",
+            "MAGNOLIA_CONTROL_DIR", "MAGNOLIA_DISTILL_INTERVAL_MIN", "MAGNOLIA_DOORBELL",
+            "MAGNOLIA_HOOK_POLICY", "MAGNOLIA_HOOK_POLICY_REQUIRED", "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_INSTALLATION_ROOT", "MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER",
+            "MAGNOLIA_MODEL", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_IDENTITY",
+            "MAGNOLIA_PYTHON", "MAGNOLIA_ROLE", "MAGNOLIA_ROOT", "MAGNOLIA_RULES_DIR",
+            "MAGNOLIA_RUN_DIR", "MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "MAGNOLIA_WORKSPACE_ROOT",
+            "MAGNOLIA_WORK_DIR", "PATH", "PYTHONPYCACHEPREFIX",
+        ],
+        "codex": [
+            "COMPCHEM_TOOLS_PORT", "MAGNOLIA_CLIENT", "MAGNOLIA_CONTROL_DIR",
+            "MAGNOLIA_DISTILL_INTERVAL_MIN", "MAGNOLIA_DOORBELL", "MAGNOLIA_HOOK_POLICY",
+            "MAGNOLIA_HOOK_POLICY_REQUIRED", "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_INSTALLATION_ROOT", "MAGNOLIA_MODEL", "MAGNOLIA_PROJECT_DIR",
+            "MAGNOLIA_PROJECT_IDENTITY", "MAGNOLIA_PYTHON", "MAGNOLIA_ROLE", "MAGNOLIA_ROOT",
+            "MAGNOLIA_RULES_DIR", "MAGNOLIA_RUN_DIR", "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+            "MAGNOLIA_WORKSPACE_ROOT", "MAGNOLIA_WORK_DIR", "PATH", "PYTHONPYCACHEPREFIX",
+        ],
+    }
+
+    launch = prepare_launch(_context(tmp_path, client=client))
+
+    assert sorted(launch.env) == baseline[client]
+
+
 def test_campaign_vibe_managed_route_acquires_project_service(
     tmp_path, monkeypatch
 ):
@@ -2327,6 +2386,35 @@ def test_claude_xdg_state_home_reaches_hook(tmp_path, source):
     assert not (home / ".local/state/magnolia/bindings").exists()
 
 
+@pytest.mark.parametrize("source", ("environment", "renderer_env"))
+def test_vibe_xdg_state_home_reaches_hook(tmp_path, source):
+    home = tmp_path / "home"
+    home.mkdir()
+    state = tmp_path / "xdg-state"
+    environment = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    renderer_env = {}
+    (environment if source == "environment" else renderer_env)["XDG_STATE_HOME"] = str(state)
+    context = _context(
+        tmp_path, client="vibe", python_executable=sys.executable,
+        environment=environment, renderer_env=renderer_env,
+    )
+    launch = prepare_launch(context)
+    hooks = tomllib.loads(
+        (launch.invocation_dir / ".vibe/hooks.toml").read_text()
+    )["hooks"]
+    command = next(hook["command"] for hook in hooks if hook["type"] == "session_start")
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps({"session_id": "xdg-check", "cwd": str(context.project_dir), "source": "startup"}),
+        text=True, capture_output=True, cwd=context.project_dir, env=dict(launch.env), timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    binding = state / "magnolia/bindings/vibe-xdg-check.json"
+    assert binding.is_file(), (result.stdout, result.stderr)
+    assert not (home / ".local/state/magnolia/bindings").exists()
+
+
 @pytest.mark.parametrize("name", ("settings.json", "settings.local.json"))
 def test_claude_refuses_project_settings_loaded_by_setting_sources(tmp_path, name):
     context = _production_claude_context(tmp_path)
@@ -2518,6 +2606,16 @@ def test_daemon_help_does_not_require_pyyaml(tmp_path):
 def test_claude_relative_xdg_state_home_is_refused(tmp_path):
     context = _production_claude_context(
         tmp_path,
+        environment={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "XDG_STATE_HOME": "work"},
+    )
+    with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
+        prepare_launch(context)
+
+
+def test_vibe_relative_xdg_state_home_is_refused(tmp_path):
+    context = _context(
+        tmp_path,
+        client="vibe",
         environment={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "XDG_STATE_HOME": "work"},
     )
     with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
