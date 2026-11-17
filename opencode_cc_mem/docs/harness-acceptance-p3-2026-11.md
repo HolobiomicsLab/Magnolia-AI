@@ -1,8 +1,9 @@
 # Plan 3 harness acceptance record — 17 November 2026
 
-This is the acceptance record for the final working tree based on `4a2233c`.
-The binding packet forbids Git-state changes, so the final fold is intentionally
-uncommitted. `observed` means that a sanitised live artifact records the stated
+This is the acceptance record for branch `feat/harness-executors-p3`. The live
+passes ran on the commits named in each evidence folder; the final fold was
+committed as `2ced2f8`, and the later fix commits are listed under "After the
+live passes" below. `observed` means that a sanitised live artifact records the stated
 outcome; it does not turn a failed observation into acceptance. `refused` means
 the production capability gate remains closed. `deferred` means no accepted
 live role was established. No raw client export, credential, private prompt,
@@ -31,9 +32,10 @@ home path, user name or scientific secret is published.
 | vibe | evaluator | deferred | opencode_cc_mem/campaign_runner/executors/capabilities-p3.json |
 <!-- acceptance-matrix:end -->
 
-The OpenCode helper produced `ANSWER: 42`; its evaluator launched but returned
-no usable JSON decision. Those are observed outcomes, not a promotion of the
-evaluator. Codex helper and evaluator still fail closed. The final-tree identity
+The OpenCode helper produced `ANSWER: 42`. The OpenCode evaluator row is
+`observed` for the launch only: the evaluator started under the governor but
+returned prose, not a JSON decision, so no evaluator decision was observed live
+and the row is not an acceptance of that role. Codex helper and evaluator still fail closed. The final-tree identity
 check found every recorded component unchanged from pass 5: Codex worker and
 reviewer are therefore current (`stale: false`), while their helper/evaluator
 remain stale and refused. All four Claude identities remain equal to live 2a;
@@ -117,14 +119,30 @@ No Vibe role is accepted. The five gaps are:
    OpenRouter route needs Magnolia-rendered provider configuration without
    forwarding a provider key to the subscription client.
 
-## Open proposals for Tao
+## After the live passes
 
-- Add an OpenCode role deny for `.magnolia/services/**`; it was intentionally
-  not applied because OpenCode agent Markdown and golden snapshots are frozen.
-- Give the OpenCode evaluator a tested JSON-producing prompt/step contract, or
-  keep that role explicitly unavailable.
-- Pin OpenCode `small_model` so session-title calls do not silently use the
-  default `openai/gpt-6-luna` route.
+Tao's review of PR #25 (17 November) settled the three proposals that were open
+here:
+
+- OpenCode campaign roles now deny `**/.magnolia/services/**` for read, glob and
+  grep; the `campaign-service.{json,log}` denies are kept. The OpenCode agent
+  Markdown and its goldens changed at these lines only.
+- The rendered OpenCode configuration pins `small_model` to the route's approved
+  model, so session titles no longer use the client's default route.
+- The evaluator JSON instruction is fixed on the PR1 line (one decision
+  instruction for every route, `stdin` closed). This branch picks it up when it
+  is rebased onto that fix; until then the OpenCode evaluator row stays a launch
+  observation only.
+
+The same round closed the last retry findings: an active retry series keeps its
+backoff when content grows, the retry command uses the member's memory route
+and refuses visibly when that route has no model, native OpenCode sessions
+re-arm on their own activity, and the value scan ignores short placeholders
+while still catching real secrets. None of these changes was exercised in a
+live pass. None changes a capability-row identity input: the hook sources and
+renderers are untouched, and the removed `opencode_omitted_read_deny_patterns`
+field is OpenCode-only and never enters the Claude or Codex policy document.
+This was checked by reading the code, not by recomputing the identities.
 
 ## Parked minors
 
