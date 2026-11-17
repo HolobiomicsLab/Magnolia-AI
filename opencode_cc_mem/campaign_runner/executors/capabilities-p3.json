@@ -820,6 +820,30 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
             }
           },
           "configuration_binding": {
@@ -830,6 +854,30 @@
               "code_mode_host": {
                 "version": "0.169.0",
                 "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
               },
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
               "mcp": "a719ceb67eddfd81fd4c86a423d87f5ba432573056181c610eaba10d915142f5",
@@ -856,6 +904,30 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
             }
           },
           "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
@@ -1019,6 +1091,30 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
             }
           },
           "configuration_binding": {
@@ -1029,6 +1125,30 @@
               "code_mode_host": {
                 "version": "0.169.0",
                 "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
               },
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
@@ -1055,6 +1175,30 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
             }
           },
           "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."

@@ -132,6 +132,7 @@ LAUNCH_IDENTITY_COMPONENTS = (
     "client_version",
     "client_sha256",
     "code_mode_host",
+    "codex_package",
     "settings",
     "mcp",
     "native_files",
@@ -159,6 +160,7 @@ class PreparedLaunch:
     code_mode_host_path: Path | None = None
     code_mode_host_sha256: str | None = None
     code_mode_host_version: str | None = None
+    codex_package_identity: Mapping[str, Any] | None = None
     memory_service_handle: Any = None
 
 
@@ -220,6 +222,7 @@ def _prepare_launch(
     code_mode_host_path = None
     code_mode_host_sha256 = None
     code_mode_host_version = None
+    codex_package_identity = None
     if "launch_identity" in evidence:
         launch_identity = _normalized_launch_identity(
             context,
@@ -236,9 +239,12 @@ def _prepare_launch(
         )
         client_sha256 = str(launch_identity["components"]["client_sha256"])
         if route.client == "codex" and context.role in {"worker", "reviewer"}:
-            code_mode_host_path, code_mode_host_version = (
-                _resolved_codex_code_mode_host(Path(launch_identity["executable"]))
+            executable = Path(launch_identity["executable"])
+            package_root, codex_package_identity = _resolved_codex_package(executable)
+            code_mode_host_path = _codex_package_executable_path(
+                package_root, codex_package_identity, "code_mode_host"
             )
+            code_mode_host_version = str(codex_package_identity["version"])
             code_mode_host_sha256 = str(
                 launch_identity["components"]["code_mode_host"]["sha256"]
             )
@@ -266,9 +272,13 @@ def _prepare_launch(
                     )
                 client_sha256 = _file_digest(executable)
                 if route.client == "codex" and context.role in {"worker", "reviewer"}:
-                    code_mode_host_path, code_mode_host_version = (
-                        _resolved_codex_code_mode_host(executable)
+                    package_root, codex_package_identity = _resolved_codex_package(
+                        executable
                     )
+                    code_mode_host_path = _codex_package_executable_path(
+                        package_root, codex_package_identity, "code_mode_host"
+                    )
+                    code_mode_host_version = str(codex_package_identity["version"])
                     code_mode_host_sha256 = _file_digest(code_mode_host_path)
                 context = replace(context, launch_argv=(str(executable),))
     if context.resume_from is not None:
@@ -284,6 +294,7 @@ def _prepare_launch(
             code_mode_host_path,
             code_mode_host_sha256,
             code_mode_host_version,
+            codex_package_identity,
             frozenset(protected_env_names),
             {
                 "policy.json": policy_body,
@@ -325,6 +336,7 @@ def _prepare_launch(
         code_mode_host_path,
         code_mode_host_sha256,
         code_mode_host_version,
+        codex_package_identity,
         frozenset(protected_env_names),
     )
 
@@ -569,11 +581,15 @@ def _normalized_launch_identity(
     if context.route is not None and context.route.client == "codex":
         components["model"] = context.route.model
         if context.role in {"worker", "reviewer"}:
-            host_path, host_version = _resolved_codex_code_mode_host(executable)
+            package_root, package_identity = _resolved_codex_package(executable)
+            host_path = _codex_package_executable_path(
+                package_root, package_identity, "code_mode_host"
+            )
             components["code_mode_host"] = {
-                "version": host_version,
+                "version": package_identity["version"],
                 "sha256": _file_digest(host_path),
             }
+            components["codex_package"] = package_identity
     return {
         "schema_version": "magnolia-normalized-launch-identity-v1",
         "executable": str(executable),
@@ -618,31 +634,140 @@ def _resolved_client_executable(
     return executable
 
 
-def _resolved_codex_code_mode_host(executable: Path) -> tuple[Path, str | None]:
-    """Resolve the packaged 0.169-style host beside the real Codex executable."""
+def _resolved_codex_package(executable: Path) -> tuple[Path, dict[str, Any]]:
+    """Resolve and hash every executable exposed by a standalone Codex package."""
     try:
         executable = executable.resolve(strict=True)
-        package_root = executable.parent.parent
+        package_root = executable.parent.parent.resolve(strict=True)
         manifest_path = package_root / "codex-package.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        entrypoint = manifest.get("entrypoint")
-        expected_client = (package_root / str(entrypoint)).resolve(strict=True)
-        host = executable.with_name("codex-code-mode-host").resolve(strict=True)
+        manifest_realpath = manifest_path.resolve(strict=True)
+        _require_codex_package_path(manifest_realpath, package_root)
+        manifest_body = manifest_realpath.read_bytes()
+        manifest = json.loads(manifest_body)
     except (OSError, RuntimeError, ValueError, TypeError) as exc:
-        raise ExecutorRefused(
-            "Codex code-mode host is unavailable from the client package"
-        ) from exc
-    if (
-        manifest.get("layoutVersion") != 1
-        or expected_client != executable
-        or not executable.is_file()
-        or not host.is_file()
-    ):
-        raise ExecutorRefused(
-            "Codex code-mode host does not match the client package layout"
-        )
+        raise ExecutorRefused("Codex package manifest is unavailable") from exc
+    layout_version = manifest.get("layoutVersion")
     version = manifest.get("version")
-    return host, version if isinstance(version, str) and version else None
+    target = manifest.get("target")
+    if (
+        layout_version != 1
+        or not isinstance(version, str)
+        or not version
+        or not isinstance(target, str)
+        or not target
+    ):
+        raise ExecutorRefused("Codex package manifest metadata is invalid")
+    executables = {
+        "entrypoint": _codex_package_executable(
+            package_root, manifest.get("entrypoint"), "entrypoint"
+        ),
+        "code_mode_host": _codex_package_executable(
+            package_root,
+            executable.with_name("codex-code-mode-host").relative_to(package_root),
+            "code_mode_host",
+        ),
+    }
+    if _codex_package_executable_path(
+        package_root, {"executables": executables}, "entrypoint"
+    ) != executable:
+        raise ExecutorRefused("Codex entrypoint does not match its package manifest")
+    if "execServer" in manifest:
+        executables["execServer"] = _codex_package_executable(
+            package_root, manifest["execServer"], "execServer"
+        )
+    if "pathDir" in manifest:
+        executables.update(
+            _codex_path_executables(package_root, manifest["pathDir"])
+        )
+    return package_root, {
+        "layout_version": layout_version,
+        "version": version,
+        "target": target,
+        "manifest_sha256": _digest(manifest_body),
+        "executables": dict(sorted(executables.items())),
+    }
+
+
+def _codex_package_executable(
+    package_root: Path, relative: Any, component: str
+) -> dict[str, str]:
+    """Bind one executable after proving its realpath stays in the package."""
+    if not isinstance(relative, (str, os.PathLike)):
+        raise ExecutorRefused(f"Codex package executable is invalid: {component}")
+    relative_path = Path(relative)
+    if relative_path.is_absolute():
+        raise ExecutorRefused(
+            f"Codex package executable is outside its package: {component}"
+        )
+    try:
+        realpath = (package_root / relative_path).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused(
+            f"Codex package executable is unavailable: {component}"
+        ) from exc
+    _require_codex_package_path(realpath, package_root)
+    if not realpath.is_file() or not os.access(realpath, os.X_OK):
+        raise ExecutorRefused(f"Codex package executable is invalid: {component}")
+    return {
+        "path": realpath.relative_to(package_root).as_posix(),
+        "sha256": _file_digest(realpath),
+    }
+
+
+def _codex_path_executables(
+    package_root: Path, relative: Any
+) -> dict[str, dict[str, str]]:
+    """Bind each executable the package adds directly to the client PATH."""
+    if not isinstance(relative, (str, os.PathLike)) or Path(relative).is_absolute():
+        raise ExecutorRefused("Codex pathDir is outside its package")
+    try:
+        path_dir = (package_root / Path(relative)).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ExecutorRefused("Codex pathDir is unavailable") from exc
+    _require_codex_package_path(path_dir, package_root)
+    if not path_dir.is_dir():
+        raise ExecutorRefused("Codex pathDir is invalid")
+    bound = {}
+    for candidate in sorted(path_dir.iterdir(), key=lambda path: path.name):
+        try:
+            realpath = candidate.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ExecutorRefused("Codex pathDir entry is unavailable") from exc
+        if not realpath.is_file() or not os.access(realpath, os.X_OK):
+            continue
+        component = f"pathDir/{candidate.name}"
+        bound[component] = _codex_package_executable(
+            package_root, candidate.relative_to(package_root), component
+        )
+    return bound
+
+
+def _require_codex_package_path(path: Path, package_root: Path) -> None:
+    if not path.is_relative_to(package_root):
+        raise ExecutorRefused("Codex package executable is outside its package")
+
+
+def _codex_package_executable_path(
+    package_root: Path, identity: Mapping[str, Any], component: str
+) -> Path:
+    try:
+        relative = identity["executables"][component]["path"]
+        path = (package_root / relative).resolve(strict=True)
+    except (KeyError, OSError, RuntimeError, TypeError) as exc:
+        raise ExecutorRefused(
+            f"Codex package executable is unavailable: {component}"
+        ) from exc
+    _require_codex_package_path(path, package_root)
+    return path
+
+
+def _resolved_codex_code_mode_host(executable: Path) -> tuple[Path, str | None]:
+    """Resolve the code-mode host from the complete package identity."""
+    package_root, identity = _resolved_codex_package(executable)
+    return (
+        _codex_package_executable_path(package_root, identity, "code_mode_host"),
+        str(identity["version"]),
+    )
 
 
 def _installed_client_version(
@@ -1729,6 +1854,7 @@ def _resume_launch(
     code_mode_host_path: Path | None,
     code_mode_host_sha256: str | None,
     code_mode_host_version: str | None,
+    codex_package_identity: Mapping[str, Any] | None,
     protected_env_names: frozenset[str],
     expected_artifacts: Mapping[str, bytes],
 ) -> PreparedLaunch:
@@ -1791,6 +1917,7 @@ def _resume_launch(
         code_mode_host_path,
         code_mode_host_sha256,
         code_mode_host_version,
+        codex_package_identity,
         protected_env_names,
     )
 
@@ -1872,6 +1999,7 @@ def _prepared(
     code_mode_host_path: Path | None,
     code_mode_host_sha256: str | None,
     code_mode_host_version: str | None,
+    codex_package_identity: Mapping[str, Any] | None,
     protected_env_names: frozenset[str],
 ) -> PreparedLaunch:
     return PreparedLaunch(
@@ -1888,6 +2016,11 @@ def _prepared(
         code_mode_host_path=code_mode_host_path,
         code_mode_host_sha256=code_mode_host_sha256,
         code_mode_host_version=code_mode_host_version,
+        codex_package_identity=(
+            MappingProxyType(dict(codex_package_identity))
+            if codex_package_identity is not None
+            else None
+        ),
         memory_service_handle=context.memory_service.get("_handle"),
     )
 
