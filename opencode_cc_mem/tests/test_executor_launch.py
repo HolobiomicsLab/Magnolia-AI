@@ -89,6 +89,14 @@ def _fake_codex_client(tmp_path):
     host = binary.with_name("codex-code-mode-host")
     host.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     host.chmod(0o755)
+    exec_server = binary.with_name("codex-exec-server")
+    exec_server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    exec_server.chmod(0o755)
+    path_dir = package / "codex-path"
+    path_dir.mkdir(exist_ok=True)
+    rg = path_dir / "rg"
+    rg.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    rg.chmod(0o755)
     (package / "codex-package.json").write_text(
         json.dumps({
             "layoutVersion": 1,
@@ -96,6 +104,8 @@ def _fake_codex_client(tmp_path):
             "target": "test-target",
             "variant": "codex",
             "entrypoint": "bin/codex",
+            "execServer": "bin/codex-exec-server",
+            "pathDir": "codex-path",
         }),
         encoding="utf-8",
     )
@@ -354,6 +364,36 @@ def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
     assert launch.code_mode_host_path == host
     assert launch.code_mode_host_sha256 == hashlib.sha256(host.read_bytes()).hexdigest()
     assert launch.code_mode_host_version == "0.154.0"
+    assert launch.codex_package_identity == {
+        "layout_version": 1,
+        "version": "0.154.0",
+        "target": "test-target",
+        "manifest_sha256": hashlib.sha256(
+            (binary.parent.parent / "codex-package.json").read_bytes()
+        ).hexdigest(),
+        "executables": {
+            "code_mode_host": {
+                "path": "bin/codex-code-mode-host",
+                "sha256": hashlib.sha256(host.read_bytes()).hexdigest(),
+            },
+            "entrypoint": {
+                "path": "bin/codex",
+                "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+            },
+            "execServer": {
+                "path": "bin/codex-exec-server",
+                "sha256": hashlib.sha256(
+                    binary.with_name("codex-exec-server").read_bytes()
+                ).hexdigest(),
+            },
+            "pathDir/rg": {
+                "path": "codex-path/rg",
+                "sha256": hashlib.sha256(
+                    (binary.parent.parent / "codex-path" / "rg").read_bytes()
+                ).hexdigest(),
+            },
+        },
+    }
 
     for path, body in launch.files.items():
         if path.name in {"config.toml", "hooks.json"}:
@@ -394,6 +434,60 @@ def test_codex_rechecks_code_mode_host_before_spawn(tmp_path):
 
     with pytest.raises(ExecutorRefused, match="code-mode host changed before spawn"):
         executor._verify_client_bytes()
+
+
+def test_codex_rechecks_every_package_executable_and_manifest_before_spawn(tmp_path):
+    for changed_relative in ("bin/codex-exec-server", "codex-path/rg", "codex-package.json"):
+        root = tmp_path / changed_relative.replace("/", "-")
+        root.mkdir()
+        binary = _fake_codex_client(root)
+        context = _context(
+            root,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            launch_argv=(str(binary),),
+        )
+        launch = prepare_launch(context)
+        for path, body in launch.files.items():
+            if path.name in {"config.toml", "hooks.json"}:
+                target = context.project_dir / path.relative_to(launch.invocation_dir)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(body)
+        executor = CodexExecutor(
+            launch, "selected-model", "worker", 30,
+            user_config_path=Path(context.setup["codex_user_config_path"]),
+        )
+        changed_path = binary.parent.parent / changed_relative
+        if changed_relative == "codex-package.json":
+            changed_manifest = json.loads(changed_path.read_text(encoding="utf-8"))
+            changed_manifest["target"] = "changed-target"
+            changed_path.write_text(json.dumps(changed_manifest), encoding="utf-8")
+        else:
+            changed_path.write_text("changed after identity binding", encoding="utf-8")
+
+        with pytest.raises(ExecutorRefused, match="package changed before spawn"):
+            executor._verify_client_bytes()
+
+
+def test_codex_refuses_package_executable_symlink_outside_package(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    outside = tmp_path / "outside-exec-server"
+    outside.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    outside.chmod(0o755)
+    exec_server = binary.with_name("codex-exec-server")
+    exec_server.unlink()
+    exec_server.symlink_to(outside)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+
+    with pytest.raises(ExecutorRefused, match="outside its package"):
+        prepare_launch(context)
 
 
 def test_codex_code_mode_host_selector_is_filtered_or_refused(tmp_path, monkeypatch):

@@ -419,6 +419,34 @@ def test_codex_campaign_rows_accepted_from_live_gate():
         assert row["gate"]["value"]["configuration_binding"]["components"][
             "code_mode_host"
         ] == host
+        package = row["cells"]["identity"]["value"]["codex_package"]
+        assert package == {
+            "layout_version": 1,
+            "version": "0.169.0",
+            "target": "aarch64-apple-darwin",
+            "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+            "executables": {
+                "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+                },
+                "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+                },
+                "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918",
+                },
+                "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf",
+                },
+            },
+        }
+        assert row["gate"]["value"]["configuration_binding"]["components"][
+            "codex_package"
+        ] == package
         assert (
             "identity extended after gate 4 (host binary bound); behaviour unchanged"
             in row["cells"]["identity"]["note"]

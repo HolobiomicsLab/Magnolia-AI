@@ -250,6 +250,8 @@ def _project_launch_identity(row: Mapping[str, Any]) -> dict[str, Any] | None:
     )
     if identity.get("code_mode_host") is not None:
         components["code_mode_host"] = identity["code_mode_host"]
+    if identity.get("codex_package") is not None:
+        components["codex_package"] = identity["codex_package"]
     return {
         "schema_version": "magnolia-normalized-launch-identity-v1",
         "components": components,

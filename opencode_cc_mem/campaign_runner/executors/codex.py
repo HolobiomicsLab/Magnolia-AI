@@ -406,8 +406,9 @@ class CodexExecutor:
         if self.role in {"worker", "reviewer"} and (
             self.prepared.code_mode_host_path is None
             or not self.prepared.code_mode_host_sha256
+            or self.prepared.codex_package_identity is None
         ):
-            raise WorkerError("Codex code-mode host is not identity-bound")
+            raise WorkerError("Codex package executables are not identity-bound")
         self._native_artifact(".codex/config.toml")
         self._native_artifact(".codex/hooks.json")
         self._verify_project_artifacts()
@@ -746,14 +747,29 @@ class CodexExecutor:
             raise ExecutorRefused("Codex client executable changed before spawn")
         if self.role not in {"worker", "reviewer"}:
             return
-        from campaign_runner.launch import _resolved_codex_code_mode_host
+        from campaign_runner.launch import (
+            _codex_package_executable_path,
+            _resolved_codex_package,
+        )
 
         try:
-            host, version = _resolved_codex_code_mode_host(executable)
+            package_root, package_identity = _resolved_codex_package(executable)
         except ExecutorRefused as exc:
             raise ExecutorRefused(
-                "Codex code-mode host changed before spawn"
+                "Codex package changed before spawn"
             ) from exc
+        expected_package = self.prepared.codex_package_identity
+        assert expected_package is not None
+        if package_identity != expected_package:
+            expected_host = expected_package["executables"].get("code_mode_host")
+            actual_host = package_identity["executables"].get("code_mode_host")
+            if expected_host != actual_host:
+                raise ExecutorRefused("Codex code-mode host changed before spawn")
+            raise ExecutorRefused("Codex package changed before spawn")
+        host = _codex_package_executable_path(
+            package_root, package_identity, "code_mode_host"
+        )
+        version = str(package_identity["version"])
         if (
             host != self.prepared.code_mode_host_path
             or version != self.prepared.code_mode_host_version
