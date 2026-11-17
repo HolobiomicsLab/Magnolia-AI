@@ -79,6 +79,14 @@ PASSTHROUGH_ENV = {
 PARENT_CLIENT_ENV = {**STRIPPED_ENV, **PASSTHROUGH_ENV}
 
 
+def _with_required_startup(servers: dict) -> dict:
+    """Mirror the fail-closed startup contract for governed Codex MCP servers."""
+    for server in servers.values():
+        server["required"] = True
+        server["startup_timeout_sec"] = 30
+    return servers
+
+
 class FakeClock:
     def __init__(self):
         self.value = datetime(2026, 11, 16, 8, tzinfo=timezone.utc)
@@ -364,7 +372,9 @@ def _enable_campaign_role(context: ExecContext, role: str) -> None:
             for name in ("read_file", "list_dir", "search")
         },
     }
-    for relative, body in native_artifacts(launch_context, servers).items():
+    for relative, body in native_artifacts(
+        launch_context, _with_required_startup(servers)
+    ).items():
         (context.project_dir / relative).write_bytes(body)
     evidence["identity"] = configuration_identity(context)
 
@@ -445,7 +455,9 @@ def test_codex_worker_reviewer_launch_includes_read_server_and_restrictions(
                 )
             },
         }
-    for relative, body in native_artifacts(expected_context, servers).items():
+    for relative, body in native_artifacts(
+        expected_context, _with_required_startup(servers)
+    ).items():
         (context.project_dir / relative).write_bytes(body)
     evidence["identity"] = configuration_identity(context)
 
@@ -603,7 +615,9 @@ def test_codex_worker_pins_each_owner_isolation_setting(
             },
         },
     }
-    for relative, body in native_artifacts(expected_context, servers).items():
+    for relative, body in native_artifacts(
+        expected_context, _with_required_startup(servers)
+    ).items():
         (context.project_dir / relative).write_bytes(body)
     evidence["identity"] = configuration_identity(context)
 
@@ -969,7 +983,9 @@ def test_codex_refuses_user_read_server_name_collision(tmp_path, name):
         invocation_id="reviewer-one",
         noninteractive=True,
     )
-    for relative, body in native_artifacts(launch_context, servers).items():
+    for relative, body in native_artifacts(
+        launch_context, _with_required_startup(servers)
+    ).items():
         (context.project_dir / relative).write_bytes(body)
     trust = Path(context.setup["codex_user_config_path"])
     trust.write_text(

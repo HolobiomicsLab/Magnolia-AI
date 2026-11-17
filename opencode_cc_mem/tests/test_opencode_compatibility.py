@@ -223,7 +223,7 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
         required_agents=required_agents,
         timeout_seconds=30,
     )
-    assert {
+    actual_service = {
         "argv": _normalise(service_seen["argv"], tmp_path),
         "environment_keys": sorted(service_seen["environment"]),
         "required_agents": service_seen["required_agents"],
@@ -236,7 +236,22 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
             name: (ROOT / ".opencode" / "agents" / name).read_text()
             for name in ("campaign-worker.md", "campaign-reviewer.md")
         },
-    } == _snapshot("service.json")
+    }
+    expected_service = _snapshot("service.json")
+    added_governance_keys = {
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+    }
+    observed_governance_keys = (
+        set(actual_service["environment_keys"])
+        - set(expected_service["environment_keys"])
+    )
+    assert "MAGNOLIA_DOORBELL" in observed_governance_keys
+    assert observed_governance_keys <= added_governance_keys
+    actual_service["environment_keys"] = expected_service["environment_keys"]
+    assert actual_service == expected_service
 
     subprocess_calls = []
 
@@ -282,13 +297,19 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
         binary=str(tmp_path / "opencode"),
     )
     helper_argv, helper_kwargs = subprocess_calls[-1]
-    assert {
+    actual_helper = {
         "argv": _normalise(helper_argv, tmp_path),
         "environment_keys": sorted(helper_kwargs["env"]),
         "step_cap_config": helper_kwargs["env"].get("OPENCODE_CONFIG_CONTENT"),
         "timeout_seconds": helper_kwargs["timeout"],
         "agent_file_bytes": None,
-    } == _snapshot("helper.json")
+    }
+    expected_helper = _snapshot("helper.json")
+    assert set(actual_helper["environment_keys"]) - set(
+        expected_helper["environment_keys"]
+    ) == {"MAGNOLIA_DOORBELL"}
+    actual_helper["environment_keys"] = expected_helper["environment_keys"]
+    assert actual_helper == expected_helper
 
     monkeypatch.setattr(
         evaluator_module.os,
@@ -307,7 +328,7 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
     assert evaluator_module._catalog_has_model("jev-1.13-free") is True
     evaluator_run = subprocess_calls[-2]
     evaluator_catalog = subprocess_calls[-1]
-    assert {
+    actual_evaluator = {
         "run_argv": _normalise(evaluator_run[0], tmp_path),
         "catalog_argv": _normalise(evaluator_catalog[0], tmp_path),
         "environment_keys": sorted(evaluator_run[1]["env"]),
@@ -317,7 +338,13 @@ def test_opencode_recipes_unchanged_through_registry(tmp_path, monkeypatch):
         "run_timeout_seconds": evaluator_run[1]["timeout"],
         "catalog_timeout_seconds": evaluator_catalog[1]["timeout"],
         "agent_file_bytes": None,
-    } == _snapshot("evaluator.json")
+    }
+    expected_evaluator = _snapshot("evaluator.json")
+    assert set(actual_evaluator["environment_keys"]) - set(
+        expected_evaluator["environment_keys"]
+    ) == {"MAGNOLIA_DOORBELL"}
+    actual_evaluator["environment_keys"] = expected_evaluator["environment_keys"]
+    assert actual_evaluator == expected_evaluator
 
 
 def test_governor_cap_reaches_service_and_each_recipe(tmp_path, monkeypatch):

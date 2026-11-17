@@ -279,7 +279,15 @@ def _production_claude_context(tmp_path, *, role="helper", project_name="project
         "python_executable": str(python),
         "tools_port": 8123,
         "setup": {"memory_enabled": True},
-        "memory_service": _memory_route(route, str(python), installation),
+        "memory_service": (
+            {
+                "transport": "http",
+                "url": "http://127.0.0.1:0/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            }
+            if role == "worker"
+            else _memory_route(route, str(python), installation)
+        ),
         "invocation_id": f"{role}-{project_name}",
         "launch_argv": (str(binary),),
         "role_capabilities": capabilities,
@@ -706,6 +714,33 @@ def test_codex_read_server_receives_policy_digest_by_name(tmp_path):
     config = _artifact_text(launch)
     assert "MAGNOLIA_HOOK_POLICY_SHA256" in config
     assert launch.env["MAGNOLIA_HOOK_POLICY_SHA256"] == launch.policy_digest
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_codex_required_servers_block_startup_until_ready(tmp_path, role):
+    capabilities = (
+        WORKER_CAPABILITIES
+        if role == "worker"
+        else ("native_read", "native_glob", "native_grep")
+    )
+    launch = prepare_launch(_context(
+        tmp_path,
+        client="codex",
+        role=role,
+        capabilities=capabilities,
+    ))
+    config = tomllib.loads(
+        (launch.invocation_dir / ".codex" / "config.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    servers = config["mcp_servers"]
+    assert servers["magnolia-read"]["required"] is True
+    assert servers["magnolia-read"]["startup_timeout_sec"] == 30
+    if role == "worker":
+        assert servers["compchem-memory"]["required"] is True
+        assert servers["compchem-memory"]["startup_timeout_sec"] == 30
 
 
 def test_claude_vibe_opencode_launch_unchanged(tmp_path):
@@ -1586,10 +1621,14 @@ def test_launch_accepts_claude_rows_in_any_project(tmp_path, role):
 def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, role):
     context = _production_claude_context(tmp_path, role=role)
     route = _memory_route(
-        context.route, context.python_executable, context.installation_root
+        context.route,
+        context.python_executable,
+        context.installation_root,
+        managed=True,
     )
 
-    prepare_launch(replace(context, memory_service=route))
+    assert route == {"transport": "managed"}
+    prepare_launch(context)
 
 
 @pytest.mark.parametrize(
@@ -1704,9 +1743,6 @@ def test_bound_identity_matches_two_independent_installations(
                 route=route,
                 launch_argv=(str(_fake_codex_client(location)),),
                 role_capabilities=capabilities,
-                memory_service=_memory_route(
-                    route, context.python_executable, context.installation_root
-                ),
             )
         assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
         launches.append(prepare_launch(context))
@@ -1716,7 +1752,7 @@ def test_bound_identity_matches_two_independent_installations(
 
 
 @pytest.mark.parametrize("selection", ("unset", "environment", "setup"))
-def test_worker_memory_environment_references_are_defined(tmp_path, selection):
+def test_worker_managed_memory_does_not_forward_provider_selection(tmp_path, selection):
     environment = {"PATH": os.environ.get("PATH", "")}
     setup = {"memory_enabled": True}
     expected = {"MAGNOLIA_MEMORY_MODEL": "", "MAGNOLIA_MEMORY_PROVIDER": ""}
@@ -1731,12 +1767,19 @@ def test_worker_memory_environment_references_are_defined(tmp_path, selection):
     )
     launch = prepare_launch(context)
     mcp = json.loads((launch.invocation_dir / "claude-mcp.json").read_text())
-    references = mcp["mcpServers"]["compchem-memory"]["env"]
-    assert set(references) == set(context.memory_service["env_vars"])
-    assert set(references) <= launch.env.keys()
-    expanded = {name: launch.env.get(name, value) for name, value in references.items()}
-    assert not any("${" in value for value in expanded.values())
-    assert {name: expanded[name] for name in expected} == expected
+    rendered = mcp["mcpServers"]["compchem-memory"]
+    assert rendered["type"] == "http"
+    assert rendered["url"] == "http://127.0.0.1:0/mcp"
+    assert rendered["headers"] == {
+        "Authorization": "Bearer ${MAGNOLIA_MEMORY_SERVICE_TOKEN}"
+    }
+    credential_names = {
+        "MAGNOLIA_LLM_API_KEY",
+        "MAGNOLIA_CRITIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+    }
+    assert not credential_names & set(launch.env)
 
 
 @pytest.mark.parametrize("change", ("missing", "extra"))
@@ -1929,12 +1972,6 @@ def test_hook_interpreter_accepts_exact_explicit_override(tmp_path, kind):
     context = _production_claude_context(
         tmp_path, role="worker", python_executable=str(interpreter),
         environment={"MAGNOLIA_PYTHON": str(interpreter)},
-    )
-    context = replace(
-        context,
-        memory_service=_memory_route(
-            context.route, str(interpreter), context.installation_root
-        ),
     )
 
     launch = prepare_launch(context)

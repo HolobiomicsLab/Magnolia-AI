@@ -232,6 +232,9 @@ def test_opencode_worker_exports_and_judges_outside_the_lease(tmp_path, monkeypa
         "name": "alpha", "root_mode": False, "harness": "opencode",
         "operation": "critic", "session_id": "s1", "turn_id": "u1",
     }
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({"opencode_session_id": "s1"}) + "\n", encoding="utf-8"
+    )
     job = folder / "opencode-turn-1.json"
     job.write_text(json.dumps(payload), encoding="utf-8")
     exported = {"messages": [

@@ -17,6 +17,7 @@ from campaign_runner.reviewers import (  # noqa: E402
     ReviewError,
     Reviewer,
     _extract_json,
+    build_review_prompt,
     choose_reviewer_model,
     model_family,
     validate_review,
@@ -83,6 +84,21 @@ def test_extract_json_accepts_fence_and_prose():
     assert _extract_json('Here is the review:\n{"issues":[]}\nDone.') == {"issues": []}
     with pytest.raises(ReviewError):
         _extract_json("no json here")
+
+
+def test_review_prompt_states_exact_followups_shape(tmp_path):
+    prompt = build_review_prompt(
+        [tmp_path / "work" / "out.md"], tmp_path / "report.md", "analyze"
+    )
+
+    exact_shape = (
+        '"followups":[{"observation":"...","proposed_test":"...",'
+        '"estimated_core_hours":0,"reason":"..."}]'
+    )
+    assert exact_shape in prompt
+    assert "Every followups item must be an object with exactly" in prompt
+    assert "Use an empty followups array when there are no follow-ups" in prompt
+    assert exact_shape in REVIEW_FORMAT_NOTE
 
 
 def test_validate_review_requires_evidence_paths(tmp_path):

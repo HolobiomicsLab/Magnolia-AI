@@ -597,6 +597,8 @@ def _run_once(model: str, project_dir: str, env: dict, timeout_s: int,
                 outcome = RunOutcome("success" if returncode == 0 else "failure")
             if process.client_started:
                 admission.release(outcome=outcome)
+            else:
+                admission._cancel_before_client_exec()
     parsed = parse_run_events(stdout)
     parsed["rc"] = returncode
     parsed["stderr_tail"] = stderr[-2000:]

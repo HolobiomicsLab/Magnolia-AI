@@ -1182,6 +1182,56 @@ def test_governed_opencode_text_quota_is_typed_and_held(tmp_path, monkeypatch):
     assert state["cooldowns"][route.subscription_key]["reason"] == "client quota"
 
 
+def test_daemon_cancels_admission_when_client_never_started(tmp_path, monkeypatch):
+    from campaign_runner import process as process_module
+    from campaign_runner.governor import Governor
+    from campaign_runner.process import ProcessOutcome
+    from campaign_runner.workers import InvocationGovernance
+
+    root = _root(tmp_path)
+    project = Path(root) / "opencode_cc_mem" / "projects" / "literature"
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    route = d._resolve_helper_route(root, str(project), "deepseek/deepseek-flash")
+    governor = Governor()
+    governance = InvocationGovernance(
+        governor, route, "helper:pre-exec-stop", d._project_digest(project), role_cap=40
+    )
+
+    def stop_before_client(
+        argv, cwd, env, timeout_seconds, stdout_path, stderr_path, control
+    ):
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+        control.on_start(os.getpid(), os.getpgrp())
+        return ProcessOutcome(
+            returncode=125,
+            timed_out=False,
+            duration_seconds=0.01,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            outcome=RunOutcome("cancelled"),
+            client_started=False,
+        )
+
+    monkeypatch.setattr(process_module, "run_process", stop_before_client)
+    result = d._run_once(
+        route.model,
+        str(project),
+        {"MAGNOLIA_ROOT": root},
+        10,
+        ["hello"],
+        d.runs_dir(root) / "pre-exec-stop.jsonl",
+        binary=str(tmp_path / "opencode"),
+        governance=governance,
+    )
+
+    assert result["outcome"].kind == "cancelled"
+    state = json.loads(governor.state_path.read_text(encoding="utf-8"))
+    assert state["reservations"] == {}
+    assert not governor.ledger_path.exists()
+
+
 def test_opencode_model_prose_does_not_create_quota_hold(tmp_path, monkeypatch):
     from campaign_runner.governor import Governor
     from campaign_runner.workers import InvocationGovernance
