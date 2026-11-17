@@ -187,8 +187,7 @@ output_dir.mkdir(parents=True, exist_ok=True)
 source = config["exports"][index]
 if source:
     shutil.copy(source, output_dir / "export.json")
-for event in config["stdout_lines"][index]:
-    print(json.dumps(event), flush=True)
+print(json.dumps(config["stdout_lines"][index]), flush=True)
 for line in config["stderr_lines"]:
     print(line, file=sys.stderr, flush=True)
 if index == 0 and config["linger_after_first"]:
@@ -886,7 +885,11 @@ def test_vibe_run_real_export_model_outcomes_and_environment(tmp_path, payload, 
     binary, config, state = _stub(
         tmp_path,
         [export if payload is not None else None],
-        stdout_lines=[[{"type": "assistant", "content": "REVIEW-OK"}]],
+        stdout_lines=[[{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "REVIEW-OK"}],
+        }]],
     )
     governance = _governance(tmp_path)
     context = _context(
