@@ -167,15 +167,15 @@ def test_user_forced_tool_event_skip_is_reported(
     assert commits == []
 
 
-def test_user_confirmed_actions_remain_whole_call_leased() -> None:
+def test_user_confirmed_actions_lease_only_their_write_phase() -> None:
     from compchem_memory.tool_catalog import memory_tool_requires_lease
 
+    assert memory_tool_requires_lease("memory_confirm") is True
     for name in (
-        "memory_confirm",
         "memory_apply_consolidation",
         "memory_apply_promotions",
     ):
-        assert memory_tool_requires_lease(name) is True
+        assert memory_tool_requires_lease(name) is False
 
 
 def test_consolidation_fingerprints_before_loading_findings(

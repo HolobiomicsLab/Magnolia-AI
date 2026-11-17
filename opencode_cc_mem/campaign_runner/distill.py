@@ -138,6 +138,7 @@ def drain_queue(
         sessions = sessions[:limit]
     completed: list[Any] = []
     unavailable: list[Any] = list(recorded_unavailable)
+    retryable: list[Any] = []
     for session, display in sessions:
         result = distill_session_transcript(
             str(project / ".magnolia"),
@@ -149,6 +150,9 @@ def drain_queue(
         if result is None:
             unavailable.append(display)
             continue
+        if result.get("status") == "skipped" and result.get("retry") is True:
+            retryable.append(display)
+            continue
         if commit:
             _append_done(run / "control", session, result)
         completed.append(display)
@@ -157,5 +161,6 @@ def drain_queue(
         "sessions": len(sessions),
         "completed": completed,
         "unavailable": unavailable,
+        "retryable": retryable,
         "commit": commit,
     }

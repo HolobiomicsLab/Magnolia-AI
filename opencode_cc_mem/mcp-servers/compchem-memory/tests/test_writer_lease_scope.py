@@ -379,6 +379,66 @@ def test_boot_pipeline_and_timer_hold_no_lease_around_their_steps(tmp_path, monk
     assert observed == [("boot", True), ("smoke", True), ("sweep", True)]
 
 
+def test_session_append_waits_for_compaction_swap_and_survives(tmp_path, monkeypatch):
+    from compchem_memory import compaction
+    from compchem_memory.writer_lease import file_fingerprint
+
+    project = tmp_path / "project"
+    sessions = project / ".magnolia" / "sessions"
+    sessions.mkdir(parents=True)
+    session = sessions / "active.jsonl"
+    session.write_text(json.dumps({"event_type": "session_start"}) + "\n")
+    ready = tmp_path / "append-ready"
+    script = textwrap.dedent(
+        """
+        import sys
+        from pathlib import Path
+        from compchem_memory.tiers.session import SessionManager
+
+        sessions, session, ready = map(Path, sys.argv[1:])
+        manager = SessionManager(sessions, project_id="project", project_dir=str(sessions.parent.parent))
+        manager._current_session = session
+        manager._current_session_id = session.stem
+        ready.write_text("ready")
+        manager.record("sentinel", {"value": "preserved"})
+        """
+    )
+    processes = []
+    original_write = compaction._write_compacted_session
+
+    def write_then_race(path, result):
+        original_write(path, result)
+        process = subprocess.Popen(
+            [PY, "-c", script, str(sessions), str(session), str(ready)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        processes.append(process)
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        with pytest.raises(subprocess.TimeoutExpired):
+            process.wait(timeout=0.2)
+
+    monkeypatch.setattr(compaction, "_write_compacted_session", write_then_race)
+    result = compaction.CompactionResult(
+        kept_messages=[], summary="summary", pruned_count=1,
+        tokens_before=10, tokens_after=1,
+    )
+
+    assert compaction._replace_if_unchanged(
+        session, file_fingerprint([session]), result,
+    ) is result
+    stdout, stderr = processes[0].communicate(timeout=5)
+
+    assert processes[0].returncode == 0, (stdout, stderr)
+    active = session.read_text(encoding="utf-8")
+    assert '"event_type": "sentinel"' in active
+    assert '"value": "preserved"' in active
+
+
 def _staging_finding(staging: Path, name: str, title: str, session: str) -> Path:
     meta = {"title": title, "type": "scientific_finding", "opencode_session_id": session,
             "observed_in_sessions": [session], "tags": [], "tools": [], "confidence": 0.6}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+from pathlib import Path
 
 
 MEMORY_SERVER_MODE = "--memory-server"
@@ -70,6 +71,7 @@ def main() -> None:
         install_stdio_guards(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
         from fastmcp import FastMCP
         from compchem_memory.memory_http import (
+            ProjectBindingMiddleware,
             ProjectWriterLeaseMiddleware,
             ToolAllowlistMiddleware,
         )
@@ -79,16 +81,20 @@ def main() -> None:
         )
 
         allowlist = resolve_memory_server_launch(launch_arguments, os.environ)
+        project_dir = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
+        strict_project_binding = bool(launch_arguments)
+        if strict_project_binding:
+            os.environ["MAGNOLIA_PROJECT_BOUND"] = "1"
         sys.argv = [sys.argv[0]]
         if not isinstance(mcp, FastMCP):
             mcp.run()
             return
         filtered = FastMCP("compchem-memory-stdio-role")
         filtered.add_middleware(ToolAllowlistMiddleware(allowlist.server_names))
+        if strict_project_binding:
+            filtered.add_middleware(ProjectBindingMiddleware(Path(project_dir)))
         filtered.add_middleware(
-            ProjectWriterLeaseMiddleware(
-                os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
-            )
+            ProjectWriterLeaseMiddleware(project_dir)
         )
         filtered.mount(mcp)
         filtered.run()

@@ -79,11 +79,13 @@ READ_ONLY_MEMORY_TOOLS = frozenset(
         "memory_get_goal",
     }
 )
-# Mutating tools whose body can call an LLM (directly or through extraction,
-# distillation or compaction). They are not leased as a whole: each of their
-# store writes takes the project lease for its short critical section only.
+# Mutating tools whose body can call an LLM or a versioning subprocess. They are
+# not leased as a whole: each store write takes the project lease for its short
+# critical section, and external work runs after that lease is released.
 SELF_LEASED_MEMORY_TOOLS = frozenset(
     {
+        "memory_apply_consolidation",
+        "memory_apply_promotions",
         "memory_extract_from_session",
         "memory_compact_session",
         "memory_distill_session",

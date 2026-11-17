@@ -1,11 +1,32 @@
 """Session tier: append-only JSONL log for the current conversation."""
 
+import fcntl
 import json
+import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 SCHEMA_VERSION = 2
+
+
+@contextmanager
+def session_writer_lock(session_path: Path) -> Iterator[None]:
+    """Serialize append and compaction for one session, without blocking other writers."""
+    lock_path = session_path.with_suffix(".session.lock")
+    descriptor = os.open(
+        lock_path,
+        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def _today_prefix() -> str:
@@ -126,15 +147,16 @@ class SessionManager:
         project_dir: str | None = None,
     ) -> str:
         path = self._get_session_path()
-        entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "event_type": event_type,
-            "session_id": self._current_session_id,
-            "project_id": self.project_id,
-            **data,
-        }
-        with open(path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        with session_writer_lock(path):
+            entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event_type": event_type,
+                "session_id": self._current_session_id,
+                "project_id": self.project_id,
+                **data,
+            }
+            with open(path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
         return str(path)
 
     def get_recent(

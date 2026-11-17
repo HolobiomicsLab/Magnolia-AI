@@ -67,3 +67,59 @@ else:
         "thread_hook": True,
     }
     assert (project / ".magnolia" / "crash.log").exists()
+
+
+def test_campaign_stdio_memory_server_is_strictly_project_bound(tmp_path):
+    project = tmp_path / "project"
+    other = tmp_path / "other"
+    project.mkdir()
+    other.mkdir()
+    probe = r'''
+import importlib.util, json, os, sys
+from fastmcp import FastMCP
+
+runner, project, other = sys.argv[1:]
+os.environ["MAGNOLIA_PROJECT_DIR"] = project
+
+def fake_run(self, *args, **kwargs):
+    from compchem_memory.server import ProjectBindingError, _enforce_http_project_binding
+    refused = False
+    try:
+        _enforce_http_project_binding(other)
+    except ProjectBindingError:
+        refused = True
+    sys.__stderr__.write("BOUND=" + json.dumps({
+        "strict": os.environ.get("MAGNOLIA_PROJECT_BOUND"),
+        "cross_project_refused": refused,
+    }) + "\n")
+
+FastMCP.run = fake_run
+spec = importlib.util.spec_from_file_location("magnolia_runner", runner)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+sys.argv = [
+    runner,
+    "--memory-server",
+    "--tool-allowlist-json",
+    json.dumps(["mcp:compchem-memory.memory_get_context"]),
+]
+module.main()
+'''
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(RUNNER), str(project), str(other)],
+        cwd=project,
+        env={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", "")},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    bound_line = next(
+        line for line in completed.stderr.splitlines() if line.startswith("BOUND=")
+    )
+    assert json.loads(bound_line.removeprefix("BOUND=")) == {
+        "strict": "1",
+        "cross_project_refused": True,
+    }

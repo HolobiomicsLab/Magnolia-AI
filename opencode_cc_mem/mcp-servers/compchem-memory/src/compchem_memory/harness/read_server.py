@@ -313,10 +313,11 @@ class ReadServer:
             or re.search(r"\\[1-9]", expression)
         ):
             raise ReadRefused("search regex uses unsupported complex constructs")
-        try:
-            re.compile(expression)
-        except re.error as exc:
-            raise ReadRefused(f"invalid search regex: {exc}") from exc
+        if regex:
+            try:
+                re.compile(expression)
+            except re.error as exc:
+                raise ReadRefused(f"invalid search regex: {exc}") from exc
         return expression, regex
 
     def _match_records(
