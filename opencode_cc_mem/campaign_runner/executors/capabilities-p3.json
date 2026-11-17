@@ -43,13 +43,13 @@
       "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
     ]
   },
-  "note": "On the final tree, all four Claude Code 2.1.326 identities remain equal to live pass 2a. Live pass 5 re-observed the Claude campaign roles and the Codex 0.169.0 worker/reviewer on their exact recorded identities, so only those two Codex rows are no longer stale. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused and deferred.",
+  "note": "The accepted Claude Code worker/reviewer/helper/evaluator and Codex worker/reviewer rows are stale until live re-observation in Plan 4 Task 6 (hook adapter change). Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused and deferred.",
   "rows": [
     {
       "client": "claude-code",
       "role": "worker",
       "role_label": "worker",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
@@ -82,7 +82,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -254,7 +254,7 @@
       "client": "claude-code",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
@@ -287,7 +287,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -453,7 +453,7 @@
       "client": "claude-code",
       "role": "helper",
       "role_label": "service-less helper",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
@@ -486,7 +486,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -651,7 +651,7 @@
       "client": "claude-code",
       "role": "evaluator",
       "role_label": "evaluator",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
@@ -684,7 +684,7 @@
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -843,7 +843,7 @@
       "client": "codex",
       "role": "worker",
       "role_label": "worker",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
@@ -922,7 +922,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1117,7 +1117,7 @@
       "client": "codex",
       "role": "reviewer",
       "role_label": "reviewer",
-      "stale": false,
+      "stale": true,
       "gate": {
         "status": "observed",
         "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
@@ -1196,7 +1196,7 @@
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1405,7 +1405,9 @@
                 "scope": "launch-project",
                 "configuration": "run-owned-refused-role-fixture"
               },
-              "capabilities": ["native_read"],
+              "capabilities": [
+                "native_read"
+              ],
               "model_isolation": {
                 "accepted": true,
                 "model": "gpt-5.6-luna",

@@ -298,7 +298,7 @@ def test_quota_evidence_never_blocks_projection(tmp_path, quota_status):
 
 @pytest.mark.parametrize(
     "client,role,decision",
-    [("codex", "worker", "D2"), ("codex", "reviewer", "D2"), ("vibe", "worker", "D4")],
+    [("codex", "worker", "D2"), ("codex", "reviewer", "D2")],
 )
 def test_d2_d4_rows_remain_refused_with_observed_cells(tmp_path, client, role, decision):
     table = _all_observed_table(tmp_path)
@@ -332,20 +332,25 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
 
     assert set(projected) == {"claude-code", "codex", "vibe"}
     assert len(changed_rows) == 8
-    assert all(
-        row["stale"] is (row["client"] == "codex" and row["role"] in {"helper", "evaluator"})
-        for row in changed_rows
-    )
+    # Plan 4 Task 4 changed the hook adapter: the six accepted rows were rebound to the
+    # new hook_source and stay stale until Plan 4 Task 6 re-observes them live.
+    assert all(row["stale"] is True for row in changed_rows)
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
+        if row["client"] == "codex" and row["role"] in {"helper", "evaluator"}
     } == {"8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff"}
+    assert {
+        row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
+        for row in changed_rows
+        if not (row["client"] == "codex" and row["role"] in {"helper", "evaluator"})
+    } == {"496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"}
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
     assert all(role["gate_accepted"] for role in projected["claude-code"].values())
-    assert all(role["accepted"] for role in projected["claude-code"].values())
-    assert all(not role["stale"] for role in projected["claude-code"].values())
+    assert not any(role["accepted"] for role in projected["claude-code"].values())
+    assert all(role["stale"] for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["claude-code"].values())
     assert all("launch_identity" in role for role in projected["codex"].values())
     assert all(
@@ -354,8 +359,9 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     )
     for role in ("worker", "reviewer"):
         assert projected["codex"][role]["gate_accepted"] is True
-        assert projected["codex"][role]["accepted"] is True
-        assert projected["codex"][role]["stale"] is False
+        # Stale until Plan 4 Task 6 re-observes the rebound hook_source.
+        assert projected["codex"][role]["accepted"] is False
+        assert projected["codex"][role]["stale"] is True
         assert projected["codex"][role]["blocking_cells"] == []
     for role in ("helper", "evaluator"):
         assert projected["codex"][role]["accepted"] is False
@@ -393,8 +399,8 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
-    assert all(item["accepted"] is True for item in projected.values())
-    assert all(item["stale"] is False for item in projected.values())
+    assert all(item["accepted"] is False for item in projected.values())
+    assert all(item["stale"] is True for item in projected.values())  # until Plan 4 Task 6
     assert {
         row["role"]: row["gate"]["artifact"] for row in rows
     } == {
@@ -443,8 +449,8 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert set(rows) == {"worker", "reviewer"}
     assert all(row["gate"]["status"] == "observed" for row in rows.values())
     assert all(projected["codex"][role]["gate_accepted"] for role in rows)
-    assert all(projected["codex"][role]["accepted"] for role in rows)
-    assert all(not projected["codex"][role]["stale"] for role in rows)
+    assert not any(projected["codex"][role]["accepted"] for role in rows)
+    assert all(projected["codex"][role]["stale"] for role in rows)  # until Plan 4 Task 6
     assert rows["worker"]["gate"]["artifact"].endswith(
         "docs/evidence/live5/c1-worker-codex-review.json"
     )
