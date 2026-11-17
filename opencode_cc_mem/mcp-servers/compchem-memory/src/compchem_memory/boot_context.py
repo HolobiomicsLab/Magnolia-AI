@@ -8,6 +8,7 @@ the budget allocation (§1.4 anti-windup) and corrected tier precedence (§2.6).
 from pathlib import Path
 
 from compchem_memory.context_assembly import assemble_context
+from compchem_memory.writer_lease import project_writer_lease
 
 
 def regenerate_boot_context(
@@ -38,6 +39,8 @@ def regenerate_boot_context(
         pass
 
     out_path = Path(project_dir) / ".magnolia" / "boot-context.md"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(result.content)
+    # Assembly may call an LLM, so only the write of this derived file is leased.
+    with project_writer_lease(project_dir):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(result.content)
     return str(out_path)

@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from compchem_memory.storage import ensure_project_store
 from compchem_memory.llm import is_llm_available, call_llm_json
 from compchem_memory import distill_log
 from compchem_memory.reflections import pick_quote
+from compchem_memory.writer_lease import project_writer_lease
 
 MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
@@ -538,24 +540,42 @@ class AutomaticMemoryExtractor:
             return []
 
         store = ensure_project_store(project_dir)
+        cursor_read = self._stored_cursor()
+        # Candidate generation can call an LLM, so it runs outside the project
+        # writer lease; the save re-validates the cursor it started from.
         candidates = self._generate_candidates(events)
 
-        saved = []
-        for candidate in candidates:
-            candidate["run_ids"] = _link_run_ids(store, candidate)
-            path = self._save_to_staging(store, candidate, session_id=session_path.stem)
-            saved.append(path)
+        with project_writer_lease(project_dir):
+            if self._stored_cursor() != cursor_read:
+                print(f"[extraction] {session_path.name}: cursor moved during "
+                      "extraction; nothing saved, the next pass retries", file=sys.stderr)
+                return []
+            saved = []
+            for candidate in candidates:
+                candidate["run_ids"] = _link_run_ids(store, candidate)
+                path = self._save_to_staging(store, candidate, session_id=session_path.stem)
+                saved.append(path)
 
-        if saved:
-            quote = pick_quote("closing")
-            summary = f"{len(saved)} learning(s) distilled from {session_path.name}"
-            distill_log.append_distill_log(project_dir, quote, summary)
-            distill_log.push_distill_notice(project_dir, quote, summary)
+            if saved:
+                quote = pick_quote("closing")
+                summary = f"{len(saved)} learning(s) distilled from {session_path.name}"
+                distill_log.append_distill_log(project_dir, quote, summary)
+                distill_log.push_distill_notice(project_dir, quote, summary)
 
-        self.last_cursor = events[-1].get("timestamp", "")
-        self._save_state()
+            self.last_cursor = events[-1].get("timestamp", "")
+            self._save_state()
 
         return saved
+
+    def _stored_cursor(self) -> str | None:
+        """Return the cursor currently on disk (None when unreadable or absent)."""
+        if not self.state_path or not self.state_path.exists():
+            return None
+        try:
+            data = yaml.safe_load(self.state_path.read_text()) or {}
+        except (yaml.YAMLError, OSError):
+            return None
+        return data.get("last_cursor", "") if isinstance(data, dict) else None
 
     def _load_state(self) -> None:
         if self.state_path and self.state_path.exists():

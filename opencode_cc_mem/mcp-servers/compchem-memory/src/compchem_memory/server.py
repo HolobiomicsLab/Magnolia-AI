@@ -71,7 +71,6 @@ from . import project_context
 from compchem_memory.capture import captured, get_session_manager
 from compchem_memory.tiers.session import SessionManager, init_session_identity
 from compchem_memory.tiers.project import ProjectManager
-from compchem_memory.writer_lease import project_writer_lease as _project_writer_lease
 from compchem_memory.learning.consolidator import consolidate_tier
 from compchem_memory.context_assembly import assemble_context, _memory_store
 from compchem_memory.retrieval import select_relevant_entries
@@ -209,21 +208,22 @@ def _run_startup_scan_background():
         print(f"[boot-timing] {step}: {int(ms)} ms{suffix}", file=sys.stderr)
 
     def _worker():
-        with _project_writer_lease(PROJECT_DIR):
-            _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
-            t_all = time.monotonic()
-            for step_name, step_fn in _build_boot_steps(PROJECT_DIR):
-                t0 = time.monotonic()
-                try:
-                    step_fn()
-                except BaseException as e:  # noqa: BLE001 - a boot step must not kill the server
-                    _crash_log(f"boot step {step_name}", e)
-                    print(f"[{step_name}] error: {type(e).__name__}: {e}",
-                          file=sys.stderr)
-                    _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
-                else:
-                    _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
-            _log_boot_step("total", (time.monotonic() - t_all) * 1000)
+        # No project writer lease here: the steps call LLMs and subprocesses,
+        # and each of their store writes leases its own short critical section.
+        _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
+        t_all = time.monotonic()
+        for step_name, step_fn in _build_boot_steps(PROJECT_DIR):
+            t0 = time.monotonic()
+            try:
+                step_fn()
+            except BaseException as e:  # noqa: BLE001 - a boot step must not kill the server
+                _crash_log(f"boot step {step_name}", e)
+                print(f"[{step_name}] error: {type(e).__name__}: {e}",
+                      file=sys.stderr)
+                _log_boot_step(step_name, (time.monotonic() - t0) * 1000, ok=False, error=e)
+            else:
+                _log_boot_step(step_name, (time.monotonic() - t0) * 1000)
+        _log_boot_step("total", (time.monotonic() - t_all) * 1000)
 
     threading.Thread(target=_worker, daemon=True).start()
 
@@ -233,8 +233,9 @@ def _run_startup_scan_background():
 # for every shell call. Writing it at the end of the 70-170 s boot pipeline let
 # early calls inherit the previous session's id (2026-11-10 "Nov 5" ghost file).
 if _claim_once("session_identity"):
-    with _project_writer_lease(PROJECT_DIR):
-        _BOOT_SESSION_ID = init_session_identity(PROJECT_DIR)
+    # Never the project writer lease at import: server start must not wait on
+    # a long holder, and an unwritable project still boots read-only.
+    _BOOT_SESSION_ID = init_session_identity(PROJECT_DIR)
     if _BOOT_SESSION_ID is None:
         print("[session_id] error: could not initialize session identity", file=sys.stderr)
 
@@ -287,30 +288,23 @@ def _distill_timer_tick(project_dir: str) -> None:
     memory_distill_session are deliberately ungated. Never raises — a timer
     failure must not crash the server."""
     try:
-        if Path(project_dir).is_dir():
-            with _project_writer_lease(project_dir):
-                _distill_timer_tick_leased(project_dir)
-        else:
-            _distill_timer_tick_leased(project_dir)
+        # No project writer lease around the tick: the canary and the sweep
+        # call LLMs; each store write in them leases its own critical section.
+        # Smoke detector (Phase 0): cadence-gated, off the boot path. Runs the
+        # distiller canary + boot-duplication + dead-man checks; on drift the
+        # canary freeze flag halts auto-promotion. MAGNOLIA_SMOKE_INTERVAL_H
+        # (default 12, 0 = off).
+        from compchem_memory import smoke
+        smoke.maybe_run_scheduled(project_dir)
+        if not _offpeak_gate_disabled() and _is_peak_time():
+            print("[distill_timer] peak hours (UTC) — skipping sweep; "
+                  "backlog will run at the next off-peak tick",
+                  file=sys.stderr)
+            return
+        scan_and_distill(project_dir)
     except Exception as e:
         _crash_log("distill_timer tick", e)
         print(f"[distill_timer] tick error: {e}", file=sys.stderr)
-
-
-def _distill_timer_tick_leased(project_dir: str) -> None:
-    """Run one timer tick while the project's canonical writer lease is held."""
-    # Smoke detector (Phase 0): cadence-gated, off the boot path. Runs the
-    # distiller canary + boot-duplication + dead-man checks; on drift the
-    # canary freeze flag halts auto-promotion. MAGNOLIA_SMOKE_INTERVAL_H
-    # (default 12, 0 = off).
-    from compchem_memory import smoke
-    smoke.maybe_run_scheduled(project_dir)
-    if not _offpeak_gate_disabled() and _is_peak_time():
-        print("[distill_timer] peak hours (UTC) — skipping sweep; "
-              "backlog will run at the next off-peak tick",
-              file=sys.stderr)
-        return
-    scan_and_distill(project_dir)
 
 
 def _run_distill_timer_background() -> None:

@@ -12,6 +12,7 @@ import functools
 import json
 import os
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from itertools import combinations
 from pathlib import Path
@@ -24,7 +25,13 @@ from compchem_memory.reflex_common import (
     pending_indices as _pending_indices,
 )
 from compchem_memory.staging_io import union_origins
-from compchem_memory.writer_lease import leased_source_writer, leased_store_writer
+from compchem_memory.writer_lease import (
+    file_fingerprint,
+    fingerprint_unchanged,
+    leased_source_writer,
+    leased_store_writer,
+    project_writer_lease,
+)
 
 # Natural-language learning types that need semantic (not lexical) matching.
 NL_TYPES = ("scientific_finding", "success_pattern", "parameter_guidance",
@@ -347,7 +354,6 @@ def _default_clusterer(payload: list[dict[str, Any]],
     return clusters
 
 
-@leased_store_writer
 def consolidate_project_findings(
     store_dir: str,
     *,
@@ -363,11 +369,15 @@ def consolidate_project_findings(
     MAGNOLIA_CONSOLIDATION_FLOOR override) never reach the queue; they are
     appended to reflex/suppressed-proposals.jsonl so strictness stays measurable.
     Returns {"clusters": int, "suppressed": int, "artifact": str,
-    "auto_applied": int}."""
+    "auto_applied": int}, plus "skipped" when a finding or the artifact changed
+    while the clusterer ran (nothing is written then)."""
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
     entries = _load_findings(store / "staging", types)
     artifact = store / "reflex" / "consolidation-proposal.json"
+    # Clustering calls an LLM, so it runs outside the project writer lease; the
+    # write below re-validates every file read here under the lease.
+    read_set = file_fingerprint([*(e["path"] for e in entries), artifact])
     # Read prior rejections BEFORE clustering: they both seed the judge (below,
     # MAGNOLIA_CONSOLIDATION_SEED) and durably auto-reject re-proposals (below).
     prior_rejected_keys = _prior_rejected_keys(artifact)
@@ -395,13 +405,27 @@ def consolidate_project_findings(
             },
         })
 
+    with project_writer_lease(store):
+        if not fingerprint_unchanged(read_set):
+            print("[consolidation] store changed during clustering; proposals not "
+                  "written, the next sweep recomputes them", file=sys.stderr)
+            return {"clusters": 0, "suppressed": 0, "artifact": str(artifact),
+                    "auto_applied": 0, "skipped": "store changed during clustering"}
+        return _write_consolidation_proposals(store, artifact, proposals,
+                                              prior_rejected_keys)
+
+
+def _write_consolidation_proposals(
+    store: Path, artifact: Path, proposals: list[dict[str, Any]],
+    prior_rejected_keys: set[tuple[str, ...]],
+) -> dict[str, Any]:
+    """Write validated proposals; the caller holds the project writer lease."""
     # Volume-tuning floor: sub-floor clusters go to the side log, not the queue.
     floor = _proposal_floor()
     suppressed = [p for p in proposals if p["confidence"] < floor]
     _log_suppressed(store, suppressed, floor)
     proposals = [p for p in proposals if p["confidence"] >= floor]
 
-    artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
     # Carry forward prior REJECTIONS durably: rejection is non-destructive (the
     # sources stay in staging), so a rejected cluster would otherwise re-cluster
@@ -421,7 +445,7 @@ def consolidate_project_findings(
     # high-confidence band right here so the human review only ever sees the
     # proposals that actually need judgment. Off by default — without the
     # variable this function stays proposal-only (Increment A contract).
-    auto_applied = auto_apply_band(store_dir).get("applied", 0)
+    auto_applied = auto_apply_band(str(store)).get("applied", 0)
     return {"clusters": len(proposals), "suppressed": len(suppressed),
             "artifact": str(artifact), "auto_applied": auto_applied}
 

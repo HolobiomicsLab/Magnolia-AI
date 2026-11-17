@@ -20,11 +20,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from compchem_memory.writer_lease import leased_store_writer
+from compchem_memory.writer_lease import project_writer_lease
 
 
 # Conservative secret shapes. Do not use broad long-hex or long-base64 rules:
@@ -610,7 +611,6 @@ def _session_ref(store_dir: str, session: Any) -> Any:
     return SessionRef("opencode", str(session), str(session), None, None, True)
 
 
-@leased_store_writer
 def distill_session_transcript(
     store_dir: str,
     sid: Any,
@@ -672,26 +672,32 @@ def distill_session_transcript(
     if not commit:
         return {"status": "preview", "candidates": kept}
 
-    rec_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = [_save_candidate(store, c, ref.key) for c in kept]
-    new_cursor = _last_message_id(new_msgs) or cursor
-    prior = rec.get("candidates", 0) if rec else 0
-    closed = (
-        hook_session_closed(store, ref, fingerprint=fingerprint)
-        if not ref.sealable else None
-    )
-    _write_progress(
-        rec_path,
-        new_cursor,
-        prior + len(kept),
-        done=False,
-        fingerprint=fingerprint,
-        closed=closed,
-    )
+    # The export and the distiller ran outside the project writer lease; the
+    # commit re-validates the progress record it started from.
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            print(f"[opencode_ingest] {ref.key}: progress changed during distillation; "
+                  "nothing saved, the next sweep retries", file=sys.stderr)
+            return {"status": "committed", "saved": []}
+        rec_path.parent.mkdir(parents=True, exist_ok=True)
+        saved = [_save_candidate(store, c, ref.key) for c in kept]
+        new_cursor = _last_message_id(new_msgs) or cursor
+        prior = rec.get("candidates", 0) if rec else 0
+        closed = (
+            hook_session_closed(store, ref, fingerprint=fingerprint)
+            if not ref.sealable else None
+        )
+        _write_progress(
+            rec_path,
+            new_cursor,
+            prior + len(kept),
+            done=False,
+            fingerprint=fingerprint,
+            closed=closed,
+        )
     return {"status": "committed", "saved": saved}
 
 
-@leased_store_writer
 def ingest_opencode_sessions(
     store_dir: str,
     mapping_path: str | None = None,
@@ -767,19 +773,22 @@ def ingest_opencode_sessions(
             # Nothing new since the cursor. Seal it if it is no longer the active
             # session, so we stop re-exporting a finished conversation; leave the
             # active one open for its next slice.
-            if can_seal:
-                _write_progress(rec_path, cursor, prior_count, done=True)
-            elif not ref.sealable:
-                _write_progress(
-                    rec_path,
-                    cursor,
-                    prior_count,
-                    done=False,
-                    fingerprint=fingerprint,
-                    closed=hook_session_closed(
-                        store, ref, fingerprint=fingerprint,
-                    ),
-                )
+            with project_writer_lease(store):
+                if _read_progress(rec_path) != rec:
+                    continue
+                if can_seal:
+                    _write_progress(rec_path, cursor, prior_count, done=True)
+                elif not ref.sealable:
+                    _write_progress(
+                        rec_path,
+                        cursor,
+                        prior_count,
+                        done=False,
+                        fingerprint=fingerprint,
+                        closed=hook_session_closed(
+                            store, ref, fingerprint=fingerprint,
+                        ),
+                    )
             continue
 
         transcript = scrub_secrets(reconstruct_transcript({
@@ -814,21 +823,29 @@ def ingest_opencode_sessions(
             except Exception as e:  # noqa: BLE001 - gate failure never blocks distillation
                 print(f"[admission] gate error (fail-open): {e}")
 
-        for c in kept:
-            saved.append(_save_candidate(store, c, ref.key))
+        # Export, distiller and admission judge ran outside the project writer
+        # lease; the write re-validates the progress record it started from.
+        with project_writer_lease(store):
+            if _read_progress(rec_path) != rec:
+                print(f"[opencode_ingest] {ref.key}: progress changed during "
+                      "distillation; nothing saved, the next sweep retries",
+                      file=sys.stderr)
+                continue
+            for c in kept:
+                saved.append(_save_candidate(store, c, ref.key))
 
-        new_cursor = _last_message_id(new_msgs) or cursor
-        closed = (
-            hook_session_closed(store, ref, fingerprint=fingerprint)
-            if not ref.sealable else None
-        )
-        _write_progress(
-            rec_path,
-            new_cursor,
-            prior_count + len(kept),
-            done=can_seal,
-            fingerprint=fingerprint,
-            closed=closed,
-        )
+            new_cursor = _last_message_id(new_msgs) or cursor
+            closed = (
+                hook_session_closed(store, ref, fingerprint=fingerprint)
+                if not ref.sealable else None
+            )
+            _write_progress(
+                rec_path,
+                new_cursor,
+                prior_count + len(kept),
+                done=can_seal,
+                fingerprint=fingerprint,
+                closed=closed,
+            )
 
     return saved

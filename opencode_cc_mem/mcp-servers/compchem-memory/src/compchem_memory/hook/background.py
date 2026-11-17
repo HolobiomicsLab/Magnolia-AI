@@ -144,18 +144,17 @@ def run_job(job_path: Path) -> None:
             )
         except (KeyError, OSError, ValueError, TypeError):
             return
-        from compchem_memory.writer_lease import project_writer_lease
-
-        with project_writer_lease(paths.project_dir):
-            lock_path = _worker_lock(store, harness, session_id)
-            private_mkdir(lock_path.parent)
-            with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
-                try:
-                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    return
-                while (job := _claim_next(store, harness, session_id)) is not None:
-                    _run_turn(paths, payload, job)
+        # No project writer lease: the probe and critic call an LLM and write
+        # only self-locked streams (session state, verdict and surfacing logs).
+        lock_path = _worker_lock(store, harness, session_id)
+        private_mkdir(lock_path.parent)
+        with os.fdopen(os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600), "a+") as lock:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            while (job := _claim_next(store, harness, session_id)) is not None:
+                _run_turn(paths, payload, job)
     finally:
         job_path.unlink(missing_ok=True)
 
@@ -279,13 +278,16 @@ def _finalize_opencode_capture(
             "note": "session exceeded 4 MB; dump clipped — use the database fallback",
             "messages": messages[:200],
         }, ensure_ascii=False)
-    atomic_write_text(
-        paths.store / "opencode-transcripts" / f"{session_id}.json",
-        dump_text,
-    )
     rows = _neutral_rows(messages)
     body = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
-    atomic_write_text(transcript_path(paths.store, "opencode", session_id), body)
+    from compchem_memory.writer_lease import project_writer_lease
+
+    with project_writer_lease(paths.project_dir):
+        atomic_write_text(
+            paths.store / "opencode-transcripts" / f"{session_id}.json",
+            dump_text,
+        )
+        atomic_write_text(transcript_path(paths.store, "opencode", session_id), body)
     return messages
 
 
@@ -654,10 +656,9 @@ def run_opencode_job(job_path: Path) -> None:
             store = Path(str(payload["store"]))
     except (OSError, ValueError, TypeError):
         pass
-    from compchem_memory.writer_lease import project_writer_lease, project_from_store
-
-    with project_writer_lease(project_from_store(store)):
-        drain_opencode_payloads(store)
+    # The export (a subprocess) and the critic (an LLM) run outside the lease;
+    # only the capture write in _finalize_opencode_capture takes it.
+    drain_opencode_payloads(store)
 
 
 def main() -> None:

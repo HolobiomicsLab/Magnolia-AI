@@ -12,6 +12,8 @@ Madina Bekbergenova.
 import subprocess
 from pathlib import Path
 
+from compchem_memory.writer_lease import leased_store_writer
+
 # Ignore everything, then re-include only the knowledge tiers and this file.
 # Robust against new plumbing directories appearing later.
 # .handover-state.md is tracked since 2026-09-16: the merge ages items out
@@ -46,6 +48,7 @@ def ensure_repo(store: str | Path) -> None:
         gi.write_text(_GITIGNORE)
 
 
+@leased_store_writer
 def commit_all(store: Path, message: str) -> str | None:
     """Stage the tracked tiers and commit if anything changed. Returns the new
     commit hash, or None when there is nothing to commit (a clean tree, or only
