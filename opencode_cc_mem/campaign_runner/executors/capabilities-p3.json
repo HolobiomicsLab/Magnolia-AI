@@ -1641,7 +1641,7 @@
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "D4: Vibe worker edits are refused until D4 and the complete safety gate pass."
+        "reason": "D4: Vibe worker edits are refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
       },
       "cells": {
         "identity": {
@@ -1733,7 +1733,7 @@
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
       },
       "cells": {
         "identity": {
@@ -1825,7 +1825,7 @@
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
       },
       "cells": {
         "identity": {
@@ -1917,7 +1917,7 @@
       "gate": {
         "status": "refused",
         "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
       },
       "cells": {
         "identity": {
