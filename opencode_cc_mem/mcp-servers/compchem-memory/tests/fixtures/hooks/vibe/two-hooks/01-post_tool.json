@@ -1,0 +1,19 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "duration_ms": 0,
+ "hook_event_name": "post_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-12",
+ "tool_call_id": "typescript:7:chatcmpl-tool-9cc03862f584e1be:0:tool:0",
+ "tool_error": null,
+ "tool_input": {
+  "text": "top"
+ },
+ "tool_name": "mcp_probe.echo",
+ "tool_output": {
+  "result": "top"
+ },
+ "tool_output_text": "top",
+ "tool_status": "success",
+ "transcript_path": "/HOME/<elided>"
+}

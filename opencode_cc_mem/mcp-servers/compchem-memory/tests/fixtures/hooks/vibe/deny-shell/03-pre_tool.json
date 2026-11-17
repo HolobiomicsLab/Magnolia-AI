@@ -1,0 +1,13 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-deny-shell",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-19",
+ "tool_call_id": "chatcmpl-tool-b30b9202f3be09a7",
+ "tool_input": {
+  "command": "echo hi > shell-ran.txt",
+  "timeout": 120
+ },
+ "tool_name": "file_system.bash",
+ "transcript_path": "/HOME/<elided>"
+}

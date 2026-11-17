@@ -1,0 +1,12 @@
+{
+ "agent_id": "01a1ded9-d62b-7e60-8d9c-40ea94f3ab27",
+ "agent_type": "default",
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "UserPromptSubmit",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "prompt": "Call the probe echo tool exactly once with text 'sub'. Then report the returned result briefly. Do not perform any other task or delegate.",
+ "session_id": "ses-fixture-5",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-56-20-01a1ded9-d62b-7e60-8d9c-40ea94f3ab27.jsonl",
+ "turn_id": "01a1ded9-d66b-73f3-be51-de7f52ffde1c"
+}

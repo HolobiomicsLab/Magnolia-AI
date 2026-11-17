@@ -1,0 +1,11 @@
+{
+ "cwd": "/TMPDIR/probe-codex-deny-shell",
+ "hook_event_name": "Stop",
+ "last_assistant_message": "Security hook blocked the shell command; no file was created.",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-6",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-04-42-ses-fixture-6.jsonl",
+ "turn_id": "01a1dee1-7e8b-79c3-9cdf-471a5f9ba8ad"
+}

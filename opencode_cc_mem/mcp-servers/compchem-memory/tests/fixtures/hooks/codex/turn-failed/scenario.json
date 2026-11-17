@@ -1,0 +1,6 @@
+{
+ "client": "codex",
+ "version": "0.154.0",
+ "command": "run_probes.sh codex_run deny-write <prompt>  (default model from the user config, refused by the account)",
+ "observed": "hand-transcribed from the console output of a refused run; shape of error and turn.failed events"
+}

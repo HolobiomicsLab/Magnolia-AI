@@ -7,7 +7,6 @@ path cannot — no `opencode` binary, no LLM, or no captured session mapping.
 
 import json
 import os
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,7 +19,10 @@ _CONSOLIDATION_MIN_FINDINGS = 20  # gate: skip consolidation below this many fin
 
 
 def _opencode_available() -> bool:
-    return shutil.which("opencode") is not None
+    """v1: `opencode` on PATH. v2: the session database or the v2 binary."""
+    from compchem_memory import opencode_cli
+
+    return opencode_cli.available()
 
 
 def scan_and_distill(project_dir: str) -> dict[str, Any]:

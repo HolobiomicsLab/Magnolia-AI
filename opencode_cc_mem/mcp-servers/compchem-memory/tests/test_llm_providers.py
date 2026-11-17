@@ -26,6 +26,11 @@ def _clean_env(monkeypatch):
         "KIMI_PLAN_MAGNOLIA_API_KEY",
         "KIMI_API_KEY",
         "KIMI_BASE_URL",
+        "MISTRAL_API_KEY",
+        "MISTRAL_BASE_URL",
+        "ZHIPU_API_KEY",
+        "ZAI_API_KEY",
+        "ZAI_BASE_URL",
         "OPENROUTER_API_KEY",
         "OPENROUTER_BASE_URL",
         "OPENROUTER_CODING_API_KEY",
@@ -590,3 +595,92 @@ def test_call_anthropic_returns_resolved_model(monkeypatch):
     out, finish, resolved = llm._call_anthropic(
         "k", "claude-haiku-4-5", "s", "u", 10)
     assert (out, finish, resolved) == ("hello", "end_turn", "claude-haiku-4-5-20251001")
+
+
+# ============ mistral and zai providers =============
+
+def _capture_openai_compat(monkeypatch, content="ok"):
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update(url=url, headers=headers, json=json)
+        resp = MagicMock()
+        resp.raise_for_status = lambda: None
+        resp.json = lambda: {"model": json["model"],
+                             "choices": [{"message": {"content": content},
+                                          "finish_reason": "stop"}]}
+        return resp
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    return captured
+
+
+@pytest.mark.parametrize("model", [
+    "mistral-small-latest", "ministral-8b-latest", "magistral-medium-latest",
+    "devstral-latest", "codestral-latest", "pixtral-large-latest",
+    "open-mistral-nemo",
+])
+def test_provider_for_model_mistral_families(model):
+    assert llm._provider_for_model(model) == "mistral"
+
+
+def test_provider_for_model_glm_is_zai():
+    assert llm._provider_for_model("glm-5.3-flash") == "zai"
+
+
+def test_provider_for_model_vendor_slash_stays_openrouter():
+    assert llm._provider_for_model("mistralai/mistral-small") == "openrouter"
+    assert llm._provider_for_model("z-ai/glm-5.3") == "openrouter"
+
+
+def test_resolve_autodetect_mistral_and_zai_never_hijack(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "mk")
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or")
+    assert llm._resolve_provider() == "openrouter"
+
+
+def test_resolve_autodetect_mistral_only(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "mk")
+    assert llm._resolve_call() == ("mistral", "mistral-small-latest")
+
+
+def test_resolve_autodetect_zai_only_via_alias(monkeypatch):
+    monkeypatch.setenv("ZAI_API_KEY", "zk")
+    assert llm._resolve_call() == ("zai", "glm-5.3-flash")
+
+
+def test_get_api_key_zai_prefers_zhipu_name(monkeypatch):
+    monkeypatch.setenv("ZHIPU_API_KEY", "zhipu")
+    monkeypatch.setenv("ZAI_API_KEY", "alias")
+    assert llm._get_api_key("zai") == "zhipu"
+
+
+def test_explicit_mistral_provider_with_foreign_model_id(monkeypatch):
+    """Mistral also hosts other vendors' models; the explicit provider wins."""
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", "mistral")
+    monkeypatch.setenv("MAGNOLIA_MEMORY_MODEL", "deepseek-v4-1-flash-1017")
+    assert llm._resolve_call() == ("mistral", "deepseek-v4-1-flash-1017")
+
+
+def test_zai_coding_plan_base_url_keeps_v4(monkeypatch):
+    monkeypatch.setenv("ZAI_BASE_URL", "https://api.z.ai/api/coding/paas/v4/")
+    assert llm._get_base_url("zai") == "https://api.z.ai/api/coding/paas/v4"
+
+
+def test_call_llm_mistral_posts_chat_completions(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "mk-123")
+    captured = _capture_openai_compat(monkeypatch, "from mistral")
+    assert llm.call_llm("sys", "user", disable_thinking=True) == "from mistral"
+    assert captured["url"] == "https://api.mistral.ai/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer mk-123"
+    assert captured["json"]["model"] == "mistral-small-latest"
+    assert "thinking" not in captured["json"]
+
+
+def test_call_llm_zai_disables_thinking(monkeypatch):
+    monkeypatch.setenv("ZHIPU_API_KEY", "zk-123")
+    captured = _capture_openai_compat(monkeypatch, "from glm")
+    assert llm.call_llm("sys", "user", disable_thinking=True) == "from glm"
+    assert captured["url"] == "https://api.z.ai/api/paas/v4/chat/completions"
+    assert captured["json"]["thinking"] == {"type": "disabled"}

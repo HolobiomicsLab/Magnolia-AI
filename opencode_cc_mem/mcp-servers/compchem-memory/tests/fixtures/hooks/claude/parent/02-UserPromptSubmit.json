@@ -1,0 +1,10 @@
+{
+ "cwd": "/TMPDIR/probe-claude-parent",
+ "hook_event_name": "UserPromptSubmit",
+ "permission_mode": "auto",
+ "prompt": "Call the echo tool with text 'top'. Then ask a subagent to call echo with text 'sub'.",
+ "prompt_id": "d71be0f3-1725-4712-a6a4-135b61323059",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-1",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
+}

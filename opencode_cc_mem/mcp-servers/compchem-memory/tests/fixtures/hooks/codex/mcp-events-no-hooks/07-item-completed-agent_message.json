@@ -1,0 +1,8 @@
+{
+ "item": {
+  "id": "item_3",
+  "text": "done",
+  "type": "agent_message"
+ },
+ "type": "item.completed"
+}

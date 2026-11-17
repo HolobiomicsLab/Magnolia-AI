@@ -12,10 +12,10 @@ from typing import Sequence
 
 from .distill import drain_queue
 from .jobs import CompchemJobBackend, FakeJobBackend, JobController
-from .models import CampaignError, load_protocol, protocol_sha256
+from .models import CampaignError, Protocol, load_protocol, protocol_sha256
 from .reviewers import Reviewer
 from .runner import CampaignRunner, RunnerConfig
-from .service import ensure_service, service_status, stop_service
+from .service import ensure_service, merge_agent_steps, service_status, stop_service
 from .state import CampaignState, CampaignStore
 from .workers import OpenCodeExecutor
 
@@ -164,6 +164,23 @@ def _validate_new_campaign(protocol_path: str, run_dir: str) -> None:
         )
 
 
+_WORKER_AGENT = "campaign-worker"
+_REVIEWER_AGENT = "campaign-reviewer"
+
+
+def _service_settings(protocol: Protocol) -> tuple[str, list[str]]:
+    """OPENCODE_CONFIG_CONTENT and required agents for the dedicated service.
+
+    Observed on OpenCode 2.3.0: the step limit in OPENCODE_CONFIG_CONTENT
+    reaches a dedicated service only from the service's own environment at
+    start, so the limits of both agents are given to the service."""
+    steps = {_WORKER_AGENT: protocol.worker.max_steps}
+    if protocol.reviewer.enabled:
+        steps[_REVIEWER_AGENT] = protocol.reviewer.max_steps
+    config = merge_agent_steps(os.environ.get("OPENCODE_CONFIG_CONTENT"), steps)
+    return config, list(steps)
+
+
 def _build_runner(args: argparse.Namespace) -> CampaignRunner:
     store = CampaignStore(args.run_dir)
     protocol = store.verify_protocol()
@@ -203,8 +220,15 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         and not server
         and getattr(args, "command", None) in {"run", "daemon"}
     ):
+        config_content, required_agents = _service_settings(protocol)
         try:
-            record = ensure_service(project_dir, binary, database)
+            record = ensure_service(
+                project_dir,
+                binary,
+                database,
+                config_content=config_content,
+                required_agents=required_agents,
+            )
         except Exception as exc:
             raise CampaignError(f"dedicated opencode service unavailable: {exc}") from exc
         server = f"http://127.0.0.1:{record['port']}"
@@ -215,7 +239,7 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         return OpenCodeExecutor(
             binary=binary,
             model=model,
-            agent="campaign-worker",
+            agent=_WORKER_AGENT,
             server_url=server,
             db_path=database,
             environment=environment,

@@ -1,0 +1,8 @@
+{
+ "cwd": "/TMPDIR/probe-claude-ctx-small",
+ "hook_event_name": "SessionStart",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-3",
+ "source": "startup",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-ctx-small/ses-fixture-3.jsonl"
+}

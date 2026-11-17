@@ -1,0 +1,31 @@
+{
+ "cwd": "/TMPDIR/probe-claude-parent",
+ "duration_ms": 6,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "auto",
+ "prompt_id": "d71be0f3-1725-4712-a6a4-135b61323059",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-1",
+ "tool_input": {
+  "description": "Echo 'sub' via probe tool",
+  "prompt": "Call the echo tool (mcp__probe__echo; load it with ToolSearch using \"select:mcp__probe__echo\" first if its schema is not loaded) with text 'sub'. Reply with the exact result the tool returned, and nothing else.",
+  "subagent_type": "general-purpose"
+ },
+ "tool_name": "Agent",
+ "tool_response": {
+  "agentId": "a5d2e2e2b28d1e668",
+  "canContinueAgent": true,
+  "canReadOutputFile": true,
+  "description": "Echo 'sub' via probe tool",
+  "isAsync": true,
+  "outputFile": "/TMPDIR/claude-scratchpad",
+  "prompt": "Call the echo tool (mcp__probe__echo; load it with ToolSearch using \"select:mcp__probe__echo\" first if its schema is not loaded) with text 'sub'. Reply with the exact result the tool returned, and nothing else.",
+  "resolvedModel": "claude-haiku-5-5",
+  "status": "async_launched"
+ },
+ "tool_use_id": "toolu_01Q8dDMT9QFePV6R17Cz7c8g",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
+}

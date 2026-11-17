@@ -1,0 +1,6 @@
+{
+ "client": "claude",
+ "version": "2.1.325",
+ "command": "run_probes.sh claude_context small  (default model)",
+ "observed": "SessionStart additionalContext of 2000 bytes returned; see report for what the model saw"
+}

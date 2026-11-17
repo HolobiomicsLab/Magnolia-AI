@@ -1,0 +1,11 @@
+{
+ "agent_name": "accept-edits",
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "notification",
+ "message": "Vibe needs your approval to run mcp_probe.echo",
+ "notification_type": "approval_requested",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-15",
+ "tool_name": "mcp_probe.echo",
+ "transcript_path": "/HOME/<elided>"
+}

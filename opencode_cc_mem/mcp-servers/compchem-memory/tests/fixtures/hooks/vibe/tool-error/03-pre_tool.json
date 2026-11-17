@@ -1,0 +1,12 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-tool-error",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-18",
+ "tool_call_id": "typescript:7:chatcmpl-tool-a93f78d4062336eb:0:tool:0",
+ "tool_input": {
+  "text": "fail"
+ },
+ "tool_name": "mcp_probe.echo",
+ "transcript_path": "/HOME/<elided>"
+}

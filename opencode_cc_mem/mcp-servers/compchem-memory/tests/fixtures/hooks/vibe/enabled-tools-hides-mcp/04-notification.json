@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "notification",
+ "message": "Vibe finished its turn",
+ "notification_type": "turn_completed",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-23",
+ "transcript_path": "/HOME/<elided>"
+}

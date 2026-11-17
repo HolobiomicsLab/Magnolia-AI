@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-tool-error",
+ "hook_event_name": "pre_agent",
+ "parent_session_id": null,
+ "prompt": "Call the probe echo tool with text fail and report the outcome in five words.",
+ "session_id": "ses-fixture-18",
+ "transcript_path": "/HOME/<elided>",
+ "turn_id": "turn-23b682e76f23a41860f348ab2d50966f"
+}

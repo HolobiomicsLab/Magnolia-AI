@@ -1,0 +1,16 @@
+{
+ "background_tasks": [],
+ "cwd": "/TMPDIR/probe-claude-ctx-max",
+ "effort": {
+  "level": "high"
+ },
+ "hook_event_name": "Stop",
+ "last_assistant_message": "`.`\n\nThe last thing in my context before this reply is the line `Today's date is 2026-11-15.`, so the final tok is the closing period (I can't inspect tokization directly; it may be merged as `15.`).\n\nThe 250 KB SessionStart hook output of `B` characters was not loaded in full: only a 2 KB preview is in context, and the rest was saved to disk.",
+ "permission_mode": "auto",
+ "prompt_id": "95db86ea-71be-4295-9f40-9d95a62c661f",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_crons": [],
+ "session_id": "ses-fixture-4",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-ctx-max/ses-fixture-4.jsonl"
+}

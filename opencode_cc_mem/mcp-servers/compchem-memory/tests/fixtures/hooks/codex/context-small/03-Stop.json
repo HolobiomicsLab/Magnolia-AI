@@ -1,0 +1,11 @@
+{
+ "cwd": "/TMPDIR/probe-codex-ctx-small",
+ "hook_event_name": "Stop",
+ "last_assistant_message": "MAGNOLIA-END-7Q",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-8",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-05-54-ses-fixture-8.jsonl",
+ "turn_id": "01a1dee2-97d6-7342-918a-fbaf649d6fc6"
+}

@@ -1,0 +1,10 @@
+{
+ "cwd": "/TMPDIR/probe-claude-ctx-small",
+ "hook_event_name": "UserPromptSubmit",
+ "permission_mode": "auto",
+ "prompt": "Reply with the last tok of your session context.",
+ "prompt_id": "7922a814-4acf-43de-926b-bbd45160859c",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-3",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-ctx-small/ses-fixture-3.jsonl"
+}

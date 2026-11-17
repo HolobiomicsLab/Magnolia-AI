@@ -1,0 +1,30 @@
+{
+ "item": {
+  "arguments": {
+   "text": "top"
+  },
+  "error": null,
+  "id": "item_6",
+  "result": {
+   "_meta": {
+    "fastmcp": {
+     "wrap_result": true
+    }
+   },
+   "content": [
+    {
+     "text": "top",
+     "type": "text"
+    }
+   ],
+   "structured_content": {
+    "result": "top"
+   }
+  },
+  "server": "probe",
+  "status": "completed",
+  "tool": "echo",
+  "type": "mcp_tool_call"
+ },
+ "type": "item.completed"
+}

@@ -33,6 +33,25 @@ npm install -g opencode-ai
 opencode --version
 ```
 
+The launcher runs the OpenCode v2 runtime by default (`MAGNOLIA_OPENCODE_V2=0` selects
+v1). It expects the v2 binary at `~/.local/share/magnolia-v2/bin/opencode`, or at the
+path in `MAGNOLIA_OPENCODE_V2_BIN`, and stops if the file is missing; nothing in Magnolia
+downloads it. The supported v2 version is **OpenCode 2.3.0**. Its release archives are
+published on the OpenCode releases page; for Linux arm64:
+
+```bash
+curl -fsSL -o opencode-linux-arm64.tar.gz \
+  https://github.com/sst/opencode/releases/download/v2.3.0/opencode-linux-arm64.tar.gz
+echo "3207fb5cdec448d479242c0f1a14f4f7bdfcad3a79209b5eb8f9003725e93711  opencode-linux-arm64.tar.gz" \
+  | sha256sum --check -
+mkdir -p ~/.local/share/magnolia-v2/bin
+tar -xzf opencode-linux-arm64.tar.gz -C ~/.local/share/magnolia-v2/bin opencode
+~/.local/share/magnolia-v2/bin/opencode --version   # opencode v2.3.0
+```
+
+The checksum above is that of the Linux arm64 archive. For another platform, take the
+matching archive from the same release and record its SHA-256 when you install it.
+
 Check the shell utilities before launching:
 
 ```bash
@@ -133,14 +152,39 @@ Authenticate the main model with `opencode auth login`, then inspect IDs with
 `opencode models` ([OpenCode CLI](https://opencode.ai/docs/cli/)). Choose an ID available
 to your account; this guide does not prescribe a subscription.
 
-The memory client currently implements four provider routes:
+What each vendor's account allows for the main agent (OpenCode providers page and vendor
+terms, checked 2026-11-15; Magnolia has not been run end to end on every row):
 
-| Provider argument | Credential variable | Endpoint override |
+| Vendor | Main agent through OpenCode | Example model ID |
 |---|---|---|
-| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_BASE_URL` |
-| `anthropic` | `ANTHROPIC_API_KEY` | No dedicated override in this client |
-| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
-| `kimi` | `KIMI_PLAN_MAGNOLIA_API_KEY` or `KIMI_API_KEY` | `KIMI_BASE_URL` |
+| OpenAI | ChatGPT Plus/Pro login, or an API key | `openai/<model>` |
+| Z.ai | GLM Coding Plan (`zai-coding-plan` provider), or a pay-as-you-go key (`zai`) | `zai-coding-plan/glm-5.3` |
+| Mistral | API key created in Mistral Studio; usage draws on the account's plan, which is shared across Vibe, Studio and the API | `mistral/mistral-large-latest` |
+| Anthropic | API key from the Claude Console only. Anthropic does not permit Claude Pro/Max subscription logins in third-party tools, and OpenCode removed its bundled login plugins in 1.3.0 | `anthropic/<model>` |
+| DeepSeek, Kimi, OpenRouter | API key (Kimi: Kimi-for-Coding plan login) | `deepseek/deepseek-flash` |
+
+A campaign reviewer must come from another model family than the worker
+(`campaign_runner/reviewers.py`), so a single-vendor setup needs an `alternate_model`
+from a second vendor.
+
+The memory client implements seven provider routes:
+
+| Provider argument | Credential variable | Endpoint override | Default model |
+|---|---|---|---|
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_BASE_URL` | `deepseek-flash` |
+| `anthropic` | `ANTHROPIC_API_KEY` | No dedicated override in this client | `claude-haiku-4-5-20251001` |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` | `gpt-4o-mini` |
+| `kimi` | `KIMI_PLAN_MAGNOLIA_API_KEY` or `KIMI_API_KEY` | `KIMI_BASE_URL` | `k3` |
+| `openrouter` | `OPENROUTER_API_KEY` | `OPENROUTER_BASE_URL` | `deepseek/deepseek-v4.1-flash` |
+| `mistral` | `MISTRAL_API_KEY` | `MISTRAL_BASE_URL` | `mistral-small-latest` |
+| `zai` | `ZHIPU_API_KEY` or `ZAI_API_KEY` | `ZAI_BASE_URL` | `glm-5.3-flash` |
+
+The provider follows from the model name (`mistral-*`, `devstral-*` and the other Mistral
+families → `mistral`; `glm-*` → `zai`; `vendor/model` → `openrouter`), or from
+`--provider`. Z.ai defaults to the pay-as-you-go endpoint. A GLM Coding Plan key needs
+`ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4`; check the plan's terms before pointing
+background work at it. The Mistral and Z.ai routes are covered by unit tests with a
+simulated endpoint; no live call has been made through them yet.
 
 Kimi uses its coding endpoint and Anthropic-style messages. Another OpenAI-compatible
 service may work through `--provider openai` and `OPENAI_BASE_URL`, but must pass the
@@ -307,7 +351,8 @@ opencode --version
 .venv/bin/python3 -m pip freeze
 ```
 
-Requirements have lower bounds, not a complete lockfile; OpenCode is also unpinned.
+Requirements have lower bounds, not a complete lockfile. The supported OpenCode v2
+version is 2.3.0 (step 1); an OpenCode installed through npm is not pinned.
 Record the working combination. Before updating, preserve local changes, back up the
 project and review upstream changes. Reinstall both editable packages and repeat step 6.
 Rolling back source does not roll back packages, client versions or project data.

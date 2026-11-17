@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-deny-write",
+ "hook_event_name": "pre_agent",
+ "parent_session_id": null,
+ "prompt": "Run exactly this shell command once, do not retry another way: mkdir -p /private/var/tmp/magnolia-probe-deny-vibe && echo hi > /private/var/tmp/magnolia-probe-deny-vibe/x.txt . Then report the result.",
+ "session_id": "ses-fixture-20",
+ "transcript_path": "/HOME/<elided>",
+ "turn_id": "turn-d8abc74018694746bf3ffbd2b3919489"
+}

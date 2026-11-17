@@ -1,0 +1,10 @@
+{
+ "agent_name": "auto-approve",
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "pre_agent",
+ "parent_session_id": "ses-fixture-12",
+ "prompt": "Call the probe echo tool with text \"sub\" and report the result.",
+ "session_id": "ses-fixture-14",
+ "transcript_path": "/HOME/<elided>",
+ "turn_id": "ses-fixture-14:turn:1"
+}

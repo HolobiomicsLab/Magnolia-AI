@@ -1,0 +1,66 @@
+{
+ "cost_usd": 0.0,
+ "error": null,
+ "exit_code": 0,
+ "limits": {
+  "max_price": 0.05,
+  "max_tokens": null,
+  "max_turns": 8,
+  "time_limit_s": null
+ },
+ "outcome": "finished",
+ "schema_version": 1,
+ "steps": 7,
+ "stop_reason": null,
+ "subagents": [
+  {
+   "agent_name": "echo-sub",
+   "agent_type": null,
+   "cost_usd": 0.0,
+   "model": "zai-glm-5-3-flash-vibe-free",
+   "parent_session_id": "ses-fixture-12",
+   "pricing_fallback": false,
+   "pricing_model": "zai-glm-5-3-flash",
+   "root_session_id": "ses-fixture-12",
+   "session_id": "ses-fixture-13",
+   "spawn_action_id": "f1d3971d-2dc8-5a65-8086-979d071cbd7a",
+   "spawn_call_id": "typescript:12:chatcmpl-tool-a985444fd4051795:0:tool:0",
+   "status": "failed",
+   "steps": 2,
+   "usage": {
+    "cached_input_tokens": 17280,
+    "input_tokens": 37577,
+    "output_tokens": 79,
+    "total_tokens": 37656
+   }
+  },
+  {
+   "agent_name": "echo-sub-retry",
+   "agent_type": null,
+   "cost_usd": 0.0,
+   "model": "zai-glm-5-3-flash-vibe-free",
+   "parent_session_id": "ses-fixture-12",
+   "pricing_fallback": false,
+   "pricing_model": "zai-glm-5-3-flash",
+   "root_session_id": "ses-fixture-12",
+   "session_id": "ses-fixture-14",
+   "spawn_action_id": "ac0fb950-ba4a-5192-ad32-74c53df461b6",
+   "spawn_call_id": "typescript:15:chatcmpl-tool-b570bc268eccc415:0:tool:0",
+   "status": "failed",
+   "steps": 2,
+   "usage": {
+    "cached_input_tokens": 17280,
+    "input_tokens": 37578,
+    "output_tokens": 115,
+    "total_tokens": 37693
+   }
+  }
+ ],
+ "usage": {
+  "cached_input_tokens": 102528,
+  "input_tokens": 133206,
+  "output_tokens": 659,
+  "total_tokens": 133865
+ },
+ "vibe_version": "3.1.2"
+}

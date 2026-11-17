@@ -1,0 +1,12 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": "ses-fixture-12",
+ "session_id": "ses-fixture-13",
+ "tool_call_id": "typescript:3:chatcmpl-tool-b15cb9cb2b78a384:0:tool:0",
+ "tool_input": {
+  "text": "sub"
+ },
+ "tool_name": "mcp_probe.echo",
+ "transcript_path": "/HOME/<elided>"
+}

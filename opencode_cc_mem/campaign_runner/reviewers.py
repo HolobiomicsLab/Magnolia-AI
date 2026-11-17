@@ -28,6 +28,14 @@ _FAMILY_HINTS = (
     ("claude", "claude"),
     ("gpt", "gpt"),
     ("gemini", "gemini"),
+    # Mistral families. After the others: Mistral also hosts DeepSeek and GLM
+    # models ("mistral/deepseek-…"), which keep their own family.
+    ("mistral", "mistral"),
+    ("ministral", "mistral"),
+    ("magistral", "mistral"),
+    ("devstral", "mistral"),
+    ("codestral", "mistral"),
+    ("pixtral", "mistral"),
 )
 
 

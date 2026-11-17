@@ -1,0 +1,9 @@
+{
+ "cwd": "/TMPDIR/probe-codex-deny-shell",
+ "hook_event_name": "SessionStart",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-6",
+ "source": "startup",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-04-42-ses-fixture-6.jsonl"
+}

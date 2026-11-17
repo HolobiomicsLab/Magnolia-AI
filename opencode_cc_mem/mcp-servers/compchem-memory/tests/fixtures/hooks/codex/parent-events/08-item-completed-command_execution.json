@@ -1,0 +1,11 @@
+{
+ "item": {
+  "aggregated_output": "<redacted: owner's local agent configuration>",
+  "command": "/bin/zsh -lc \"sed -n '1,240p' <redacted: owner's local agent configuration> && sed -n '1,240p' <redacted: owner's local agent configuration>\"",
+  "exit_code": 0,
+  "id": "item_4",
+  "status": "completed",
+  "type": "command_execution"
+ },
+ "type": "item.completed"
+}

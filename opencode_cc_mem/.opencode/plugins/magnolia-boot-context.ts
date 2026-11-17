@@ -11,6 +11,9 @@
  * when ctx.session.hook is absent. No @opencode/plugin import is needed, so it
  * loads even though that package is not installed in .opencode/node_modules.
  *
+ * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
+ * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
+ *
  * Session binding: the project is resolved from .magnolia/.active-project at
  * the session's first context call and cached per session id. A later launch
  * flipping the marker must not switch an existing conversation's boot context.

@@ -248,3 +248,17 @@ def test_reviewer_invalid_after_retry_raises(tmp_path):
             tmp_path / "attempt",
             tmp_path,
         )
+
+
+def test_mistral_models_share_one_family():
+    from campaign_runner.reviewers import ReviewError, choose_reviewer_model, model_family
+
+    assert model_family("mistral/mistral-large-latest") == "mistral"
+    assert model_family("mistral/devstral-latest") == "mistral"
+    assert model_family("mistral/deepseek-v4-1-flash-1017") == "deepseek"
+    assert model_family("zai-coding-plan/glm-5.3") == "glm"
+    with pytest.raises(ReviewError):
+        choose_reviewer_model("mistral/mistral-large-latest", "mistral/devstral-latest", None)
+    assert choose_reviewer_model(
+        "mistral/mistral-large-latest", "mistral/devstral-latest", "zai-coding-plan/glm-5.3"
+    ) == "zai-coding-plan/glm-5.3"

@@ -1,0 +1,16 @@
+{
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "PostToolUse",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-5",
+ "tool_input": {
+  "fork_context": false,
+  "message": "Call the probe echo tool exactly once with text 'sub'. Then report the returned result briefly. Do not perform any other task or delegate."
+ },
+ "tool_name": "spawn_agent",
+ "tool_response": "{\"agent_id\":\"01a1ded9-d62b-7e60-8d9c-40ea94f3ab27\",\"nickname\":\"Hegel\"}",
+ "tool_use_id": "exec-e529464e-1c91-430b-88e8-3c7a046ea839",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-55-55-ses-fixture-5.jsonl",
+ "turn_id": "01a1ded9-75f1-7e93-aec8-19119f3d6509"
+}

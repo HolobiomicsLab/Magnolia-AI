@@ -1,0 +1,6 @@
+{
+ "client": "codex",
+ "version": "0.154.0",
+ "command": "codex exec --json -C <tmp> -s workspace-write -m gpt-5.6-luna (hooks not loaded: no trust bypass)",
+ "observed": "event stream only"
+}

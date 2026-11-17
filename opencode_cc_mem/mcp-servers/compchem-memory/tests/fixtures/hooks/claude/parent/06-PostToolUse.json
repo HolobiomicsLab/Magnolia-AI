@@ -1,0 +1,23 @@
+{
+ "cwd": "/TMPDIR/probe-claude-parent",
+ "duration_ms": 11,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "mcp_server": {
+  "name": "probe",
+  "source": "dynamic"
+ },
+ "permission_mode": "auto",
+ "prompt_id": "d71be0f3-1725-4712-a6a4-135b61323059",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-1",
+ "tool_input": {
+  "text": "top"
+ },
+ "tool_name": "mcp__probe__echo",
+ "tool_response": "{\"result\":\"top\"}",
+ "tool_use_id": "toolu_01JaB5rGohwj9zD1YePrSc5h",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
+}

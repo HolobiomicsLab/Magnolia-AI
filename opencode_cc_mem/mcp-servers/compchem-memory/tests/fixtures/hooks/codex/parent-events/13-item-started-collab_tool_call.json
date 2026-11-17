@@ -1,0 +1,13 @@
+{
+ "item": {
+  "agents_states": {},
+  "id": "item_7",
+  "prompt": "Call the probe echo tool exactly once with text 'sub'. Then report the returned result briefly. Do not perform any other task or delegate.",
+  "receiver_thread_ids": [],
+  "sender_thread_id": "ses-fixture-5",
+  "status": "in_progress",
+  "tool": "spawn_agent",
+  "type": "collab_tool_call"
+ },
+ "type": "item.started"
+}

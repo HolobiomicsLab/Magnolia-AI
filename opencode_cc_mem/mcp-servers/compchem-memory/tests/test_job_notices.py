@@ -2,9 +2,18 @@
 
 Push must never raise; drain must consume what it returns (roundtrip),
 tolerate malformed lines, and leave the absent-file steady state quiet."""
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
-from compchem_memory.job_notices import drain_job_notices, push_job_notice
+from compchem_memory.job_notices import (
+    JobNoticeLock,
+    _lock_path,
+    drain_job_notices,
+    push_job_notice,
+)
 
 
 def test_push_then_drain_roundtrip(tmp_path):
@@ -72,3 +81,44 @@ def test_drain_never_raises_on_unusable_project_dir(tmp_path):
     blocker = tmp_path / "blocker"
     blocker.write_text("i am a file, not a directory\n")
     assert drain_job_notices(str(blocker)) == []
+
+
+def test_writer_waits_for_consumer_lock(tmp_path):
+    project = str(tmp_path / "project")
+    push_job_notice(project, run_id="before", tool="xtb", state="done", category="success")
+    lock = JobNoticeLock(project)
+    assert lock.acquire()
+    finished = threading.Event()
+
+    def append() -> None:
+        push_job_notice(project, run_id="during", tool="xtb", state="done", category="success")
+        finished.set()
+
+    writer = threading.Thread(target=append)
+    writer.start()
+    time.sleep(0.05)
+    assert not finished.is_set()
+    lock.release()
+    writer.join(timeout=1)
+
+    assert finished.is_set()
+    assert [row["run_id"] for row in drain_job_notices(project)] == ["before", "during"]
+
+
+def test_process_crash_releases_lock(tmp_path):
+    project = str(tmp_path / "project")
+    Path(project, ".magnolia").mkdir(parents=True)
+    code = (
+        "import os, sys; "
+        "from compchem_memory.job_notices import JobNoticeLock; "
+        "lock = JobNoticeLock(sys.argv[1]); "
+        "assert lock.acquire(); "
+        "os._exit(0)"
+    )
+    subprocess.run([sys.executable, "-c", code, project], check=True, timeout=10)
+    assert _lock_path(project).exists()  # persistent sidecar, but no held flock
+
+    push_job_notice(project, run_id="after-crash", tool="xtb", state="done", category="success")
+
+    assert [row["run_id"] for row in drain_job_notices(project)] == ["after-crash"]
+    assert _lock_path(project).exists()

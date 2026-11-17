@@ -1,0 +1,26 @@
+{
+ "cwd": "/TMPDIR/probe-claude-tool-error",
+ "duration_ms": 2,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "auto",
+ "prompt_id": "71a02140-b801-4f06-b3e4-e315ae15bac3",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-2",
+ "tool_input": {
+  "max_results": 1,
+  "query": "select:mcp__probe__echo"
+ },
+ "tool_name": "ToolSearch",
+ "tool_response": {
+  "matches": [
+   "mcp__probe__echo"
+  ],
+  "query": "select:mcp__probe__echo",
+  "total_deferred_tools": 20
+ },
+ "tool_use_id": "toolu_01EWtBsycZfqozjXgp9u76ag",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-tool-error/ses-fixture-2.jsonl"
+}

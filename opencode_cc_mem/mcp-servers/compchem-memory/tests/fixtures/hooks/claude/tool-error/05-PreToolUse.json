@@ -1,0 +1,21 @@
+{
+ "cwd": "/TMPDIR/probe-claude-tool-error",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PreToolUse",
+ "mcp_server": {
+  "name": "probe",
+  "source": "dynamic"
+ },
+ "permission_mode": "auto",
+ "prompt_id": "71a02140-b801-4f06-b3e4-e315ae15bac3",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-2",
+ "tool_input": {
+  "text": "fail"
+ },
+ "tool_name": "mcp__probe__echo",
+ "tool_use_id": "toolu_01H8cmMDebqLZPHHDTJUpHzF",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-tool-error/ses-fixture-2.jsonl"
+}

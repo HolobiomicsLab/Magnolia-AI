@@ -10,6 +10,15 @@ correction `1eed4a7` and Bash parser correction `812b1b5` (11 September 2026). O
 targets, not tested Magnolia configurations. Begin with the manual path below, then
 add automation one responsibility at a time.
 
+A harness-neutral hook core is under development on branch `feat/hook-core-p0-p1`
+(package `compchem_memory.hook`, `python -m compchem_memory.hook`; design in
+[`harness-neutral-agents-design.md`](../opencode_cc_mem/docs/harness-neutral-agents-design.md),
+probe report in [`harness-probes-2026-11.md`](../opencode_cc_mem/docs/harness-probes-2026-11.md)).
+It is not wired to any client yet and is unreviewed. OpenCode still uses the TypeScript
+plugins described below; none changed. Distillation and handover do not yet read the new
+Magnolia transcripts (design section 6.3 waits for Plan 2). Claude Code and Codex hook
+payloads were probed; Vibe was not.
+
 ## Choose the integration level
 
 | Level | What is available | What remains to implement or do explicitly |
@@ -182,8 +191,10 @@ as well as the event API; a successful parse alone does not prove it can execute
 
 Action retrieval is advisory feedback after an action, not a pre-execution gate.
 If prior knowledge must change the parameters of the current action, retrieve it
-explicitly before execution. The critic is also flag-only. It currently uses its own
-DeepSeek call and environment, rather than inheriting every memory-provider option.
+explicitly before execution. The critic is also flag-only. Its judge has its own
+variables (`MAGNOLIA_CRITIC_PROVIDER`, `MAGNOLIA_CRITIC_MODEL`, `MAGNOLIA_CRITIC_API_KEY`,
+`MAGNOLIA_CRITIC_BASE_URL`) but the same seven providers and defaults as the memory
+client; failed calls are logged to `.magnolia/claim-critic/errors.jsonl`.
 Enable it only with a suitable model and permission to send that report/tool trace.
 
 A duplicate `join` import previously prevented the action plugin from parsing; it is

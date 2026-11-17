@@ -33,15 +33,9 @@ def _gist(text: str, limit: int = 180) -> str:
     return line[:limit]
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(prog="quick_search")
-    ap.add_argument("query")
-    ap.add_argument("--project-dir", default=None)
-    ap.add_argument("--k", type=int, default=5)
-    args = ap.parse_args()
-
-    query = args.query.strip()
-    project_dir = resolve_project_dir(args.project_dir, os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
+def search(query: str, project_dir: str, k: int = 5) -> list[dict]:
+    """Return the same ranked dictionaries emitted by the command-line tool."""
+    query = query.strip()
     proj_m = ProjectManager(Path.home() / ".magnolia")
 
     results: list[dict] = []
@@ -67,7 +61,8 @@ def main() -> int:
     results.sort(key=lambda e: (e.get("score", 0), tier_weight.get(e.get("tier", ""), 0)),
                  reverse=True)
 
-    for e in results[: max(args.k, 0)]:
+    output = []
+    for e in results[: max(k, 0)]:
         out = {
             "title": e.get("title") or e.get("name", ""),
             "type": e.get("type", ""),
@@ -83,7 +78,20 @@ def main() -> int:
                 out["gist"] = _gist(Path(out["path"]).read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 pass
-        print(json.dumps(out, ensure_ascii=False))
+        output.append(out)
+    return output
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="quick_search")
+    ap.add_argument("query")
+    ap.add_argument("--project-dir", default=None)
+    ap.add_argument("--k", type=int, default=5)
+    args = ap.parse_args()
+
+    project_dir = resolve_project_dir(args.project_dir, os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
+    for result in search(args.query, project_dir, args.k):
+        print(json.dumps(result, ensure_ascii=False))
     return 0
 
 

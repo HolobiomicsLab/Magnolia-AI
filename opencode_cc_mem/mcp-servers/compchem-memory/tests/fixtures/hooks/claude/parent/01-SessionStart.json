@@ -1,0 +1,8 @@
+{
+ "cwd": "/TMPDIR/probe-claude-parent",
+ "hook_event_name": "SessionStart",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-1",
+ "source": "startup",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-parent/ses-fixture-1.jsonl"
+}

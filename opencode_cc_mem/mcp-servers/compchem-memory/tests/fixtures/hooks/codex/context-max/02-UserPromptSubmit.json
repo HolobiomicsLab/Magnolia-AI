@@ -1,0 +1,10 @@
+{
+ "cwd": "/TMPDIR/probe-codex-ctx-max",
+ "hook_event_name": "UserPromptSubmit",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "prompt": "Reply with the last tok of your session context.",
+ "session_id": "ses-fixture-9",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T12-06-00-ses-fixture-9.jsonl",
+ "turn_id": "01a1dee2-b062-70b2-a030-d0ed8cce762d"
+}

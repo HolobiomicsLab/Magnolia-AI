@@ -35,6 +35,11 @@ _LLM_ENV_VARS = (
     "KIMI_PLAN_MAGNOLIA_API_KEY",
     "KIMI_API_KEY",
     "KIMI_BASE_URL",
+    "MISTRAL_API_KEY",
+    "MISTRAL_BASE_URL",
+    "ZHIPU_API_KEY",
+    "ZAI_API_KEY",
+    "ZAI_BASE_URL",
 )
 
 # The magnolia wrapper exports a cwd-relative project pin ("projects/<name>").
@@ -48,6 +53,14 @@ os.environ["MAGNOLIA_PROJECT_DIR"] = tempfile.mkdtemp(prefix="magnolia-tests-")
 def _isolate_llm_env(monkeypatch):
     """Clear LLM-related env vars before every test."""
     for var in _LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_opencode_runtime_env(monkeypatch):
+    """Tests run as v1 unless they opt in: a developer shell inside a v2
+    Magnolia session carries these, and they switch the OpenCode calls."""
+    for var in ("MAGNOLIA_OPENCODE_V2", "MAGNOLIA_OPENCODE_V2_BIN", "OPENCODE_DB"):
         monkeypatch.delenv(var, raising=False)
 
 

@@ -678,6 +678,7 @@ class CampaignRunner:
                 "attempts": result.attempts,
                 "tool_calls": result.tool_calls,
                 "usage": result.usage,
+                "errors": result.errors,
             },
         )
         self._record_worker_usage(result)

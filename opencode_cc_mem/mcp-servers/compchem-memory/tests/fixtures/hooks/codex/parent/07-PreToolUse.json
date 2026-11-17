@@ -1,0 +1,14 @@
+{
+ "cwd": "/TMPDIR/probe-codex-hooks-parent",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-5.6-luna",
+ "permission_mode": "default",
+ "session_id": "ses-fixture-5",
+ "tool_input": {
+  "text": "top"
+ },
+ "tool_name": "mcp__probe__echo",
+ "tool_use_id": "exec-7799ace6-189f-434c-9d9b-d8fa2dc93756",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/15/rollout-2026-11-15T11-55-55-ses-fixture-5.jsonl",
+ "turn_id": "01a1ded9-75f1-7e93-aec8-19119f3d6509"
+}

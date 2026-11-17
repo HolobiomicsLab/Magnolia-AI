@@ -30,6 +30,7 @@ class ParsedRun:
     tool_calls: int = 0
     usage: dict[str, float] = field(default_factory=dict)
     parse_errors: int = 0
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -46,6 +47,7 @@ class WorkerResult:
     stdout_paths: list[Path]
     stderr_paths: list[Path]
     stopped_reason: str | None = None
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 def empty_usage() -> dict[str, float]:
@@ -96,6 +98,13 @@ def parse_run_events(text: str) -> ParsedRun:
                 parsed.session_id = session_id
         part = event.get("part")
         if not isinstance(part, dict):
+            # Observed on OpenCode 2.3.0: a failed turn is reported as a
+            # top-level {"type": "error", "error": {...}} line with no part.
+            if event.get("type") == "error":
+                error = event.get("error")
+                parsed.errors.append(
+                    error if isinstance(error, dict) else {"message": str(error)}
+                )
             continue
         part_type = part.get("type")
         if part_type == "text":
@@ -167,6 +176,7 @@ class OpenCodeExecutor:
         all_text = ""
         total_tool_calls = 0
         total_usage = empty_usage()
+        errors: list[dict[str, Any]] = []
         stdout_paths: list[Path] = []
         stderr_paths: list[Path] = []
         total_duration = 0.0
@@ -206,6 +216,7 @@ class OpenCodeExecutor:
             final_text = parsed.final_text
             all_text = parsed.all_text
             total_tool_calls += parsed.tool_calls
+            errors.extend(parsed.errors)
             _merge_usage(total_usage, parsed.usage)
             if outcome.stopped_reason:
                 break
@@ -232,6 +243,7 @@ class OpenCodeExecutor:
             stdout_paths=stdout_paths,
             stderr_paths=stderr_paths,
             stopped_reason=stopped_reason,
+            errors=errors,
         )
 
     def _argv(self, prompt: str, session_id: str | None) -> list[str]:

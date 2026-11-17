@@ -212,3 +212,44 @@ def _ingest(tmp_path):
     from router_runner.replay import _ingest as ingest
     from router_runner.router import Router
     return ingest(Router(engine, registry={}), "eval-wi")
+
+
+# Observed on OpenCode 2.3.0: a CLI call with neither --standalone nor --server
+# starts a shared background service that outlives the call; once it runs, the
+# OPENCODE_DB a later caller sets is ignored. The evaluator's one-shot calls
+# set OPENCODE_DB, so they pass --standalone (a private server per call).
+
+def _capture_run(monkeypatch, stdout="{}"):
+    seen = []
+
+    class Out:
+        returncode = 0
+        stderr = ""
+
+    Out.stdout = stdout
+
+    def fake_run(cmd, **kwargs):
+        seen.append((cmd, kwargs.get("env") or {}))
+        return Out()
+
+    monkeypatch.setattr("router_runner.evaluator.subprocess.run", fake_run)
+    return seen
+
+
+def test_go_generative_run_is_standalone(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2_BIN", "/opt/oc/bin/opencode")
+    seen = _capture_run(monkeypatch, '{"action":"ignore","confidence":0.9,"reason":"x"}')
+    GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {})
+    cmd, env = seen[0]
+    assert cmd[:3] == ["/opt/oc/bin/opencode", "--standalone", "run"]
+    assert env.get("OPENCODE_DB", "").endswith("opencode-v2.db")
+
+
+def test_catalog_check_is_standalone(monkeypatch):
+    from router_runner.evaluator import _catalog_has_model
+
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2_BIN", "/opt/oc/bin/opencode")
+    seen = _capture_run(monkeypatch, '{"data":[{"id":"jev-1.13-free"}]}')
+    assert _catalog_has_model("jev-1.13-free") is True
+    cmd, _env = seen[0]
+    assert cmd == ["/opt/oc/bin/opencode", "--standalone", "api", "get", "/api/model"]

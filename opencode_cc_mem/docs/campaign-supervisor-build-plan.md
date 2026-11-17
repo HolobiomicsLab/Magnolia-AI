@@ -3,7 +3,8 @@
 Status: draft for implementation, 2026-10-23.
 Audience: the agent implementing this plan and the human reviewer.
 Target tree: `~/repos/project_magnolia-v2`, branch `exp/opencode-v2`.
-Pinned runtime: opencode v2.0.6 at `~/.local/share/magnolia-v2/bin/opencode`.
+Pinned runtime: opencode v2.0.6 at `~/.local/share/magnolia-v2/bin/opencode` when this
+plan was written. The supported runtime is now OpenCode 2.3.0, at the same path.
 
 This plan adds partial automation to Magnolia. It does not attempt open-ended
 scientific discovery. A human approves the protocol and the scientific claims.
@@ -469,7 +470,9 @@ Requirements:
 - `start_new_session=True` and explicit process-group kill are mandatory.
 - Save raw JSON events and stderr for every attempt.
 - The v2.0.6 JSON event shape must be probed before adapting the parser. Do not
-  assume the v1 `part.text` shape.
+  assume the v1 `part.text` shape. (Probed on 2.3.0: `tool_use` lines carry
+  `part.type == "tool"`, `step_finish` lines carry `part.tokens` and `part.cost`,
+  and a failed turn is a top-level `error` line with no `part`.)
 - Resume the same session only for an output-format retry. Never resume a lane
   session from a previous stage or campaign.
 

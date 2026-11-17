@@ -1,0 +1,10 @@
+{
+ "agent_name": "accept-edits",
+ "cwd": "/TMPDIR/probe-vibe-ctx-max",
+ "hook_event_name": "pre_agent",
+ "parent_session_id": null,
+ "prompt": "Reply with the last token of your session context.",
+ "session_id": "ses-fixture-22",
+ "transcript_path": "/HOME/<elided>",
+ "turn_id": "turn-302c012c4791e6a88183e60f1cf17457"
+}

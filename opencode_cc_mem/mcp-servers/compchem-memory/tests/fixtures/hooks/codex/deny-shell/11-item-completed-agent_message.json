@@ -1,0 +1,8 @@
+{
+ "item": {
+  "id": "item_4",
+  "text": "Security hook blocked the shell command; no file was created.",
+  "type": "agent_message"
+ },
+ "type": "item.completed"
+}

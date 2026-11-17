@@ -1,0 +1,13 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-deny-write",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-20",
+ "tool_call_id": "chatcmpl-tool-92d4e46a77f1e0f1",
+ "tool_input": {
+  "command": "mkdir -p /private/var/tmp/magnolia-probe-deny-vibe && echo hi > /private/var/tmp/magnolia-probe-deny-vibe/x.txt",
+  "timeout": 30
+ },
+ "tool_name": "file_system.bash",
+ "transcript_path": "/HOME/<elided>"
+}

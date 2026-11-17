@@ -187,7 +187,10 @@ def export_session(ses_id: str) -> Optional[dict]:
     when stdout is a pipe — so `capture_output=True` silently yields invalid
     (cut-off) JSON for any session larger than 64 KB, which are exactly the
     content-rich sessions worth distilling. Writing to a regular FILE gets the
-    full output, so we redirect to a temp file and read it back."""
+    full output, so we redirect to a temp file and read it back.
+
+    Under v2 only `session export` is tried, with the v2 binary and
+    --standalone (see opencode_cli)."""
     import os
     import tempfile
 
@@ -215,6 +218,12 @@ def export_session(ses_id: str) -> Optional[dict]:
         except Exception:
             return None
 
+    from compchem_memory import opencode_cli
+
+    if opencode_cli.is_v2():
+        # Observed on OpenCode 2.3.0: `opencode export <id>` is not a command
+        # (exit 1, "Unexpected positional argument"). v2 binary, --standalone.
+        return _try(opencode_cli.command("session", "export", ses_id))
     out = _try(["opencode", "export", ses_id])
     if out is not None:
         return out
@@ -224,8 +233,16 @@ def export_session(ses_id: str) -> Optional[dict]:
 def _normalize_v2_part(p: dict) -> dict:
     """session_message content items -> the v1 part family reconstruct reads:
     tool parts carry their result at state.output (v2 items may use flat
-    output/input keys instead)."""
+    output/input keys instead) and their tool name under `tool`. Observed on
+    OpenCode 2.3.0: a tool part has `state` and its name under `name` only
+    (Code Mode: `execute`)."""
     if not isinstance(p, dict):
+        return p
+    if p.get("type") == "tool" and "state" in p:
+        if "tool" not in p and "name" in p:
+            q = dict(p)
+            q["tool"] = q["name"]
+            return q
         return p
     if p.get("type") == "tool" and "state" not in p:
         state: dict = {}
@@ -244,12 +261,21 @@ def _normalize_v2_part(p: dict) -> dict:
     return p
 
 
+# Observed on OpenCode 2.3.0: session_message rows of type `idle` (end of a
+# turn: outcome succeeded/failed, with error) and `synthetic` (notices such as
+# "The server restarted while you were working...") are not dialogue.
+_V2_NON_DIALOGUE_TYPES = frozenset({"idle", "synthetic"})
+
+
 def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
     """Exporter reading opencode v2's event-sourced `session_message` table.
 
-    THE v2 content source (2026-10-07 smoke findings): the export CLI AND
-    ctx.session.context() both return flat user-text-only messages (assistant
-    turns empty), and the event table stays empty for --standalone runs — but
+    THE v2 content source (2026-10-07 smoke findings, OpenCode 2.0.6): the
+    export CLI AND ctx.session.context() both returned flat user-text-only
+    messages (assistant turns empty), and the event table stays empty for
+    --standalone runs. Observed on OpenCode 2.3.0: ctx.session.context() does
+    return assistant messages with `content` (text, tool parts), `tokens` and
+    `cost`, each message keyed by `type` rather than `info.role`. Either way
     session_message.data holds the full payload: user {text}, assistant
     {content: [reasoning/text/tool parts], model, cost, tokens}. Mapped to the
     v1 {info:{role,id}, parts:[...]} family so reconstruct_transcript (with
@@ -271,6 +297,8 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
             return None
         msgs = []
         for mid, typ, data in rows:
+            if typ in _V2_NON_DIALOGUE_TYPES:
+                continue
             try:
                 d = json.loads(data) if isinstance(data, (str, bytes, bytearray)) else (data or {})
             except Exception:  # noqa: BLE001 - one bad row must not kill the export
@@ -305,13 +333,16 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
 
     Order (2026-10-07): (1) opencode v2's session_message table via OPENCODE_DB
     (full content: assistant reasoning + tool parts); (2) the capture plugin's
-    ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat,
-    user text + system — a fallback, NOT a content source); (3) the export CLI
-    (v1 form first, then v2 `session export`) for v1 sessions.
+    ctx.session.context dump at <store>/opencode-transcripts/<sid>.json (flat;
+    user text + system only on 2.0.6, assistant content too on 2.3.0 — a
+    fallback, NOT the primary content source); (3) the export CLI
+    (v1 form first, then v2 `session export`) for v1 sessions; under v2 only
+    `session export` with --standalone (see export_session).
 
-    In v2 mode (OPENCODE_DB or MAGNOLIA_OPENCODE_V2) the CLI fallback is
-    deliberately skipped: the v1 binary cannot read the v2 DB, and invoking it
-    from the stdio MCP server can kill the connection."""
+    When the environment looks like v2 (OPENCODE_DB set) but the v2 runtime is
+    not declared (MAGNOLIA_OPENCODE_V2 unset), the CLI fallback is skipped: the
+    bare `opencode` from PATH can be the v1 binary, which cannot read the v2 DB,
+    and invoking it from the stdio MCP server can kill the connection."""
     store = Path(store_dir)
 
     def exporter(ses_id: str) -> Optional[dict]:
@@ -328,11 +359,16 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
                     return d
             except (OSError, ValueError, TypeError):
                 pass  # corrupt dump — fall through
-        if v2_mode():
-            # v2 mode: the v1 `opencode export` CLI cannot read the v2 DB and
+        from compchem_memory import opencode_cli
+
+        if v2_mode() and not opencode_cli.is_v2():
+            # v2 mode without the declared v2 runtime: the bare `opencode`
+            # from PATH may be the v1 CLI, which cannot read the v2 DB, and
             # spawning it from the stdio MCP server has taken down the MCP
             # connection. A missing session is retried next boot after the v2
             # DB/transcript dump appears; never shell out to the wrong CLI.
+            # With MAGNOLIA_OPENCODE_V2 set, export_session uses the v2 binary
+            # with --standalone (see opencode_cli).
             return None
         return export_session(ses_id)
 

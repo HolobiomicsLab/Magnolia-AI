@@ -1,0 +1,13 @@
+{
+ "cwd": "/TMPDIR/probe-vibe-parent",
+ "hook_event_name": "pre_tool",
+ "parent_session_id": null,
+ "session_id": "ses-fixture-15",
+ "tool_call_id": "chatcmpl-tool-b814c1a556913eb6",
+ "tool_input": {
+  "deadline_unix_ms": 1794746846307,
+  "timeout_ms": 30000
+ },
+ "tool_name": "self.wait",
+ "transcript_path": "/HOME/<elided>"
+}

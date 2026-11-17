@@ -347,9 +347,13 @@ terms of [§ Use cases](#use-cases-and-starting-prompts) above.
 
 Two options are worth knowing early:
 
-- `magnolia --critic <project>` enables a flag-only claim critic. It uses `DEEPSEEK_API_KEY`
-  to send the report and session tool trace to its judge, writes verdict logs and displays flags.
-  It does not block or edit the session; without that key it currently does nothing silently.
+- `magnolia --critic <project>` enables a flag-only claim critic. It sends the report and session
+  tool trace to a judge model, writes verdict logs and displays flags. The judge resolves like the
+  memory model: `MAGNOLIA_CRITIC_PROVIDER` (deepseek, openai, anthropic, kimi, openrouter, mistral,
+  zai), else the prefix of `MAGNOLIA_CRITIC_MODEL`, else the first key present, DeepSeek first.
+  `MAGNOLIA_CRITIC_API_KEY` and `MAGNOLIA_CRITIC_BASE_URL` reach any OpenAI-compatible service.
+  It does not block or edit the session; without a key it does nothing, and failed judge calls
+  go to `.magnolia/claim-critic/errors.jsonl`.
   See the [hook guide](docs/harness-adaptation.md#what-the-opencode-plugins-actually-do) before enabling it.
 - `magnolia memory status` reports which models are in force.
 

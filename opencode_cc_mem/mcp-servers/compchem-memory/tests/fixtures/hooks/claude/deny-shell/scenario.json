@@ -1,0 +1,6 @@
+{
+ "client": "claude",
+ "version": "2.1.325",
+ "command": "not run for Claude",
+ "observed": "not probed (Task 0 only requires Codex denial probes)"
+}

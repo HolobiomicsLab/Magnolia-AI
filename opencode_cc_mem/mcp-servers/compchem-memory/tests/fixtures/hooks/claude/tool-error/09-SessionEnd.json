@@ -1,0 +1,9 @@
+{
+ "cwd": "/TMPDIR/probe-claude-tool-error",
+ "hook_event_name": "SessionEnd",
+ "prompt_id": "71a02140-b801-4f06-b3e4-e315ae15bac3",
+ "reason": "other",
+ "scratchpad_dir": "/TMPDIR/claude-scratchpad",
+ "session_id": "ses-fixture-2",
+ "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-claude-tool-error/ses-fixture-2.jsonl"
+}
