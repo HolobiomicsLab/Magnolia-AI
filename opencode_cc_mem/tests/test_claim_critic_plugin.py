@@ -30,8 +30,17 @@ DRIVER = r"""
 const [pluginPath, directory, replyKind, status] = process.argv.slice(2)
 const verdict = { flag: true, severity: "low", unsupported_claims: ["x"], why: "no tool ran" }
 const calls = []
+const timeoutDelays = []
+const realSetTimeout = globalThis.setTimeout
+globalThis.setTimeout = (callback, delay, ...args) => {
+  timeoutDelays.push(delay)
+  return realSetTimeout(callback, delay, ...args)
+}
 globalThis.fetch = async (url, init) => {
-  calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+  calls.push({
+    url, headers: init.headers, body: JSON.parse(init.body),
+    hasSignal: Boolean(init.signal), timeoutDelays: [...timeoutDelays],
+  })
   const text = "```json\n" + JSON.stringify(verdict) + "\n```"
   const data = replyKind === "anthropic"
     ? { content: [{ type: "text", text }] }
@@ -146,3 +155,11 @@ def test_http_error_is_logged_not_raised(tmp_path):
     calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"}, status=401)
     assert len(calls) == 1 and rows == []
     assert errors[0]["provider"] == "mistral" and "401" in errors[0]["error"]
+
+
+def test_judge_fetch_uses_python_route_timeout(tmp_path):
+    calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"})
+
+    assert calls[0]["hasSignal"] is True
+    assert calls[0]["timeoutDelays"] == [60_000]
+    assert len(rows) == 1 and errors == []
