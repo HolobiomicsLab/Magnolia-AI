@@ -26,7 +26,9 @@ from compchem_memory.harness import RENDERERS
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.protocol import LaunchContext
 from compchem_memory.hook.doorbell import process_prompt
+from compchem_memory.hook.policy import load_required_policy, read_target_allowed
 from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.tool_catalog import resolve_memory_tool_allowlist
 
 
 STRIPPED_CLIENT_ENV = {
@@ -113,6 +115,7 @@ def _context(
         (config_dir / "hooks.toml").write_text("[[hooks]]\nname = \"fixture\"\n")
     route = ResolvedRoute(client, model, "family", client, role, "test")
     capabilities = set(changes.pop("capabilities", ()))
+    vibe_memory = changes.pop("vibe_memory", False)
     evidence = {
         "accepted": True,
         "trusted": True,
@@ -129,6 +132,8 @@ def _context(
             "identity": f"{client}-model-isolation-v1",
         },
     }
+    if client == "vibe":
+        evidence["vibe_memory"] = vibe_memory
     values = {
         "route": route,
         "role": role,
@@ -890,6 +895,7 @@ def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
         role="worker",
         capabilities=WORKER_CAPABILITIES,
         memory_service=route,
+        vibe_memory=True,
     )
 
     launch = prepare_launch(context)
@@ -937,7 +943,41 @@ def test_campaign_vibe_managed_route_acquires_project_service(
     acquired = []
     monkeypatch.setattr(
         "compchem_memory.harness.memory_service.ensure_memory_service",
-        lambda context: acquired.append(context) or handle,
+        lambda context, *, tool_allowlist: acquired.append(
+            (context, tool_allowlist)
+        ) or handle,
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", ""), "OPENAI_API_KEY": "provider"},
+        vibe_memory=True,
+    )
+
+    launch = prepare_launch(context)
+
+    assert len(acquired) == 1
+    assert acquired[0][0].project_dir == context.project_dir
+    assert acquired[0][1] == WORKER_CAPABILITIES[-3:]
+    assert launch.memory_service_handle is handle
+    rendered = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )["mcp_servers"][0]
+    assert rendered["url"] == "http://127.0.0.1:43101/mcp"
+    assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
+
+
+def test_vibe_managed_memory_requires_explicit_accepted_capability_cell(
+    tmp_path, monkeypatch
+):
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: acquired.append((context, kwargs)),
     )
     context = _context(
         tmp_path,
@@ -951,14 +991,35 @@ def test_campaign_vibe_managed_route_acquires_project_service(
 
     launch = prepare_launch(context)
 
-    assert len(acquired) == 1
-    assert acquired[0].project_dir == context.project_dir
-    assert launch.memory_service_handle is handle
-    rendered = tomllib.loads(
-        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
-    )["mcp_servers"][0]
-    assert rendered["url"] == "http://127.0.0.1:43101/mcp"
-    assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
+    assert acquired == []
+    policy_payload = json.loads(Path(launch.env["MAGNOLIA_HOOK_POLICY"]).read_text())
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert policy_payload["mcp_tool_allowlist"] == []
+    assert mcp_payload["tool_allowlist"] == []
+    assert mcp_payload["memory_service"] is None
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_non_opencode_role_policy_denies_service_token_root(tmp_path, client):
+    context = _context(
+        tmp_path,
+        client=client,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    launch = prepare_launch(context)
+    policy_path = Path(launch.env["MAGNOLIA_HOOK_POLICY"])
+    policy = load_required_policy(
+        policy_path,
+        expected_sha256=launch.policy_digest,
+        control_dir=str(context.control_dir),
+    )
+    token_path = context.project_dir / ".magnolia" / "services" / "probe" / "bearer-token"
+    token_path.parent.mkdir(parents=True)
+    token_path.write_text("sentinel\n", encoding="utf-8")
+
+    assert "**/.magnolia/services/**" in policy.deny_patterns
+    assert read_target_allowed(str(token_path), context.project_dir, policy) is False
 
 
 def test_vibe_reviewer_without_memory_tools_does_not_acquire_managed_service(
@@ -967,7 +1028,7 @@ def test_vibe_reviewer_without_memory_tools_does_not_acquire_managed_service(
     acquired = []
     monkeypatch.setattr(
         "compchem_memory.harness.memory_service.ensure_memory_service",
-        lambda context: acquired.append(context),
+        lambda context, **kwargs: acquired.append((context, kwargs)),
     )
     context = _context(
         tmp_path,
@@ -997,6 +1058,30 @@ def test_memory_role_without_route_is_refused(tmp_path):
                 memory_service={},
             )
         )
+
+
+def test_hook_catalog_and_server_allowlists_are_identical(tmp_path):
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+        )
+    )
+    policy = json.loads(Path(launch.env["MAGNOLIA_HOOK_POLICY"]).read_text())
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    server = resolve_memory_tool_allowlist(
+        json.loads(launch.env["MAGNOLIA_MEMORY_TOOL_ALLOWLIST"]),
+        required=True,
+    )
+
+    assert tuple(policy["mcp_tool_allowlist"]) == tuple(mcp["tool_allowlist"])
+    assert server.neutral_names == tuple(mcp["tool_allowlist"])
+    assert server.server_names == (
+        "memory_get_context",
+        "memory_search",
+        "memory_get_run_history",
+    )
 
 
 def test_memory_stdio_route_refuses_nonisolated_module_launch(tmp_path):

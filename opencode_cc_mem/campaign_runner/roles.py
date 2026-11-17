@@ -10,6 +10,8 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
+from compchem_memory.tool_catalog import resolve_memory_tool_allowlist
+
 
 ROLE_NAMES = ("campaign-worker", "campaign-reviewer", "helper", "evaluator")
 OPENCODE_ROLES = ("campaign-worker", "campaign-reviewer")
@@ -24,6 +26,7 @@ class RolePolicy:
     role: str
     canonical_read_roots: tuple[str, ...]
     read_deny_patterns: tuple[str, ...]
+    opencode_omitted_read_deny_patterns: tuple[str, ...]
     edit_roots: tuple[str, ...]
     allowed_native_capabilities: tuple[str, ...]
     mcp_tool_allowlist: tuple[str, ...]
@@ -47,6 +50,9 @@ def load_role(role: str, config_dir: Path = CONFIG_DIR) -> RolePolicy:
         role=_text(value, "role", path),
         canonical_read_roots=_strings(value, "canonical_read_roots", path),
         read_deny_patterns=_strings(value, "read_deny_patterns", path),
+        opencode_omitted_read_deny_patterns=_optional_strings(
+            value, "opencode_omitted_read_deny_patterns", path
+        ),
         edit_roots=_strings(value, "edit_roots", path),
         allowed_native_capabilities=_strings(
             value, "allowed_native_capabilities", path
@@ -62,6 +68,17 @@ def load_role(role: str, config_dir: Path = CONFIG_DIR) -> RolePolicy:
         raise ValueError(f"role policy name mismatch in {path}: {policy.role!r}")
     if policy.delegation_policy != "deny":
         raise ValueError(f"delegation must be denied in {path}")
+    unknown_omissions = set(policy.opencode_omitted_read_deny_patterns) - set(
+        policy.read_deny_patterns
+    )
+    if unknown_omissions:
+        raise ValueError(f"OpenCode omissions are not read denials in {path}")
+    if policy.opencode_omitted_read_deny_patterns and role not in OPENCODE_ROLES:
+        raise ValueError(f"OpenCode omissions are invalid for {role} in {path}")
+    resolve_memory_tool_allowlist(
+        policy.mcp_tool_allowlist,
+        required=role == "campaign-worker",
+    )
     return policy
 
 
@@ -106,7 +123,13 @@ def _opencode_permissions(policy: RolePolicy) -> list[tuple[str, str, str]]:
         permissions.append(("read", "*", "allow"))
     permissions.extend(
         ("read", resource, "deny")
-        for resource in _opencode_read_denials(policy.read_deny_patterns)
+        for resource in _opencode_read_denials(
+            tuple(
+                pattern
+                for pattern in policy.read_deny_patterns
+                if pattern not in policy.opencode_omitted_read_deny_patterns
+            )
+        )
     )
     for capability in ("native_glob", "native_grep"):
         if capability in capabilities:
@@ -182,6 +205,15 @@ def _strings(value: Mapping[str, Any], key: str, path: Path) -> tuple[str, ...]:
     if not all(isinstance(item, str) and item for item in items):
         raise ValueError(f"{key} contains an invalid item in {path}")
     return tuple(items)
+
+
+def _optional_strings(
+    value: Mapping[str, Any], key: str, path: Path
+) -> tuple[str, ...]:
+    """Return an optional string-list field as an immutable tuple."""
+    if key not in value:
+        return ()
+    return _strings(value, key, path)
 
 
 def _positive_int(value: Mapping[str, Any], key: str, path: Path) -> int:

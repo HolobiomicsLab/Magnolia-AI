@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import fcntl
 import hmac
 import logging
 import math
 import os
 import signal
+import stat
 import threading
 import time
 from dataclasses import dataclass, field
@@ -16,7 +19,7 @@ from typing import Any, Awaitable, Callable
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from fastmcp.server.auth import StaticTokenVerifier
+from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from starlette.requests import Request
@@ -27,6 +30,10 @@ from compchem_memory.harness.memory_service import (
     TOKEN_ENV,
     _process_identity,
     project_digest,
+)
+from compchem_memory.tool_catalog import (
+    memory_tool_is_mutating,
+    resolve_memory_tool_environment,
 )
 
 
@@ -43,6 +50,81 @@ MAX_WATCHDOG_SECONDS = 30.0
 MIN_GRACE_SECONDS = 5.0
 MAX_GRACE_SECONDS = 600.0
 LOGGER = logging.getLogger(__name__)
+
+
+class ConstantTimeTokenVerifier(TokenVerifier):
+    """Verify the one service bearer without data-dependent string lookup."""
+
+    def __init__(self, expected_token: str) -> None:
+        super().__init__(required_scopes=[])
+        self.expected_token = expected_token
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Return fixed service claims only after constant-time comparison."""
+        if not hmac.compare_digest(token, self.expected_token):
+            return None
+        return AccessToken(
+            token=token,
+            client_id="magnolia-memory",
+            scopes=[],
+            claims={"client_id": "magnolia-memory", "scopes": []},
+        )
+
+
+class ToolAllowlistMiddleware(Middleware):
+    """Hide and refuse every memory tool outside one resolved allowlist."""
+
+    def __init__(self, allowed_tools: tuple[str, ...]) -> None:
+        self.allowed_tools = frozenset(allowed_tools)
+
+    async def on_list_tools(self, context, call_next):
+        """Return only tools this server instance may dispatch."""
+        tools = await call_next(context)
+        return tuple(tool for tool in tools if tool.name in self.allowed_tools)
+
+    async def on_call_tool(self, context, call_next):
+        """Refuse direct calls that bypass discovery."""
+        name = getattr(context.message, "name", "")
+        if name not in self.allowed_tools:
+            raise ToolError(f"memory tool is not allowed by this role: {name}")
+        return await call_next(context)
+
+
+class ProjectWriterLeaseMiddleware(Middleware):
+    """Serialize durable memory mutations with a process-safe project lease."""
+
+    def __init__(self, project_dir: Path) -> None:
+        self.project_dir = project_dir.expanduser().resolve()
+
+    def _acquire(self) -> int:
+        store = self.project_dir / ".magnolia"
+        store.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = store.resolve() / ".writer.lock"
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags, 0o600)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
+            raise RuntimeError("memory writer lease is not a regular file")
+        os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        return descriptor
+
+    @staticmethod
+    def _release(descriptor: int) -> None:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+    async def on_call_tool(self, context, call_next):
+        """Lease mutating calls while allowing read calls to overlap."""
+        name = getattr(context.message, "name", "")
+        arguments = getattr(context.message, "arguments", None)
+        if not memory_tool_is_mutating(name, arguments):
+            return await call_next(context)
+        descriptor = await asyncio.to_thread(self._acquire)
+        try:
+            return await call_next(context)
+        finally:
+            await asyncio.to_thread(self._release, descriptor)
 
 
 @dataclass
@@ -415,15 +497,21 @@ def build_server(token: str) -> FastMCP:
         raise RuntimeError("memory HTTP service requires a bearer token")
     from compchem_memory.server import mcp as memory_app
 
-    verifier = StaticTokenVerifier(
-        {token: {"client_id": "magnolia-memory", "scopes": []}}
-    )
+    try:
+        allowlist = resolve_memory_tool_environment(os.environ, legacy_stdio=False)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if not allowlist.server_names:
+        raise RuntimeError("memory HTTP service requires a non-empty tool allowlist")
+    verifier = ConstantTimeTokenVerifier(token)
     app = FastMCP("compchem-memory-http", auth=verifier)
+    app.add_middleware(ToolAllowlistMiddleware(allowlist.server_names))
     if os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1":
         project = os.environ.get("MAGNOLIA_PROJECT_DIR")
         if not project:
             raise RuntimeError("memory HTTP service requires a bound project directory")
         app.add_middleware(ProjectBindingMiddleware(Path(project)))
+        app.add_middleware(ProjectWriterLeaseMiddleware(Path(project)))
     app.mount(memory_app)
 
     @app.custom_route("/health", methods=["GET"])

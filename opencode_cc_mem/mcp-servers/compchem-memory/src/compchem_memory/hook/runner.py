@@ -67,9 +67,22 @@ def main() -> None:
         from compchem_memory.server_start import install_stdio_guards
 
         install_stdio_guards(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
+        from fastmcp import FastMCP
+        from compchem_memory.memory_http import ToolAllowlistMiddleware
         from compchem_memory.server import mcp
+        from compchem_memory.tool_catalog import (
+            MEMORY_TOOL_ALLOWLIST_ENV,
+            resolve_memory_tool_environment,
+        )
 
-        mcp.run()
+        allowlist = resolve_memory_tool_environment(os.environ, legacy_stdio=True)
+        if MEMORY_TOOL_ALLOWLIST_ENV not in os.environ:
+            mcp.run()
+            return
+        filtered = FastMCP("compchem-memory-stdio-role")
+        filtered.add_middleware(ToolAllowlistMiddleware(allowlist.server_names))
+        filtered.mount(mcp)
+        filtered.run()
         return
     if sys.argv[1:2] == [MEMORY_HTTP_MODE]:
         sys.argv = [sys.argv[0], *sys.argv[2:]]

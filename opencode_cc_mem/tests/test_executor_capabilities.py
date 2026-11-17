@@ -51,6 +51,11 @@ def _all_observed_table(tmp_path):
                 "status": "unknown",
                 "artifact": None,
             }
+        if "vibe_memory" in row["cells"]:
+            row["cells"]["vibe_memory"] = {
+                "status": "unknown",
+                "artifact": None,
+            }
         row["gate"] = {
             "status": "observed",
             "artifact": evidence.name,
@@ -413,6 +418,12 @@ def test_codex_helper_evaluator_and_vibe_rows_still_refused():
 
     assert projected["codex"]["helper"]["accepted"] is False
     assert projected["codex"]["evaluator"]["accepted"] is False
+    assert all(
+        row["cells"]["vibe_memory"]["status"] != "observed"
+        for row in table["rows"]
+        if row["client"] == "vibe"
+    )
+    assert projected["vibe"]["worker"]["vibe_memory"] is False
     assert all(not row["accepted"] for row in projected["vibe"].values())
 
 

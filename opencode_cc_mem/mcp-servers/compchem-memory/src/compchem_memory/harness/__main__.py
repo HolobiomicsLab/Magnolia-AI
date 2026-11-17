@@ -15,6 +15,7 @@ from pathlib import Path
 from compchem_memory.harness.files import atomic_write, validate_project_paths
 from compchem_memory.harness.neutral import NeutralConfig, bind_memory_service, load
 from compchem_memory.harness.protocol import RENDERERS, Launch, LaunchContext, Renderer
+from compchem_memory.tool_catalog import CANONICAL_MEMORY_TOOL_ALLOWLIST
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -118,7 +119,10 @@ def _render(args: argparse.Namespace) -> tuple[Launch, Renderer]:
             token_for_handle,
         )
 
-        handle = ensure_memory_service(context)
+        handle = ensure_memory_service(
+            context,
+            tool_allowlist=CANONICAL_MEMORY_TOOL_ALLOWLIST,
+        )
         context.memory_service = handle.route()
         neutral = bind_memory_service(neutral, handle.route())
         try:

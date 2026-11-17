@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,11 +12,22 @@ from campaign_runner.launch import ROLE_CONFIG_NAMES
 
 
 ROOT = Path(__file__).parents[1]
+BASE_OPENCODE_SHA256 = {
+    "campaign-worker": "8d6b9d64a6e2d2f74c99f2aaeba4f2b59496326fd962e034fc99730147d61c68",
+    "campaign-reviewer": "441b5b4126f23b5c2034e6ed104310936127f4c2db806da9d85804b48123a04c",
+}
 
 
 @pytest.mark.parametrize("role", ("campaign-worker", "campaign-reviewer"))
 def test_render_opencode_byte_identical(role):
     assert roles.render_opencode(role) == (ROOT / ".opencode" / "agents" / f"{role}.md").read_bytes()
+
+
+@pytest.mark.parametrize("role", ("campaign-worker", "campaign-reviewer"))
+def test_render_opencode_preserves_base_bytes(role):
+    assert hashlib.sha256(roles.render_opencode(role)).hexdigest() == (
+        BASE_OPENCODE_SHA256[role]
+    )
 
 
 def test_role_generation_check_detects_drift(tmp_path):
@@ -32,9 +44,11 @@ def test_role_generation_check_detects_drift(tmp_path):
     (
         ("default_cap", 31),
         ("canonical_read_roots", []),
-        ("read_deny_patterns", ["**/private/**"]),
+        (
+            "read_deny_patterns",
+            ["**/private/**", "**/.magnolia/services/**"],
+        ),
         ("edit_roots", []),
-        ("mcp_tool_allowlist", []),
     ),
 )
 def test_role_fields_drive_opencode_output_and_check(field, value, tmp_path):
@@ -104,3 +118,28 @@ def test_worker_exact_three_memory_reads_reviewer_none():
         "mcp:compchem-memory.memory_get_run_history",
     )
     assert policies["campaign-reviewer"].mcp_tool_allowlist == ()
+
+
+@pytest.mark.parametrize("role", ("campaign-worker", "campaign-reviewer"))
+def test_service_state_deny_is_not_rendered_for_opencode(role):
+    policy = roles.load_role(role)
+
+    assert "**/.magnolia/services/**" in policy.read_deny_patterns
+    assert "**/.magnolia/services/**" in policy.opencode_omitted_read_deny_patterns
+    assert b"**/.magnolia/services/**" not in roles.render_opencode(role)
+
+
+@pytest.mark.parametrize(
+    "allowlist",
+    ([], ["mcp:compchem-memory.memory_not_a_real_tool"]),
+)
+def test_required_memory_role_refuses_empty_or_unknown_allowlist(tmp_path, allowlist):
+    config = tmp_path / "agents"
+    shutil.copytree(ROOT / "agents", config)
+    worker = config / "campaign-worker.yaml"
+    payload = yaml.safe_load(worker.read_text(encoding="utf-8"))
+    payload["mcp_tool_allowlist"] = allowlist
+    worker.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="memory tool allowlist"):
+        roles.load_role("campaign-worker", config)

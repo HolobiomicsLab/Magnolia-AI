@@ -35,6 +35,12 @@ from compchem_memory.harness.render_common import (
     _required_pre_tool_command,
     policy_files,
 )
+from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_ALLOWLIST_ENV,
+    MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+    ResolvedMemoryToolAllowlist,
+    resolve_memory_tool_allowlist,
+)
 
 from .executors.contracts import ExecContext
 from .executors.registry import ExecutorRefused
@@ -349,11 +355,8 @@ def _acquire_managed_memory_service(
     ):
         return context, None
     policy = load_role(ROLE_CONFIG_NAMES[context.role])
-    uses_memory = any(
-        tool.startswith("mcp:compchem-memory.")
-        for tool in policy.mcp_tool_allowlist
-    )
-    if not uses_memory:
+    tools = _resolved_memory_tools(context, policy)
+    if not tools.neutral_names:
         return context, None
     if context.project_dir is None or not context.python_executable:
         raise ExecutorRefused("managed Vibe memory requires a project and Python")
@@ -369,7 +372,8 @@ def _acquire_managed_memory_service(
                 **({} if context.environment is None else dict(context.environment)),
             },
             holder_pid=os.getpid(),
-        )
+        ),
+        tool_allowlist=tools.neutral_names,
     )
     route = {**handle.route(), "_handle": handle}
     return replace(context, memory_service=route), handle
@@ -987,7 +991,7 @@ def _policy_payload(
     edit_roots: tuple[str, ...],
     capability_identity: str,
 ) -> dict[str, Any]:
-    mcp_tools = list(policy.mcp_tool_allowlist)
+    mcp_tools = list(_resolved_memory_tools(context, policy).neutral_names)
     if context.route is not None and (
         context.route.client == "codex" and context.role in {"worker", "reviewer"}
     ):
@@ -1063,8 +1067,9 @@ def _settings_payload(
 
 
 def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
+    resolved_tools = _resolved_memory_tools(context, policy)
     service = None
-    if policy.mcp_tool_allowlist:
+    if resolved_tools.neutral_names:
         if not context.memory_service:
             raise ExecutorRefused(
                 "role requires memory tools but no usable memory route was supplied"
@@ -1081,7 +1086,7 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
             key: value for key, value in context.memory_service.items() if key in allowed
         }
         _validate_memory_service(context, service)
-    tool_allowlist = list(policy.mcp_tool_allowlist)
+    tool_allowlist = list(resolved_tools.neutral_names)
     if context.route is not None and (
         context.route.client == "codex" and context.role in {"worker", "reviewer"}
     ):
@@ -1091,6 +1096,22 @@ def _mcp_payload(context: ExecContext, policy: RolePolicy) -> dict[str, Any]:
         "memory_service": service,
         "tool_allowlist": list(dict.fromkeys(tool_allowlist)),
     }
+
+
+def _resolved_memory_tools(
+    context: ExecContext, policy: RolePolicy
+) -> ResolvedMemoryToolAllowlist:
+    """Resolve one role list, applying the explicit Vibe-memory gate."""
+    resolved = resolve_memory_tool_allowlist(
+        policy.mcp_tool_allowlist,
+        required=policy.role == "campaign-worker",
+    )
+    if context.route is None or context.route.client != "vibe":
+        return resolved
+    evidence = context.role_capabilities.get("vibe", {}).get(context.role, {})
+    if isinstance(evidence, Mapping) and evidence.get("vibe_memory") is True:
+        return resolved
+    return resolve_memory_tool_allowlist((), required=False)
 
 
 def _client_native_artifacts(
@@ -1445,6 +1466,13 @@ def _explicit_environment(
             explicit.setdefault(name, inherited.get(name, ""))
     if context.route.model:
         explicit["MAGNOLIA_MODEL"] = context.route.model
+    policy = load_role(ROLE_CONFIG_NAMES[context.role])
+    memory_tools = _resolved_memory_tools(context, policy)
+    if memory_tools.neutral_names:
+        explicit[MEMORY_TOOL_ALLOWLIST_ENV] = json.dumps(
+            memory_tools.neutral_names, separators=(",", ":")
+        )
+        explicit[MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV] = "1"
     service = context.memory_service
     authorization = service.get("authorization_env")
     token_file = service.get("token_file")

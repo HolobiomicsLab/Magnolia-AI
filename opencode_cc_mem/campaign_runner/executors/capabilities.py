@@ -27,7 +27,7 @@ PREREQUISITE_CELLS = (
     "usage_semantics",
 )
 ALL_CELLS = (*PREREQUISITE_CELLS, "quota_evidence")
-OPTIONAL_CELLS = ("http_api_key_env",)
+OPTIONAL_CELLS = ("http_api_key_env", "vibe_memory")
 
 
 class CapabilityTableError(ValueError):
@@ -103,6 +103,12 @@ def project_role_capabilities(table: Mapping[str, Any]) -> dict[str, Any]:
                 *[f"{name}: {cells[name]['status']}" for name in blocking],
             ],
         }
+        if row["client"] == "vibe":
+            vibe_memory = cells.get("vibe_memory", {})
+            value = _observed_value(vibe_memory, {})
+            role_projection["vibe_memory"] = bool(
+                isinstance(value, Mapping) and value.get("accepted") is True
+            )
         launch_identity = _project_launch_identity(row)
         if launch_identity is not None:
             role_projection["launch_identity"] = launch_identity
@@ -132,6 +138,8 @@ def _validate_row(row: Any, index: int, repository_root: Path) -> None:
         raise CapabilityTableError(f"row {index} must contain every capability cell")
     if names - set((*ALL_CELLS, *OPTIONAL_CELLS)):
         raise CapabilityTableError(f"row {index} contains an unknown capability cell")
+    if row.get("client") == "vibe" and "vibe_memory" not in names:
+        raise CapabilityTableError(f"row {index} must contain the vibe_memory cell")
     for name, cell in cells.items():
         _validate_cell(cell, f"row {index}.{name}", repository_root)
     identity = cells["identity"].get("value")

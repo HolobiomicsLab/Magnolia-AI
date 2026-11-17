@@ -1,0 +1,154 @@
+"""Canonical compchem-memory tool catalog and allowlist resolution."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Mapping, Sequence
+
+
+MEMORY_TOOL_PREFIX = "mcp:compchem-memory."
+MEMORY_TOOL_ORDER = (
+    "memory_get_context",
+    "memory_record_session",
+    "memory_record_learning",
+    "memory_search",
+    "memory_get_run_history",
+    "memory_record_run",
+    "memory_consolidate",
+    "memory_verify_claim",
+    "memory_confirm",
+    "memory_park",
+    "memory_unpark",
+    "memory_select_relevant",
+    "memory_extract_from_session",
+    "memory_compact_session",
+    "memory_search_errors",
+    "memory_distill_session",
+    "memory_review_consolidation",
+    "memory_apply_consolidation",
+    "memory_review_promotions",
+    "memory_apply_promotions",
+    "memory_scan_headers",
+    "memory_health_check",
+    "memory_notebook",
+    "memory_annotate",
+    "memory_set_goal",
+    "memory_get_goal",
+)
+MEMORY_TOOL_NAMES = frozenset(MEMORY_TOOL_ORDER)
+MEMORY_TOOL_ALLOWLIST_ENV = "MAGNOLIA_MEMORY_TOOL_ALLOWLIST"
+MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV = "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED"
+CANONICAL_MEMORY_TOOL_ALLOWLIST = tuple(
+    f"{MEMORY_TOOL_PREFIX}{name}" for name in MEMORY_TOOL_ORDER
+)
+CAMPAIGN_ROLE_NAMES = frozenset({"worker", "reviewer", "helper", "evaluator"})
+
+MUTATING_MEMORY_TOOLS = frozenset(
+    {
+        "memory_record_session",
+        "memory_record_learning",
+        "memory_record_run",
+        "memory_consolidate",
+        "memory_confirm",
+        "memory_park",
+        "memory_unpark",
+        "memory_extract_from_session",
+        "memory_compact_session",
+        "memory_distill_session",
+        "memory_review_consolidation",
+        "memory_apply_consolidation",
+        "memory_review_promotions",
+        "memory_apply_promotions",
+        "memory_health_check",
+        "memory_annotate",
+        "memory_set_goal",
+    }
+)
+READ_ONLY_MEMORY_TOOLS = frozenset(
+    {
+        "memory_get_context",
+        "memory_search",
+        "memory_get_run_history",
+        "memory_verify_claim",
+        "memory_select_relevant",
+        "memory_search_errors",
+        "memory_scan_headers",
+        "memory_notebook",
+        "memory_get_goal",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ResolvedMemoryToolAllowlist:
+    """The same exact allowlist in neutral-policy and server spellings."""
+
+    neutral_names: tuple[str, ...]
+    server_names: tuple[str, ...]
+
+
+def resolve_memory_tool_allowlist(
+    entries: Sequence[str] | None,
+    *,
+    required: bool,
+    legacy_stdio: bool = False,
+) -> ResolvedMemoryToolAllowlist:
+    """Validate exact known names and resolve both consumer spellings."""
+    if entries is None:
+        if legacy_stdio and not required:
+            server_names = MEMORY_TOOL_ORDER
+        else:
+            raise ValueError("memory tool allowlist is required")
+    else:
+        if isinstance(entries, (str, bytes)) or not isinstance(entries, Sequence):
+            raise ValueError("memory tool allowlist must be a list")
+        neutral_names = tuple(entries)
+        if not all(isinstance(name, str) and name for name in neutral_names):
+            raise ValueError("memory tool allowlist contains an invalid entry")
+        if len(set(neutral_names)) != len(neutral_names):
+            raise ValueError("memory tool allowlist contains duplicate entries")
+        server_names = tuple(
+            name.removeprefix(MEMORY_TOOL_PREFIX) for name in neutral_names
+        )
+        if any(
+            not name.startswith(MEMORY_TOOL_PREFIX)
+            for name in neutral_names
+        ):
+            raise ValueError("memory tool allowlist entries must use canonical names")
+        unknown = sorted(set(server_names) - MEMORY_TOOL_NAMES)
+        if unknown:
+            raise ValueError(
+                "memory tool allowlist contains unknown tools: " + ", ".join(unknown)
+            )
+        if required and not server_names:
+            raise ValueError("memory tool allowlist must be non-empty")
+    neutral_names = tuple(f"{MEMORY_TOOL_PREFIX}{name}" for name in server_names)
+    return ResolvedMemoryToolAllowlist(neutral_names, tuple(server_names))
+
+
+def resolve_memory_tool_environment(
+    environment: Mapping[str, str], *, legacy_stdio: bool
+) -> ResolvedMemoryToolAllowlist:
+    """Resolve one server process's explicit JSON allowlist environment."""
+    required = (
+        environment.get(MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV) == "1"
+        or environment.get("MAGNOLIA_ROLE") in CAMPAIGN_ROLE_NAMES
+    )
+    raw = environment.get(MEMORY_TOOL_ALLOWLIST_ENV)
+    entries = None
+    if raw is not None:
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("memory tool allowlist is not valid JSON") from exc
+    return resolve_memory_tool_allowlist(
+        entries, required=required, legacy_stdio=legacy_stdio
+    )
+
+
+def memory_tool_is_mutating(
+    name: str, arguments: Mapping[str, object] | None = None
+) -> bool:
+    """Return whether a tool can change durable project memory state."""
+    return name in MUTATING_MEMORY_TOOLS

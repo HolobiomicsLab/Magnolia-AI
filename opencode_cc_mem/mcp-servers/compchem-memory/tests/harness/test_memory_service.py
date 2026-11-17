@@ -47,6 +47,11 @@ def _context(project: Path, *, key: str = "provider-secret") -> SimpleNamespace:
         },
         environment={"OPENAI_API_KEY": key},
         holder_pid=os.getpid(),
+        tool_allowlist=(
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ),
     )
 
 
@@ -87,6 +92,16 @@ def test_provider_must_be_explicit_and_other_key_names_do_not_count():
             context,
             {"MISTRAL_API_KEY": "client-credential-like"},
         )
+
+
+def test_service_acquisition_refuses_missing_tool_allowlist(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    context = _context(project)
+    del context.tool_allowlist
+
+    with pytest.raises(ExecutorRefused, match="tool allowlist is required"):
+        memory_service.ensure_memory_service(context)
 
 
 def test_service_environment_is_provider_specific_allowlist():
@@ -881,6 +896,11 @@ context = SimpleNamespace(
         "OPENAI_API_KEY": "provider-secret",
     }},
     holder_pid={os.getpid()},
+    tool_allowlist=(
+        "mcp:compchem-memory.memory_get_context",
+        "mcp:compchem-memory.memory_search",
+        "mcp:compchem-memory.memory_get_run_history",
+    ),
 )
 memory_service.ensure_memory_service(context)
 """
@@ -1355,6 +1375,11 @@ ms.ensure_memory_service(SimpleNamespace(
     project_dir=Path({str(project)!r}), python=sys.executable, holder_pid=os.getpid(),
     setup={{'memory_provider': 'openai', 'memory_model': 'test', 'memory_service_timeout': 0}},
     environment={{'HOME': {str(Path.home())!r}, 'OPENAI_API_KEY': 'sentinel'}},
+        tool_allowlist=(
+            'mcp:compchem-memory.memory_get_context',
+            'mcp:compchem-memory.memory_search',
+            'mcp:compchem-memory.memory_get_run_history',
+        ),
 ))
 """
     acquirer = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1616,6 +1641,11 @@ ms.ensure_memory_service(SimpleNamespace(
     project_dir=Path({str(project)!r}), python={sys.executable!r}, holder_pid={os.getpid()},
     setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
     environment={environment!r},
+    tool_allowlist=(
+        'mcp:compchem-memory.memory_get_context',
+        'mcp:compchem-memory.memory_search',
+        'mcp:compchem-memory.memory_get_run_history',
+    ),
 ))
 """
     acquirer = subprocess.Popen([sys.executable, "-c", code], env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1781,6 +1811,11 @@ ms.ensure_memory_service(SimpleNamespace(
     project_dir=Path({str(project)!r}), python={str(wrapper)!r}, holder_pid={os.getpid()},
     setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
     environment={environment!r},
+    tool_allowlist=(
+        'mcp:compchem-memory.memory_get_context',
+        'mcp:compchem-memory.memory_search',
+        'mcp:compchem-memory.memory_get_run_history',
+    ),
 ))
 """
     acquirer = subprocess.Popen(
@@ -1853,6 +1888,11 @@ ms.ensure_memory_service(SimpleNamespace(
     project_dir=Path({str(project)!r}), python={sys.executable!r}, holder_pid={os.getpid()},
     setup={{'memory_provider': 'openai', 'memory_service_timeout': 15}},
     environment={environment!r},
+    tool_allowlist=(
+        'mcp:compchem-memory.memory_get_context',
+        'mcp:compchem-memory.memory_search',
+        'mcp:compchem-memory.memory_get_run_history',
+    ),
 ))
 """
     acquirer = subprocess.Popen(
