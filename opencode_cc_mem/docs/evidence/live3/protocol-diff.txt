@@ -1,0 +1,39 @@
+--- <G>/snap/opencode_cc_mem/tests/fixtures/campaigns/harness-p3/opencode-control.json	2026-11-17 10:58:18
++++ <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/campaigns/harness-p3/opencode-control.json	2026-11-17 11:10:31
+@@ -3,14 +3,14 @@
+   "id": "harness-p3-opencode-control",
+   "project": "harness-p3-acceptance",
+   "worker": {
+-    "model": "opencode/deepseek-v4.1-flash-free",
++    "model": "openrouter/deepseek/deepseek-v4.1-flash",
+     "agent": "campaign-worker",
+     "max_steps": 30,
+     "timeout_seconds": 600
+   },
+   "reviewer": {
+     "enabled": true,
+-    "model": "opencode/glm-5.3-flash-free",
++    "model": "openrouter/z-ai/glm-5.3-flash",
+     "max_steps": 8,
+     "timeout_seconds": 600,
+     "repair_attempts": 1
+@@ -27,7 +27,7 @@
+     {
+       "id": "work",
+       "type": "agent",
+-      "model": "opencode/deepseek-v4.1-flash-free",
++      "model": "openrouter/deepseek/deepseek-v4.1-flash",
+       "prompt": "prompts/prompt.md",
+       "outputs": ["work/result.txt"],
+       "gate": ["python3", "-c", "from pathlib import Path; raise SystemExit(0 if Path('work/result.txt').is_file() else 1)"],
+--- <G>/snap/opencode_cc_mem/tests/fixtures/campaigns/harness-p3/opencode-reviewer-only.json	2026-11-17 10:58:18
++++ <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/campaigns/harness-p3/opencode-reviewer-only.json	2026-11-17 11:10:31
+@@ -10,7 +10,7 @@
+   },
+   "reviewer": {
+     "enabled": true,
+-    "model": "opencode/deepseek-v4.1-flash-free",
++    "model": "openrouter/deepseek/deepseek-v4.1-flash",
+     "max_steps": 8,
+     "timeout_seconds": 600,
+     "repair_attempts": 1

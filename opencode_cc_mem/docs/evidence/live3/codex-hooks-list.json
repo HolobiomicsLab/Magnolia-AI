@@ -1,0 +1,77 @@
+{
+  "method": "operator probes x1/x2 call the production campaign_runner.executors.codex._fresh_codex_hook_rows (stdin held open until the id 2 reply); each returned 8 rows (5 project rows). The campaign then ran its own fresh probes: c2-run 2 app-server launches (executor_for require_codex_trust at 11:10:35, pre-spawn _verify_discovered_configuration at 11:10:36) before the codex exec at 11:10:37; d2 dry 1 launch.",
+  "x1_after_project_trust": [
+    {
+      "currentHash": "sha256:8cf7386f13c0eee91f649bb39839463f33d6f93bbd2b19371aaaf346c2182b79",
+      "enabled": true,
+      "eventName": "preToolUse",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+      "trustStatus": "untrusted"
+    },
+    {
+      "currentHash": "sha256:f20e0db9f271339216b9c937da8ae3290e91c658ce728db49f6a9eb5897ab753",
+      "enabled": true,
+      "eventName": "postToolUse",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+      "trustStatus": "untrusted"
+    },
+    {
+      "currentHash": "sha256:d7708d865eb25c7cf0be96b69c3624e334ef9ff0b685b3d7c3b42aa567befabb",
+      "enabled": true,
+      "eventName": "sessionStart",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+      "trustStatus": "untrusted"
+    },
+    {
+      "currentHash": "sha256:4ab20f9c89aba24e6e7a5a153cb0b8aa2f2134a8f70801da87d027302a957e7f",
+      "enabled": true,
+      "eventName": "userPromptSubmit",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+      "trustStatus": "untrusted"
+    },
+    {
+      "currentHash": "sha256:fe9075b73bb0d407386d9b7b538a927f3f332b89622c2ae1c204b4c6590d42bf",
+      "enabled": true,
+      "eventName": "stop",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+      "trustStatus": "untrusted"
+    }
+  ],
+  "x2_after_hook_trust": [
+    {
+      "currentHash": "sha256:8cf7386f13c0eee91f649bb39839463f33d6f93bbd2b19371aaaf346c2182b79",
+      "enabled": true,
+      "eventName": "preToolUse",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:f20e0db9f271339216b9c937da8ae3290e91c658ce728db49f6a9eb5897ab753",
+      "enabled": true,
+      "eventName": "postToolUse",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:d7708d865eb25c7cf0be96b69c3624e334ef9ff0b685b3d7c3b42aa567befabb",
+      "enabled": true,
+      "eventName": "sessionStart",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:4ab20f9c89aba24e6e7a5a153cb0b8aa2f2134a8f70801da87d027302a957e7f",
+      "enabled": true,
+      "eventName": "userPromptSubmit",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+      "trustStatus": "trusted"
+    },
+    {
+      "currentHash": "sha256:fe9075b73bb0d407386d9b7b538a927f3f332b89622c2ae1c204b4c6590d42bf",
+      "enabled": true,
+      "eventName": "stop",
+      "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+      "trustStatus": "trusted"
+    }
+  ]
+}

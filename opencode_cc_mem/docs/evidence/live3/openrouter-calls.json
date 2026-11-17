@@ -1,0 +1,324 @@
+{
+  "calls": [
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 34,
+      "cost_usd": 5.024e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 972,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:18",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 642,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:19",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 543,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:20",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 596,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:20",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 413,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:21",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 288,
+      "cost_usd": 0.000345119,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 2359,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1673,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:21",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 517,
+      "cost_usd": 0.000394727,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 3234,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1529,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:48",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 2,
+      "cost_usd": 0.00013115,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 429,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1970,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:52",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 1024,
+      "completion_tokens": 358,
+      "cost_usd": 0.00029674,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 1725,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1740,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:52",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 655,
+      "cost_usd": 0.000670379,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 3699,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2693,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:54",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "memory_call": true,
+      "method": "POST",
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "reason": "gate cap reached (calls or spend)",
+      "refused_locally": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 429,
+      "stream": false,
+      "t": "11:13:58",
+      "x_title": "Magnolia"
+    }
+  ],
+  "cost_usd_total": 0.00201251,
+  "memory_calls_forwarded": 10,
+  "refused_locally": 1,
+  "state": {
+    "calls": 10,
+    "cost_usd": 0.00201252,
+    "refused": 1
+  }
+}

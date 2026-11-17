@@ -1,0 +1,8 @@
+11:06:29 preflight claude --version (env -i, gate XDG)
+11:06:29 preflight codex --version (env -i, gate XDG)
+11:10:08 pre-c2 claude --version (env -i, gate XDG)
+11:10:08 pre-c2 codex --version (env -i, gate XDG)
+11:10:23 oc-version opencode --version (env -i, gate XDG)
+11:10:23 oc-models opencode models --standalone (env -i, gate XDG)
+11:13:59 pre-c3 claude --version (env -i, gate XDG)
+11:13:59 pre-c3 codex --version (env -i, gate XDG)

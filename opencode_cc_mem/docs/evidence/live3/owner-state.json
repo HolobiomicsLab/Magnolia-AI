@@ -1,0 +1,17 @@
+{
+  "codex_config": "byte-identical (cmp)",
+  "local_share_opencode_after": [
+    "size_kb 25844",
+    "files 80",
+    "manifest_sha256 c22932c2809b0cd906afe881bda168cad72d81927234694ee2f45d271871668b"
+  ],
+  "local_share_opencode_before": [
+    "size_kb 25844",
+    "files 80",
+    "manifest_sha256 c22932c2809b0cd906afe881bda168cad72d81927234694ee2f45d271871668b"
+  ],
+  "local_share_opencode_per_file_manifest_identical": true,
+  "magnolia_listing_identical": true,
+  "magnolia_listing_sha256_before": "2b51e037798666fd",
+  "note": "d1/d2 dry runs spawned 4 managed memory services WITHOUT OPENCODE_DB (to observe fix 3); campaign/render runs set OPENCODE_DB to a gate path"
+}

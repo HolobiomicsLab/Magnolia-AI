@@ -708,6 +708,7 @@ class Governor:
                 for name in (
                     "turns",
                     "input_tokens",
+                    "uncached_input_tokens",
                     "output_tokens",
                     "reasoning_tokens",
                     "cached_tokens",
@@ -718,6 +719,8 @@ class Governor:
                     "completeness",
                 )
             }
+            usage_values["cache_read_tokens"] = usage.cached_tokens
+            usage_values["cache_creation_tokens"] = usage.cache_write_tokens
         limit = outcome.limit
         return {
             "schema_version": "magnolia-invocation-v1",
@@ -943,13 +946,18 @@ def _xdg_root(name: str, fallback: Path) -> Path:
 _USAGE_FIELDS = (
     "turns",
     "input_tokens",
+    "uncached_input_tokens",
     "output_tokens",
     "reasoning_tokens",
-    "cached_tokens",
-    "cache_write_tokens",
+    "cache_read_tokens",
+    "cache_creation_tokens",
     "cost",
     "duration_seconds",
 )
+_LEGACY_USAGE_FIELDS = {
+    "cache_read_tokens": "cached_tokens",
+    "cache_creation_tokens": "cache_write_tokens",
+}
 _SUBSCRIPTION_GROUP = re.compile(
     r"(?:claude-code|codex|vibe|opencode:[A-Za-z0-9._-]+)\Z"
 )
@@ -966,6 +974,9 @@ def _usage_summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
             usage = row.get("usage")
             for name in _USAGE_FIELDS:
                 value = usage.get(name) if isinstance(usage, Mapping) else None
+                if value is None and isinstance(usage, Mapping):
+                    legacy = _LEGACY_USAGE_FIELDS.get(name)
+                    value = usage.get(legacy) if legacy else None
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
                     values[name] += value
                 else:

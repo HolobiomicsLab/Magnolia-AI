@@ -66,6 +66,7 @@ STRIPPED_ENV = {
     "MISTRAL_API_KEY": "forbidden-mistral-key",
 }
 PASSTHROUGH_ENV = {
+    "VENDOR_SPECIFIC_API_KEY": "unlisted-provider-key",
     "MAGNOLIA_OPENAI_API_KEY": "magnolia-openai-key",
     "MAGNOLIA_MISTRAL_API_KEY": "magnolia-mistral-key",
     "OPENROUTER_API_KEY": "forbidden-openrouter-key",

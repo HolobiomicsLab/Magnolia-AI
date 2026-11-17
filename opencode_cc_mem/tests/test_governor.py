@@ -649,6 +649,25 @@ def test_cumulative_usage_delta_not_recounted(tmp_path):
     assert rows[1]["usage"]["output_tokens"] == 10
 
 
+def test_ledger_carries_h1_cache_fields_when_reported(tmp_path):
+    clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    usage = governor(tmp_path, clock, min_seconds_between_runs=1)
+    record = UsageRecord(
+        input_tokens=100,
+        uncached_input_tokens=25,
+        output_tokens=10,
+        cached_tokens=75,
+        cache_write_tokens=8,
+    )
+
+    finish(usage.admit(request("h1")), usage=record)
+
+    ledger = json.loads((tmp_path / "usage-ledger.jsonl").read_text())
+    assert ledger["usage"]["uncached_input_tokens"] == 25
+    assert ledger["usage"]["cache_read_tokens"] == 75
+    assert ledger["usage"]["cache_creation_tokens"] == 8
+
+
 def test_shared_quota_blocks_second_process(tmp_path):
     clock = FakeClock(datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
     first = governor(tmp_path, clock, min_seconds_between_runs=1)

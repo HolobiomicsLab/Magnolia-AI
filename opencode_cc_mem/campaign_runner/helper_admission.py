@@ -20,6 +20,7 @@ from campaign_runner.executors.contracts import UsageRecord
 from campaign_runner.governor import Admission, AdmissionRequest, Governor, QuotaWaiting
 from campaign_runner.process import ProcessControl, run_process
 from campaign_runner.routing import resolve_route
+from compchem_memory.harness.memory_service import is_provider_api_key_name
 
 
 SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
@@ -86,7 +87,8 @@ def _probe_environment(source: dict[str, str], harness: str) -> dict[str, str]:
         name: value
         for name, value in source.items()
         if name not in _SETUP_FORBIDDEN_ENV
-        and not name.upper().endswith(("_API_KEY", "_AUTH_TOKEN"))
+        and not is_provider_api_key_name(name)
+        and not name.upper().endswith("_AUTH_TOKEN")
     }
     environment["MAGNOLIA_DOORBELL"] = "0"
     if harness == "vibe":

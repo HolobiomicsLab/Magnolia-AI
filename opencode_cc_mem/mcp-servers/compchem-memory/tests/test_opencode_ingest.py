@@ -306,7 +306,12 @@ def test_ingest_does_not_mark_on_distill_failure(store):
                                      "parts": [{"type": "text", "text": "hi"}]}]),
         distiller=lambda t: None,  # None == distillation FAILED
     )
-    assert not (store / "opencode-distilled" / "ses_llmfail.json").exists()  # retry
+    progress = json.loads(
+        (store / "opencode-distilled" / "ses_llmfail.json").read_text()
+    )
+    assert progress["done"] is False
+    assert progress["retry"]["attempts"] == 1
+    assert progress["retry"]["exhausted"] is False
 
 
 def test_saved_entry_carries_provenance(store):

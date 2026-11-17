@@ -557,6 +557,7 @@ def _write_progress(
     *,
     fingerprint: dict[str, int] | None = None,
     closed: bool | None = None,
+    retry: dict[str, Any] | None = None,
 ) -> None:
     from compchem_memory.transcript_source import (
         SESSION_CLOSED_KEY,
@@ -573,7 +574,45 @@ def _write_progress(
         payload[SESSION_FINGERPRINT_KEY] = fingerprint
     if closed is not None:
         payload[SESSION_CLOSED_KEY] = closed
+    if retry is not None:
+        payload["retry"] = retry
     rec_path.write_text(json.dumps(payload) + "\n")
+
+
+def _retry_blocked(rec: dict | None) -> bool:
+    """Return whether persisted extraction backoff blocks this sweep."""
+    from compchem_memory.extraction_retry import retry_is_due
+
+    retry = rec.get("retry") if isinstance(rec, dict) else None
+    return isinstance(retry, dict) and not retry_is_due(retry)
+
+
+def _record_failed_retry(
+    store: Path,
+    rec_path: Path,
+    rec: dict | None,
+    *,
+    fingerprint: dict[str, int] | None,
+    closed: bool | None,
+) -> dict[str, Any] | None:
+    """Persist one failed attempt if this session's progress is unchanged."""
+    from compchem_memory.extraction_retry import next_retry
+
+    retry = next_retry(rec.get("retry") if rec else None)
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            return None
+        rec_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_progress(
+            rec_path,
+            rec.get("cursor") if rec else None,
+            rec.get("candidates", 0) if rec else 0,
+            done=False,
+            fingerprint=None,
+            closed=closed,
+            retry=retry,
+        )
+    return retry
 
 
 def _session_exporter(
@@ -647,6 +686,15 @@ def distill_session_transcript(
     )
 
     fingerprint = hook_transcript_fingerprint(store, ref)
+    if commit and _retry_blocked(rec):
+        retry = rec.get("retry", {})
+        return {
+            "status": "skipped",
+            "reason": "extraction retry backoff" if not retry.get("exhausted") else "extraction retry cap reached",
+            "retry": not retry.get("exhausted", False),
+            "exhausted": retry.get("exhausted", False),
+            "saved": [],
+        }
     if commit and fingerprint_matches(rec, fingerprint):
         return {"status": "committed", "saved": []}
 
@@ -667,7 +715,16 @@ def distill_session_transcript(
     if distillation_failed:
         from compchem_memory import distill_log
 
+        retry = _record_failed_retry(
+            store,
+            rec_path,
+            rec,
+            fingerprint=fingerprint,
+            closed=hook_session_closed(store, ref, fingerprint=fingerprint),
+        )
         distill_log.push_extraction_failure_notice(str(store.parent))
+        if retry and retry["exhausted"]:
+            distill_log.push_extraction_retry_exhausted_notice(str(store.parent))
         return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
     _attach_transcript_origins(kept, new_msgs, ref)
@@ -769,6 +826,8 @@ def ingest_opencode_sessions(
         is_active = ref.harness == "opencode" and ref.session_id == active_sid
         can_seal = ref.sealable and not is_active
         fingerprint = hook_transcript_fingerprint(store, ref)
+        if _retry_blocked(rec):
+            continue
         if fingerprint_matches(rec, fingerprint):
             continue
 
@@ -809,7 +868,16 @@ def ingest_opencode_sessions(
             # with nothing ([]). Don't advance the cursor — retry next sweep.
             from compchem_memory import distill_log
 
+            retry = _record_failed_retry(
+                store,
+                rec_path,
+                rec,
+                fingerprint=fingerprint,
+                closed=hook_session_closed(store, ref, fingerprint=fingerprint),
+            )
             distill_log.push_extraction_failure_notice(str(store.parent))
+            if retry and retry["exhausted"]:
+                distill_log.push_extraction_retry_exhausted_notice(str(store.parent))
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]

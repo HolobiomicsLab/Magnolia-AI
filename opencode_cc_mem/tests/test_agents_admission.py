@@ -51,6 +51,7 @@ def test_setup_probe_filters_credentials_and_records_one_turn(tmp_path):
     binary.write_text(
         "#!/bin/sh\n"
         "test -z \"${ANTHROPIC_API_KEY+x}\" || exit 81\n"
+        "test -z \"${vendor_api_key+x}\" || exit 84\n"
         "test -z \"${CLAUDE_CONFIG_DIR+x}\" || exit 82\n"
         "test \"$MAGNOLIA_DOORBELL\" = 0 || exit 83\n"
         "printf 'probe-ok\\n'\n",
@@ -72,6 +73,7 @@ def test_setup_probe_filters_credentials_and_records_one_turn(tmp_path):
         environment={
             **os.environ,
             "ANTHROPIC_API_KEY": "must-not-reach-child",
+            "vendor_api_key": "case-insensitive-suffix-must-not-reach-child",
             "CLAUDE_CONFIG_DIR": "/must/not/reach/child",
         },
     )

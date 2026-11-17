@@ -71,6 +71,15 @@ def push_extraction_failure_notice(project_dir: str) -> None:
     )
 
 
+def push_extraction_retry_exhausted_notice(project_dir: str) -> None:
+    """Surface one latched notice when automatic extraction retries stop."""
+    push_distill_notice(
+        project_dir,
+        "The failed session remains unsealed so its transcript is preserved.",
+        "Memory extraction reached its retry cap; manual retry or provider repair is required",
+    )
+
+
 def drain_distill_notices(project_dir: str) -> list[str]:
     """Read and clear the .distill-notices queue. Returns a list of formatted
     notice strings (most-recent-last). Never raises — returns [] on any error."""

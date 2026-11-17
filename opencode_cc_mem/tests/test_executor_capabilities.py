@@ -323,7 +323,7 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_live2a_accepts_claude_while_codex_remains_stale():
+def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
     changed_rows = [
@@ -333,7 +333,8 @@ def test_live2a_accepts_claude_while_codex_remains_stale():
     assert set(projected) == {"claude-code", "codex", "vibe"}
     assert len(changed_rows) == 8
     assert all(
-        row["stale"] is (row["client"] == "codex") for row in changed_rows
+        row["stale"] is (row["client"] == "codex" and row["role"] in {"helper", "evaluator"})
+        for row in changed_rows
     )
     assert {
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
@@ -353,8 +354,8 @@ def test_live2a_accepts_claude_while_codex_remains_stale():
     )
     for role in ("worker", "reviewer"):
         assert projected["codex"][role]["gate_accepted"] is True
-        assert projected["codex"][role]["accepted"] is False
-        assert projected["codex"][role]["stale"] is True
+        assert projected["codex"][role]["accepted"] is True
+        assert projected["codex"][role]["stale"] is False
         assert projected["codex"][role]["blocking_cells"] == []
     for role in ("helper", "evaluator"):
         assert projected["codex"][role]["accepted"] is False
@@ -394,10 +395,14 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert all(item["gate_accepted"] is True for item in projected.values())
     assert all(item["accepted"] is True for item in projected.values())
     assert all(item["stale"] is False for item in projected.values())
-    assert all(
-        row["gate"]["artifact"] == "opencode_cc_mem/docs/evidence/live2a/README.md"
-        for row in rows
-    )
+    assert {
+        row["role"]: row["gate"]["artifact"] for row in rows
+    } == {
+        "worker": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+        "reviewer": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+        "helper": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        "evaluator": "opencode_cc_mem/docs/evidence/live2a/README.md",
+    }
     reviewer = next(row for row in rows if row["role"] == "reviewer")
     assert "evidence-path rule fixed by F-L3" in reviewer["notes"][-1]
     worker = next(row for row in rows if row["role"] == "worker")
@@ -438,8 +443,14 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert set(rows) == {"worker", "reviewer"}
     assert all(row["gate"]["status"] == "observed" for row in rows.values())
     assert all(projected["codex"][role]["gate_accepted"] for role in rows)
-    assert all(not projected["codex"][role]["accepted"] for role in rows)
-    assert all(projected["codex"][role]["stale"] for role in rows)
+    assert all(projected["codex"][role]["accepted"] for role in rows)
+    assert all(not projected["codex"][role]["stale"] for role in rows)
+    assert rows["worker"]["gate"]["artifact"].endswith(
+        "docs/evidence/live5/c1-worker-codex-review.json"
+    )
+    assert rows["reviewer"]["gate"]["artifact"].endswith(
+        "docs/evidence/live5/c2-worker-claude-code-review.json"
+    )
     assert rows["worker"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"
     ] == "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d"

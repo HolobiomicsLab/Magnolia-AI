@@ -1,0 +1,17 @@
+{
+  "baseline_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+  "final": "restored at 11:14:29; cmp byte-identical; sha256, size 28569, mode 0600 and mtime equal to baseline",
+  "gate_written_sha256": [
+    "bf52f961f0ba73cb (project trust)",
+    "6196cf9a75429454 (+5 hook trusted_hash)"
+  ],
+  "journal": [
+    "11:09:38 render_runner reviewer: project .codex {\".codex/config.toml\": \"f390c112322455065ddf4368e7488a4d45ed3b674d75e065538ee292ac130e77\", \".codex/hooks.json\": \"1d099c262a350a042157e1ff0184eb405377cb2a3a55609d25bc3090273a694d\"} config_digest=473a1248f87ef872",
+    "11:09:46 trust-project: wrote sha bf52f961f0ba73cb (was 7b8c10269efb097e)",
+    "11:09:46 hooks x1: 8 rows, 5 project rows, status ['untrusted', 'untrusted', 'untrusted', 'untrusted', 'untrusted']",
+    "11:09:47 trust-hooks(5): wrote sha 6196cf9a75429454 (was bf52f961f0ba73cb)",
+    "11:09:48 hooks x2: 8 rows, 5 project rows, status ['trusted', 'trusted', 'trusted', 'trusted', 'trusted']",
+    "11:13:49 render_runner worker: project .codex {\".codex/config.toml\": \"3b3a22c3e55ee9e1086dbeb97b836a9d693f7924de4cfed07ccd72d58f248a86\", \".codex/hooks.json\": \"1d099c262a350a042157e1ff0184eb405377cb2a3a55609d25bc3090273a694d\"} config_digest=0866350a75c5e1da",
+    "11:14:29 restore: cmp byte-identical sha 7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159 size 28569 mode 0o600 mtime 1794866952"
+  ]
+}

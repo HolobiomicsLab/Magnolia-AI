@@ -1,0 +1,18 @@
+{
+  "chosen": {
+    "opencode/deepseek-v4.1-flash-free": "openrouter/deepseek/deepseek-v4.1-flash",
+    "opencode/glm-5.3-flash-free": "openrouter/z-ai/glm-5.3-flash"
+  },
+  "command": "opencode models --standalone (env -i, gate XDG, OPENROUTER_API_KEY set); opencode v2.3.0",
+  "family_matches": [
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/glm-5.3-flash-free",
+    "openrouter/deepseek/deepseek-v4.1-flash",
+    "openrouter/deepseek/deepseek-v4.1-flash-1017",
+    "openrouter/z-ai/glm-5.3-flash",
+    "openrouter/z-ai/glm-5.3-flashx",
+    "openrouter/z-ai/glm-5.3-flashx-legal"
+  ],
+  "note": "prepared only; no OpenCode model call in this attempt",
+  "openrouter_entries_total": 360
+}
