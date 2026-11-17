@@ -18,7 +18,7 @@
   "budget": {
     "max_tokens": 100000,
     "max_wall_hours": 1,
-    "max_core_hours": 0,
+    "max_core_hours": 0.01,
     "max_attempts_per_stage": 1,
     "max_parallel_jobs": 1,
     "max_followups": 0
@@ -28,7 +28,7 @@
       "id": "work",
       "type": "agent",
       "model": "claude-code/haiku",
-      "prompt": "prompt.md",
+      "prompt": "prompts/prompt.md",
       "outputs": ["work/result.txt"],
       "gate": ["python3", "-c", "from pathlib import Path; raise SystemExit(0 if Path('work/result.txt').is_file() else 1)"],
       "review": true,
