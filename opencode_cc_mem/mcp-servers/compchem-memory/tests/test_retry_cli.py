@@ -9,6 +9,8 @@ from compchem_memory import retry_cli
 
 
 def test_retry_cli_uses_configured_memory_route(tmp_path, monkeypatch):
+    from compchem_memory.harness.memory_service import SERVICE_ROUTE_ENV
+
     project = tmp_path / "project"
     project.mkdir()
     setup = tmp_path / "llm-setup.json"
@@ -19,6 +21,9 @@ def test_retry_cli_uses_configured_memory_route(tmp_path, monkeypatch):
     }))
     monkeypatch.setenv("OPENROUTER_API_KEY", "route-key")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "unselected-key")
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", "before-retry")
+    route_names = SERVICE_ROUTE_ENV | {"MAGNOLIA_PROJECT_DIR"}
+    before = {name: os.environ.get(name) for name in route_names}
     observed = {}
 
     def retry_once(project_dir, session_id):
@@ -37,6 +42,7 @@ def test_retry_cli_uses_configured_memory_route(tmp_path, monkeypatch):
     assert observed["MAGNOLIA_MEMORY_MODEL"] == "deepseek/deepseek-v4.1-flash"
     assert observed["OPENROUTER_API_KEY"] == "route-key"
     assert "DEEPSEEK_API_KEY" not in observed
+    assert {name: os.environ.get(name) for name in route_names} == before
 
 
 def test_retry_cli_clears_tool_event_cap_and_retries_once(
@@ -85,6 +91,8 @@ def test_retry_cli_clears_tool_event_cap_and_retries_once(
 def test_retry_cli_refuses_missing_route_without_sealing(
     tmp_path, monkeypatch, capsys,
 ):
+    from compchem_memory.harness.memory_service import SERVICE_ROUTE_ENV
+
     project = tmp_path / "project"
     session = project / ".magnolia" / "sessions" / "closed.jsonl"
     session.parent.mkdir(parents=True)
@@ -112,7 +120,13 @@ def test_retry_cli_refuses_missing_route_without_sealing(
         "memory_model": "deepseek/deepseek-v4.1-flash",
         "memory_provider": "openrouter",
     }))
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    for name in SERVICE_ROUTE_ENV:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", "before-refusal")
+    before = {
+        name: os.environ.get(name)
+        for name in SERVICE_ROUTE_ENV | {"MAGNOLIA_PROJECT_DIR"}
+    }
 
     status = retry_cli.main([
         "closed.jsonl", "--project-dir", str(project), "--setup", str(setup),
@@ -122,3 +136,7 @@ def test_retry_cli_refuses_missing_route_without_sealing(
     assert "configured memory LLM is unavailable" in capsys.readouterr().err
     assert yaml.safe_load(state_path.read_text()) == state
     assert not session.with_suffix(".distilled").exists()
+    assert {
+        name: os.environ.get(name)
+        for name in SERVICE_ROUTE_ENV | {"MAGNOLIA_PROJECT_DIR"}
+    } == before

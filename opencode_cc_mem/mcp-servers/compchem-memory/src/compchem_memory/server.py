@@ -97,7 +97,7 @@ from compchem_memory.scanning import (
     scan_memory_headers,
     format_manifest,
 )
-from compchem_memory.extraction import AutomaticMemoryExtractor
+from compchem_memory.extraction import AutomaticMemoryExtractor, ManualRetryRefused
 from compchem_memory.compaction import (
     maybe_compact_session,
     compact_session_to_notes,
@@ -127,6 +127,16 @@ if __name__ == "__main__":
 
 class ProjectBindingError(ValueError):
     """Raised when an HTTP request targets a project other than its service pin."""
+
+
+def _has_dialogue_retry(store: Path, session_key: str) -> bool:
+    """Return whether one dialogue session has a persisted retry series."""
+    marker = store / "opencode-distilled" / f"{session_key}.json"
+    try:
+        progress = json.loads(marker.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(progress, dict) and isinstance(progress.get("retry"), dict)
 
 
 def _enforce_http_project_binding(project_dir: str | None) -> str:
@@ -902,7 +912,20 @@ def memory_extract_from_session(
     if not extractor.should_extract(session_path):
         return json.dumps({"status": "threshold_not_met", "extracted": 0})
 
-    saved = extractor.commit(session_path, pd, force_retry=True)
+    try:
+        saved = extractor.commit(session_path, pd, force_retry=True)
+    except ManualRetryRefused as exc:
+        return json.dumps({
+            "status": "skipped",
+            "reason": exc.reason,
+            "retry": False,
+            "extracted": 0,
+            "paths": [],
+            **(
+                {"next_retry_at": exc.next_retry_at}
+                if exc.next_retry_at else {}
+            ),
+        }, indent=2)
     if saved is None:
         return json.dumps({
             "status": "skipped",
@@ -1041,14 +1064,23 @@ def memory_distill_session(
 
     ref = current_session(store)
     has_source = False
-    if ref and is_llm_available():
+    llm_available = is_llm_available()
+    has_dialogue_retry = bool(
+        ref and commit and _has_dialogue_retry(store, ref.key)
+    )
+    if ref and (llm_available or has_dialogue_retry):
         has_source = (
-            (ref.sealable and _opencode_available())
-            or (not ref.sealable and resolve_transcript(store, ref.key) is not None)
+            has_dialogue_retry
+            or (ref.sealable and _opencode_available())
+            or (
+                not ref.sealable
+                and resolve_transcript(store, ref.key) is not None
+            )
         )
     if ref and has_source:
         res = distill_session_transcript(
-            str(store), ref, commit=commit, force_retry=commit
+            str(store), ref, commit=commit, force_retry=commit,
+            llm_available=llm_available,
         )
         if res is not None:
             if res["status"] == "committed":
@@ -1083,7 +1115,25 @@ def memory_distill_session(
     session_path = Path(log_path)
 
     if commit:
-        saved = extractor.commit(session_path, pd, force_retry=True)
+        try:
+            saved = extractor.commit(session_path, pd, force_retry=True)
+        except ManualRetryRefused as exc:
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": exc.reason,
+                    "retry": False,
+                    "saved_count": 0,
+                    "paths": [],
+                    "source": "tool_event",
+                    **(
+                        {"next_retry_at": exc.next_retry_at}
+                        if exc.next_retry_at else {}
+                    ),
+                    "reflection": pick_quote("closing"),
+                },
+                indent=2,
+            )
         if saved is None:
             return json.dumps(
                 {

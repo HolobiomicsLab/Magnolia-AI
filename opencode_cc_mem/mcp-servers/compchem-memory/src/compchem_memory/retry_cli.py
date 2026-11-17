@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Sequence
@@ -73,8 +74,10 @@ def retry_session(project_dir: str | Path, session_id: str) -> dict[str, Any]:
     return _retry_tool_events(project, store, session_id)
 
 
-def _configure_memory_route(setup_path: str | Path, project: Path) -> None:
-    """Apply the same selected provider environment as the managed server."""
+def _configured_memory_route(
+    setup_path: str | Path, project: Path,
+) -> tuple[dict[str, str], frozenset[str]]:
+    """Build the managed server's selected provider environment."""
     from compchem_memory.harness.memory_service import (
         SERVICE_ROUTE_ENV,
         _server_environment,
@@ -87,10 +90,38 @@ def _configure_memory_route(setup_path: str | Path, project: Path) -> None:
     if not isinstance(setup, dict) or not setup.get("memory_enabled"):
         raise RuntimeError("configured memory route is disabled")
     route = _server_environment(SimpleNamespace(environment=os.environ, setup=setup))
-    for name in SERVICE_ROUTE_ENV:
-        os.environ.pop(name, None)
-    os.environ.update(route)
-    os.environ["MAGNOLIA_PROJECT_DIR"] = str(project.resolve())
+    route["MAGNOLIA_PROJECT_DIR"] = str(project.resolve())
+    return route, SERVICE_ROUTE_ENV | {"MAGNOLIA_PROJECT_DIR"}
+
+
+@contextmanager
+def _scoped_environment(
+    route: dict[str, str], replaced_names: frozenset[str],
+):
+    """Apply one retry route and restore the process environment afterward."""
+    previous = {name: os.environ.get(name) for name in replaced_names}
+    try:
+        for name in replaced_names:
+            os.environ.pop(name, None)
+        os.environ.update(route)
+        yield
+    finally:
+        for name in replaced_names:
+            os.environ.pop(name, None)
+        os.environ.update({
+            name: value for name, value in previous.items() if value is not None
+        })
+
+
+def _run_retry(args: argparse.Namespace) -> dict[str, Any]:
+    """Run one retry with a setup route scoped to this invocation."""
+    if not args.setup:
+        return retry_session(args.project_dir, args.session)
+    route, replaced_names = _configured_memory_route(
+        args.setup, Path(args.project_dir)
+    )
+    with _scoped_environment(route, replaced_names):
+        return retry_session(args.project_dir, args.session)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -101,9 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--setup")
     args = parser.parse_args(argv)
     try:
-        if args.setup:
-            _configure_memory_route(args.setup, Path(args.project_dir))
-        result = retry_session(args.project_dir, args.session)
+        result = _run_retry(args)
     except (FileNotFoundError, ValueError) as exc:
         parser.exit(2, f"magnolia memory retry: {exc}\n")
     except RuntimeError as exc:

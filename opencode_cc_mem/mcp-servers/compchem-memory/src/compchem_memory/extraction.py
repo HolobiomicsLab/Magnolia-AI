@@ -21,6 +21,15 @@ MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
 
 
+class ManualRetryRefused(RuntimeError):
+    """A model-callable forced retry cannot safely run yet."""
+
+    def __init__(self, reason: str, next_retry_at: str | None = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.next_retry_at = next_retry_at
+
+
 # Matches a bare 'exit=N' error message with optional surrounding whitespace
 # and no further content. Shell-tool errors that capture only the exit code
 # (no stderr text, no stdout, no command) are not informative learnings —
@@ -561,10 +570,24 @@ class AutomaticMemoryExtractor:
             return []
 
         if force_retry:
+            from compchem_memory.extraction_retry import retry_is_due
+
             with project_writer_lease(project_dir):
                 self._load_state()
-                self.session_retries.pop(session_path.name, None)
-                self._save_state()
+                forced_retry = self.session_retries.get(session_path.name)
+                if forced_retry and not is_llm_available():
+                    raise ManualRetryRefused(
+                        "configured memory LLM is unavailable"
+                    )
+                if forced_retry and forced_retry.get("exhausted") is True:
+                    self.session_retries.pop(session_path.name, None)
+                    self._save_state()
+                elif forced_retry and not retry_is_due(forced_retry):
+                    scheduled_at = forced_retry.get("next_retry_at")
+                    raise ManualRetryRefused(
+                        f"extraction retry scheduled at {scheduled_at}",
+                        next_retry_at=scheduled_at,
+                    )
 
         fingerprint = hashlib.sha256(session_path.read_bytes()).hexdigest()
         retry = self.session_retries.get(session_path.name)

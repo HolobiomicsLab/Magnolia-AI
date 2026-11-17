@@ -1117,6 +1117,20 @@ def test_provider_placeholder_value_is_ignored(tmp_path, placeholder):
     assert "VENDOR_API_KEY" not in launch.env
 
 
+def test_short_redirect_value_is_still_refused(tmp_path):
+    redirect = "ws://h:9"
+    context = _context(
+        tmp_path,
+        launch_argv=("stub", "--endpoint", redirect),
+        environment={"CODEX_EXEC_SERVER_URL": redirect},
+    )
+
+    with pytest.raises(
+        ExecutorRefused, match="forbidden client environment value"
+    ):
+        prepare_launch(context)
+
+
 @pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
 def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter):
     secret = "sk-ant-SECRET_123"
