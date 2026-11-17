@@ -104,6 +104,44 @@ def test_usage_counter_reset_is_unknown():
     assert reset.completeness == "partial"
 
 
+@pytest.mark.parametrize(
+    ("schema", "input_tokens", "cache_read", "cache_creation", "output", "reasoning", "charged"),
+    [
+        ("claude-stream-json", 10, 129_191, 18_191, 2_147, 792, 21_140),
+        ("opencode-usage-v1", 35_673, 108_800, 0, 2_463, 4_640, 42_776),
+        ("codex-exec-json", 284_906, 255_360, 0, 1_834, 585, 31_965),
+    ],
+)
+def test_recorded_live_usage_shapes_charge_per_client(
+    schema,
+    input_tokens,
+    cache_read,
+    cache_creation,
+    output,
+    reasoning,
+    charged,
+):
+    record = UsageRecord.from_raw(
+        {
+            "schema_version": schema,
+            "tokens": {
+                "input": input_tokens,
+                "output": output,
+                "reasoning": reasoning,
+                "cache": {"read": cache_read, "write": cache_creation},
+            },
+        }
+    )
+
+    assert record.input_tokens == input_tokens
+    assert record.uncached_input_tokens == (
+        input_tokens - cache_read if schema == "codex-exec-json" else input_tokens
+    )
+    assert record.cached_tokens == cache_read
+    assert record.cache_write_tokens == cache_creation
+    assert record.charged_tokens == charged
+
+
 def test_transcript_ref_matches_claude_session_source(tmp_path):
     session_id = "thread /β"
     session_log = tmp_path / "agent-sessions.jsonl"

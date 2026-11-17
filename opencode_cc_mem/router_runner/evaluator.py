@@ -214,6 +214,8 @@ class GenerativeEvaluator:
         route = route or resolve_evaluator_route(self.model)
         if not self._uses_client(route):
             return llm.is_llm_available()
+        if (self.model or route.model or "").startswith("opencode-go/"):
+            return llm.is_llm_available()
         try:
             load_role("evaluator")
             if not self._executable_available(self._binary(route.client)):
@@ -245,20 +247,12 @@ class GenerativeEvaluator:
         selected = route or resolve_evaluator_route(self.model)
         if selected.source == "api-fallback":
             return False
-        if self.model is not None:
-            return self.model.startswith(
-                (
-                    "claude-code/",
-                    "codex/",
-                    "vibe/",
-                    "opencode-go/",
-                    "opencode/",
-                    "openrouter/",
-                )
-            )
-        return selected.source == "routes.evaluator" and selected.client in {
-            "claude-code", "codex", "vibe", "opencode",
-        }
+        selected_model = self.model or selected.model or ""
+        if selected_model.startswith(("openrouter/", "opencode/")):
+            return False
+        return selected.client in {"claude-code", "codex", "vibe"} or (
+            selected_model.startswith("opencode-go/")
+        )
 
     def _binary(self, client: str) -> str:
         if client == "opencode":
@@ -396,7 +390,7 @@ class GenerativeEvaluator:
         exec_context = self._execution_context(route)
         executor = executor_for(route, "evaluator", exec_context)
         waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
-        system = self._system_prompt()
+        system = "" if route.client == "opencode" else self._system_prompt()
         prompt = system + "\n\n" + json.dumps(
             {"message": text, "context": context}, ensure_ascii=False
         )

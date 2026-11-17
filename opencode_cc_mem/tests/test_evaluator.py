@@ -12,8 +12,11 @@ import sys
 from types import SimpleNamespace
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from campaign_runner.routing import resolve_route
 from router_runner import agentd
 from router_runner.evaluator import (
     EVALUATOR_SYSTEM_PROMPT,
@@ -243,7 +246,6 @@ def test_evaluator_each_client_route_without_api_key(monkeypatch, tmp_path):
         "claude-code/claude-haiku-5-5",
         "codex/gpt-5.6-luna",
         "vibe/devstral-2",
-        "opencode-go/deepseek-v4.1-flash",
     ):
         evaluator = GenerativeEvaluator(
             model,
@@ -252,7 +254,7 @@ def test_evaluator_each_client_route_without_api_key(monkeypatch, tmp_path):
             executable_available=lambda path: checked.append(path) or True,
         )
         assert evaluator.available() is True
-    assert len(checked) == 4
+    assert len(checked) == 3
     assert not (tmp_path / ".magnolia").exists()
 
 
@@ -379,6 +381,65 @@ def test_evaluator_api_fallback_unchanged(monkeypatch):
     )
     assert decision is not None and decision.action == "accept"
     assert decision.project == "proj_a"
+
+
+@pytest.mark.parametrize(
+    "model", ["openrouter/deepseek/deepseek-v4.1", "opencode/provider/model"]
+)
+def test_evaluator_openrouter_and_opencode_prefixes_keep_direct_api_path(
+    monkeypatch, model
+):
+    from router_runner import evaluator as evaluator_module
+
+    calls = []
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        evaluator_module.llm,
+        "call_llm_json",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or {
+            "action": "ignore",
+            "project": None,
+            "confidence": 0.9,
+            "reason": "API decision",
+        },
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("direct API prefixes must not construct a client executor")
+        ),
+    )
+
+    decision = GenerativeEvaluator(model).evaluate("triage", {})
+
+    assert decision is not None and decision.action == "ignore"
+    assert calls and calls[0][1] == {"max_tokens": 400, "disable_thinking": True}
+
+
+def test_opencode_go_availability_retains_base_api_probe_when_binary_missing(
+    monkeypatch, tmp_path
+):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    evaluator = GenerativeEvaluator(
+        "opencode-go/deepseek-v4.1-flash",
+        project_dir=tmp_path,
+        executable_available=lambda _path: False,
+    )
+
+    assert evaluator.available() is True
+
+
+def test_configured_openrouter_route_keeps_direct_api_path():
+    route = resolve_route(
+        "evaluator",
+        {"routes": {"evaluator": "openrouter/deepseek/deepseek-v4.1"}},
+    )
+
+    assert GenerativeEvaluator()._uses_client(route) is False
 
 
 def test_jev_evaluator_unchanged(monkeypatch):
@@ -574,3 +635,6 @@ def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
     assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
     observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
     assert observed == snapshot
+    assert calls[0][0][-1] == (
+        '\n\n{"message": "dock", "context": {"projects": ["proj_a"]}}'
+    )

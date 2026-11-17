@@ -201,6 +201,7 @@ class UsageRecord:
     session_identity: SessionIdentity | None = None
     turns: int | None = None
     input_tokens: float | int | None = None
+    uncached_input_tokens: float | int | None = None
     output_tokens: float | int | None = None
     reasoning_tokens: float | int | None = None
     cached_tokens: float | int | None = None
@@ -221,11 +222,12 @@ class UsageRecord:
         session_identity: SessionIdentity | None = None,
         **metadata: Any,
     ) -> "UsageRecord":
-        """Normalize cumulative raw usage; OpenCode input includes cached input."""
+        """Normalize raw counters and derive chargeable input per client shape."""
         tokens = raw.get("tokens") if isinstance(raw.get("tokens"), Mapping) else raw
         cache = tokens.get("cache") if isinstance(tokens.get("cache"), Mapping) else {}
         counters = {
             "input_tokens": _number(tokens.get("input", tokens.get("input_tokens"))),
+            "uncached_input_tokens": _number(tokens.get("uncached_input_tokens")),
             "output_tokens": _number(tokens.get("output", tokens.get("output_tokens"))),
             "reasoning_tokens": _number(tokens.get("reasoning", tokens.get("reasoning_tokens"))),
             "cached_tokens": _number(cache.get("read", tokens.get("cached_tokens"))),
@@ -237,6 +239,18 @@ class UsageRecord:
                 previous = getattr(baseline, key)
                 delta = value - previous if value is not None and previous is not None else None
                 counters[key] = delta if delta is not None and delta >= 0 else None
+        if counters["uncached_input_tokens"] is None:
+            input_tokens = counters["input_tokens"]
+            cached_tokens = counters["cached_tokens"]
+            schema = str(raw.get("schema_version", "unknown"))
+            cache_is_included = schema in {"codex-exec-json", "vibe-export-json"}
+            if input_tokens is None or (cache_is_included and cached_tokens is None):
+                uncached_input = None
+            elif cache_is_included:
+                uncached_input = max(0, input_tokens - cached_tokens)
+            else:
+                uncached_input = input_tokens
+            counters["uncached_input_tokens"] = uncached_input
         known = [key for key in counters if key != "cost"]
         completeness = "complete" if all(counters[key] is not None for key in known) else "partial"
         values = {
@@ -257,6 +271,19 @@ class UsageRecord:
                 session_identity=session_identity,
             )
         return cls(**values)
+
+    @property
+    def charged_tokens(self) -> float:
+        """Return tokens charged to campaign budgets; cache reads are excluded."""
+        return sum(
+            float(value or 0)
+            for value in (
+                self.uncached_input_tokens,
+                self.cache_write_tokens,
+                self.output_tokens,
+                self.reasoning_tokens,
+            )
+        )
 
     def to_dict(self) -> dict[str, Any]:
         values = {

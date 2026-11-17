@@ -58,6 +58,7 @@ def test_read_session_usage_sums_assistant_rows(tmp_path):
     connection.close()
     usage = read_session_usage(db, "ses_1")
     assert usage["input_tokens"] == 15
+    assert usage["uncached_input_tokens"] == 15
     assert usage["output_tokens"] == 4
     assert usage["reasoning_tokens"] == 2
     assert usage["cache_read_tokens"] == 4

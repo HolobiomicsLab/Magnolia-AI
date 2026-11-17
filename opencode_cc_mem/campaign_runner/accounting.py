@@ -35,7 +35,9 @@ def read_session_usage(db_path: str | Path, session_id: str) -> dict[str, float]
             continue
         tokens = data.get("tokens")
         if isinstance(tokens, dict):
-            usage["input_tokens"] += float(tokens.get("input", 0) or 0)
+            input_tokens = float(tokens.get("input", 0) or 0)
+            usage["input_tokens"] += input_tokens
+            usage["uncached_input_tokens"] += input_tokens
             usage["output_tokens"] += float(tokens.get("output", 0) or 0)
             usage["reasoning_tokens"] += float(tokens.get("reasoning", 0) or 0)
             cache = tokens.get("cache")

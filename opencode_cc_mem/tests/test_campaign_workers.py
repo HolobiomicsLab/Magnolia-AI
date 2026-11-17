@@ -90,6 +90,7 @@ def test_parse_v2_events():
     assert parsed.all_text == "one\ntwo"
     assert parsed.tool_calls == 1
     assert parsed.usage["input_tokens"] == 5
+    assert parsed.usage["uncached_input_tokens"] == 5
     assert parsed.usage["cost_usd"] == pytest.approx(0.2)
 
 

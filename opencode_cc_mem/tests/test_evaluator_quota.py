@@ -147,28 +147,28 @@ def test_setup_selected_client_controls_dispatch(tmp_path, monkeypatch):
     assert evaluator.available() is True
 
 
-def test_explicit_openrouter_evaluator_uses_opencode_client(tmp_path):
+def test_explicit_openrouter_evaluator_keeps_direct_api_path(tmp_path):
     evaluator = GenerativeEvaluator(
         "openrouter/deepseek/deepseek-v4.1-flash",
         governor=_governor(tmp_path),
         project_dir=tmp_path,
     )
 
-    assert evaluator.route_identity()["client"] == "opencode"
-    assert evaluator._uses_client() is True
+    assert evaluator.route_identity()["client"] == "api"
+    assert evaluator._uses_client() is False
 
 
-def test_opencode_evaluator_receives_json_system_prompt_and_two_steps(
+def test_opencode_go_evaluator_keeps_base_prompt_and_two_steps(
     tmp_path, monkeypatch
 ):
     from router_runner import evaluator as evaluator_module
 
     prompts = []
     route = resolve_route(
-        "evaluator", {"model": "openrouter/deepseek/deepseek-v4.1-flash"}
+        "evaluator", {"model": "opencode-go/deepseek-v4.1-flash"}
     )
     evaluator = GenerativeEvaluator(
-        "openrouter/deepseek/deepseek-v4.1-flash",
+        "opencode-go/deepseek-v4.1-flash",
         governor=_governor(tmp_path),
         project_dir=tmp_path,
     )
@@ -195,7 +195,7 @@ def test_opencode_evaluator_receives_json_system_prompt_and_two_steps(
     assert result.outcome.kind == "success"
     exec_context, prompt = prompts[0]
     assert exec_context.role_cap == 2
-    assert prompt.startswith(evaluator._system_prompt())
+    assert prompt == '\n\n{"message": "hello", "context": {}}'
 
 
 def test_evaluator_context_satisfies_native_launch_contract(tmp_path, monkeypatch):

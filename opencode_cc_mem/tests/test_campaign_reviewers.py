@@ -448,7 +448,12 @@ def test_vibe_reviewer_explicitly_releases_lease_at_review_end(tmp_path, monkeyp
 
 def test_reviewer_db_usage_fallback(tmp_path, monkeypatch):
     fallback = empty_usage()
-    fallback.update(input_tokens=11.0, output_tokens=3.0, cost_usd=0.25)
+    fallback.update(
+        input_tokens=11.0,
+        uncached_input_tokens=11.0,
+        output_tokens=3.0,
+        cost_usd=0.25,
+    )
 
     calls = []
 

@@ -430,6 +430,7 @@ def test_claude_recorded_stream_usage_and_cache():
     assert parsed.reported_model == "claude-haiku-5-5"
     assert parsed.tool_events == 2
     assert parsed.usage.input_tokens == 16
+    assert parsed.usage.uncached_input_tokens == 16
     assert parsed.usage.output_tokens == 1934
     assert parsed.usage.reasoning_tokens == 719
     assert parsed.usage.cached_tokens == 164374
@@ -449,6 +450,7 @@ def test_claude_recorded_stream_usage_and_cache():
     )
 
     assert resumed.usage.input_tokens == 12
+    assert resumed.usage.uncached_input_tokens == 12
     assert resumed.usage.output_tokens == 979
     assert resumed.usage.cached_tokens == 149350
     assert resumed.usage.cache_write_tokens == 2913

@@ -84,6 +84,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
 }
 USAGE_KEYS = (
     "input_tokens",
+    "uncached_input_tokens",
     "output_tokens",
     "reasoning_tokens",
     "cache_read_tokens",
@@ -799,6 +800,8 @@ class CampaignStore:
         stage: str | None = None,
         attempt: int | None = None,
         allow_human_exit: bool = False,
+        event_details: Mapping[str, Any] | None = None,
+        usage_delta: Mapping[str, float] | None = None,
     ) -> CampaignState:
         """Transition only when the campaign still matches the loaded state."""
         with self.lock():
@@ -816,6 +819,8 @@ class CampaignStore:
                 stage,
                 attempt,
                 allow_human_exit=allow_human_exit,
+                event_details=event_details,
+                usage_delta=usage_delta,
             )
 
     def _transition_locked(
@@ -825,6 +830,8 @@ class CampaignStore:
         stage: str | None = None,
         attempt: int | None = None,
         allow_human_exit: bool = False,
+        event_details: Mapping[str, Any] | None = None,
+        usage_delta: Mapping[str, float] | None = None,
     ) -> CampaignState:
         state = self.load()
         validate_transition(state.state, target)
@@ -857,6 +864,14 @@ class CampaignStore:
         ) != (state.quota_wait.stage, state.quota_wait.attempt):
             raise StateError("cannot change stage or attempt while quota is held")
         event = self._new_event(state, target, reason, resolved_stage, resolved_attempt)
+        if event_details:
+            event["human_decision"] = dict(event_details)
+        for key, value in (usage_delta or {}).items():
+            if key not in state.usage:
+                raise StateError(f"unknown usage field '{key}'")
+            state.usage[key] = float(state.usage[key]) + float(value)
+        if usage_delta:
+            event["usage_after"] = state.usage
         if target == "paused":
             event["paused_from"] = state.state
         clear_quota = (

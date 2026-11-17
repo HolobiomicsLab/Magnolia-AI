@@ -14,7 +14,10 @@ from campaign_runner.jobs import FakeJobBackend, JobController, JobStatus  # noq
 from campaign_runner.lease import AttemptLease  # noqa: E402
 from campaign_runner.reviewers import ReviewResult  # noqa: E402
 from campaign_runner.runner import CampaignRunner, RunnerConfig, RunnerError  # noqa: E402
-from campaign_runner.state import CampaignStore  # noqa: E402
+from campaign_runner.state import (  # noqa: E402
+    CampaignStateChangedError,
+    CampaignStore,
+)
 from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
 from campaign_runner.executors.contracts import SessionIdentity  # noqa: E402
 
@@ -526,10 +529,95 @@ def test_decline_followups_passes_stage_and_queues_distillation(tmp_path):
     receipt = json.loads(receipt_path.read_text())
     assert receipt["status"] == "passed"
     assert receipt["human_decision"]["decision"] == "decline_followups"
+    decision_event = store.read_events()[-1]
+    assert decision_event["human_decision"]["stage"] == "analyze"
+    assert decision_event["human_decision"]["attempt"] == receipt["attempt"]
     queued = [
         json.loads(line) for line in store.distill_queue_path.read_text().splitlines()
     ]
     assert queued[-1]["session_ids"] == ["ses_fake", "ses_review"]
+
+
+def test_decline_followups_retry_repairs_crash_after_transition(
+    tmp_path, monkeypatch
+):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+    from campaign_runner import runner as runner_module
+
+    real_write_receipt = runner_module.write_receipt
+    calls = 0
+
+    def crash_once(path, payload):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("simulated crash after transition")
+        return real_write_receipt(path, payload)
+
+    monkeypatch.setattr(runner_module, "write_receipt", crash_once)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert store.load().state == "queued"
+    state = runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert state.state == "queued"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    assert json.loads(receipt_path.read_text())["status"] == "passed"
+    queued = store.distill_queue_path.read_text().splitlines()
+    assert len(queued) == 1
+
+
+def test_decline_followups_concurrent_state_change_has_no_side_effects(
+    tmp_path, monkeypatch
+):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    original_receipt = receipt_path.read_bytes()
+    real_transition = store.transition_if_current
+
+    def concurrent_approval(*args, **kwargs):
+        store.approve("other", "concurrent decision")
+        return real_transition(*args, **kwargs)
+
+    monkeypatch.setattr(store, "transition_if_current", concurrent_approval)
+
+    with pytest.raises(CampaignStateChangedError):
+        runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert store.load().state == "queued"
+    assert receipt_path.read_bytes() == original_receipt
+    assert not store.distill_queue_path.exists()
 
 
 def test_decline_followups_refuses_blocking_review(tmp_path):
@@ -606,7 +694,9 @@ def test_gate_failure_repairs_once_then_waits(tmp_path):
 def test_budget_exceeded_halts(tmp_path):
     store = initialize(tmp_path, max_tokens=1)
     store.approve_start("tao", "start")
-    store.update_usage({"input_tokens": 2}, "test usage")
+    store.update_usage(
+        {"input_tokens": 2, "uncached_input_tokens": 2}, "test usage"
+    )
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
     result = runner.run_once()
     assert result["state"]["state"] == "halted"
@@ -618,6 +708,7 @@ def test_cached_codex_input_does_not_exhaust_token_budget(tmp_path):
     store.update_usage(
         {
             "input_tokens": 284_906,
+            "uncached_input_tokens": 29_546,
             "cache_read_tokens": 255_360,
             "output_tokens": 2_000,
             "reasoning_tokens": 3_000,
