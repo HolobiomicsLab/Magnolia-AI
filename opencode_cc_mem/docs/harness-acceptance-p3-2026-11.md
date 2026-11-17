@@ -90,7 +90,7 @@ A reviewer is the stage's review phase, not a second stage.
 | `worker-claude-code-review.json` | Claude Haiku | Codex `gpt-5.6-luna` | **pending** current Claude identity re-observation |
 | `worker-codex-review.json` | Codex `gpt-5.6-luna` | Claude Haiku | **pending** current Claude reviewer re-observation |
 | `worker-vibe-review.json` | Vibe `zai-glm-5-3-flash` | Claude Haiku | **pending** Vibe gate and actual-model confirmation |
-| `opencode-control.json` | OpenCode DeepSeek V4.1 Flash free | OpenCode GLM 5.3 | **pending** live control |
+| `opencode-control.json` | OpenCode DeepSeek V4.1 Flash free | OpenCode GLM 5.3 Flash free | **pending** live control |
 | `opencode-reviewer-only.json` | Claude Haiku | OpenCode DeepSeek V4.1 Flash free | **pending** current Claude identity and OpenCode reviewer control |
 
 No protocol was run in this offline task. This task added **zero** client
