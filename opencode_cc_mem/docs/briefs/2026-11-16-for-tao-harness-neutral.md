@@ -50,7 +50,8 @@ Rules kept throughout (they are tested, not only stated):
   passed to a client, no alternate `CLAUDE_CONFIG_DIR` / `CODEX_HOME` / `VIBE_HOME`, no permission or hook-trust
   bypass, no `--trust`. Clients use their own normal login and normally persisted project trust.
 - Consumption stays what a person would produce: every non-interactive run goes through a usage governor (section 4).
-  Interactive sessions never take governor slots. Memory and critic calls stay on API billing (OpenRouter by default)
+  Interactive sessions never take governor slots. Memory and critic calls stay on API billing (new setups prefer
+  OpenRouter when `OPENROUTER_API_KEY` is available; existing explicit routes are preserved)
   and outside the governor.
 - The OpenCode path does not change: its worker, reviewer, dedicated service, helper daemon and evaluator recipes are
   pinned by snapshot tests (`tests/snapshots/opencode/`); the only approved differences are the governor's waits,
@@ -123,7 +124,7 @@ fixtures).
 | TM-3 | D1 governor numbers (2 / 50 / 60 / 30 per subscription) and the policy/ledger locations. | As decided. |
 | TM-4 | May `compchem-tools` gain a read/list/search tool confined server-side to a role's read roots (for the Codex worker, Task 8b)? | Built on the branch, off unless a role allowlists it. |
 | TM-5 | May the memory server expose only the tools a role allowlists (from an environment list), and gain an HTTP transport with a per-service bearer token for Vibe (D3)? | Built on the branch; stdio unchanged for OpenCode, Claude and Codex. |
-| TM-6 | OpenRouter as the default route for critic and memory calls, with prompt caching and an optional host pin (`MAGNOLIA_OPENROUTER_PROVIDER`). | As built; Mistral and Z.ai routes remain selectable. |
+| TM-6 | OpenRouter as the preferred route for new critic and memory setups when its key is available, with prompt caching and an optional host pin (`MAGNOLIA_OPENROUTER_PROVIDER`). | Existing routes are preserved; Mistral and Z.ai remain selectable. Explicit OpenRouter failures degrade visibly unless a direct fallback is configured. |
 
 Answers can go in the Slack thread or as review comments once the PRs exist. For anything about code you own, it is
 your call.

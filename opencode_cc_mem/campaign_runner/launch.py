@@ -1677,6 +1677,15 @@ def _explicit_environment(
         explicit["MAGNOLIA_MEMORY_MODEL"] = memory_model
     if isinstance(memory_provider, str) and memory_provider:
         explicit["MAGNOLIA_MEMORY_PROVIDER"] = memory_provider
+    for setup_key, env_name in (
+        ("critic_provider", "MAGNOLIA_CRITIC_PROVIDER"),
+        ("critic_model", "MAGNOLIA_CRITIC_MODEL"),
+        ("direct_fallback_provider", "MAGNOLIA_DIRECT_FALLBACK_PROVIDER"),
+        ("direct_fallback_model", "MAGNOLIA_DIRECT_FALLBACK_MODEL"),
+    ):
+        value = context.setup.get(setup_key)
+        if isinstance(value, str) and value:
+            explicit[env_name] = value
     if context.route.client == "claude-code" and context.memory_service.get("transport") == "stdio":
         for name in ("MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER"):
             explicit.setdefault(name, inherited.get(name, ""))

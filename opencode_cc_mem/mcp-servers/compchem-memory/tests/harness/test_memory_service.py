@@ -128,6 +128,34 @@ def test_service_environment_is_provider_specific_allowlist():
     assert "UNRELATED_SECRET" not in environment
 
 
+def test_service_environment_includes_explicit_critic_and_direct_fallback_routes():
+    context = SimpleNamespace(
+        setup={
+            "memory_provider": "openrouter",
+            "memory_model": "deepseek/model",
+            "critic_provider": "openrouter",
+            "critic_model": "deepseek/judge",
+            "direct_fallback_provider": "deepseek",
+            "direct_fallback_model": "deepseek-flash",
+        },
+        environment={
+            "OPENROUTER_API_KEY": "router",
+            "DEEPSEEK_API_KEY": "fallback",
+            "ANTHROPIC_API_KEY": "unrelated",
+        },
+    )
+
+    environment = memory_service._server_environment(context)
+
+    assert environment["MAGNOLIA_CRITIC_PROVIDER"] == "openrouter"
+    assert environment["MAGNOLIA_CRITIC_MODEL"] == "deepseek/judge"
+    assert environment["MAGNOLIA_DIRECT_FALLBACK_PROVIDER"] == "deepseek"
+    assert environment["MAGNOLIA_DIRECT_FALLBACK_MODEL"] == "deepseek-flash"
+    assert environment["OPENROUTER_API_KEY"] == "router"
+    assert environment["DEEPSEEK_API_KEY"] == "fallback"
+    assert "ANTHROPIC_API_KEY" not in environment
+
+
 def test_service_environment_preserves_server_runtime_knobs_and_proxy_variants():
     context = SimpleNamespace(
         setup={"memory_provider": "openai", "memory_model": "model"},

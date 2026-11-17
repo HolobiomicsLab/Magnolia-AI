@@ -30,7 +30,9 @@ VENV_PY="$REPO_ROOT/.venv/bin/python3"
 # launcher re-renders opencode.json from the template on EVERY launch, so
 # LLM choices must persist here — never in the volatile opencode.json.
 # Shape: {"main_model": "...", "memory_model": "...",
-#         "memory_provider": "...", "memory_enabled": true}
+#         "memory_provider": "...", "critic_provider": "...",
+#         "critic_model": "...", "memory_enabled": true,
+#         "direct_fallback_provider": "...", "direct_fallback_model": "..."}
 LLM_SETUP="$OPENCODE_DIR/.magnolia/llm-setup.json"
 ACTIVE_PROJECT_FILE="$OPENCODE_DIR/.magnolia/.active-project"
 
@@ -62,7 +64,7 @@ Usage: magnolia [--harness opencode|claude|codex|vibe] [--profile NAME] [setup] 
        magnolia setup --harness claude|codex|vibe [--model M] <project>
        magnolia setup --route ROLE=MODEL [<project>]
        magnolia usage [resume <subscription-key>]
-       magnolia memory set <model> [--provider P]
+       magnolia memory set <model> [--provider P] [--fallback-provider P --fallback-model M]
        magnolia memory status
 
 Launch opencode for the given Magnolia project. If the project does not
@@ -473,6 +475,14 @@ if mem_on:
     env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
     if setup.get("memory_provider"):
         env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+    if setup.get("critic_provider"):
+        env["MAGNOLIA_CRITIC_PROVIDER"] = setup["critic_provider"]
+    if setup.get("critic_model"):
+        env["MAGNOLIA_CRITIC_MODEL"] = setup["critic_model"]
+    if setup.get("direct_fallback_provider"):
+        env["MAGNOLIA_DIRECT_FALLBACK_PROVIDER"] = setup["direct_fallback_provider"]
+    if setup.get("direct_fallback_model"):
+        env["MAGNOLIA_DIRECT_FALLBACK_MODEL"] = setup["direct_fallback_model"]
 
 # opencode v2 shape translation (2026-10-06, gate-1 follow-up). Applied ONLY
 # in v2 mode (--opencode-v2): the template stays the single source of truth
@@ -594,6 +604,45 @@ sys.exit(0 if out and out.strip() == expected else 1)
 PY
 }
 
+memory_provider_for_model() {
+    local lower
+    lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$lower" in
+        */*) echo "openrouter" ;;
+        deepseek*) echo "deepseek" ;;
+        claude*) echo "anthropic" ;;
+        gpt-*|o1*|o3*|o4*|chatgpt*) echo "openai" ;;
+        kimi*|k3*|moonshot*) echo "kimi" ;;
+        mistral*|ministral*|magistral*|devstral*|codestral*|pixtral*|open-mistral*) echo "mistral" ;;
+        glm*) echo "zai" ;;
+        *) echo "" ;;
+    esac
+}
+
+provider_key_name() {
+    case "$1" in
+        openrouter) echo "OPENROUTER_API_KEY" ;;
+        deepseek) echo "DEEPSEEK_API_KEY" ;;
+        anthropic) echo "ANTHROPIC_API_KEY" ;;
+        openai) echo "OPENAI_API_KEY" ;;
+        kimi) echo "KIMI_PLAN_MAGNOLIA_API_KEY or KIMI_API_KEY" ;;
+        mistral) echo "MISTRAL_API_KEY" ;;
+        zai) echo "ZHIPU_API_KEY or ZAI_API_KEY" ;;
+        *) echo "provider-specific API key" ;;
+    esac
+}
+
+memory_setup_default() {
+    local current_model="$1" current_provider="$2"
+    if [ -n "$current_model" ]; then
+        printf '%s\t%s\n' "$current_model" "${current_provider:-$(memory_provider_for_model "$current_model")}"
+    elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
+        printf '%s\t%s\n' "deepseek/deepseek-v4.1-flash" "openrouter"
+    else
+        printf '%s\t%s\n' "deepseek-flash" "deepseek"
+    fi
+}
+
 # Re-render for the active project if one is known (best-effort).
 render_active_project() {
     [ -s "$ACTIVE_PROJECT_FILE" ] || return 0
@@ -607,25 +656,44 @@ render_active_project() {
 }
 
 cmd_memory_set() {
-    local model="" provider=""
+    local model="" provider="" fallback_provider="" fallback_model=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --provider) provider="$2"; shift 2 ;;
+            --fallback-provider) fallback_provider="$2"; shift 2 ;;
+            --fallback-model) fallback_model="$2"; shift 2 ;;
             --*) echo "error: unknown option '$1'" >&2; exit 1 ;;
             *) model="$1"; shift ;;
         esac
     done
     if [ -z "$model" ]; then
-        echo "usage: magnolia memory set <model> [--provider P]" >&2
+        echo "usage: magnolia memory set <model> [--provider P] [--fallback-provider P --fallback-model M]" >&2
         exit 1
     fi
+    if [ -n "$fallback_provider$fallback_model" ] && { [ -z "$fallback_provider" ] || [ -z "$fallback_model" ]; }; then
+        echo "error: direct fallback requires both provider and model" >&2
+        exit 1
+    fi
+    if [ "$fallback_provider" = "openrouter" ]; then
+        echo "error: direct fallback provider cannot be openrouter" >&2
+        exit 1
+    fi
+    [ -n "$provider" ] || provider="$(memory_provider_for_model "$model")"
+    echo "route: ${provider:-autodetect} via $(provider_key_name "$provider")"
     echo "verifying memory model '$model' with one real call…"
     if ! probe_memory "$model" "$provider"; then
         echo "verification FAILED — nothing written." >&2
         echo "hints: wrong model id? missing API key for that provider? network?" >&2
         exit 1
     fi
-    setup_set "memory_model=$model" "memory_provider=$provider" "memory_enabled=true"
+    local settings=("memory_model=$model" "memory_provider=$provider" "memory_enabled=true")
+    if [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+        settings+=("critic_provider=$provider" "critic_model=$model")
+    fi
+    if [ -n "$fallback_provider" ]; then
+        settings+=("direct_fallback_provider=$fallback_provider" "direct_fallback_model=$fallback_model")
+    fi
+    setup_set "${settings[@]}"
     render_active_project
     echo "memory model set: $model (enabled). Restart opencode to activate."
 }
@@ -708,18 +776,30 @@ except Exception:
 
     echo
     echo "Step 2 — memory model (background only: distillation, handover, re-ranking)."
-    echo "  Cheap is recommended; the provider is derived from the model name."
-    local cur_mem def_mem
+    echo "  Cheap is recommended; new setups prefer OpenRouter when its key is available."
+    local cur_mem cur_provider def_mem def_provider
     cur_mem="$(setup_get memory_model)"
-    def_mem="${cur_mem:-deepseek-flash}"
+    cur_provider="$(setup_get memory_provider)"
+    local memory_default
+    memory_default="$(memory_setup_default "$cur_mem" "$cur_provider")"
+    def_mem="${memory_default%%$'\t'*}"
+    def_provider="${memory_default##*$'\t'}"
     ans="$(_read_from_tty "  memory model [$def_mem]: " || true)"
     local mem="${ans:-$def_mem}"
+    local mem_provider
+    mem_provider="$(memory_provider_for_model "$mem")"
+    [ -n "$mem_provider" ] || mem_provider="$def_provider"
+    echo "  route: $mem_provider via $(provider_key_name "$mem_provider")"
     echo "  verifying with one real call…"
-    if probe_memory "$mem" ""; then
-        setup_set "memory_model=$mem" "memory_enabled=true"
+    if probe_memory "$mem" "$mem_provider"; then
+        local setup_values=("memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=true")
+        if [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+            setup_values+=("critic_provider=$mem_provider" "critic_model=$mem")
+        fi
+        setup_set "${setup_values[@]}"
         echo "  OK — memory verified and enabled."
     else
-        setup_set "memory_model=$mem" "memory_enabled=false"
+        setup_set "memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=false"
         echo "  verification FAILED — memory left OFF (main model still works)." >&2
         echo "  Fix the key/model and re-run setup, or ask your agent: \"set up memory\"." >&2
     fi

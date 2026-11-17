@@ -50,13 +50,13 @@
             ],
             "components": {
               "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
-              "mcp": "1819a866791146d33eb5d31da5858b8b5432f588dcd242368946931ee75dd775",
-              "native_files": "f8971787ea74cb06ea6c3ab312f431ff183261e610d1532b9bddf2c4199b59a7",
-              "policy": "81cc77a40f81fff02be14421920a571158f0eb75eb29e43df04e0b6a68baf7fd",
+              "mcp": "84ee161778f9244b72bfbc338bc20017fedf74d8ceac0b2961b38188850d67e4",
+              "native_files": "21d27ad3d7e2f4e4b28b6ef305a05f5bae5db27d7fc5422cfd8398000fdecdc6",
+              "policy": "e314a49bde7032c89646e4714027f087a42b42eb408f21f3e0d6ea0436b9dbe7",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -255,11 +255,11 @@
               "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "a1b1eab67cd00365c91c2df21fff90e679be5aa2ae675df27b6c91618ac35fc0",
+              "policy": "9c10e4ad51a0f1df72c3f61e9d917a6be5f3d40e0e85c67b70f8c01d0e024756",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -451,11 +451,11 @@
               "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "a804ec277d79f4129846cd97a989f09047457a9d2e15dd6676094d1895853c5b",
+              "policy": "85125a30f0c1426f797b1f31c52aac42dd1d1401c07dea54ae34d215e6d60c98",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -646,11 +646,11 @@
               "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
-              "policy": "db8b4a81dfc880dd8ee98447294a48c8eedbbc1670d983192a69207422293093",
+              "policy": "3b50e1c928aab12e50f9255e25fd6c6f47f586714802c578a59759cbc7e5d0be",
               "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -820,30 +820,6 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-            },
-            "codex_package": {
-              "layout_version": 1,
-              "version": "0.169.0",
-              "target": "aarch64-apple-darwin",
-              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-              "executables": {
-                "code_mode_host": {
-                  "path": "bin/codex-code-mode-host",
-                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                },
-                "entrypoint": {
-                  "path": "bin/codex",
-                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                },
-                "execServer": {
-                  "path": "bin/codex-exec-server",
-                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                },
-                "pathDir/rg": {
-                  "path": "codex-path/rg",
-                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                }
-              }
             }
           },
           "configuration_binding": {
@@ -855,38 +831,14 @@
                 "version": "0.169.0",
                 "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
               },
-              "codex_package": {
-                "layout_version": 1,
-                "version": "0.169.0",
-                "target": "aarch64-apple-darwin",
-                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-                "executables": {
-                  "code_mode_host": {
-                    "path": "bin/codex-code-mode-host",
-                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                  },
-                  "entrypoint": {
-                    "path": "bin/codex",
-                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                  },
-                  "execServer": {
-                    "path": "bin/codex-exec-server",
-                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                  },
-                  "pathDir/rg": {
-                    "path": "codex-path/rg",
-                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                  }
-                }
-              },
               "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
-              "mcp": "a719ceb67eddfd81fd4c86a423d87f5ba432573056181c610eaba10d915142f5",
-              "native_files": "049f4736fbb896b01519154ccb7319a9756e177e65119141fedb143c407ea809",
-              "policy": "7bf73caf903266d81004d446910c6d972089b45fb6bb909eb9159a506ae657b0",
+              "mcp": "a38ef3835c5815a8d00937c78cd7e46fdc383c970b1738016a3a32dce6b8bff2",
+              "native_files": "c9029176512f058f08bab775d765e9bd85b0c589e62890fbc6a03ed77b16fd12",
+              "policy": "184ebe313dec2ff61f8f5a2de1f40d5b9731e2e865f87b3a740426bf160b282b",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -904,30 +856,6 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-            },
-            "codex_package": {
-              "layout_version": 1,
-              "version": "0.169.0",
-              "target": "aarch64-apple-darwin",
-              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-              "executables": {
-                "code_mode_host": {
-                  "path": "bin/codex-code-mode-host",
-                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                },
-                "entrypoint": {
-                  "path": "bin/codex",
-                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                },
-                "execServer": {
-                  "path": "bin/codex-exec-server",
-                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                },
-                "pathDir/rg": {
-                  "path": "codex-path/rg",
-                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                }
-              }
             }
           },
           "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
@@ -1091,30 +1019,6 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-            },
-            "codex_package": {
-              "layout_version": 1,
-              "version": "0.169.0",
-              "target": "aarch64-apple-darwin",
-              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-              "executables": {
-                "code_mode_host": {
-                  "path": "bin/codex-code-mode-host",
-                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                },
-                "entrypoint": {
-                  "path": "bin/codex",
-                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                },
-                "execServer": {
-                  "path": "bin/codex-exec-server",
-                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                },
-                "pathDir/rg": {
-                  "path": "codex-path/rg",
-                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                }
-              }
             }
           },
           "configuration_binding": {
@@ -1126,38 +1030,14 @@
                 "version": "0.169.0",
                 "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
               },
-              "codex_package": {
-                "layout_version": 1,
-                "version": "0.169.0",
-                "target": "aarch64-apple-darwin",
-                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-                "executables": {
-                  "code_mode_host": {
-                    "path": "bin/codex-code-mode-host",
-                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                  },
-                  "entrypoint": {
-                    "path": "bin/codex",
-                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                  },
-                  "execServer": {
-                    "path": "bin/codex-exec-server",
-                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                  },
-                  "pathDir/rg": {
-                    "path": "codex-path/rg",
-                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                  }
-                }
-              },
               "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
               "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
               "native_files": "fe097f4adff24720c34b646d31add9d58b95116daac95bcf407c4ddba57b2d9d",
-              "policy": "642cb38be6931fbc2d09ba232b36d5e7e5129daf0b9d2aa2ded8b639aff2562b",
+              "policy": "f619948085b689cdd9695313c347ef5d7ffae36013a0983b686eb2f006f1551f",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1175,30 +1055,6 @@
             "code_mode_host": {
               "version": "0.169.0",
               "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-            },
-            "codex_package": {
-              "layout_version": 1,
-              "version": "0.169.0",
-              "target": "aarch64-apple-darwin",
-              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
-              "executables": {
-                "code_mode_host": {
-                  "path": "bin/codex-code-mode-host",
-                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
-                },
-                "entrypoint": {
-                  "path": "bin/codex",
-                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
-                },
-                "execServer": {
-                  "path": "bin/codex-exec-server",
-                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
-                },
-                "pathDir/rg": {
-                  "path": "codex-path/rg",
-                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
-                }
-              }
             }
           },
           "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
@@ -1363,11 +1219,11 @@
               "settings": "2b9d3fbc2bc45ab24440c9fd9dc9286969735748ac4b3d696c96680c92d24498",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "88c0190564912e46c3d3e068d7a84a6ef49db332342c22dcb2467d011513a0d1",
+              "policy": "916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1469,11 +1325,11 @@
               "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
               "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
               "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
-              "policy": "db8b4a81dfc880dd8ee98447294a48c8eedbbc1670d983192a69207422293093",
+              "policy": "3b50e1c928aab12e50f9255e25fd6c6f47f586714802c578a59759cbc7e5d0be",
               "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
               "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
               "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
-              "hook_source": "1e8d0cbff8c39667f5037c399cf30bab30798eec85c47269b164e3c8bc75582e",
+              "hook_source": "57212ad685bdd1a08c849b506df04f22df46fb6533fb321849178755ab09bb0c",
               "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
             }
           }
@@ -1632,11 +1488,6 @@
           "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
           "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
-        },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
@@ -1723,11 +1574,6 @@
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
           "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",
@@ -1816,11 +1662,6 @@
           "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
           "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
         },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
-        },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
@@ -1907,11 +1748,6 @@
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
           "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
         },
         "quota_evidence": {
           "status": "synthetic-only",

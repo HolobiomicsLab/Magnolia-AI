@@ -674,6 +674,11 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     assert error["quality_floor_dropped"] is True
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
     assert outcome.kind == "error" and outcome.reason == "HTTP 401: denied"
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["unshown_notices"] == [
+            "⚠ Claim critic unavailable: HTTP 401: denied"
+        ]
+        assert state.data["critic_route_failure_noticed"] is True
 
 
 def test_run_critic_dot_dot_session_id_stays_in_store(tmp_path, monkeypatch):

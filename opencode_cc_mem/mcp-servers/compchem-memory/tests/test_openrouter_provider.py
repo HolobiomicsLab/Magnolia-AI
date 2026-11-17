@@ -22,10 +22,12 @@ def _clear_provider_env(monkeypatch):
         "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "MAGNOLIA_LLM_API_KEY",
         "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
         "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_OPENROUTER_STICKY",
+        "MAGNOLIA_DIRECT_FALLBACK_PROVIDER", "MAGNOLIA_DIRECT_FALLBACK_MODEL",
         "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
     ):
         monkeypatch.delenv(var, raising=False)
     llm._INVALID_OPENROUTER_PROVIDER_WARNED.clear()
+    llm._OPENROUTER_FAILURE_WARNED.clear()
 
 
 def test_explicit_openrouter_resolution(monkeypatch):
@@ -604,3 +606,87 @@ def test_native_anthropic_route_marks_prefix_but_kimi_does_not(monkeypatch):
         "cache_control": {"type": "ephemeral"},
     }]
     assert kimi_body["messages"][0]["content"] == "transcript"
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_explicit_openrouter_failure_never_autodetects_direct_key(
+    monkeypatch, capsys, status,
+):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "direct-key-must-not-be-used")
+    calls = []
+
+    class Response:
+        status_code = status
+        text = "upstream unavailable"
+
+        @staticmethod
+        def json():
+            return {}
+
+    monkeypatch.setattr(
+        llm.httpx, "post", lambda url, **kwargs: calls.append(url) or Response(),
+    )
+    route = llm.Route("openrouter", "deepseek/model", "https://router/chat", "or-key", "openai")
+
+    first = llm.call_route(route, "s", "u", max_tokens=1)
+    second = llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert first.status == status and first.error.startswith(f"HTTP {status}")
+    assert len(calls) == 2 and all("router" in call for call in calls)
+    assert capsys.readouterr().err.count("OpenRouter memory route failed") == 1
+
+
+def test_explicit_openrouter_missing_key_is_typed_and_visible(
+    tmp_path, monkeypatch, capsys,
+):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_PROJECT_DIR", str(tmp_path))
+    magnolia = tmp_path / ".magnolia"
+    magnolia.mkdir()
+    (magnolia / ".current-session-id").write_text("session-one")
+    route = llm.Route("openrouter", "deepseek/model", "https://router/chat", "", "openai")
+
+    result = llm.call_route(route, "s", "u", max_tokens=1)
+    llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert result.error == "missing API key for openrouter" and result.status is None
+    assert "OpenRouter memory route failed" in capsys.readouterr().err
+    assert len((magnolia / ".distill-notices").read_text().splitlines()) == 1
+
+
+def test_configured_direct_fallback_is_the_only_alternate_route(monkeypatch):
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("MAGNOLIA_DIRECT_FALLBACK_PROVIDER", "deepseek")
+    monkeypatch.setenv("MAGNOLIA_DIRECT_FALLBACK_MODEL", "deepseek-flash")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "direct-key")
+    calls = []
+
+    class Response:
+        text = ""
+
+        def __init__(self, status, data):
+            self.status_code = status
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    replies = [
+        Response(503, {}),
+        Response(200, {"model": "deepseek-flash", "choices": [{"message": {"content": "recovered"}, "finish_reason": "stop"}]}),
+    ]
+    monkeypatch.setattr(
+        llm.httpx, "post",
+        lambda url, **kwargs: calls.append((url, kwargs["headers"]["Authorization"])) or replies.pop(0),
+    )
+    route = llm.Route("openrouter", "deepseek/model", "https://router/chat", "or-key", "openai")
+
+    result = llm.call_route(route, "s", "u", max_tokens=1)
+
+    assert result.text == "recovered"
+    assert result.fallback_provider == "deepseek" and result.fallback_model == "deepseek-flash"
+    assert calls == [
+        ("https://router/chat", "Bearer or-key"),
+        ("https://api.deepseek.com/v1/chat/completions", "Bearer direct-key"),
+    ]
