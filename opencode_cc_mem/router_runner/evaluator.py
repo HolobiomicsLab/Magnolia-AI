@@ -392,7 +392,7 @@ class GenerativeEvaluator:
         try:
             executor = executor_for(route, "evaluator", exec_context)
             waiter = waiter_id or f"eval_{uuid.uuid4().hex}"
-            system = "" if route.client == "opencode" else self._system_prompt()
+            system = self._system_prompt()
             prompt = system + "\n\n" + json.dumps(
                 {"message": text, "context": context}, ensure_ascii=False
             )
