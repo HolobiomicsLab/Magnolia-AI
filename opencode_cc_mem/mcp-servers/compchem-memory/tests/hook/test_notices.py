@@ -144,3 +144,22 @@ def test_notices_are_defensive_and_cap_lines(tmp_path):
     assert notices.text.startswith("⚠️ ")
     assert notices.critic == []
     release_notices(notices)
+
+
+def test_critic_notice_flood_is_bounded_and_drains_in_batches(tmp_path):
+    paths = _paths(tmp_path)
+    queued = [f"critic-{index}-" + "x" * 500 for index in range(23)]
+    _queue_critic(paths, queued)
+
+    first = _deliver(paths)
+
+    assert first is not None
+    assert len(first.splitlines()) == 10
+    assert len(first) <= 1_609
+    assert all(len(line) <= 160 for line in first.splitlines())
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["unshown_notices"] == queued[10:]
+
+    assert len(_deliver(paths).splitlines()) == 10
+    assert len(_deliver(paths).splitlines()) == 3
+    assert _deliver(paths) is None
