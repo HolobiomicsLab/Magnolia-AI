@@ -121,7 +121,7 @@ def test_reobserved_rebound_rows_are_accepted_on_the_new_hook_source(client, rol
     assert evidence["accepted"] is True
     assert evidence["stale"] is False
     assert evidence["launch_identity"]["components"]["hook_source"] == (
-        "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d"
     )
 
 
