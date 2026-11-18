@@ -52,8 +52,14 @@ makes is hooked, and the program's sandbox has no filesystem, process or network
 - **What happens.** Because forbidden tools stay offered, a model sometimes spends turns on calls that are then
   denied. Reviewers run with a cap of 8 turns, helpers 40, workers 30 and evaluators 1. A one-turn evaluator that
   tries a tool ends with `turn_limit` and no answer.
-- **What to do.** Keep reviewer and evaluator prompts short and say which tools are available. Read-only roles
-  cannot search with `grep` (Vibe has no native grep tool and `bash` is denied); they read files instead.
+- **What to do.** Keep reviewer and evaluator prompts short and say which tools are available.
+
+### 3b. No glob or grep
+
+Vibe 3.1.2's unified runtime offers no glob or grep tool, and `bash` is denied to read-only roles, so a Vibe
+reviewer or helper finds files by reading them. Magnolia's worker and reviewer baselines therefore do not require
+`native_glob` or `native_grep` from Vibe. A campaign that explicitly requires either capability is refused before
+Vibe is launched; route it to Claude Code or Codex instead.
 
 ### 4. `todo` and `unified_harness_scratchpad` are denied
 

@@ -144,6 +144,15 @@ def test_capability_record_rejects_unknown_status():
         validate_capability_table(table, repository_root=REPOSITORY_ROOT)
 
 
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_vibe_worker_reviewer_projection_has_no_glob_grep(role):
+    projected = project_role_capabilities(load_capability_table())
+
+    capabilities = projected["vibe"][role]["capabilities"]
+    assert "native_read" in capabilities
+    assert not {"native_glob", "native_grep"} & set(capabilities)
+
+
 def test_capability_record_requires_boolean_stale_and_observed_value(tmp_path):
     table = _all_observed_table(tmp_path)
     del table["rows"][0]["stale"]

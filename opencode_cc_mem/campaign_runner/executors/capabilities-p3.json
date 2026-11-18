@@ -1778,15 +1778,13 @@
           "value": {
             "capabilities": [
               "native_read",
-              "native_glob",
-              "native_grep",
               "native_edit",
               "mcp:compchem-memory.memory_get_context",
               "mcp:compchem-memory.memory_search",
               "mcp:compchem-memory.memory_get_run_history"
             ]
           },
-          "note": "allowed: memory_get_context and memory_search (both from inside run_typescript, hooked and allowed), direct write_file and edit in work/, nested run_typescript edit in work/ (step3b; file ends D4-NESTED), memory_search on the bound resume; campaign worker reads + work/result.txt write. native_glob/native_grep: Vibe 3.1.2 has no native glob/grep tool, so these were not exercised."
+          "note": "allowed: memory_get_context and memory_search (both from inside run_typescript, hooked and allowed), direct write_file and edit in work/, nested run_typescript edit in work/ (step3b; file ends D4-NESTED), memory_search on the bound resume; campaign worker reads + work/result.txt write. Vibe 3.1.2 offers no native glob/grep tool; the baseline does not require them for Vibe."
         },
         "denied_actions": {
           "status": "observed",
@@ -2037,12 +2035,10 @@
           "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
           "value": {
             "capabilities": [
-              "native_read",
-              "native_glob",
-              "native_grep"
+              "native_read"
             ]
           },
-          "note": "allowed: read_file of docs/notes.md and of two run files; the bound resume returned review JSON that the production parser accepted and validate_review validated (1 issue)."
+          "note": "allowed: read_file of docs/notes.md and of two run files; the bound resume returned review JSON that the production parser accepted and validate_review validated (1 issue). Vibe 3.1.2 offers no native glob/grep tool; the baseline does not require them for Vibe."
         },
         "denied_actions": {
           "status": "observed",

@@ -25,8 +25,10 @@ from campaign_runner.executors.capabilities import (
 )
 from campaign_runner.launch import (
     VIBE_BASE_ENV,
+    _capability_evidence,
     _identity_replacements,
     _normalized_launch_identity,
+    _required_capabilities,
     _replace_identity_text,
     configuration_identity,
     prepare_launch,
@@ -391,6 +393,108 @@ def test_vibe_p4_production_rows_require_identity_match_not_blanket_refusal(tmp_
         with pytest.raises(ExecutorRefused, match="capability launch identity mismatch"):
             prepare_launch(context)
         assert not sentinel.exists(), "an identity mismatch must refuse before spawn"
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_vibe_worker_reviewer_baseline_omits_unavailable_glob_grep(
+    tmp_path, monkeypatch, role
+):
+    from test_executor_vibe import _context
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    production = project_role_capabilities(load_capability_table())["vibe"]
+    context = _context(tmp_path, role=role, binary=binary)
+    if role == "worker":
+        token_file = tmp_path / "memory-token"
+        token_file.write_text("offline-memory-bearer-sentinel\n", encoding="utf-8")
+        token_file.chmod(0o600)
+        context = replace(
+            context,
+            memory_service={
+                "transport": "http",
+                "url": "http://127.0.0.1:9876/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            },
+        )
+    context = replace(
+        context,
+        route=replace(context.route, model="mistral-medium-3.5"),
+        python_executable=sys.executable,
+        launch_argv=(str(binary),),
+        environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+        role_capabilities={"vibe": {role: copy.deepcopy(production[role])}},
+    )
+    context.role_capabilities["vibe"][role]["identity"] = configuration_identity(context)
+    expected_hash = production[role]["launch_identity"]["components"]["client_sha256"]
+    monkeypatch.setattr(
+        "campaign_runner.launch._file_digest", lambda _path: expected_hash
+    )
+    policy = load_role(ROLE_CONFIG_NAMES[role])
+
+    required = _required_capabilities(policy, context)
+    evidence = _capability_evidence(context, required)
+    prepare_launch(context)
+
+    assert "native_read" in required
+    assert not {"native_glob", "native_grep"} & set(required)
+    assert not {"native_glob", "native_grep"} & set(evidence["capabilities"])
+    assert not sentinel.exists(), "preparation must not execute Vibe"
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+@pytest.mark.parametrize("capability", ("native_glob", "native_grep"))
+def test_vibe_explicit_unavailable_capabilities_refuse_before_spawn(
+    tmp_path, role, capability
+):
+    from test_executor_vibe import _context
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    production = project_role_capabilities(load_capability_table())["vibe"]
+    context = _context(tmp_path, role=role, binary=binary)
+    if role == "worker":
+        token_file = tmp_path / "memory-token"
+        token_file.write_text("offline-memory-bearer-sentinel\n", encoding="utf-8")
+        token_file.chmod(0o600)
+        context = replace(
+            context,
+            memory_service={
+                "transport": "http",
+                "url": "http://127.0.0.1:9876/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            },
+        )
+    context = replace(
+        context,
+        route=replace(context.route, model="mistral-medium-3.5"),
+        python_executable=sys.executable,
+        launch_argv=(str(binary),),
+        environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+        role_capabilities={"vibe": {role: copy.deepcopy(production[role])}},
+    )
+    context.role_capabilities["vibe"][role]["identity"] = configuration_identity(context)
+    context = replace(context, required_capabilities=(capability,))
+
+    with pytest.raises(ExecutorRefused, match=f"unsupported required capabilities: {capability}"):
+        prepare_launch(context)
+    assert not sentinel.exists(), "an unsupported capability must refuse before spawn"
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_claude_codex_worker_reviewer_baseline_still_requires_glob_grep(
+    tmp_path, client, role
+):
+    from test_executor_vibe import _context
+
+    context = _context(tmp_path, role=role)
+    context = replace(context, route=replace(context.route, client=client))
+    policy = load_role(ROLE_CONFIG_NAMES[role])
+
+    required = _required_capabilities(policy, context)
+
+    assert {"native_glob", "native_grep"} <= set(required)
 
 
 def _tied_identity_context(tmp_path):
