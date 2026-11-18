@@ -1,0 +1,457 @@
+{
+  "budget": {
+    "claude": 2,
+    "codex": 0,
+    "codex_appserver": 0,
+    "nonmodel": [],
+    "opencode": 0,
+    "vibe": 1
+  },
+  "codex_config_journal": null,
+  "key_usage_counters": [
+    {
+      "label": "start",
+      "status": 200,
+      "t": "15:49:01",
+      "usage": 838.393206463,
+      "usage_daily": 49.398077013,
+      "usage_monthly": 462.67782213,
+      "usage_weekly": 191.68563332
+    },
+    {
+      "label": "end",
+      "status": 200,
+      "t": "15:52:52",
+      "usage": 838.393636943,
+      "usage_daily": 49.398507493,
+      "usage_monthly": 462.67825261,
+      "usage_weekly": 191.6860638
+    }
+  ],
+  "nonmodel_launches": "15:49:03 pre-c5r claude --version (env -i, gate XDG)\n15:49:03 pre-c5r codex --version (env -i, gate XDG)\n15:49:47 c5r-run claude --version (env -i, gate XDG)\n15:49:47 c5r-run codex --version (env -i, gate XDG)\n15:53:04 post-c5r claude --version (env -i, gate XDG)\n15:53:04 post-c5r codex --version (env -i, gate XDG)\n",
+  "opencode_models_family_matches": [],
+  "opencode_version": null,
+  "openrouter_calls_all": [
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 216,
+      "cost_usd": 0.000196514,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 1999,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1358,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "peer_comm": "python3",
+        "peer_env": {
+          "LIVE3_RUN": "c5r-drain"
+        },
+        "peer_pids": [
+          21591
+        ],
+        "peer_ppid": 21577
+      },
+      "status": 200,
+      "stream": false,
+      "t": "15:51:45",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 58,
+      "cost_usd": 0.000233966,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 1100,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2642,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "peer_comm": "python3",
+        "peer_env": {
+          "LIVE3_RUN": "c5r-drain"
+        },
+        "peer_pids": [
+          21591
+        ],
+        "peer_ppid": 21577
+      },
+      "status": 200,
+      "stream": false,
+      "t": "15:51:47",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    }
+  ],
+  "openrouter_state": {
+    "calls": 2,
+    "cost_usd": 0.00043048,
+    "refused": 0
+  },
+  "operator_notes": "live15 c5 re-run on 65171f8: one campaign attempt, no retry. Production capability table as committed (no candidate).\nPre-launch (pre15.json): claude-code reviewer accepted/gate_accepted/stale false/blocking [], identity mismatch {}; prepare_launch accepted. vibe worker accepted/gate_accepted/stale false; refused only for the missing project .vibe source before the render (as Task 13).\nReviewer repair path EXERCISED: first Claude review invalid (ReviewError: review.followups[2] has unknown fields: severity); runner resumed the SAME session (--resume = first session id) with REVIEW_FORMAT_NOTE (713 chars, sha256 85116d18..., equal to the repair turn's prompt hook row); repaired review valid (4 issues, 3 follow-ups); reviewer.json attempts 2, retry_cursor 1. Claude calls 2 (cap 2).\nVibe worker: memory MCP toolset (mcp_compchem_memory, incl. memory_get_context) was offered in the session; the model did not call it and self-reported memory=absent (model behaviour; Task 13 c5/c5b called it).\nVibe stderr/export warning about an ignored owner-level model setting ('zai-glm-5-3-flash') comes from Vibe's own config load; ~/.vibe was not read by the gate except the trust-file procedure.\nCritic rows: MAGNOLIA_CRITIC unset in the gate (as pass 5 / Task 13): no claim-critic verdict rows.\n",
+  "owner_state": {
+    "listening_ports_identical": true,
+    "local_share_opencode_after": [
+      "size_kb 25844",
+      "files 80",
+      "manifest_sha256 0b5aa29bda4b936fcd78fe57c16e42f35561e85a185ee3856862cdd6d70b367f"
+    ],
+    "local_share_opencode_before": [
+      "size_kb 25844",
+      "files 80",
+      "manifest_sha256 0b5aa29bda4b936fcd78fe57c16e42f35561e85a185ee3856862cdd6d70b367f"
+    ],
+    "local_share_opencode_per_file_manifest_identical": true,
+    "magnolia_listing_identical": true,
+    "magnolia_listing_sha16": "2b51e037798666fd"
+  },
+  "pre_launch_production_table": {
+    "claude-code:reviewer": {
+      "client_env_violations": [],
+      "identity_mismatch_vs_row": {},
+      "prepare_launch": "accepted",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    },
+    "vibe:worker": {
+      "identity_error": "ExecutorRefused: missing discovered client configuration: .vibe/config.toml",
+      "prepare_launch": "refused ExecutorRefused: missing discovered client configuration: .vibe/config.toml",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    }
+  },
+  "protocol_diff": "6c6\n<     \"model\": \"vibe/zai-glm-5-3-flash\",\n---\n>     \"model\": \"vibe/mistral-medium-3.5\",\n30c30\n<       \"model\": \"vibe/zai-glm-5-3-flash\",\n---\n>       \"model\": \"vibe/mistral-medium-3.5\",\n",
+  "render_journal": "15:49:37 render_runner vibe worker: project files {\".vibe/config.toml\": \"0cd6e4f22bc56de0d780c1d92e50929ac55d52a05c6b7acbfed3ff9bedee8233\", \".vibe/hooks.toml\": \"06c2aa2489df41e17268c35b2d31f57356efc2f7306a7f6b315dbb4075e97ed0\"} config_digest=5899e12355852b2f policy_digest=57e82176ad96e944\n",
+  "routes": null,
+  "spawns_all": [
+    {
+      "argv": [
+        "<G>/venv/bin/python3",
+        "-I",
+        "-c",
+        "<text len=152>",
+        "<G>/venv/bin/python3",
+        "-I",
+        "<text len=166>",
+        "--memory-http",
+        "--project-dir",
+        "<text len=134>",
+        "--state-dir",
+        "<text len=240>"
+      ],
+      "barrier": false,
+      "blocked": null,
+      "env_inherited": false,
+      "env_keys": [
+        "HOME",
+        "LANG",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY",
+        "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID",
+        "MAGNOLIA_MEMORY_SERVICE_IDENTITY",
+        "MAGNOLIA_MEMORY_SERVICE_PORT",
+        "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_OPENROUTER_PROVIDER",
+        "MAGNOLIA_PROJECT_BOUND",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_SERVER_STARTED_AT",
+        "OPENCODE_DB",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "TMPDIR",
+        "XDG_STATE_HOME"
+      ],
+      "forbidden_flags": [],
+      "free_gb": 37.8,
+      "kind": "memory-server",
+      "run": "c5r-render",
+      "spend_usd_before": 0.0,
+      "t": "15:49:35",
+      "watched_present": [
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL"
+      ]
+    },
+    {
+      "argv": [
+        "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "-p",
+        "<text len=1540>",
+        "--output",
+        "json",
+        "--workdir",
+        "<text len=134>",
+        "--max-turns",
+        "30",
+        "--output-dir",
+        "<text len=180>",
+        "--auto-approve",
+        "--disabled-tools",
+        "bash"
+      ],
+      "barrier": true,
+      "blocked": null,
+      "call_number": 1,
+      "client_sha256_ok": true,
+      "dist_info_313": true,
+      "env_inherited": false,
+      "env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "env_violations": [],
+      "forbidden_flags": [],
+      "free_gb": 37.7,
+      "kind": "vibe-model",
+      "run": "c5r-run",
+      "t": "15:49:48",
+      "telemetry": "false",
+      "trust_file_is_gate_version": true,
+      "watched_present": []
+    },
+    {
+      "argv": [
+        "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+        "-p",
+        "<text len=1533>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "<text len=221>",
+        "--mcp-config",
+        "<text len=216>",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "8",
+        "--model",
+        "haiku",
+        "--allowedTools",
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "barrier": true,
+      "blocked": null,
+      "call_number": 1,
+      "claude_version": "2.1.327",
+      "client_sha256_ok": true,
+      "env_inherited": false,
+      "env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "env_violations": [],
+      "forbidden_flags": [],
+      "free_gb": 37.7,
+      "kind": "claude-model",
+      "run": "c5r-run",
+      "t": "15:50:16",
+      "watched_present": []
+    },
+    {
+      "argv": [
+        "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+        "-p",
+        "<text len=713>",
+        "--setting-sources",
+        "project",
+        "--settings",
+        "<text len=221>",
+        "--mcp-config",
+        "<text len=216>",
+        "--strict-mcp-config",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--max-turns",
+        "8",
+        "--model",
+        "haiku",
+        "--resume",
+        "id:c72e46ac1a8f40fe",
+        "--allowedTools",
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "barrier": true,
+      "blocked": null,
+      "call_number": 2,
+      "claude_version": "2.1.327",
+      "client_sha256_ok": true,
+      "env_inherited": false,
+      "env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "env_violations": [],
+      "forbidden_flags": [],
+      "free_gb": 37.6,
+      "kind": "claude-model",
+      "run": "c5r-run",
+      "t": "15:50:46",
+      "watched_present": []
+    }
+  ],
+  "version_checks": "15:49:03 label=pre-c5r claude=[2.1.327 (Claude Code)] claude_sha=76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 vibe=[mistral_vibe-3.1.3.dist-info] vibe_sha=c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9 free_gb=35 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159\n15:49:47 label=c5r-run claude=[2.1.327 (Claude Code)] claude_sha=76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 vibe=[mistral_vibe-3.1.3.dist-info] vibe_sha=c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9 free_gb=35 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159\n15:53:04 label=post-c5r claude=[2.1.327 (Claude Code)] claude_sha=76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 vibe=[mistral_vibe-3.1.3.dist-info] vibe_sha=c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9 free_gb=34 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159\n",
+  "vibe_trust_journal": [
+    {
+      "appended": 1,
+      "before_mode": "0o600",
+      "before_mtime": 1794811114.62612,
+      "before_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "before_size": 28,
+      "event": "begin",
+      "gate_written_sha256": "8a722ac3f9640a9e1ef2767b2481524159b6c7fbf79d1e8a101fed3d91909678",
+      "gate_written_size": 164,
+      "keys": [
+        "trusted",
+        "untrusted"
+      ],
+      "t": "15:49:30",
+      "trusted_count_after": 1,
+      "untrusted_count_after": 0
+    },
+    {
+      "backup_deleted": true,
+      "cmp_identical": true,
+      "event": "end",
+      "mode": "0o600",
+      "mtime": 1794811114.62612,
+      "restored_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "size": 28,
+      "t": "15:51:54"
+    }
+  ]
+}
