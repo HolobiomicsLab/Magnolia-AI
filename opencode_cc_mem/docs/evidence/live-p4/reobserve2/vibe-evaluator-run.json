@@ -1,0 +1,204 @@
+{
+  "argv0": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+  "client": "vibe",
+  "client_env_keys": [
+    "COMPCHEM_TOOLS_PORT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "MAGNOLIA_CLIENT",
+    "MAGNOLIA_CONTROL_DIR",
+    "MAGNOLIA_DISTILL_INTERVAL_MIN",
+    "MAGNOLIA_DOORBELL",
+    "MAGNOLIA_HOOK_POLICY",
+    "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    "MAGNOLIA_HOOK_POLICY_SHA256",
+    "MAGNOLIA_INSTALLATION_ROOT",
+    "MAGNOLIA_MODEL",
+    "MAGNOLIA_PROJECT_DIR",
+    "MAGNOLIA_PROJECT_IDENTITY",
+    "MAGNOLIA_PYTHON",
+    "MAGNOLIA_ROLE",
+    "MAGNOLIA_ROOT",
+    "MAGNOLIA_RULES_DIR",
+    "MAGNOLIA_RUN_DIR",
+    "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+    "MAGNOLIA_WORKSPACE_ROOT",
+    "MAGNOLIA_WORK_DIR",
+    "PATH",
+    "PYTHONPYCACHEPREFIX",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "VIBE_ENABLE_TELEMETRY",
+    "XDG_STATE_HOME"
+  ],
+  "client_env_violations": [],
+  "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+  "config_digest": "d4e554d4409c2d181b1453c5cc8bc8d9cd1c875dc60fa05a0e7dd08e4f0cdfbe",
+  "effects": {
+    "outside_after": {
+      "credential.txt": "1124156c104843a7",
+      "notes-copy.md": "a65b4acb1e2a13ce"
+    },
+    "outside_before": {
+      "credential.txt": "1124156c104843a7",
+      "notes-copy.md": "a65b4acb1e2a13ce"
+    },
+    "outside_unchanged": true,
+    "project_added": [],
+    "project_changed": [],
+    "project_removed": [],
+    "work_files": {}
+  },
+  "error": null,
+  "final_text_json": {
+    "tools_offered": 9,
+    "verdict": "EVAL-OK"
+  },
+  "hook_sessions": {
+    "sha16:9141b0975cda8dc6": {
+      "assistant:": 1,
+      "injected:": 1,
+      "prompt:": 1,
+      "session-end:": 1,
+      "session-start:": 1
+    }
+  },
+  "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/13a-ve/control/executors/640d1ec82b4c481c82d839b5f49347f0",
+  "label": "13a-ve",
+  "max_turns": 1,
+  "pass": "Plan 4 Task 13a live, restacked head 7edd315, 18 Nov 2026",
+  "policy_digest": "7eba1ebb4f2c2b65b1fb96ea42a3352b1391496986e61cd2bfd9c814c2b4c6a2",
+  "project_files": {
+    ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+    ".vibe/hooks.toml": "9c7f170bc30c03533275fa30e9d6b64c5f25d7a986735a90bc9e72021d68d38f"
+  },
+  "result": {
+    "attempts": 1,
+    "duration_seconds": 12.601877042092383,
+    "errors": [
+      {
+        "kind": "client_notice",
+        "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      },
+      {
+        "kind": "client_notice",
+        "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+      },
+      {
+        "kind": "client_notice",
+        "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      }
+    ],
+    "final_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+    "outcome": "RunOutcome(kind='success', limit=None)",
+    "returncode": 0,
+    "stopped_reason": null,
+    "timed_out": false,
+    "tool_calls": 0,
+    "usage": {
+      "cache_read_tokens": 20864.0,
+      "cache_write_tokens": null,
+      "cost_usd": 0.0276006,
+      "input_tokens": 36298.0,
+      "output_tokens": 176.0,
+      "reasoning_tokens": null,
+      "uncached_input_tokens": 15434.0
+    }
+  },
+  "review_validation": null,
+  "role": "evaluator",
+  "sentinel_hits_in_raw_files": [],
+  "sentinel_in_final_or_all_text": {
+    "outside": false,
+    "secret": false
+  },
+  "session_id_sha16": "9141b0975cda8dc6",
+  "stream": {
+    "export_active_model": "mistral-medium-3.5",
+    "export_cost_usd": 0.0276006,
+    "export_keys": [
+      "config",
+      "cost_usd",
+      "ended_at",
+      "error",
+      "exit_code",
+      "journal_dir",
+      "limits",
+      "outcome",
+      "schema_version",
+      "session_id",
+      "started_at",
+      "steps",
+      "stop_reason",
+      "usage",
+      "vibe_version",
+      "warnings"
+    ],
+    "export_outcome": "finished",
+    "provided_groups": {
+      "connector_web_search": [
+        "finance_search (programmatic)",
+        "news_search (programmatic)",
+        "open_url (programmatic)",
+        "weather_search (programmatic)",
+        "web_search (programmatic)"
+      ],
+      "vibe": [
+        "todo (direct_and_programmatic)",
+        "unified_harness_scratchpad (direct)"
+      ]
+    }
+  },
+  "usage_ledger_rows": [
+    {
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 1,
+      "keys": [
+        "actual_work",
+        "billing",
+        "client",
+        "effective_cap",
+        "ended_at",
+        "invocation_id",
+        "outcome",
+        "parent_run_id",
+        "project_digest",
+        "reserved_at",
+        "resolved_model",
+        "run_kind",
+        "schema_version",
+        "session_identity",
+        "started_at",
+        "subscription_key",
+        "usage"
+      ],
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "policy_digest": "656637b893fe53fa8b0b71d0fb8bbf3a9ca18c14e0f92c3fc2ebc5ad7677fe42",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "session_model": "mistral-medium-3.5",
+      "session_role": "evaluator",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 20864,
+        "cache_write_tokens": null,
+        "cached_tokens": 20864,
+        "completeness": "partial",
+        "cost": 0.0276006,
+        "duration_seconds": 12.601877042092383,
+        "input_tokens": 36298,
+        "output_tokens": 176,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 15434
+      }
+    }
+  ]
+}

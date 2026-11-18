@@ -1,0 +1,482 @@
+[
+  {
+    "actual_work": {
+      "pgid": 89246,
+      "pid": 89246,
+      "process_start_token": "ps:89246:Wed Nov 18 13:33:26 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 30,
+    "ended_at": "2026-11-18T13:33:51.028130+00:00",
+    "invocation_id": "live13a:13a-cw:worker:1:582a18269acd44b98632cd2209e097a4",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-cw",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:33:26.068598+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "fd044e744652b53ea579e73c62ae7d76663604e5b0bc25ec4d4ca14ba3ae0f6d",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "worker",
+      "session_id": "sha16:aa830844da9ba4be"
+    },
+    "started_at": "2026-11-18T13:33:26.406798+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 17740,
+      "cache_read_tokens": 277320,
+      "cache_write_tokens": 17740,
+      "cached_tokens": 277320,
+      "completeness": "complete",
+      "cost": 0.0076392000000000005,
+      "duration_seconds": 24.80732624977827,
+      "input_tokens": 20,
+      "output_tokens": 2632,
+      "reasoning_tokens": 826,
+      "source": "claude-stream-json",
+      "turns": 10,
+      "uncached_input_tokens": 20
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 89530,
+      "pid": 89530,
+      "process_start_token": "ps:89530:Wed Nov 18 13:34:39 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 8,
+    "ended_at": "2026-11-18T13:34:52.065542+00:00",
+    "invocation_id": "live13a:13a-cr:reviewer:1:e7751e9553b84fb69d189f86a661f709",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-cr",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:34:39.345721+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "dfe2a4620cb5197636cc422197034fd15ab6232b866c1a5dc908c55fc4a5bf52",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "reviewer",
+      "session_id": "sha16:bc129ae7701c34d1"
+    },
+    "started_at": "2026-11-18T13:34:39.684451+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 15298,
+      "cache_read_tokens": 68137,
+      "cache_write_tokens": 15298,
+      "cached_tokens": 68137,
+      "completeness": "complete",
+      "cost": 0.0044935700000000005,
+      "duration_seconds": 12.557601917535067,
+      "input_tokens": 6,
+      "output_tokens": 1504,
+      "reasoning_tokens": 699,
+      "source": "claude-stream-json",
+      "turns": 8,
+      "uncached_input_tokens": 6
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 89680,
+      "pid": 89680,
+      "process_start_token": "ps:89680:Wed Nov 18 13:35:10 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 40,
+    "ended_at": "2026-11-18T13:35:21.064371+00:00",
+    "invocation_id": "live13a:13a-ch:helper:1:24148098cfca4a43909ccc15f1ea2807",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-ch",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:35:09.696772+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "helper",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "40688fe63d28be198ec9013bb7373bc8be66fb0de3a65ba9217a1f7a60128dad",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "helper",
+      "session_id": "sha16:bc6addd717f5aaf6"
+    },
+    "started_at": "2026-11-18T13:35:10.072835+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 11257,
+      "cache_read_tokens": 50997,
+      "cache_write_tokens": 11257,
+      "cached_tokens": 50997,
+      "completeness": "complete",
+      "cost": 0.00332737,
+      "duration_seconds": 11.170202417299151,
+      "input_tokens": 10,
+      "output_tokens": 1130,
+      "reasoning_tokens": 347,
+      "source": "claude-stream-json",
+      "turns": 5,
+      "uncached_input_tokens": 10
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 89814,
+      "pid": 89814,
+      "process_start_token": "ps:89814:Wed Nov 18 13:35:40 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 1,
+    "ended_at": "2026-11-18T13:35:43.917764+00:00",
+    "invocation_id": "live13a:13a-ce:evaluator:1:9917cd1db5c64daaa67ad50302a3ba0c",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-ce",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:35:40.084611+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "evaluator",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "68e9935eff8ea2445d382e4eaf193b4d7d02cbe6cbffc72702e26e7515dba051",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "evaluator",
+      "session_id": "sha16:b1abd4a942be5b62"
+    },
+    "started_at": "2026-11-18T13:35:40.460483+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 9744,
+      "cache_read_tokens": 649,
+      "cache_write_tokens": 9744,
+      "cached_tokens": 649,
+      "completeness": "complete",
+      "cost": 0.0020429899999999997,
+      "duration_seconds": 3.6366050001233816,
+      "input_tokens": 2,
+      "output_tokens": 175,
+      "reasoning_tokens": 154,
+      "source": "claude-stream-json",
+      "turns": 1,
+      "uncached_input_tokens": 2
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 90063,
+      "pid": 90063,
+      "process_start_token": "ps:90063:Wed Nov 18 13:36:15 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "codex",
+    "effective_cap": 30,
+    "ended_at": "2026-11-18T13:36:53.032290+00:00",
+    "invocation_id": "live13a:13a-xw:worker:1:6444c7e5e18040c092d33262a8c7b90d",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-xw",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:36:14.677998+00:00",
+    "resolved_model": "gpt-5.6-luna",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "codex",
+      "model": "gpt-5.6-luna",
+      "policy_digest": "59748567012b9c83ce22cf4e86c92f62a1f7d31a8cc25ff86127bf79a7105228",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "worker",
+      "session_id": "sha16:3e28d59eb5ccc060"
+    },
+    "started_at": "2026-11-18T13:36:15.811122+00:00",
+    "subscription_key": "codex",
+    "usage": {
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 189184,
+      "cache_write_tokens": 0,
+      "cached_tokens": 189184,
+      "completeness": "complete",
+      "cost": null,
+      "duration_seconds": 37.36341150011867,
+      "input_tokens": 211884,
+      "output_tokens": 728,
+      "reasoning_tokens": 172,
+      "source": "codex-exec-json",
+      "turns": 1,
+      "uncached_input_tokens": 22700
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 90768,
+      "pid": 90768,
+      "process_start_token": "ps:90768:Wed Nov 18 13:37:04 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "codex",
+    "effective_cap": 8,
+    "ended_at": "2026-11-18T13:37:38.249756+00:00",
+    "invocation_id": "live13a:13a-xr:reviewer:1:f8a7075fc9fe42bd9e90b003f3bcc0b0",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-xr",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:37:03.060238+00:00",
+    "resolved_model": "gpt-5.6-luna",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "codex",
+      "model": "gpt-5.6-luna",
+      "policy_digest": "7efd58c9bbca33e6795d3a2d893ac0a5b55608757dd5b2d1035d5497ea54b034",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "reviewer",
+      "session_id": "sha16:25b22a3297fb5da7"
+    },
+    "started_at": "2026-11-18T13:37:04.380656+00:00",
+    "subscription_key": "codex",
+    "usage": {
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 158848,
+      "cache_write_tokens": 0,
+      "cached_tokens": 158848,
+      "completeness": "complete",
+      "cost": null,
+      "duration_seconds": 34.12123008351773,
+      "input_tokens": 179795,
+      "output_tokens": 1133,
+      "reasoning_tokens": 576,
+      "source": "codex-exec-json",
+      "turns": 1,
+      "uncached_input_tokens": 20947
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 91606,
+      "pid": 91606,
+      "process_start_token": "ps:91606:Wed Nov 18 13:38:09 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 30,
+    "ended_at": "2026-11-18T13:38:45.179312+00:00",
+    "invocation_id": "live13a:13a-vw:worker:1:032264a0a7b640f5b3aede53e9c8fa0a",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-vw",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:38:09.655458+00:00",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "vibe",
+      "model": "mistral-medium-3.5",
+      "policy_digest": "825cbc98a448d704437a4a5f992969725f370e3ac878fad566072a00b298aab7",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "worker",
+      "session_id": "sha16:501327ad8bea5e5e"
+    },
+    "started_at": "2026-11-18T13:38:09.664078+00:00",
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 266752,
+      "cache_write_tokens": null,
+      "cached_tokens": 266752,
+      "completeness": "partial",
+      "cost": 0.11800829999999998,
+      "duration_seconds": 35.51811204198748,
+      "input_tokens": 306634,
+      "output_tokens": 2423,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 8,
+      "uncached_input_tokens": 39882
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 91795,
+      "pid": 91795,
+      "process_start_token": "ps:91795:Wed Nov 18 13:38:54 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 8,
+    "ended_at": "2026-11-18T13:39:29.705471+00:00",
+    "invocation_id": "live13a:13a-vr:reviewer:1:bb38f57b8cde48deb5a9a4da88b82cf5",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-vr",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:38:54.293068+00:00",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "vibe",
+      "model": "mistral-medium-3.5",
+      "policy_digest": "63e1857b76510be65c4cab949cf6262dc903223810b82bb89ae0ceff75b8baf0",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "reviewer",
+      "session_id": "sha16:edc617f68156ee90"
+    },
+    "started_at": "2026-11-18T13:38:54.303347+00:00",
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 74880,
+      "cache_write_tokens": null,
+      "cached_tokens": 74880,
+      "completeness": "partial",
+      "cost": 0.0903735,
+      "duration_seconds": 35.39809212461114,
+      "input_tokens": 112986,
+      "output_tokens": 2931,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 3,
+      "uncached_input_tokens": 38106
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 91930,
+      "pid": 91930,
+      "process_start_token": "ps:91930:Wed Nov 18 13:39:36 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 40,
+    "ended_at": "2026-11-18T13:40:05.509510+00:00",
+    "invocation_id": "live13a:13a-vh:helper:1:7cf81e46ff6444c49389f2ab1782b882",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-vh",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:39:36.593569+00:00",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "helper",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "vibe",
+      "model": "mistral-medium-3.5",
+      "policy_digest": "ca8648a1cbc86e401c61f2f13df9b377f9f36007790db8aaae0214a57910910c",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "helper",
+      "session_id": "sha16:093170bf682c4ce3"
+    },
+    "started_at": "2026-11-18T13:39:36.604316+00:00",
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 245632,
+      "cache_write_tokens": null,
+      "cached_tokens": 245632,
+      "completeness": "partial",
+      "cost": 0.08340179999999998,
+      "duration_seconds": 28.90884008258581,
+      "input_tokens": 264070,
+      "output_tokens": 2520,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 7,
+      "uncached_input_tokens": 18438
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 92060,
+      "pid": 92060,
+      "process_start_token": "ps:92060:Wed Nov 18 13:40:13 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 1,
+    "ended_at": "2026-11-18T13:40:25.753266+00:00",
+    "invocation_id": "live13a:13a-ve:evaluator:1:2999fa1bc0b346d684244cd81445ba0c",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live13a:13a-ve",
+    "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+    "reserved_at": "2026-11-18T13:40:13.144091+00:00",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "evaluator",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "vibe",
+      "model": "mistral-medium-3.5",
+      "policy_digest": "656637b893fe53fa8b0b71d0fb8bbf3a9ca18c14e0f92c3fc2ebc5ad7677fe42",
+      "project_digest": "da95e9f5c6aac83f572686fbeecb3a6e9308eea8a8eabffd12233fc29f78393b",
+      "role": "evaluator",
+      "session_id": "sha16:9141b0975cda8dc6"
+    },
+    "started_at": "2026-11-18T13:40:13.155356+00:00",
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 20864,
+      "cache_write_tokens": null,
+      "cached_tokens": 20864,
+      "completeness": "partial",
+      "cost": 0.0276006,
+      "duration_seconds": 12.601877042092383,
+      "input_tokens": 36298,
+      "output_tokens": 176,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 1,
+      "uncached_input_tokens": 15434
+    }
+  }
+]

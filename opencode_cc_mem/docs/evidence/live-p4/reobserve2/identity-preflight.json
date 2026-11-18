@@ -1,0 +1,791 @@
+{
+  "candidate_table": "snapshot capabilities-p3.json with only gate.value.configuration_binding.components.hook_source 496c1102... -> 170065f4... in the ten accepted rows (10 leaves)",
+  "launch_identity_formula": "sha256 of canonical JSON {schema_version, components} (sort_keys, compact)",
+  "pass": "Plan 4 Task 13a live, restacked head 7edd315, 18 Nov 2026",
+  "rows": {
+    "claude-code:evaluator": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534"
+      },
+      "configuration_identity": "f064369f6f9e6b7bc9c3da2547dd561c218b5a56a07e064324fe0e973e1c80cc",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_identity_sha256": "258041c1597d8008abf5a2df0c00b8ecc5df75d9228fe109e170ca0642029680",
+      "launch_identity_sha256_after_calls": "258041c1597d8008abf5a2df0c00b8ecc5df75d9228fe109e170ca0642029680",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "f0aa63a8a367c8c8c131205e8898e9c80879dca5f388a6886e435447881d5ee5"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": {
+        "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+        "hook_command_module": "compchem_memory.hook",
+        "kind": "claude-role-shape-v1",
+        "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+        "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+        "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+        "observed_revision": "02b5f43",
+        "required_policy_env": [
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256"
+        ],
+        "required_policy_schema": "magnolia-role-v1"
+      }
+    },
+    "claude-code:helper": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06"
+      },
+      "configuration_identity": "8564ccbfff336d779dd245c0cbfd1773d84b074a7eef8cb8c294290b91651e0d",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_identity_sha256": "ad5149ba3e7e117048a39b3de7ef219e64d5c68ad0091734b2b810bb56b63c88",
+      "launch_identity_sha256_after_calls": "ad5149ba3e7e117048a39b3de7ef219e64d5c68ad0091734b2b810bb56b63c88",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "f0aa63a8a367c8c8c131205e8898e9c80879dca5f388a6886e435447881d5ee5"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": {
+        "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+        "hook_command_module": "compchem_memory.hook",
+        "kind": "claude-role-shape-v1",
+        "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+        "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+        "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+        "observed_revision": "02b5f43",
+        "required_policy_env": [
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256"
+        ],
+        "required_policy_schema": "magnolia-role-v1"
+      }
+    },
+    "claude-code:reviewer": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6"
+      },
+      "configuration_identity": "840046887e66829d1b2410304dd277dbdf9c475c18ef1017b89d7ea7e7a5ec14",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_identity_sha256": "64b0369014271bca1f2fb90b2242cddbe40610460ed2780bd66c2eab4c282220",
+      "launch_identity_sha256_after_calls": "64b0369014271bca1f2fb90b2242cddbe40610460ed2780bd66c2eab4c282220",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "f0aa63a8a367c8c8c131205e8898e9c80879dca5f388a6886e435447881d5ee5"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": {
+        "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+        "hook_command_module": "compchem_memory.hook",
+        "kind": "claude-role-shape-v1",
+        "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+        "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+        "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+        "observed_revision": "02b5f43",
+        "required_policy_env": [
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256"
+        ],
+        "required_policy_schema": "magnolia-role-v1"
+      }
+    },
+    "claude-code:worker": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+        "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517"
+      },
+      "configuration_identity": "543f487312fb2dc8fff9b9792afe2e83394ab0eed2113565d9dab7da99801515",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_identity_sha256": "f36c06f29c95e1779de2d30c3e44da7fb8080f076780607e6ae388cacf0b1361",
+      "launch_identity_sha256_after_calls": "f36c06f29c95e1779de2d30c3e44da7fb8080f076780607e6ae388cacf0b1361",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        "claude-mcp.json": "1972bd501078329f2d494056b385fb44098c04b1edcbf40f74c743019abfe5bc",
+        "claude-settings.json": "f0aa63a8a367c8c8c131205e8898e9c80879dca5f388a6886e435447881d5ee5"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": {
+        "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+        "hook_command_module": "compchem_memory.hook",
+        "kind": "claude-role-shape-v1",
+        "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+        "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+        "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+        "observed_revision": "02b5f43",
+        "required_policy_env": [
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256"
+        ],
+        "required_policy_schema": "magnolia-role-v1"
+      }
+    },
+    "codex:reviewer": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LIVE_RUN",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "OPENROUTER_BASE_URL",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "__CF_USER_TEXT_ENCODING"
+      ],
+      "components_recomputed": {
+        "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+        "client_version": "0.169.0",
+        "code_mode_host": {
+          "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+          "version": "0.169.0"
+        },
+        "codex_package": {
+          "executables": {
+            "code_mode_host": {
+              "path": "bin/codex-code-mode-host",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "entrypoint": {
+              "path": "bin/codex",
+              "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            },
+            "execServer": {
+              "path": "bin/codex-exec-server",
+              "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+            },
+            "pathDir/rg": {
+              "path": "codex-path/rg",
+              "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+            }
+          },
+          "layout_version": 1,
+          "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+          "target": "aarch64-apple-darwin",
+          "version": "0.169.0"
+        },
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+        "model": "gpt-5.6-luna",
+        "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
+        "policy": "be6df35b2c5c99d8a969c66fbe65eb5d4aa17b4d7255097ca0e2d50e0475d46c",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645"
+      },
+      "configuration_identity": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+      "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+      "launch_identity_sha256": "a1d4b50a85a5100a11525bc8150a197e6903efd809e4651719048b91b74d9971",
+      "launch_identity_sha256_after_calls": "a1d4b50a85a5100a11525bc8150a197e6903efd809e4651719048b91b74d9971",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".codex/config.toml": "ddc8596bcf44bed05d10df336808d03d0498b05fa9035bf8707d414d1eee16cb",
+        ".codex/hooks.json": "a30fbf375f3662a906a7542f5c5c2a8b7a09e30d24ae0c499ee7971ad9019796"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c"
+    },
+    "codex:worker": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LIVE_RUN",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_MODEL",
+        "MAGNOLIA_MEMORY_PROVIDER",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "OPENROUTER_BASE_URL",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "__CF_USER_TEXT_ENCODING"
+      ],
+      "components_recomputed": {
+        "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+        "client_version": "0.169.0",
+        "code_mode_host": {
+          "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+          "version": "0.169.0"
+        },
+        "codex_package": {
+          "executables": {
+            "code_mode_host": {
+              "path": "bin/codex-code-mode-host",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "entrypoint": {
+              "path": "bin/codex",
+              "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+            },
+            "execServer": {
+              "path": "bin/codex-exec-server",
+              "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+            },
+            "pathDir/rg": {
+              "path": "codex-path/rg",
+              "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+            }
+          },
+          "layout_version": 1,
+          "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+          "target": "aarch64-apple-darwin",
+          "version": "0.169.0"
+        },
+        "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
+        "model": "gpt-5.6-luna",
+        "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
+        "policy": "211e05cc288c85203d119123ff0623aad960a05a5519e6e6293a816354bc3d65",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805"
+      },
+      "configuration_identity": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
+      "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+      "launch_identity_sha256": "9c6ca1f925825930bb7771dfa071e032b84d2786670553a2382fc6608ff621b4",
+      "launch_identity_sha256_after_calls": "9c6ca1f925825930bb7771dfa071e032b84d2786670553a2382fc6608ff621b4",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".codex/config.toml": "f67927aa9f29a2263b90248351f0cf0540f7775c1e8ce156be75e3e5c54d660e",
+        ".codex/hooks.json": "a30fbf375f3662a906a7542f5c5c2a8b7a09e30d24ae0c499ee7971ad9019796"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d"
+    },
+    "vibe:evaluator": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "d21a64962472d402847631282d285c458a0a5309ffe3e6ea982f6590c2826d00"
+      },
+      "configuration_identity": "d4e554d4409c2d181b1453c5cc8bc8d9cd1c875dc60fa05a0e7dd08e4f0cdfbe",
+      "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "launch_identity_sha256": "7d8338c64ffa2bffa10bdee6bb700e85e5c8411ce2262f72a49fef28a9927fae",
+      "launch_identity_sha256_after_calls": "7d8338c64ffa2bffa10bdee6bb700e85e5c8411ce2262f72a49fef28a9927fae",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "9c7f170bc30c03533275fa30e9d6b64c5f25d7a986735a90bc9e72021d68d38f"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "683e83a34834eb2966a40b38a214f4a71e8d458ca481148a817fdc73edcce8d0"
+    },
+    "vibe:helper": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "756302ab630e020bb9df6a148129c210995574f7ba009e9528d58a38c974b5df"
+      },
+      "configuration_identity": "c58b87d95e86e738983e07fb3ec2f4634fc6c30aa543f3644a20ab60631920e6",
+      "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "launch_identity_sha256": "c16dc1e25f930fa4bd6374c57774cdd0688f897738014b23844e745d9039d156",
+      "launch_identity_sha256_after_calls": "c16dc1e25f930fa4bd6374c57774cdd0688f897738014b23844e745d9039d156",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "9c7f170bc30c03533275fa30e9d6b64c5f25d7a986735a90bc9e72021d68d38f"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "9abfb76c97fd27ab274ac56bfd9a4b516b27b2c16aa175dd7b48a6d9dfeebc55"
+    },
+    "vibe:reviewer": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "eb95486a0a37546883abb2f8f9b786837b49c9c783c12549c10831cbe37ab588"
+      },
+      "configuration_identity": "5c1a05c29254db4d1023e23c5edc5d1fc41683f0978e2a3b73c3240d9fca1f50",
+      "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "launch_identity_sha256": "3879b4a6690fcc181d60322003fc831d14c888206d7b66b2d55a06d81e28a8db",
+      "launch_identity_sha256_after_calls": "3879b4a6690fcc181d60322003fc831d14c888206d7b66b2d55a06d81e28a8db",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "9c7f170bc30c03533275fa30e9d6b64c5f25d7a986735a90bc9e72021d68d38f"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "4ef776badacc0ebf3c71b652285bac1e63ee35861e26ea6ff527f9c398aac147"
+    },
+    "vibe:worker": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components_recomputed": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+        "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+        "native_files": "174dbe7574d45d27cf4ae8dd611eb43af0822bd76e909c69984be8f3843a31a5",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "de2916383297e0689849b43baebea3d9212419268f34c6b36ae46652a0da6460"
+      },
+      "configuration_identity": "42a0050c39fe385f4f1f71b162ea0bc6585daef32345f902bb0a6e14a1829eb3",
+      "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "launch_identity_sha256": "516dd3183ef53dba71b93c6ac69b6d2b2ae87bf31f4c10f3ec463b605ee5d9cf",
+      "launch_identity_sha256_after_calls": "516dd3183ef53dba71b93c6ac69b6d2b2ae87bf31f4c10f3ec463b605ee5d9cf",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_candidate_row_after_calls": {},
+      "mismatch_vs_production_row": {
+        "hook_source": {
+          "observed": "170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d",
+          "row": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0"
+        }
+      },
+      "native_body_sha256": {
+        ".vibe/config.toml": "9d77f5aa30a9dfcf7ec72950d06c41acb62ac149ccf5f70c831a6b0458bf6173",
+        ".vibe/hooks.toml": "9c7f170bc30c03533275fa30e9d6b64c5f25d7a986735a90bc9e72021d68d38f"
+      },
+      "production_prepare_launch": "refused ExecutorRefused: capability launch identity mismatch: hook_source",
+      "row_hook_policy_digest_cell": "d4aa8f8c2019f9ae2cc1e08155b5d6c117851211d7aacbf0f92e0068aa5379e9"
+    }
+  }
+}

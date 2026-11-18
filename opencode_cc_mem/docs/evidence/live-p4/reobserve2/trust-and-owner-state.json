@@ -1,0 +1,115 @@
+{
+  "codex_config_journal": [
+    {
+      "appended": "projects.<gate project>.trust_level",
+      "before_mode": "0o600",
+      "before_mtime": 1794866952.430373,
+      "before_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+      "before_size": 28569,
+      "event": "begin",
+      "gate_written_sha256": "0d6b0aa260c7e58459d2479c800e7ccb5df142cd161a123392a993c274f67346",
+      "gate_written_size": 28745,
+      "t": "14:35:49",
+      "top_level_keys": [
+        "approval_policy",
+        "approvals_reviewer",
+        "desktop",
+        "features",
+        "hooks",
+        "marketplaces",
+        "mcp_servers",
+        "model",
+        "model_providers",
+        "model_reasoning_effort",
+        "notify",
+        "plugins",
+        "project_doc_fallback_filenames",
+        "projects",
+        "sandbox_mode",
+        "service_tier",
+        "shell_environment_policy",
+        "tui"
+      ]
+    },
+    {
+      "appended": 5,
+      "event": "hooks",
+      "gate_written_sha256": "f896fa4c0350c0e0b9642aa2c106692133ffa2d51f6ceda002e45f474ee7cdee",
+      "rows_after": [
+        "trusted",
+        "trusted",
+        "trusted",
+        "trusted",
+        "trusted"
+      ],
+      "rows_before": [
+        [
+          "untrusted",
+          "preToolUse"
+        ],
+        [
+          "untrusted",
+          "postToolUse"
+        ],
+        [
+          "untrusted",
+          "sessionStart"
+        ],
+        [
+          "untrusted",
+          "userPromptSubmit"
+        ],
+        [
+          "untrusted",
+          "stop"
+        ]
+      ],
+      "t": "14:35:55"
+    },
+    {
+      "backup_deleted": true,
+      "cmp_identical": true,
+      "event": "end",
+      "mode": "0o600",
+      "mtime": 1794866952.430373,
+      "restored_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+      "size": 28569,
+      "t": "14:37:47"
+    }
+  ],
+  "free_kb_after": "free_kb 39532924",
+  "free_kb_before": "free_kb 37662936",
+  "note": "Vibe and Claude Code write their own session data under ~/.vibe and ~/.claude; the gate did not read, list or clean them. Only ~/.vibe/trusted_folders.toml (backed-up append, cmp restore) and ~/.codex/config.toml (backed-up append, cmp restore) were touched.",
+  "owner_state_identical_excluding_free_disk": true,
+  "owner_state_sha16_before": "864b2b0fa3364375",
+  "ports_identical": true,
+  "vibe_trust_journal": [
+    {
+      "appended": 1,
+      "before_mode": "0o600",
+      "before_mtime": 1794811114.62612,
+      "before_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "before_size": 28,
+      "event": "begin",
+      "gate_written_sha256": "8f1b2771d1588e6401c192ed25cedec091cf26472e72fe322d17a97d03c56ada",
+      "gate_written_size": 167,
+      "keys": [
+        "trusted",
+        "untrusted"
+      ],
+      "t": "14:37:53",
+      "trusted_count_after": 1,
+      "untrusted_count_after": 0
+    },
+    {
+      "backup_deleted": true,
+      "cmp_identical": true,
+      "event": "end",
+      "mode": "0o600",
+      "mtime": 1794811114.62612,
+      "restored_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "size": 28,
+      "t": "14:40:31"
+    }
+  ]
+}
