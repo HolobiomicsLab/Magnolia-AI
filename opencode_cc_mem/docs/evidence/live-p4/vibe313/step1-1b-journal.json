@@ -1,0 +1,215 @@
+{
+ "children": [],
+ "export": {
+  "config": {
+   "active_model": "",
+   "bypass_tool_permissions": true,
+   "disabled_tools": [
+    "*",
+    "*",
+    "ask_user_question",
+    "cron"
+   ],
+   "enable_background_processes": false,
+   "enable_subagents": false,
+   "enable_telemetry": false,
+   "enabled_tools": []
+  },
+  "cost_usd": 0.00690354,
+  "ended_at": "2026-11-18T12:47:30.191334Z",
+  "error": null,
+  "exit_code": 0,
+  "limits": {
+   "max_price": null,
+   "max_tokens": null,
+   "max_turns": 3,
+   "time_limit_s": null
+  },
+  "outcome": "finished",
+  "session_id": "04e8215e-b88f-a44c-96c4-e77433ba45ce",
+  "started_at": "2026-11-18T12:47:17.976614Z",
+  "steps": 2,
+  "stop_reason": null,
+  "usage": {
+   "cached_input_tokens": 6912,
+   "input_tokens": 13797,
+   "output_tokens": 762,
+   "total_tokens": 14559
+  },
+  "vibe_version": "3.1.3",
+  "warnings": [
+   {
+    "message": "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Large 4'. Pick another model to stop this notice.",
+    "source": null
+   },
+   {
+    "message": "Tool call denied: file_system.bash (Tool execution denied by approval policy)",
+    "source": "file_system.bash"
+   },
+   {
+    "message": "Tool call denied: file_system.write_file (Tool execution denied by approval policy)",
+    "source": "file_system.write_file"
+   }
+  ]
+ },
+ "root": {
+  "context_breakdown": {
+   "conversation": 2481,
+   "skills": 0,
+   "system": 16800,
+   "tools": 10368
+  },
+  "dir": "session",
+  "hook_results": [
+   {
+    "hook": "post_tool_call",
+    "result": "{\"action_id\": \"06127a3e-3064-56f3-9df1-ab2fd2266762\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"never\", \"approvalType\": \"never\", \"decision\": \"skip\"}}, \"content\": [], \"error\": {\"code\": \"tool_denied\", \"message\": \"Tool execution denied by approval policy\", \"retryable\": false}, \"type\": \"failure\"}}}, \"type\": \"hook_completed\"}",
+    "seq": 19,
+    "state": "succeeded"
+   },
+   {
+    "hook": "post_tool_call",
+    "result": "{\"action_id\": \"3c51a2c8-cdc8-5c6c-9223-2a5d8167ef85\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"never\", \"approvalType\": \"never\", \"decision\": \"skip\"}}, \"content\": [], \"error\": {\"code\": \"tool_denied\", \"message\": \"Tool execution denied by approval policy\", \"retryable\": false}, \"type\": \"failure\"}}}, \"type\": \"hook_completed\"}",
+    "seq": 23,
+    "state": "succeeded"
+   }
+  ],
+  "hooks": [
+   {
+    "action_id": "06127a3e-3064-56f3-9df1-ab2fd2266762",
+    "bindings": [
+     "builtin:agents_md"
+    ],
+    "call_id": "tSWSBsiYe",
+    "hook": "post_tool_call",
+    "input_keys": [
+     "duration_ms",
+     "tool_call",
+     "tool_result"
+    ],
+    "seq": 18,
+    "tool": "file_system.bash"
+   },
+   {
+    "action_id": "3c51a2c8-cdc8-5c6c-9223-2a5d8167ef85",
+    "bindings": [
+     "builtin:agents_md"
+    ],
+    "call_id": "bMe9bGzLh",
+    "hook": "post_tool_call",
+    "input_keys": [
+     "duration_ms",
+     "tool_call",
+     "tool_result"
+    ],
+    "seq": 20,
+    "tool": "file_system.write_file"
+   }
+  ],
+  "llm_calls": [
+   {
+    "iteration": 0,
+    "seq": 4,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-027cf9b765560208e2bf2987ae1c451d"
+   },
+   {
+    "iteration": 1,
+    "seq": 26,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-027cf9b765560208e2bf2987ae1c451d"
+   }
+  ],
+  "runtime": {
+   "active_model": "mistral-large-4-0",
+   "agent_name": "auto-approve",
+   "children": [],
+   "hook_bindings": [
+    {
+     "id": "builtin:agents_md",
+     "order": 0,
+     "point": "post_tool_call",
+     "selector": {
+      "type": "always"
+     }
+    }
+   ],
+   "identity": {
+    "depth": 0,
+    "kind": "root",
+    "parent_session_id": null,
+    "root_session_id": "04e8215e-b88f-a44c-96c4-e77433ba45ce",
+    "session_id": "04e8215e-b88f-a44c-96c4-e77433ba45ce"
+   },
+   "tool_modes": {
+    "background_processes": "disabled",
+    "bash_timeout": null,
+    "command_environment": "unix",
+    "file_system": "enabled",
+    "large_output": "filesystem",
+    "max_wait_ms": 3600000,
+    "model_wait": "enabled",
+    "programmatic": null,
+    "subagents": "disabled"
+   }
+  },
+  "secret_in_session": false,
+  "segments": [
+   {
+    "file": "0000000000000001.jsonl",
+    "records": 30,
+    "seq": [
+     1,
+     30
+    ]
+   },
+   {
+    "file": "0000000000000031.jsonl",
+    "records": 0,
+    "seq": null
+   }
+  ],
+  "tools": [
+   {
+    "approval": {
+     "approvalSource": "never",
+     "approvalType": "never",
+     "decision": "skip"
+    },
+    "arguments": "{\"command\": \"printf TOOL_FILTER_PROBE\", \"timeout_seconds\": 120}",
+    "call_id": "tSWSBsiYe",
+    "call_type": "runtime_builtin",
+    "error": "Tool execution denied by approval policy",
+    "name": "file_system.bash",
+    "parent_call_id": null,
+    "result_excerpt": "[]",
+    "result_type": "tool_failed",
+    "seq": 8,
+    "state": "failed"
+   },
+   {
+    "approval": {
+     "approvalSource": "never",
+     "approvalType": "never",
+     "decision": "skip"
+    },
+    "arguments": "{\"content\": \"probe\", \"path\": \"<G>/probe/1b/probe.txt\"}",
+    "call_id": "bMe9bGzLh",
+    "call_type": "runtime_builtin",
+    "error": "Tool execution denied by approval policy",
+    "name": "file_system.write_file",
+    "parent_call_id": null,
+    "result_excerpt": "[]",
+    "result_type": "tool_failed",
+    "seq": 10,
+    "state": "failed"
+   }
+  ]
+ }
+}

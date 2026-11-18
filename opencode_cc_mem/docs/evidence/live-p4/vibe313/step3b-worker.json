@@ -1,0 +1,792 @@
+{
+  "calls": {
+    "initial": {
+      "children": [],
+      "client_notices": [
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        },
+        {
+          "kind": "client_notice",
+          "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+        },
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        }
+      ],
+      "context_breakdown": {
+        "conversation": 69125,
+        "skills": 0,
+        "system": 73364,
+        "tools": 13311
+      },
+      "export": {
+        "cost_usd": 0.064083,
+        "ended_at": "2026-11-18T12:55:57.662320Z",
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 30,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "started_at": "2026-11-18T12:55:34.311944Z",
+        "steps": 5,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 170880,
+          "input_tokens": 189779,
+          "output_tokens": 1347,
+          "total_tokens": 191126
+        },
+        "vibe_version": "3.1.3",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "export_config": {
+        "active_model": "mistral-medium-3.5",
+        "bypass_tool_permissions": true,
+        "disabled_tools": [
+          "bash",
+          "bash",
+          "ask_user_question",
+          "cron"
+        ],
+        "enable_background_processes": false,
+        "enable_subagents": false,
+        "enable_telemetry": false,
+        "enabled_tools": []
+      },
+      "final_text": "1 ok\n2 ok",
+      "final_text_json": null,
+      "hook_points_bound": [
+        "post_agent_turn:magnolia-turn-end",
+        "post_tool_call:agents_md",
+        "post_tool_call:magnolia-post-tool",
+        "pre_agent_turn:magnolia-prompt",
+        "pre_agent_turn:session_start_context",
+        "pre_tool_call:magnolia-pre-tool"
+      ],
+      "journal_hook_results": [
+        {
+          "hook": "pre_agent_turn",
+          "output_type": "{\"action_id\": \"1d90edf3-68cb-56bf-b657-d4a48a9a2a87\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\"\u2026",
+          "seq": 7,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 25,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"c979a0de-d4e0-5409-ac2e-b71a4fd41385\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 36,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 42,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": null,
+          "seq": 53,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 63,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"39e11eed-a79b-5ab3-8a05-5a1115deadfa\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 74,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_agent_turn",
+          "output_type": "accept",
+          "seq": 84,
+          "state": "succeeded"
+        }
+      ],
+      "journal_hooks": [
+        {
+          "hook": "pre_agent_turn",
+          "input_keys": [
+            "user_content"
+          ],
+          "seq": 4,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 22,
+          "tool": null
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 33,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 39,
+          "tool": null
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 50,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 60,
+          "tool": "file_system.write_file"
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 71,
+          "tool": "file_system.write_file"
+        },
+        {
+          "hook": "post_agent_turn",
+          "input_keys": [
+            "candidate"
+          ],
+          "seq": 81,
+          "tool": null
+        }
+      ],
+      "journal_segments": [
+        {
+          "file": "0000000000000001.jsonl",
+          "records": 87,
+          "seq": [
+            1,
+            87
+          ]
+        },
+        {
+          "file": "0000000000000088.jsonl",
+          "records": 0,
+          "seq": null
+        }
+      ],
+      "journal_tools": [
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"task_description\": \"harness acceptance\"}",
+          "call_id": "typescript:7:m8VcuHTKe:0:tool:0",
+          "call_type": "provided",
+          "error": null,
+          "name": null,
+          "parent_call_id": null,
+          "result_excerpt": "{\"result\": \"{\\n  \\\"content\\\": \\\"[SESSION HANDOVER]\\\\nGenerated 2026-11-18T12:55:30.005127+00:00 \\\\u00b7 last sessions: vibe-1f34ec29-8c33-2f3c-813b-a7cdc2730c46 (2026-11-18, USER: This is an authorise\u2026",
+          "result_type": "tool_succeeded",
+          "seq": 28,
+          "state": "succeeded"
+        },
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"keyword\": \"synthetic question\"}",
+          "call_id": "typescript:7:m8VcuHTKe:1:tool:1",
+          "call_type": "provided",
+          "error": null,
+          "name": null,
+          "parent_call_id": null,
+          "result_excerpt": "{\"result\": \"[]\"}",
+          "result_type": "tool_succeeded",
+          "seq": 45,
+          "state": "succeeded"
+        },
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"content\": \"D3-WRITE\", \"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d3.txt\"}",
+          "call_id": "Hl0ZpaXeK",
+          "call_type": "runtime_builtin",
+          "error": null,
+          "name": "file_system.write_file",
+          "parent_call_id": null,
+          "result_excerpt": "{\"bytes_written\": 8, \"file_existed\": false, \"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step\u2026",
+          "result_type": "tool_succeeded",
+          "seq": 66,
+          "state": "succeeded"
+        }
+      ],
+      "llm_calls": 5,
+      "magnolia_transcript_rows": [
+        {
+          "kind": "session-start",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:37.730Z"
+        },
+        {
+          "kind": "injected",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:37.750Z"
+        },
+        {
+          "kind": "prompt",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:37.825Z"
+        },
+        {
+          "call_id": "typescript:7:m8VcuHTKe:0:tool:0",
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "kind": "tool",
+          "name": "memory_get_context",
+          "phase": "pre",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:55:49.970Z"
+        },
+        {
+          "call_id": "typescript:7:m8VcuHTKe:0:tool:0",
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "memory_get_context",
+          "output_excerpt": "{\n  \"content\": \"[SESSION HANDOVER]\\nGenerated 2026-11-18T12:55:30.005127+00:00 \\u00b7 last sessions: vibe-1f34ec29-8c33-2f3c-813b-a7cdc2730c46 (2026-11-18, USER\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:55:50.383Z"
+        },
+        {
+          "call_id": "typescript:7:m8VcuHTKe:1:tool:1",
+          "input": "{\"keyword\": \"synthetic question\"}",
+          "kind": "tool",
+          "name": "memory_search",
+          "phase": "pre",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:55:50.460Z"
+        },
+        {
+          "call_id": "typescript:7:m8VcuHTKe:1:tool:1",
+          "input": "{\"keyword\": \"synthetic question\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "memory_search",
+          "output_excerpt": "[]",
+          "phase": "post",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:55:50.538Z"
+        },
+        {
+          "call_id": "Hl0ZpaXeK",
+          "input": "{\"content\": \"D3-WRITE\", \"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d3.txt\"}",
+          "kind": "tool",
+          "name": "write",
+          "phase": "pre",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:52.708Z"
+        },
+        {
+          "call_id": "Hl0ZpaXeK",
+          "input": "{\"content\": \"D3-WRITE\", \"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d3.txt\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "write",
+          "output_excerpt": "bytes_written: 8\nfile_existed: False\npath: <G>/snap/opencode_cc_mem/projects/h\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:52.774Z"
+        },
+        {
+          "kind": "assistant",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:57.276Z"
+        },
+        {
+          "kind": "session-end",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:55:57.279Z"
+        }
+      ],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "returncode": 0,
+      "review_validation": null,
+      "same_session": null,
+      "secret_in_session_files": false,
+      "session_end": {
+        "assistant_row_recovered": true,
+        "commit_to_exit_upper_bound_s": 0.477,
+        "last_message_commit_ts": "2026-11-18T12:55:57.185000+00:00",
+        "magnolia_session_end_row": true,
+        "row_after_commit_s": 0.094,
+        "session_end_row_ts": "2026-11-18T12:55:57.279Z",
+        "vibe_ended_at": "2026-11-18T12:55:57.662320Z"
+      },
+      "session_id": "0f6ce75b-c128-7490-40f3-2070cf792885",
+      "t": "13:55:34",
+      "tool_catalog_records": [
+        "{\"revision\": 9007199254740991, \"type\": \"keep\"}"
+      ],
+      "tool_modes": {
+        "background_processes": "disabled",
+        "bash_timeout": null,
+        "command_environment": "unix",
+        "file_system": "enabled",
+        "large_output": "filesystem",
+        "max_wait_ms": 3600000,
+        "model_wait": "enabled",
+        "programmatic": null,
+        "subagents": "disabled"
+      }
+    },
+    "resume": {
+      "children": [],
+      "client_notices": [
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        },
+        {
+          "kind": "client_notice",
+          "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+        },
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        }
+      ],
+      "context_breakdown": {
+        "conversation": 131810,
+        "skills": 0,
+        "system": 73364,
+        "tools": 13311
+      },
+      "export": {
+        "cost_usd": 0.0722664,
+        "ended_at": "2026-11-18T12:57:34.726196Z",
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 30,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "started_at": "2026-11-18T12:57:13.337612Z",
+        "steps": 2,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 71936,
+          "input_tokens": 109865,
+          "output_tokens": 611,
+          "total_tokens": 110476
+        },
+        "vibe_version": "3.1.3",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "export_config": {
+        "active_model": "mistral-medium-3.5",
+        "bypass_tool_permissions": true,
+        "disabled_tools": [
+          "bash",
+          "bash",
+          "ask_user_question",
+          "cron"
+        ],
+        "enable_background_processes": false,
+        "enable_subagents": false,
+        "enable_telemetry": false,
+        "enabled_tools": []
+      },
+      "final_text": "memory_get_context harness acceptance: ok 9; memory_search D4: ok 0",
+      "final_text_json": null,
+      "hook_points_bound": [
+        "post_agent_turn:magnolia-turn-end",
+        "post_tool_call:agents_md",
+        "post_tool_call:magnolia-post-tool",
+        "pre_agent_turn:magnolia-prompt",
+        "pre_agent_turn:session_start_context",
+        "pre_tool_call:magnolia-pre-tool"
+      ],
+      "journal_hook_results": [
+        {
+          "hook": "pre_agent_turn",
+          "output_type": "{\"action_id\": \"a0fff46b-b1e7-5bc3-a267-6fc95ddc4b5e\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\"\u2026",
+          "seq": 102,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 112,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"42d3a701-e168-5054-b718-4317f6078023\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 123,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 129,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": null,
+          "seq": 140,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_agent_turn",
+          "output_type": "accept",
+          "seq": 150,
+          "state": "succeeded"
+        }
+      ],
+      "journal_hooks": [
+        {
+          "hook": "pre_agent_turn",
+          "input_keys": [
+            "user_content"
+          ],
+          "seq": 99,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 109,
+          "tool": null
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 120,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 126,
+          "tool": null
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 137,
+          "tool": null
+        },
+        {
+          "hook": "post_agent_turn",
+          "input_keys": [
+            "candidate"
+          ],
+          "seq": 147,
+          "tool": null
+        }
+      ],
+      "journal_segments": [
+        {
+          "file": "0000000000000096.jsonl",
+          "records": 58,
+          "seq": [
+            96,
+            153
+          ]
+        },
+        {
+          "file": "0000000000000154.jsonl",
+          "records": 0,
+          "seq": null
+        }
+      ],
+      "journal_tools": [
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"task_description\": \"harness acceptance\"}",
+          "call_id": "typescript:13:klHSI2aaT:0:tool:0",
+          "call_type": "provided",
+          "error": null,
+          "name": null,
+          "parent_call_id": null,
+          "result_excerpt": "{\"result\": \"{\\n  \\\"content\\\": \\\"[SESSION HANDOVER]\\\\nGenerated 2026-11-18T12:55:30.005127+00:00 \\\\u00b7 last sessions: vibe-1f34ec29-8c33-2f3c-813b-a7cdc2730c46 (2026-11-18, USER: This is an authorise\u2026",
+          "result_type": "tool_succeeded",
+          "seq": 115,
+          "state": "succeeded"
+        },
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"keyword\": \"D4\"}",
+          "call_id": "typescript:13:klHSI2aaT:1:tool:1",
+          "call_type": "provided",
+          "error": null,
+          "name": null,
+          "parent_call_id": null,
+          "result_excerpt": "{\"result\": \"[]\"}",
+          "result_type": "tool_succeeded",
+          "seq": 132,
+          "state": "succeeded"
+        }
+      ],
+      "llm_calls": 2,
+      "magnolia_transcript_rows": [
+        {
+          "kind": "session-start",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:57:16.358Z"
+        },
+        {
+          "kind": "prompt",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:57:16.360Z"
+        },
+        {
+          "kind": "injected",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:57:16.379Z"
+        },
+        {
+          "call_id": "typescript:13:klHSI2aaT:0:tool:0",
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "kind": "tool",
+          "name": "memory_get_context",
+          "phase": "pre",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:57:30.210Z"
+        },
+        {
+          "call_id": "typescript:13:klHSI2aaT:0:tool:0",
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "memory_get_context",
+          "output_excerpt": "{\n  \"content\": \"[SESSION HANDOVER]\\nGenerated 2026-11-18T12:55:30.005127+00:00 \\u00b7 last sessions: vibe-1f34ec29-8c33-2f3c-813b-a7cdc2730c46 (2026-11-18, USER\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:57:30.734Z"
+        },
+        {
+          "call_id": "typescript:13:klHSI2aaT:1:tool:1",
+          "input": "{\"keyword\": \"D4\"}",
+          "kind": "tool",
+          "name": "memory_search",
+          "phase": "pre",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:57:30.814Z"
+        },
+        {
+          "call_id": "typescript:13:klHSI2aaT:1:tool:1",
+          "input": "{\"keyword\": \"D4\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "memory_search",
+          "output_excerpt": "[]",
+          "phase": "post",
+          "secret_in_row": false,
+          "server": "compchem-memory",
+          "ts": "2026-11-18T12:57:30.893Z"
+        },
+        {
+          "kind": "assistant",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:57:34.351Z"
+        },
+        {
+          "kind": "session-end",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:57:34.354Z"
+        }
+      ],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "returncode": 0,
+      "review_validation": null,
+      "same_session": true,
+      "secret_in_session_files": false,
+      "session_end": {
+        "assistant_row_recovered": true,
+        "commit_to_exit_upper_bound_s": 0.465,
+        "last_message_commit_ts": "2026-11-18T12:57:34.261000+00:00",
+        "magnolia_session_end_row": true,
+        "row_after_commit_s": 0.093,
+        "session_end_row_ts": "2026-11-18T12:57:34.354Z",
+        "vibe_ended_at": "2026-11-18T12:57:34.726196Z"
+      },
+      "session_id": "0f6ce75b-c128-7490-40f3-2070cf792885",
+      "t": "13:57:13",
+      "tool_catalog_records": [
+        "{\"revision\": 9007199254740991, \"type\": \"keep\"}"
+      ],
+      "tool_modes": {
+        "background_processes": "disabled",
+        "bash_timeout": null,
+        "command_environment": "unix",
+        "file_system": "enabled",
+        "large_output": "filesystem",
+        "max_wait_ms": 3600000,
+        "model_wait": "enabled",
+        "programmatic": null,
+        "subagents": "disabled"
+      }
+    }
+  },
+  "driver_errors": {},
+  "hook_error_rows": [],
+  "hook_state": {
+    "0f6ce75b-c128-7490-40f3-2070cf792885": {
+      "background_turns": {
+        "main--turn-77e12f30ad66a3b8729e290b3bd03ec7": {
+          "attempts": 1,
+          "started": 1795006557.310733,
+          "status": "done"
+        },
+        "main--turn-c20d040068c2198f675480c14ad7312f": {
+          "attempts": 1,
+          "started": 1795006654.386067,
+          "status": "done"
+        }
+      },
+      "background_worker": {
+        "started": 1795006654.647491,
+        "status": "idle"
+      },
+      "catchup_pending": 1,
+      "recovered_turns": 2
+    }
+  },
+  "invocation_id": "84402a7e8b6141ec9dd53a92a1f417f7",
+  "label": "step3b-worker",
+  "ledger_rows": [
+    {
+      "client": "vibe",
+      "cost": null,
+      "input_tokens": null,
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "output_tokens": null,
+      "parent_run_id": "live12:step3b-worker",
+      "reported_model": null,
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "subscription_key": "vibe",
+      "turns": null
+    },
+    {
+      "client": "vibe",
+      "cost": null,
+      "input_tokens": null,
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "output_tokens": null,
+      "parent_run_id": "live12:step3b-worker",
+      "reported_model": null,
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "subscription_key": "vibe",
+      "turns": null
+    }
+  ],
+  "ledger_total_rows": 5,
+  "max_turns": 30,
+  "memory_service_holder": "hold.py: production prepare_launch for a worker context held the managed service from 13:55:25 to 13:57:43 (service url sha16 d705af4765a34de5)",
+  "resume_attempt1_refused_before_spawn": "ExecutorRefused: stale or untrusted resume launch reference: config_digest",
+  "resume_invocation_dir_same": true,
+  "resume_restored_discovered_from": "<G>/.../runs/step3-worker/control/executors/<id> (.vibe/config.toml, .vibe/hooks.toml: the bytes the 3b initial prepare_launch saw)",
+  "role": "worker",
+  "secret_sentinel_hits": [],
+  "tamper": "refused ExecutorRefused: Vibe resume artifact does not match client, role, policy, or project",
+  "tamper_attempt1": "refused ExecutorRefused: stale or untrusted resume launch reference: config_digest",
+  "tree_diff": {
+    "added_or_changed": [
+      "F 4dfd364f91b4e366 ./.vibe/config.toml",
+      "F f056a3dd2c374c2c ./runs/step3b-worker/work/d3.txt"
+    ],
+    "removed_or_changed": [
+      "F 1bcb741fb9f507e5 ./.vibe/config.toml"
+    ]
+  }
+}

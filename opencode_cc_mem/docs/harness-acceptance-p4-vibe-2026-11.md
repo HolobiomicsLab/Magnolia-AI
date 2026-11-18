@@ -41,6 +41,16 @@ the client version and executable hash changed, the nine bound configuration com
 the offered tool catalogue is identical, and every forbidden attempt (secret, alias, outside write, read-only
 writes and edits, the helper's read outside its root) was denied by the hook with no effect.
 
+**The four Vibe rows are rebound to Vibe 3.1.3.** The owner's Vibe was upgraded from 3.1.2 to 3.1.3 on 18 November
+(release of the same morning), which made every Vibe role refuse before launch (`client_version`). Task 12
+(`live-p4/vibe313/`) re-observed the four roles on 3.1.3 with the same method as gate 9b: every forbidden write,
+edit, shell command, secret read and alias read was denied, direct or nested, with no effect; in-policy reads,
+worker writes and edits in `work/`, memory calls, bound resume, tampered-resume refusal, model delivery
+(`mistral-medium-3.5`, while 3.1.3's default is Mistral Large 4) and `final_text` parsing were observed again, and
+the launch and configuration identities were stable. 3.1.3 adds a `connector_web_search` tool group to every role;
+its calls are denied by the strict hook. Upstream, #1552 is still open, while #1538 and #1540 are fixed
+(`docs/vibe-known-issues.md`).
+
 ## Matrix (Plan 4 changes only)
 
 | Client | Role | Status | Evidence |
@@ -51,7 +61,7 @@ writes and edits, the helper's read outside its root) was denied by the hook wit
 | claude-code | evaluator | rebound to 2.1.327 | `live-p4/claude327/evaluator-*.json` (2.1.326: `live-p4/reobserve/B-ce*.json`) |
 | codex | worker | re-observed, current | `live-p4/reobserve/B-xw*.json` |
 | codex | reviewer | re-observed, current | `live-p4/reobserve/B-xr*.json` |
-| vibe | worker, reviewer, helper, evaluator | accepted, accepted limitation (`docs/vibe-known-issues.md`) | `live-p4/vibe9b/`, `live-p4/vibe9a/` (earlier refusal evidence `live-p4/vibe/`) |
+| vibe | worker, reviewer, helper, evaluator | accepted, accepted limitation (`docs/vibe-known-issues.md`); rebound to 3.1.3 | `live-p4/vibe313/` (3.1.2: `live-p4/vibe9b/`, `live-p4/vibe9a/`; earlier refusal evidence `live-p4/vibe/`) |
 
 Each re-observed row's launch and configuration identity equalled the stored row (`hook_source 496c1102…`);
 each run exercised a permitted read and the secret and alias denials, and, by role, the work-tree write and
@@ -72,10 +82,11 @@ tool names, which Vibe's filter does not match, so Vibe's own deny-on-call never
 
 | Client | Plan 4 live calls | Cumulative |
 | --- | --- | --- |
-| Vibe | 24 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b) | 29 of 30 |
-| Claude Code | 9 (5 re-observation on 2.1.326, 4 on 2.1.327) | 40 of 40 |
-| Codex | 2 (re-observation) | 36 of 44 |
-| OpenRouter (memory server) | 29 calls, US$0.006 | — |
+| Vibe | 38 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b, 14 gate 12 on 3.1.3) | 43 of 52 (cap raised 18 Nov) |
+| Claude Code | 9 (5 re-observation on 2.1.326, 4 on 2.1.327) | 40 of 52 (cap raised 18 Nov) |
+| Codex | 2 (re-observation) | 36 of 52 (cap raised 18 Nov) |
+| OpenRouter (memory server) | 33 calls, US$0.007 | — |
 
-Vibe reported about US$1.38 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b). The owner's Vibe trust file and Codex `config.toml`
+Vibe reported about US$2.17 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b,
+US$0.79 gate 12). The owner's Vibe trust file and Codex `config.toml`
 were restored byte-identical after each pass (`cmp`); owner Magnolia state was unchanged.

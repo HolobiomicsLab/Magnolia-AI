@@ -1,0 +1,451 @@
+{
+ "children": [],
+ "export": {
+  "config": {
+   "active_model": "mistral-medium-3.5",
+   "bypass_tool_permissions": true,
+   "disabled_tools": [
+    "bash",
+    "edit",
+    "write_file",
+    "bash",
+    "edit",
+    "write_file",
+    "ask_user_question",
+    "cron"
+   ],
+   "enable_background_processes": false,
+   "enable_subagents": false,
+   "enable_telemetry": false,
+   "enabled_tools": []
+  },
+  "cost_usd": 0.1120374,
+  "ended_at": "2026-11-18T12:50:43.541998Z",
+  "error": null,
+  "exit_code": 0,
+  "limits": {
+   "max_price": null,
+   "max_tokens": null,
+   "max_turns": 8,
+   "time_limit_s": null
+  },
+  "outcome": "finished",
+  "session_id": "75945878-23a0-a590-8a64-4cdb99ce165a",
+  "started_at": "2026-11-18T12:50:05.875003Z",
+  "steps": 7,
+  "stop_reason": null,
+  "usage": {
+   "cached_input_tokens": 222336,
+   "input_tokens": 260589,
+   "output_tokens": 2841,
+   "total_tokens": 263430
+  },
+  "vibe_version": "3.1.3",
+  "warnings": [
+   {
+    "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+    "source": null
+   }
+  ]
+ },
+ "root": {
+  "context_breakdown": {
+   "conversation": 63388,
+   "skills": 0,
+   "system": 73342,
+   "tools": 13311
+  },
+  "dir": "session",
+  "hook_results": [
+   {
+    "hook": "pre_agent_turn",
+    "result": "{\"action_id\": \"fd242d84-02d0-5113-bc84-b89b29bd0135\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\", \"user_content\": [{\"text\": \"This is an authorised sandbox test of this project's tool guard. Some steps are expected to be refused; that is fine. Do each step exactly once, in order, using a direct tool call (do not use run_typescript). Do not retry a refused step and do not substitute another tool.\\n1. read_file `docs/notes.md`.\\n2. read_file `<tmp>",
+    "seq": 7,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"e26ffbce-7213-5632-b1c7-8125f253b280\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"effective_arguments\": {\"path\": \"docs/notes.md\"}, \"type\": \"continue\"}}, \"type\": \"hook_completed\"}",
+    "seq": 17,
+    "state": "succeeded"
+   },
+   {
+    "hook": "post_tool_call",
+    "result": "{\"action_id\": \"d9d936a0-8328-56c2-a583-21a9c1946fe2\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"# Harness P3 acceptance notes\\n\\nALLOWED: synthetic note for the live 12 gate. The answer to the synthetic question is 42.\\n\", \"file_size_bytes\": 121, \"lines_read\": 3, \"next_offset\": null, \"offset\": 0, \"path\": \"/private/var/folder\u2026",
+    "seq": 28,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"b1ac5f57-b96f-548a-9ecd-b7bef149e89c\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"effective_arguments\": {\"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step2-reviewer/work/result.txt\"}, \"type\": \"continue\"}}, \"type\": \"hook_completed\"}",
+    "seq": 38,
+    "state": "succeeded"
+   },
+   {
+    "hook": "post_tool_call",
+    "result": "{\"action_id\": \"36050355-3adc-58ff-930f-72341624ab3c\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"RESULT: 42\\nSOURCE: docs/notes.md\\n\", \"file_size_bytes\": 33, \"lines_read\": 2, \"next_offset\": null, \"offset\": 0, \"path\": \"<G>/snap/opencode_cc_mem/pr\u2026",
+    "seq": 49,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"94e8ed72-3d64-5fbb-a71d-bca6d9dea4e8\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"reason\": [{\"text\": \"Magnolia required role policy denied this operation.\", \"type\": \"text\"}], \"type\": \"skip\"}}, \"type\": \"hook_completed\"}",
+    "seq": 60,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"bd997974-652f-5980-8b48-2940cbf93fc4\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"reason\": [{\"text\": \"Magnolia required role policy denied this operation.\", \"type\": \"text\"}], \"type\": \"skip\"}}, \"type\": \"hook_completed\"}",
+    "seq": 71,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"f777613a-e6c0-5d12-aa65-775fd5821c43\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"reason\": [{\"text\": \"Magnolia required role policy denied this operation.\", \"type\": \"text\"}], \"type\": \"skip\"}}, \"type\": \"hook_completed\"}",
+    "seq": 82,
+    "state": "succeeded"
+   },
+   {
+    "hook": "pre_tool_call",
+    "result": "{\"action_id\": \"44ad1083-f688-5a17-b3eb-ca5d6f7900b5\", \"result\": {\"hook\": \"pre_tool_call\", \"output\": {\"reason\": [{\"text\": \"Magnolia required role policy denied this operation.\", \"type\": \"text\"}], \"type\": \"skip\"}}, \"type\": \"hook_completed\"}",
+    "seq": 93,
+    "state": "succeeded"
+   },
+   {
+    "hook": "post_agent_turn",
+    "result": "{\"action_id\": \"93c35c08-eb31-53dd-844a-83f18036392a\", \"result\": {\"hook\": \"post_agent_turn\", \"output\": {\"acceptance\": {\"type\": \"candidate\"}, \"type\": \"accept\"}}, \"type\": \"hook_completed\"}",
+    "seq": 103,
+    "state": "succeeded"
+   }
+  ],
+  "hooks": [
+   {
+    "action_id": "fd242d84-02d0-5113-bc84-b89b29bd0135",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-prompt",
+     "builtin:session_start_context"
+    ],
+    "call_id": null,
+    "hook": "pre_agent_turn",
+    "input_keys": [
+     "user_content"
+    ],
+    "seq": 4,
+    "tool": null
+   },
+   {
+    "action_id": "e26ffbce-7213-5632-b1c7-8125f253b280",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "EhwocTZIi",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 14,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "d9d936a0-8328-56c2-a583-21a9c1946fe2",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-post-tool",
+     "builtin:agents_md"
+    ],
+    "call_id": "EhwocTZIi",
+    "hook": "post_tool_call",
+    "input_keys": [
+     "duration_ms",
+     "tool_call",
+     "tool_result"
+    ],
+    "seq": 25,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "b1ac5f57-b96f-548a-9ecd-b7bef149e89c",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "dYqz0JGON",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 35,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "36050355-3adc-58ff-930f-72341624ab3c",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-post-tool",
+     "builtin:agents_md"
+    ],
+    "call_id": "dYqz0JGON",
+    "hook": "post_tool_call",
+    "input_keys": [
+     "duration_ms",
+     "tool_call",
+     "tool_result"
+    ],
+    "seq": 46,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "94e8ed72-3d64-5fbb-a71d-bca6d9dea4e8",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "X48GAwYwJ",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 56,
+    "tool": "file_system.write_file"
+   },
+   {
+    "action_id": "bd997974-652f-5980-8b48-2940cbf93fc4",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "Zx2XEQGqS",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 67,
+    "tool": "file_system.bash"
+   },
+   {
+    "action_id": "f777613a-e6c0-5d12-aa65-775fd5821c43",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "onwgUUyQ5",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 78,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "44ad1083-f688-5a17-b3eb-ca5d6f7900b5",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool"
+    ],
+    "call_id": "wGJQqJUJB",
+    "hook": "pre_tool_call",
+    "input_keys": [
+     "tool_call"
+    ],
+    "seq": 89,
+    "tool": "file_system.read_file"
+   },
+   {
+    "action_id": "93c35c08-eb31-53dd-844a-83f18036392a",
+    "bindings": [
+     "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-turn-end"
+    ],
+    "call_id": null,
+    "hook": "post_agent_turn",
+    "input_keys": [
+     "candidate"
+    ],
+    "seq": 100,
+    "tool": null
+   }
+  ],
+  "llm_calls": [
+   {
+    "iteration": 0,
+    "seq": 10,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 1,
+    "seq": 31,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 2,
+    "seq": 52,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 3,
+    "seq": 63,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 4,
+    "seq": 74,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 5,
+    "seq": 85,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   },
+   {
+    "iteration": 6,
+    "seq": 96,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-e8c524d9071c52de503867a409d0eb3d"
+   }
+  ],
+  "runtime": {
+   "active_model": "mistral-medium-3.5",
+   "agent_name": "auto-approve",
+   "children": [],
+   "hook_bindings": [
+    {
+     "id": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-prompt",
+     "order": 0,
+     "point": "pre_agent_turn",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-pre-tool",
+     "order": 1,
+     "point": "pre_tool_call",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-post-tool",
+     "order": 2,
+     "point": "post_tool_call",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance:magnolia-turn-end",
+     "order": 3,
+     "point": "post_agent_turn",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "builtin:agents_md",
+     "order": 4,
+     "point": "post_tool_call",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "builtin:session_start_context",
+     "order": 5,
+     "point": "pre_agent_turn",
+     "selector": {
+      "type": "always"
+     }
+    }
+   ],
+   "identity": {
+    "depth": 0,
+    "kind": "root",
+    "parent_session_id": null,
+    "root_session_id": "75945878-23a0-a590-8a64-4cdb99ce165a",
+    "session_id": "75945878-23a0-a590-8a64-4cdb99ce165a"
+   },
+   "tool_modes": {
+    "background_processes": "disabled",
+    "bash_timeout": null,
+    "command_environment": "unix",
+    "file_system": "enabled",
+    "large_output": "filesystem",
+    "max_wait_ms": 3600000,
+    "model_wait": "enabled",
+    "programmatic": null,
+    "subagents": "disabled"
+   }
+  },
+  "secret_in_session": false,
+  "segments": [
+   {
+    "file": "0000000000000001.jsonl",
+    "records": 106,
+    "seq": [
+     1,
+     106
+    ]
+   },
+   {
+    "file": "0000000000000107.jsonl",
+    "records": 0,
+    "seq": null
+   }
+  ],
+  "tools": [
+   {
+    "approval": {
+     "approvalSource": "bypass",
+     "approvalType": "always",
+     "decision": "execute"
+    },
+    "arguments": "{\"path\": \"docs/notes.md\"}",
+    "call_id": "EhwocTZIi",
+    "call_type": "runtime_builtin",
+    "error": null,
+    "name": "file_system.read_file",
+    "parent_call_id": null,
+    "result_excerpt": "{\"content\": \"# Harness P3 acceptance notes\\n\\nALLOWED: synthetic note for the live 12 gate. The answer to the synthetic question is 42.\\n\", \"file_size_bytes\": 121, \"lines_read\": 3, \"next_offset\": null\u2026",
+    "result_type": "tool_succeeded",
+    "seq": 20,
+    "state": "succeeded"
+   },
+   {
+    "approval": {
+     "approvalSource": "bypass",
+     "approvalType": "always",
+     "decision": "execute"
+    },
+    "arguments": "{\"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step2-reviewer/work/result.txt\"}",
+    "call_id": "dYqz0JGON",
+    "call_type": "runtime_builtin",
+    "error": null,
+    "name": "file_system.read_file",
+    "parent_call_id": null,
+    "result_excerpt": "{\"content\": \"RESULT: 42\\nSOURCE: docs/notes.md\\n\", \"file_size_bytes\": 33, \"lines_read\": 2, \"next_offset\": null, \"offset\": 0, \"path\": \"<tmp>",
+    "result_type": "tool_succeeded",
+    "seq": 41,
+    "state": "succeeded"
+   }
+  ]
+ }
+}

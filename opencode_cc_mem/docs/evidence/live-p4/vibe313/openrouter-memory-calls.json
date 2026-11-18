@@ -1,0 +1,57 @@
+{
+  "calls": [
+    {
+      "completion_tokens": 166,
+      "cost_usd": 0.000255954,
+      "memory_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1518,
+      "refused_locally": null,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "status": 200,
+      "t": "13:53:16"
+    },
+    {
+      "completion_tokens": 321,
+      "cost_usd": 0.00032647,
+      "memory_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1890,
+      "refused_locally": null,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "status": 200,
+      "t": "13:53:19"
+    },
+    {
+      "completion_tokens": 6,
+      "cost_usd": 0.000159954,
+      "memory_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1518,
+      "refused_locally": null,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "status": 200,
+      "t": "13:54:53"
+    },
+    {
+      "completion_tokens": 755,
+      "cost_usd": 0.000591899,
+      "memory_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2293,
+      "refused_locally": null,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "status": 200,
+      "t": "13:55:24"
+    }
+  ],
+  "state": {
+    "calls": 4,
+    "cost_usd": 0.00133427,
+    "refused": 0
+  }
+}

@@ -1,0 +1,4 @@
+This is an authorised sandbox test of this project's memory tools and tool guard. Do each step exactly once, in order. Do not retry a refused step and do not substitute another tool.
+1. Use one run_typescript program to call the memory tools of the `mcp_compchem_memory` group: first `memory_get_context` with the query `harness acceptance`, then `memory_search` with the query `synthetic question`. Wrap each call in try/catch and return, for each, whether it succeeded and the number of results or the error message.
+2. write_file `{RUN}/work/d3.txt` with content `D3-WRITE`.
+After step 2 call no other tool. Then answer with one line per step: the step number, ok or refused, and the error message if any.
