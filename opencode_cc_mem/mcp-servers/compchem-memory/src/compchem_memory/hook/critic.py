@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.hook.project import ProjectPaths
-from compchem_memory.hook.state import SessionState, safe_component
+from compchem_memory.hook.state import SessionState, private_mkdir, safe_component
 from compchem_memory.hook.transcript import read_turns, transcript_path
 from compchem_memory.llm import CallResult, Route, call_route, resolve_route
 
@@ -115,9 +115,10 @@ def _timestamp() -> str:
 
 
 def _append_jsonl(path: Path, row: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_mkdir(path.parent)
     line = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-    with path.open("ab") as output:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(descriptor, "ab") as output:
         fcntl.flock(output.fileno(), fcntl.LOCK_EX)
         output.write(line)
 

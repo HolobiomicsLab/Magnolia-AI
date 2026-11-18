@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping
 
+from compchem_memory.hook.state import private_mkdir
+
 
 def log_error(
     error: BaseException,
@@ -32,7 +34,7 @@ def log_error(
     data = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
     for destination in _destinations(store, env):
         try:
-            destination.mkdir(parents=True, exist_ok=True)
+            private_mkdir(destination)
             descriptor = os.open(
                 destination / "hook-errors.jsonl",
                 os.O_WRONLY | os.O_CREAT | os.O_APPEND,

@@ -29,7 +29,7 @@ from pathlib import Path
 from compchem_memory import quick_search, surfacing
 from compchem_memory.hook.events import HookEvent, canonical_tool
 from compchem_memory.hook.project import ProjectPaths
-from compchem_memory.hook.state import SessionState
+from compchem_memory.hook.state import SessionState, private_mkdir
 
 
 CACHE_TTL_SECONDS = 120.0
@@ -223,15 +223,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _log(paths: ProjectPaths, row: dict) -> None:
-    """Append one O_APPEND write per row without ever breaking a hook call."""
+def _log(paths: ProjectPaths, row: dict) -> bool:
+    """Append one O_APPEND write per row; return True only if it was written.
+
+    A failed write returns False instead of raising, so a probe can keep its
+    pending item for the next attempt.
+    """
     try:
-        paths.store.mkdir(parents=True, exist_ok=True)
+        private_mkdir(paths.store)
         data = json.dumps({"ts": _now(), **row}, ensure_ascii=False).encode("utf-8") + b"\n"
         descriptor = os.open(
             paths.store / "action-retrieval.jsonl",
             os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-            0o644,
+            0o600,
         )
         try:
             # Avoid BufferedWriter splitting a large row into interleavable writes.
@@ -241,8 +245,9 @@ def _log(paths: ProjectPaths, row: dict) -> None:
                 remaining = remaining[written:]
         finally:
             os.close(descriptor)
+        return True
     except Exception:  # noqa: BLE001 - telemetry is never session-critical
-        pass
+        return False
 
 
 def _coarse_row(event: HookEvent, tool_key: str, injected: int) -> dict:
@@ -502,32 +507,42 @@ def probe_application(
     session_id: str,
     reply_text: str,
 ) -> None:
-    """Probe pending notes using one short state transaction.
+    """Probe pending notes in one state transaction, removing each after its row.
 
-    The caller must not hold this session's state while calling this function.
+    An item leaves ``pending_application`` only once its ``application`` row is
+    written. A failed write keeps that item and every later item for the next
+    probe. A hard crash before the state is saved can write an item twice; the
+    analyzer deduplicates application rows by (sessionID, callID), so the
+    duplicate does not bias the rate. Malformed items are dropped. Holding the
+    state lock while logging keeps a concurrent probe of the same session from
+    writing the same items. The caller must not hold this session's state while
+    calling this function.
     """
     with SessionState.open(paths.store, harness, session_id) as state:
-        items = state.data.get("pending_application", [])
-        if not isinstance(items, list) or not items:
+        pending = state.data.get("pending_application", [])
+        if not isinstance(pending, list) or not pending:
             return
-        state.data["pending_application"] = []
-    reply = reply_text.lower()
-    for item in items:
-        try:
-            tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
-            matched = [token for token in tokens if token in reply]
-            applied = bool(tokens) and len(matched) >= min(2, len(tokens))
-            _log(
-                paths,
-                {
+        reply = reply_text.lower()
+        for item in list(pending):
+            try:
+                tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
+                matched = [token for token in tokens if token in reply]
+                row = {
                     "event": "application",
                     "sessionID": session_id,
                     "tool": item.get("tool"),
                     "callID": item.get("callID"),
-                    "applied": applied,
+                    "applied": bool(tokens) and len(matched) >= min(2, len(tokens)),
                     "matched": matched,
                     "distinct": len(tokens),
-                },
-            )
-        except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
-            continue
+                }
+            except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
+                pending.remove(item)
+                continue
+            try:
+                logged = _log(paths, row)
+            except Exception:  # noqa: BLE001 - keep this and later items for the next probe
+                logged = False
+            if not logged:
+                break
+            pending.remove(item)

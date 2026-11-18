@@ -1,6 +1,7 @@
 """Session mappings from the neutral hook and the legacy OpenCode plugin."""
 
 import json
+import os
 
 from compchem_memory.hook.sessions import iter_sessions, record_session
 
@@ -14,6 +15,20 @@ def test_record_session_once(tmp_path):
     assert rows[0]["harness"] == "claude-code" and rows[0]["session_id"] == "s1"
     assert rows[0]["directory"] == "/project" and rows[0]["transcript_ref"] == "transcript.jsonl"
     assert "ts" in rows[0]
+
+
+def test_record_session_files_are_private_regardless_of_umask(tmp_path):
+    previous_umask = os.umask(0o022)
+    try:
+        assert record_session(tmp_path, "claude-code", "s1", "/project", "transcript.jsonl") is True
+    finally:
+        os.umask(previous_umask)
+
+    directory = tmp_path / "hook-state"
+    marker = directory / "session-recorded-claude-code-s1"
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert marker.stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "agent-sessions.jsonl").stat().st_mode & 0o777 == 0o600
 
 
 def test_iter_sessions_merges_legacy(tmp_path):

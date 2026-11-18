@@ -27,16 +27,45 @@ KEY_VARS = (
 )
 
 DRIVER = r"""
-const [pluginPath, directory, replyKind, status] = process.argv.slice(2)
+const [pluginPath, directory, replyKind, status, bodyMode] = process.argv.slice(2)
 const verdict = { flag: true, severity: "low", unsupported_claims: ["x"], why: "no tool ran" }
 const calls = []
+const timeoutDelays = []
+const realSetTimeout = globalThis.setTimeout
+globalThis.setTimeout = (callback, delay, ...args) => {
+  timeoutDelays.push(delay)
+  if (bodyMode === "hang" && delay === 60_000) {
+    return realSetTimeout(callback, 0, ...args)
+  }
+  return realSetTimeout(callback, delay, ...args)
+}
+const order = []
+const realClearTimeout = globalThis.clearTimeout
+globalThis.clearTimeout = (handle) => {
+  order.push("clear")
+  return realClearTimeout(handle)
+}
 globalThis.fetch = async (url, init) => {
-  calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+  calls.push({
+    url, headers: init.headers, body: JSON.parse(init.body),
+    hasSignal: Boolean(init.signal), timeoutDelays: [...timeoutDelays],
+  })
+  if (bodyMode === "hang") {
+    return {
+      ok: true, status: 200,
+      json: () => new Promise((_, reject) => {
+        init.signal.addEventListener("abort", () => reject(new Error("aborted")))
+      }),
+    }
+  }
   const text = "```json\n" + JSON.stringify(verdict) + "\n```"
   const data = replyKind === "anthropic"
     ? { content: [{ type: "text", text }] }
     : { choices: [{ message: { content: text } }] }
-  return { ok: Number(status) < 400, status: Number(status), json: async () => data }
+  return {
+    ok: Number(status) < 400, status: Number(status),
+    json: async () => { order.push("json"); return data },
+  }
 }
 const mod = await import(pluginPath)
 const report = "The binding energy is -9.3 kcal/mol and the pose ranks first. ".repeat(5)
@@ -50,13 +79,14 @@ const client = {
 }
 const hooks = await mod.default.server({ client, directory })
 if (hooks.event) await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+for (const call of calls) call.order = order
 process.stdout.write(JSON.stringify(calls))
 """
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 
-def run_critic(tmp_path, env, reply_kind="openai", status=200):
+def run_critic(tmp_path, env, reply_kind="openai", status=200, body_mode="ok"):
     driver = tmp_path / "driver.mjs"
     driver.write_text(DRIVER)
     project = tmp_path / "project"
@@ -65,7 +95,7 @@ def run_critic(tmp_path, env, reply_kind="openai", status=200):
     full_env = {k: v for k, v in os.environ.items() if k not in KEY_VARS}
     full_env.update({"MAGNOLIA_CRITIC": "1", **env})
     proc = subprocess.run(
-        [NODE, str(driver), PLUGIN.as_uri(), str(project), reply_kind, str(status)],
+        [NODE, str(driver), PLUGIN.as_uri(), str(project), reply_kind, str(status), body_mode],
         env=full_env, capture_output=True, text=True, timeout=60,
     )
     if proc.returncode != 0 and "ERR_UNKNOWN_FILE_EXTENSION" in proc.stderr:
@@ -146,3 +176,51 @@ def test_http_error_is_logged_not_raised(tmp_path):
     calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"}, status=401)
     assert len(calls) == 1 and rows == []
     assert errors[0]["provider"] == "mistral" and "401" in errors[0]["error"]
+
+
+def test_judge_fetch_uses_python_route_timeout(tmp_path):
+    calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"})
+
+    assert calls[0]["hasSignal"] is True
+    assert calls[0]["timeoutDelays"] == [60_000]
+    assert len(rows) == 1 and errors == []
+
+
+def test_judge_timeout_covers_the_response_body(tmp_path):
+    calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"})
+
+    order = calls[0]["order"]
+    assert "json" in order and "clear" in order
+    assert order.index("json") < order.index("clear")
+
+
+def test_verdict_file_is_private_regardless_of_umask(tmp_path):
+    previous_umask = os.umask(0o022)
+    try:
+        calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"})
+    finally:
+        os.umask(previous_umask)
+
+    out = tmp_path / "project" / ".magnolia" / "claim-critic"
+    assert out.stat().st_mode & 0o777 == 0o700
+    assert (out / "s1.jsonl").stat().st_mode & 0o777 == 0o600
+
+
+def test_error_file_is_private_regardless_of_umask(tmp_path):
+    previous_umask = os.umask(0o022)
+    try:
+        calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"}, status=401)
+    finally:
+        os.umask(previous_umask)
+
+    out = tmp_path / "project" / ".magnolia" / "claim-critic"
+    assert out.stat().st_mode & 0o777 == 0o700
+    assert (out / "errors.jsonl").stat().st_mode & 0o777 == 0o600
+
+
+def test_judge_timeout_aborts_a_hanging_body(tmp_path):
+    calls, rows, errors = run_critic(tmp_path, {"MISTRAL_API_KEY": "mk"}, body_mode="hang")
+
+    assert calls and calls[0]["hasSignal"] is True
+    assert rows == []
+    assert errors and "abort" in errors[0]["error"].lower()

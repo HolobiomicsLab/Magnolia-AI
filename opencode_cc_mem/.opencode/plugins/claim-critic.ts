@@ -49,7 +49,7 @@
  * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
  * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
-import { appendFileSync, existsSync, mkdirSync } from "node:fs"
+import { appendFileSync, chmodSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
@@ -58,6 +58,7 @@ const MAX_OUTPUT_CHARS_OLD = 500    // tighter cap for older non-evidence tools
 const MAX_OUTPUT_CHARS_EVIDENCE = 0  // uncapped for tools that carry evidence (0 = no cap)
 const MAX_TRACE_CHARS = 80000        // total trace cap (larger: full-session scope)
 const MIN_REPORT_CHARS = 200         // skip trivial turns (acks, one-liners)
+const JUDGE_TIMEOUT_MS = 60_000       // matches compchem_memory.llm.call_route
 
 // Tools whose full output the judge needs to see (project memory, run history, etc.)
 const EVIDENCE_TOOLS = new Set([
@@ -193,23 +194,42 @@ async function judge(route: JudgeRoute, report: string, traceText: string): Prom
       ...(route.provider === "deepseek" || route.provider === "zai" ? { thinking: { type: "disabled" } } : {}),
     }
   }
-  const res = await fetch(route.url, { method: "POST", headers, body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
-  const data: any = await res.json()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS)
+  let data: any
+  try {
+    const res = await fetch(route.url, {
+      method: "POST", headers, body: JSON.stringify(body), signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status} from ${route.provider}`)
+    data = await res.json()  // the body read stays under the same timeout
+  } finally {
+    clearTimeout(timeout)
+  }
   const text = route.schema === "anthropic"
     ? (data?.content ?? []).find((b: any) => b?.type === "text")?.text ?? ""
     : data?.choices?.[0]?.message?.content ?? ""
   return parseVerdict(String(text))
 }
 
+function privateDir(path: string) {
+  mkdirSync(path, { recursive: true, mode: 0o700 })
+  try { chmodSync(path, 0o700) } catch { /* best effort */ }
+}
+
+function privateAppend(path: string, line: string) {
+  appendFileSync(path, line, { mode: 0o600 })
+  try { chmodSync(path, 0o600) } catch { /* best effort */ }
+}
+
 function logError(outDir: string, sessionID: string, route: JudgeRoute, err: unknown) {
   try {
-    mkdirSync(outDir, { recursive: true })
+    privateDir(outDir)
     const rec = {
       ts: new Date().toISOString(), sessionID, provider: route.provider, model: route.model,
       error: String((err as any)?.message ?? err).slice(0, 300),
     }
-    appendFileSync(join(outDir, "errors.jsonl"), JSON.stringify(rec) + "\n")
+    privateAppend(join(outDir, "errors.jsonl"), JSON.stringify(rec) + "\n")
   } catch {
     /* never throw into opencode */
   }
@@ -280,7 +300,7 @@ async function auditSession(
     }
 
     // Observe-only: log EVERY verdict (flagged or not) so we can measure precision later.
-    mkdirSync(outDir, { recursive: true })
+    privateDir(outDir)
     const rec = {
       ts: new Date().toISOString(),
       sessionID,
@@ -293,7 +313,7 @@ async function auditSession(
       n_tools: traceItems.length,
       report_preview: report.slice(0, 200),
     }
-    appendFileSync(join(outDir, `${sessionID}.jsonl`), JSON.stringify(rec) + "\n")
+    privateAppend(join(outDir, `${sessionID}.jsonl`), JSON.stringify(rec) + "\n")
 
     if (verdict?.flag) {
       toast("claim-audit", `⚠ (${rec.severity}) ${String(rec.why).slice(0, 140)}`, "warning")

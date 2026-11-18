@@ -1,6 +1,7 @@
 """Locked per-session state files."""
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +26,20 @@ def test_state_roundtrip(tmp_path):
         "injections": 2,
         "entry_counts": {"Read": 1},
     }
+
+
+def test_state_files_are_private_regardless_of_umask(tmp_path):
+    previous_umask = os.umask(0o022)
+    try:
+        with SessionState.open(tmp_path, "claude", "s1") as state:
+            state.data["injections"] = 1
+    finally:
+        os.umask(previous_umask)
+
+    directory = tmp_path / "hook-state"
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert (directory / "claude-s1.json").stat().st_mode & 0o777 == 0o600
+    assert (directory / "claude-s1.json.lock").stat().st_mode & 0o777 == 0o600
 
 
 def test_state_sanitises_session_id(tmp_path):

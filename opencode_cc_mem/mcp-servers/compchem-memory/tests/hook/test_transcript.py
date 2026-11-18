@@ -1,10 +1,24 @@
 """Harness-neutral transcript rows retain evidence without retaining secrets."""
 
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
 from compchem_memory.hook.transcript import append_event, read_turns, transcript_path
+
+
+def test_transcript_paths_are_private_regardless_of_umask(tmp_path):
+    previous_umask = os.umask(0o022)
+    try:
+        append_event(tmp_path, _event("prompt", prompt="private"))
+    finally:
+        os.umask(previous_umask)
+
+    path = transcript_path(tmp_path, "opencode", "ses-1")
+    assert path.parent.stat().st_mode & 0o777 == 0o700
+    assert path.parent.parent.stat().st_mode & 0o777 == 0o700
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 def _event(kind: str, **overrides) -> HookEvent:

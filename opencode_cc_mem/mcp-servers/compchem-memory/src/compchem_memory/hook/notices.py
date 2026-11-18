@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 
 from compchem_memory.atomic_io import atomic_write_text
@@ -29,6 +30,9 @@ _ICONS = {
     "infra_failure": "⚠️",
 }
 JOB_LIMIT = 10
+CRITIC_LIMIT = JOB_LIMIT
+NOTICE_LINE_LIMIT = 160
+NOTICE_TEXT_LIMIT = (JOB_LIMIT + CRITIC_LIMIT) * NOTICE_LINE_LIMIT + JOB_LIMIT + CRITIC_LIMIT - 1
 
 
 @dataclass
@@ -101,13 +105,17 @@ def peek_notices(paths: ProjectPaths, state: SessionState) -> Notices | None:
             jobs, job_lines, job_lock = _peek_jobs(str(paths.project_dir), JOB_LIMIT)
         lines = [_job_line(row) for row in jobs]
         queued = state.data.get("unshown_notices")
-        critic = [str(notice) for notice in queued] if isinstance(queued, list) else []
-        lines.extend(critic)
+        critic = [str(notice) for notice in queued[:CRITIC_LIMIT]] if isinstance(queued, list) else []
+        display = [
+            re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+", " ", notice).strip()
+            for notice in critic
+        ]
+        lines.extend(notice[:NOTICE_LINE_LIMIT] for notice in display)
         if not lines:
             if job_lock is not None:
                 job_lock.release()
             return None
-        return Notices("\n".join(lines), job_lines, critic, job_lock)
+        return Notices("\n".join(lines)[:NOTICE_TEXT_LIMIT], job_lines, critic, job_lock)
     except Exception:  # noqa: BLE001 - notices must never break a hook
         if job_lock is not None:
             job_lock.release()
