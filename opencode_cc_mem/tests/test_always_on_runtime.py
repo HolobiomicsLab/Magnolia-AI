@@ -271,6 +271,8 @@ def test_real_legacy_handle_task_boundary(tmp_path):
     spec.loader.exec_module(daemon)
 
     runtime, project = make_runtime(tmp_path)
+    # Helper admission requires a canonically registered lane.
+    (project / "agent.json").write_text(json.dumps({"enabled": True}))
     runtime.ingest(event("legacy-boundary", "use the real mailbox"))
     run = runtime.pump()
     seen = {}

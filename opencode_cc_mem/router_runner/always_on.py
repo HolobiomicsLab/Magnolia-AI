@@ -684,7 +684,10 @@ class AlwaysOnRuntime:
 
     def _start_run(self, wi: dict, events: list[dict]) -> dict:
         run_id = _new_id("aor")
-        letter = self.project_dir / "inbox" / "always-on-runs" / f"{run_id}.task.md"
+        # Helper admission accepts a letter only directly inside
+        # inbox/from-<sender> with a matching ``from:`` header; the runtime
+        # addresses its own lane, which is a same-checkout sender project.
+        letter = self.project_dir / "inbox" / f"from-{self.lane}" / f"{run_id}.task.md"
         reply = letter.with_name(f"{run_id}_reply.md")
         session_key = _safe_key(wi["thread_id"] or events[0]["thread_key"])
         try:
@@ -736,6 +739,7 @@ class AlwaysOnRuntime:
         memory = self.memory.load(run["thread_key"])
         lines = [
             "status: open",
+            f"from: {self.lane}",
             f"session-key: {run['session_key']}",
             f"always-on-run: {run['run_id']}",
             f"work_item: {run['work_item_id']}",

@@ -19,7 +19,7 @@ inbox/always-on/*.json       followup/schedule timers
                         |
             one batched run per lane
                         |
-        inbox/always-on-runs/<run>.task.md
+        inbox/from-<lane>/<run>.task.md
                         |
           EXISTING magnolia-agents-daemon
                         |

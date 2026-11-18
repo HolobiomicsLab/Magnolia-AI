@@ -547,7 +547,13 @@ def test_two_concurrent_evaluator_resumers_claim_exactly_once(tmp_path, monkeypa
     def synchronized_get(store, table, key_col, key):
         row = original_get(store, table, key_col, key)
         if table == "eval_waiters" and key == "waiter-race":
-            both_read_pending.wait(timeout=5)
+            # The control store serialises writers (BEGIN IMMEDIATE), so the
+            # second reader normally waits for the first commit instead of
+            # reaching the barrier; a broken barrier is the serialised outcome.
+            try:
+                both_read_pending.wait(timeout=0.5)
+            except threading.BrokenBarrierError:
+                pass
         return row
 
     monkeypatch.setattr(ControlStore, "get", synchronized_get)
