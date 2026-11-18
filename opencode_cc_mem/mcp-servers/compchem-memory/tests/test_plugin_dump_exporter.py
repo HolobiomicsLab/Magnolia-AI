@@ -60,25 +60,6 @@ def test_no_dump_uses_cli(tmp_path, monkeypatch):
     assert plugin_dump_exporter(str(store))("ses_c") == {"messages": []}
 
 
-def test_v2_mode_skips_cli_fallback(tmp_path, monkeypatch):
-    """A missing v2 session must not shell out to the v1 export CLI.
-
-    2026-11-16: the v1 CLI opened the v2 DB, failed, and the MCP connection
-    dropped at the same moment. Missing sessions are retried next boot.
-    """
-    store = _store(tmp_path)
-    called = {"cli": 0}
-
-    def fake_cli(sid):
-        called["cli"] += 1
-        return {"messages": []}
-
-    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "v2.db"))
-    monkeypatch.setattr("compchem_memory.opencode_ingest.export_session", fake_cli)
-    assert plugin_dump_exporter(str(store))("ses_missing") is None
-    assert called["cli"] == 0
-
-
 def test_live_exporter_never_reads_worker_dump(tmp_path, monkeypatch):
     store = _store(tmp_path)
     dump_dir = store / "opencode-transcripts"
@@ -126,6 +107,25 @@ def test_ingest_startup_path_drains_pending_turn_payloads(tmp_path, monkeypatch)
     ingest_opencode_sessions(str(store), distiller=lambda _text: [])
 
     assert calls == [store]
+
+
+def test_v2_mode_skips_cli_fallback(tmp_path, monkeypatch):
+    """A missing v2 session must not shell out to the v1 export CLI.
+
+    2026-11-16: the v1 CLI opened the v2 DB, failed, and the MCP connection
+    dropped at the same moment. Missing sessions are retried next boot.
+    """
+    store = _store(tmp_path)
+    called = {"cli": 0}
+
+    def fake_cli(sid):
+        called["cli"] += 1
+        return {"messages": []}
+
+    monkeypatch.setenv("OPENCODE_DB", str(tmp_path / "v2.db"))
+    monkeypatch.setattr("compchem_memory.opencode_ingest.export_session", fake_cli)
+    assert plugin_dump_exporter(str(store))("ses_missing") is None
+    assert called["cli"] == 0
 
 
 def test_export_session_tries_v2_form_after_v1(tmp_path, monkeypatch):

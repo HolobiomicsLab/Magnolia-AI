@@ -392,7 +392,7 @@ def _enable_campaign_role(context: ExecContext, role: str) -> None:
     if role == "worker":
         servers["compchem-memory"] = {
             "command": "/venv/bin/python",
-            "args": ISOLATED_MEMORY_ARGS,
+            "args": WORKER_MEMORY_ARGS,
             "env_vars": ["MAGNOLIA_PROJECT_DIR", "PYTHONPYCACHEPREFIX"],
             "tools": {
                 name: {"approval_mode": "approve"}
