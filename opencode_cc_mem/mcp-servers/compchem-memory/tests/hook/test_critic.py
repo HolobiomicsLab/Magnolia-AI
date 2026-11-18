@@ -378,6 +378,28 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
 
 
+def test_critic_verdict_is_private_regardless_of_umask(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    verdict = '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'
+    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(verdict, "stop", "resolved", None, 200))
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+
+    previous_umask = os.umask(0o022)
+    try:
+        critic.run_critic(paths, "claude", "s1", None)
+    finally:
+        os.umask(previous_umask)
+
+    directory = paths.store / "claim-critic"
+    assert directory.stat().st_mode & 0o777 == 0o700
+    assert (directory / "s1.jsonl").stat().st_mode & 0o777 == 0o600
+
+
 def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     paths = _paths(tmp_path)
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")

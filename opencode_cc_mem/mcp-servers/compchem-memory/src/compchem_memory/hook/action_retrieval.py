@@ -29,7 +29,7 @@ from pathlib import Path
 from compchem_memory import quick_search, surfacing
 from compchem_memory.hook.events import HookEvent, canonical_tool
 from compchem_memory.hook.project import ProjectPaths
-from compchem_memory.hook.state import SessionState
+from compchem_memory.hook.state import SessionState, private_mkdir
 
 
 CACHE_TTL_SECONDS = 120.0
@@ -226,12 +226,12 @@ def _now() -> str:
 def _log(paths: ProjectPaths, row: dict) -> None:
     """Append one O_APPEND write per row without ever breaking a hook call."""
     try:
-        paths.store.mkdir(parents=True, exist_ok=True)
+        private_mkdir(paths.store)
         data = json.dumps({"ts": _now(), **row}, ensure_ascii=False).encode("utf-8") + b"\n"
         descriptor = os.open(
             paths.store / "action-retrieval.jsonl",
             os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-            0o644,
+            0o600,
         )
         try:
             # Avoid BufferedWriter splitting a large row into interleavable writes.

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Iterator
 
-from compchem_memory.hook.state import safe_component
+from compchem_memory.hook.state import private_mkdir, safe_component
 from compchem_memory.hook.transcript import _append_jsonl, _timestamp
 
 
@@ -16,10 +16,10 @@ def record_session(
 ) -> bool:
     """Record a session once, using an exclusive marker before its locked append."""
     directory = Path(store) / "hook-state"
-    directory.mkdir(parents=True, exist_ok=True)
+    private_mkdir(directory)
     name = f"session-recorded-{safe_component(harness)}-{safe_component(session_id)}"
     try:
-        descriptor = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        descriptor = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
         return False
     os.close(descriptor)
