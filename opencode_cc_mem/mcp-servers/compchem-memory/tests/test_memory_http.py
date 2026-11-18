@@ -1016,8 +1016,8 @@ def test_memory_bound_tool_call_ignores_cross_project_argument(tmp_path, monkeyp
         server._resolve_project_store()
 
 
-def test_project_binding_middleware_refuses_every_tool_before_dispatch(
-    tmp_path, monkeypatch
+def test_project_binding_middleware_ignores_cross_project_tool_arguments(
+    tmp_path, monkeypatch, caplog
 ):
     bound = tmp_path / "bound"
     other = tmp_path / "other"
@@ -1040,7 +1040,7 @@ def test_project_binding_middleware_refuses_every_tool_before_dispatch(
     dispatched = []
 
     async def call_next(context):
-        dispatched.append(context.message.name)
+        dispatched.append((context.message.name, context.message.arguments["project_dir"]))
         return None
 
     async def exercise():
@@ -1054,15 +1054,40 @@ def test_project_binding_middleware_refuses_every_tool_before_dispatch(
                 ),
                 method="tools/call",
             )
-            with pytest.raises(ToolError, match="bound to project"):
-                await middleware.on_call_tool(context, call_next)
+            await middleware.on_call_tool(context, call_next)
 
-    asyncio.run(exercise())
+    with caplog.at_level("WARNING", logger=memory_http.LOGGER.name):
+        asyncio.run(exercise())
+        asyncio.run(exercise())
 
     after = {path.relative_to(store): path.read_bytes() for path in store.rglob("*") if path.is_file()}
     assert len(tools) == 26
-    assert dispatched == []
+    assert dispatched == [(name, str(bound)) for name in tools] * 2
     assert after == before
+    assert caplog.text.count("ignored model-supplied project_dir") == 1
+    assert str(other) not in caplog.text
+
+
+def test_project_binding_middleware_refuses_cross_project_write_override(
+    tmp_path,
+):
+    middleware = memory_http.ProjectBindingMiddleware(tmp_path)
+    context = MiddlewareContext(
+        message=mt.CallToolRequestParams(
+            name="memory_record_learning",
+            arguments={
+                "project_dir": str(tmp_path / "other"),
+                "allow_cross_project": True,
+            },
+        ),
+        method="tools/call",
+    )
+
+    async def call_next(context):
+        raise AssertionError("cross-project write reached dispatch")
+
+    with pytest.raises(ToolError, match="cross-project request refused"):
+        asyncio.run(middleware.on_call_tool(context, call_next))
 
 
 def test_project_binding_middleware_refuses_header_and_resource_before_dispatch(
@@ -1206,14 +1231,12 @@ def test_real_loopback_service_auth_and_release(tmp_path, monkeypatch):
                     tuple(await client.list_prompts()),
                 )
 
-        refused, resources, templates, prompts = asyncio.run(cross_project_call())
+        rebound, resources, templates, prompts = asyncio.run(cross_project_call())
         assert resources == templates == prompts == ()
         message = " ".join(
-            getattr(item, "text", "") for item in refused.content
+            getattr(item, "text", "") for item in rebound.content
         )
-        assert refused.is_error is True
-        assert "bound to project" in message
-        assert str(project.resolve()) in message
+        assert rebound.is_error is not True
         assert str(other.resolve()) not in message
     finally:
         assert release_memory_service(handle) is True

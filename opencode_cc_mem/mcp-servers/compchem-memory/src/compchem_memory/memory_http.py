@@ -449,10 +449,11 @@ def _request_project_headers() -> tuple[str, ...]:
 
 
 class ProjectBindingMiddleware(Middleware):
-    """Reject cross-project HTTP messages before mounted tools or resources run."""
+    """Bind headers and writes while ignoring model-supplied project arguments."""
 
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = project_dir.expanduser().resolve()
+        self._ignored_project_argument = False
 
     def _validate(self, value: Any) -> None:
         if value in (None, ""):
@@ -467,6 +468,20 @@ class ProjectBindingMiddleware(Middleware):
     def _validate_header(self) -> None:
         for value in _request_project_headers():
             self._validate(value)
+
+    def _bind_tool_arguments(self, arguments: dict[str, Any]) -> None:
+        project_dir = arguments.get("project_dir")
+        if project_dir in (None, ""):
+            return
+        target = Path(str(project_dir)).expanduser().resolve()
+        if target == self.project_dir:
+            return
+        if arguments.get("allow_cross_project") is True:
+            self._validate(project_dir)
+        arguments["project_dir"] = str(self.project_dir)
+        if not self._ignored_project_argument:
+            LOGGER.warning("ignored model-supplied project_dir for bound memory server")
+            self._ignored_project_argument = True
 
     async def on_request(
         self,
@@ -484,7 +499,7 @@ class ProjectBindingMiddleware(Middleware):
         self._validate_header()
         arguments = getattr(context.message, "arguments", None)
         if isinstance(arguments, dict):
-            self._validate(arguments.get("project_dir"))
+            self._bind_tool_arguments(arguments)
         return await call_next(context)
 
     async def check_resource_access(self, context: MiddlewareContext[Any]) -> None:
