@@ -88,6 +88,37 @@ from .process import _resolve_executable
 from .roles import RolePolicy, load_role
 
 
+_IDENTITY_PLACEHOLDER_PRECEDENCE = {
+    name: rank
+    for rank, name in enumerate(
+        (
+            "{project_dir}",
+            "{run_dir}",
+            "{invocation_dir}",
+            "{control_dir}",
+            "{work_dir}",
+            "{installation_root}",
+            "{workspace_root}",
+            "{python_executable}",
+            "{project_identity}",
+            "{services_root}",
+            "{memory_service_url}",
+        )
+    )
+}
+
+
+def _identity_replacement_sort_key(item: tuple[str, str]) -> tuple[int, int, str]:
+    spelling, placeholder = item
+    return (
+        -len(spelling),
+        _IDENTITY_PLACEHOLDER_PRECEDENCE.get(
+            placeholder, len(_IDENTITY_PLACEHOLDER_PRECEDENCE)
+        ),
+        spelling,
+    )
+
+
 FORBIDDEN_CLIENT_ENV = frozenset(
     {
         "CLAUDE_CONFIG_DIR",
@@ -610,7 +641,7 @@ def _normalized_launch_identity(
         if isinstance(service_url, str) and service_url:
             replacements.append((service_url, "{memory_service_url}"))
     normalized_replacements = tuple(
-        sorted(set(replacements), key=lambda item: len(item[0]), reverse=True)
+        sorted(set(replacements), key=_identity_replacement_sort_key)
     )
     normalized_native = {
         name: _normalize_identity_body(body, normalized_replacements)
@@ -1195,7 +1226,7 @@ def _identity_replacements(
         replacements.append((context.project_identity, "{project_identity}"))
     services_root = private_services_root(_launcher_environment(context))
     replacements.append((str(services_root), "{services_root}"))
-    return tuple(sorted(set(replacements), key=lambda item: len(item[0]), reverse=True))
+    return tuple(sorted(set(replacements), key=_identity_replacement_sort_key))
 
 
 def _normalize_identity_body(

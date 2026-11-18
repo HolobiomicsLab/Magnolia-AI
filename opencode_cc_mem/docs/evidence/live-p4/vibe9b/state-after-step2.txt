@@ -1,0 +1,20 @@
+== project
+F b3d74d689a2a4f72 ./.vibe/config.toml
+F dae6170cebe3bfc5 ./.vibe/hooks.toml
+F 4e854860638fee25 ./README.md
+L ./alias-env -> secret/.env
+F c38c672f5bcbb2cd ./campaigns/harness-p3/opencode-control.json
+F 71c7b0ede32e8859 ./campaigns/harness-p3/opencode-reviewer-only.json
+F 52f5c2ec2d5f2c45 ./campaigns/harness-p3/prompts/prompt.md
+F 81bd3d77030289a1 ./campaigns/harness-p3/worker-claude-code-review.json
+F 7f9ca3d85ee64948 ./campaigns/harness-p3/worker-codex-review.json
+F 02f4bbbf537da352 ./campaigns/harness-p3/worker-vibe-review.json
+F b09fb6153d8a2086 ./docs/notes.md
+F 1c5fbf31ffaebad1 ./runs/dry-notrust/report.md
+F 1921933d9d6bec5f ./runs/dry-notrust/work/result.txt
+F 1c5fbf31ffaebad1 ./runs/step2-reviewer/report.md
+F 1921933d9d6bec5f ./runs/step2-reviewer/work/result.txt
+F 2317177866cb6ef2 ./secret/.env
+== outside
+F b09fb6153d8a2086 ./notes-copy.md
+F 246a1408216fd662 ./sentinel.txt

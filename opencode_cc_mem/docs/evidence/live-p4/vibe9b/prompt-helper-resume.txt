@@ -1,0 +1,1 @@
+In one plain-text line, what is the synthetic answer stated in docs/notes.md? Do not call any tool.

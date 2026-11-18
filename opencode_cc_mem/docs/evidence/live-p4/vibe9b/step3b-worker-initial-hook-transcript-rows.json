@@ -1,0 +1,143 @@
+{
+  "rows": [
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:04:09.845Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:04:09.866Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:04:09.981Z"
+    },
+    {
+      "call_id": "i1cHrOfmc",
+      "input": {
+        "content": "D4-WRITE",
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt"
+      },
+      "is_error": null,
+      "name": "write",
+      "phase": "pre",
+      "ts": "2026-11-18T06:04:16.065Z"
+    },
+    {
+      "call_id": "i1cHrOfmc",
+      "input": {
+        "content": "D4-WRITE",
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt"
+      },
+      "is_error": false,
+      "name": "write",
+      "output_excerpt": "bytes_written: 8\nfile_existed: False\npath: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/",
+      "phase": "post",
+      "ts": "2026-11-18T06:04:16.133Z"
+    },
+    {
+      "call_id": "aMhT2XEqu",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt",
+        "new_string": "D4-EDITED",
+        "old_string": "D4-WRITE"
+      },
+      "is_error": null,
+      "name": "edit",
+      "phase": "pre",
+      "ts": "2026-11-18T06:04:17.635Z"
+    },
+    {
+      "call_id": "aMhT2XEqu",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt",
+        "new_string": "D4-EDITED",
+        "old_string": "D4-WRITE"
+      },
+      "is_error": false,
+      "name": "edit",
+      "output_excerpt": "file: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt\nlines_changed: 1\nwarnings",
+      "phase": "post",
+      "ts": "2026-11-18T06:04:17.701Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:04:17.717Z"
+    },
+    {
+      "call_id": "1VRcpjyVZ",
+      "input": {
+        "content": "OUT",
+        "file_path": "<OUTSIDE>/direct-out.txt"
+      },
+      "is_error": null,
+      "name": "write",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:04:19.004Z"
+    },
+    {
+      "call_id": "typescript:9:2oGQ8jkzd:0:tool:0",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt",
+        "new_string": "D4-NESTED",
+        "old_string": "D4-EDITED"
+      },
+      "is_error": null,
+      "name": "edit",
+      "phase": "pre",
+      "ts": "2026-11-18T06:04:21.741Z"
+    },
+    {
+      "call_id": "typescript:9:2oGQ8jkzd:0:tool:0",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt",
+        "new_string": "D4-NESTED",
+        "old_string": "D4-EDITED"
+      },
+      "is_error": false,
+      "name": "edit",
+      "output_excerpt": "file: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/d4.txt\nlines_changed: 1\nwarnings",
+      "phase": "post",
+      "ts": "2026-11-18T06:04:21.808Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:04:21.823Z"
+    },
+    {
+      "call_id": "typescript:9:2oGQ8jkzd:1:tool:1",
+      "input": {
+        "file_path": "<OUTSIDE>/notes-copy.md",
+        "new_string": "CHANGED",
+        "old_string": "ALLOWED"
+      },
+      "is_error": null,
+      "name": "edit",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:04:21.889Z"
+    },
+    {
+      "call_id": "rENth4G63",
+      "input": {
+        "command": "printf BASH_RAN > <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3b-worker/work/bash.txt",
+        "timeout": 120
+      },
+      "is_error": null,
+      "name": "bash",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:04:24.561Z"
+    },
+    {
+      "kind": "assistant",
+      "ts": "2026-11-18T06:04:26.897Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:04:26.901Z"
+    }
+  ],
+  "transcript_present": true
+}

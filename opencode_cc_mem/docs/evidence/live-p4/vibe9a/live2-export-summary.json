@@ -1,0 +1,35 @@
+{
+ "outcome": "finished",
+ "stop_reason": null,
+ "error": null,
+ "steps": 2,
+ "usage": {
+  "input_tokens": 45678,
+  "output_tokens": 3278,
+  "cached_input_tokens": 41984,
+  "total_tokens": 48956
+ },
+ "cost_usd": 0.0364236,
+ "exit_code": 0,
+ "vibe_version": "3.1.2",
+ "limits": {
+  "max_turns": 30,
+  "max_price": null,
+  "max_tokens": null,
+  "time_limit_s": null
+ },
+ "warnings": [
+  {
+   "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+   "source": null
+  }
+ ],
+ "active_model": "mistral-medium-3.5",
+ "enabled_tools": [],
+ "disabled_tools": [
+  "bash",
+  "bash",
+  "ask_user_question",
+  "cron"
+ ]
+}

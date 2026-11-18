@@ -6,12 +6,16 @@ import copy
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tomllib
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from campaign_runner.executors import ExecutorRefused
+from campaign_runner.executors.contracts import ExecContext
 from campaign_runner.executors.vibe import VibeExecutor
 from campaign_runner.launch import ROLE_CONFIG_NAMES
 from campaign_runner.roles import load_role
@@ -93,6 +97,8 @@ def _candidate_rows():
         row["gate"]["status"] = "observed"
         row["stale"] = False
     candidates["vibe"] = project_role_capabilities(table)["vibe"]
+    for evidence in candidates["vibe"].values():
+        evidence.pop("launch_identity", None)
     return vibe_rows, candidates["vibe"]
 
 
@@ -342,29 +348,99 @@ def test_vibe_p4_candidate_readonly_roles_dry_run(tmp_path, monkeypatch):
     assert acquired == []
 
 
-def test_vibe_p4_production_rows_remain_refused_and_unobserved(tmp_path):
+def test_vibe_p4_production_rows_require_identity_match_not_blanket_refusal(tmp_path):
     table = load_capability_table()
     vibe_rows = [row for row in table["rows"] if row["client"] == "vibe"]
     production = project_role_capabilities(table)["vibe"]
     _, candidate = _candidate_rows()
 
     assert all(candidate[role]["accepted"] for role in ROLES)
-    assert all(not production[role]["accepted"] for role in ROLES)
-    assert all(row["cells"]["model_delivery"]["status"] != "observed" for row in vibe_rows)
-    assert all(row["cells"]["vibe_memory"]["status"] != "observed" for row in vibe_rows)
+    assert all(production[role]["accepted"] for role in ROLES)
+    assert all(row["cells"]["model_delivery"]["status"] == "observed" for row in vibe_rows)
+    assert production["worker"]["vibe_memory"] is True
     for role in ROLES:
         from test_executor_vibe import _context
 
         context = _context(tmp_path / role, role=role)
+        binary, sentinel, _ = _fake_vibe_environment(tmp_path / role)
+        memory_service = context.memory_service
+        environment = context.environment
+        if role == "worker":
+            token_file = tmp_path / role / "memory-token"
+            token_file.write_text("offline-memory-bearer-sentinel\n", encoding="utf-8")
+            token_file.chmod(0o600)
+            memory_service = {
+                "transport": "http",
+                "url": "http://127.0.0.1:9876/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            }
+            environment = {
+                **environment,
+                "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+            }
         context = replace(
-            context, role_capabilities={"vibe": {role: production[role]}}
+            context,
+            route=replace(context.route, model="mistral-medium-3.5"),
+            launch_argv=(str(binary),),
+            python_executable=sys.executable,
+            memory_service=memory_service,
+            environment={**environment, "MAGNOLIA_PYTHON": sys.executable},
+            role_capabilities={"vibe": {role: copy.deepcopy(production[role])}},
         )
-        try:
+        with pytest.raises(ExecutorRefused, match="capability launch identity mismatch"):
             prepare_launch(context)
-        except ExecutorRefused as exc:
-            assert "missing accepted launch capability evidence" in str(exc)
-        else:
-            raise AssertionError("a production Vibe row must not be accepted offline")
+        assert not sentinel.exists(), "an identity mismatch must refuse before spawn"
+
+
+def _tied_identity_context(tmp_path):
+    shared = tmp_path / "shared"
+    return ExecContext(
+        route=None,
+        role="worker",
+        project_dir=shared,
+        run_dir=shared,
+        control_dir=tmp_path / "control",
+        work_dir=tmp_path / "work",
+        installation_root=tmp_path / "installation",
+        workspace_root=tmp_path,
+        environment={"HOME": str(tmp_path)},
+    )
+
+
+def test_identity_replacements_are_deterministic_when_run_and_project_dirs_tie(
+    tmp_path,
+):
+    program = """
+import json
+import sys
+from pathlib import Path
+from campaign_runner.launch import _identity_replacements, _replace_identity_text
+sys.path.insert(0, sys.argv[2])
+from test_executor_vibe_p4_candidate import _tied_identity_context
+context = _tied_identity_context(Path(sys.argv[1]))
+replacements = _identity_replacements(context, Path(sys.argv[1]) / "invocation")
+print(json.dumps([replacements, _replace_identity_text(str(context.project_dir), replacements)]))
+"""
+    outputs = []
+    for seed in ("1", "2", "3"):
+        outputs.append(
+            subprocess.check_output(
+                [sys.executable, "-c", program, str(tmp_path), str(Path(__file__).parent)],
+                env={**os.environ, "PYTHONHASHSEED": seed},
+                text=True,
+            )
+        )
+
+    results = [json.loads(output) for output in outputs]
+    assert results[1:] == [results[0]] * (len(results) - 1)
+    replacements, normalized = results[0]
+    shared = tmp_path / "shared"
+    assert normalized == "{project_dir}"
+    assert [placeholder for path, placeholder in replacements if path == str(shared)] == [
+        "{project_dir}",
+        "{run_dir}",
+    ]
 
 
 def test_vibe_p4_identity_diff_is_explicit_and_relocation_stable(tmp_path, monkeypatch):

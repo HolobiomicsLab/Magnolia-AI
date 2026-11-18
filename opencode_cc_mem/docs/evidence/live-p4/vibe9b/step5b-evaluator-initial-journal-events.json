@@ -1,0 +1,70 @@
+[
+  {
+    "decision": "continue",
+    "hook": "pre_agent_turn",
+    "kind": "hook",
+    "seq": 4
+  },
+  {
+    "kind": "llm_call",
+    "model_tool_calls": [],
+    "seq": 10,
+    "tool_catalog": [
+      "todo",
+      "unified_harness_scratchpad",
+      "search_tool_functions",
+      "run_typescript",
+      "read_file",
+      "write_file",
+      "edit",
+      "bash",
+      "skill"
+    ],
+    "tool_catalog_keys": [
+      "revision",
+      "tools",
+      "type"
+    ]
+  },
+  {
+    "arguments": {
+      "path": "secret/.env"
+    },
+    "call_id": "LqG9PrYSY",
+    "call_type": "runtime_builtin",
+    "decision": "skip",
+    "hook": "pre_tool_call",
+    "kind": "hook",
+    "reason": "Magnolia required role policy denied this operation.",
+    "seq": 14,
+    "tool_name_on_wire": "file_system.read_file"
+  },
+  {
+    "arguments": {
+      "content": "E",
+      "path": "docs/eval-note.txt"
+    },
+    "call_id": "UKlqiv0VL",
+    "call_type": "runtime_builtin",
+    "decision": "skip",
+    "hook": "pre_tool_call",
+    "kind": "hook",
+    "reason": "Magnolia required role policy denied this operation.",
+    "seq": 15,
+    "tool_name_on_wire": "file_system.write_file"
+  },
+  {
+    "arguments": {
+      "command": "ls",
+      "timeout_seconds": 120
+    },
+    "call_id": "LiKc99lwA",
+    "call_type": "runtime_builtin",
+    "decision": "skip",
+    "hook": "pre_tool_call",
+    "kind": "hook",
+    "reason": "Magnolia required role policy denied this operation.",
+    "seq": 16,
+    "tool_name_on_wire": "file_system.bash"
+  }
+]

@@ -1,0 +1,321 @@
+[
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 8,
+    "outcome": {
+      "kind": "turn_limit",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step2-reviewer",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "reviewer",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 261888,
+      "cache_write_tokens": null,
+      "cached_tokens": 261888,
+      "completeness": "partial",
+      "cost": 0.1060347,
+      "duration_seconds": 26.64459454268217,
+      "input_tokens": 300894,
+      "output_tokens": 1099,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 8,
+      "uncached_input_tokens": 39006
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 8,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step2-reviewer",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "reviewer",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 69888,
+      "cache_write_tokens": null,
+      "cached_tokens": 69888,
+      "completeness": "partial",
+      "cost": 0.0709962,
+      "duration_seconds": 21.346306999213994,
+      "input_tokens": 105715,
+      "output_tokens": 903,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 2,
+      "uncached_input_tokens": 35827
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 30,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step3-worker",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "worker",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 422656,
+      "cache_write_tokens": null,
+      "cached_tokens": 422656,
+      "completeness": "partial",
+      "cost": 0.15400439999999999,
+      "duration_seconds": 47.3672271668911,
+      "input_tokens": 464475,
+      "output_tokens": 3717,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 12,
+      "uncached_input_tokens": 41819
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 30,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step3-worker",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "worker",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 73984,
+      "cache_write_tokens": null,
+      "cached_tokens": 73984,
+      "completeness": "partial",
+      "cost": 0.07232010000000001,
+      "duration_seconds": 18.71926762536168,
+      "input_tokens": 113784,
+      "output_tokens": 203,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 2,
+      "uncached_input_tokens": 39800
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 30,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step3b-worker",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "worker",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 206976,
+      "cache_write_tokens": null,
+      "cached_tokens": 206976,
+      "completeness": "partial",
+      "cost": 0.0683244,
+      "duration_seconds": 21.210425125434995,
+      "input_tokens": 225398,
+      "output_tokens": 1286,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 6,
+      "uncached_input_tokens": 18422
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 40,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step4-helper",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "helper",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 279424,
+      "cache_write_tokens": null,
+      "cached_tokens": 279424,
+      "completeness": "partial",
+      "cost": 0.0782526,
+      "duration_seconds": 20.38855883292854,
+      "input_tokens": 297485,
+      "output_tokens": 1233,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 8,
+      "uncached_input_tokens": 18061
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 40,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step4-helper",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "helper",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 2816,
+      "cache_write_tokens": null,
+      "cached_tokens": 2816,
+      "completeness": "partial",
+      "cost": 0.0775704,
+      "duration_seconds": 17.86532283294946,
+      "input_tokens": 53628,
+      "output_tokens": 124,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 1,
+      "uncached_input_tokens": 50812
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 1,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step5-evaluator",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "evaluator",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 17280,
+      "cache_write_tokens": null,
+      "cached_tokens": 17280,
+      "completeness": "partial",
+      "cost": 0.0327105,
+      "duration_seconds": 9.758496584370732,
+      "input_tokens": 36499,
+      "output_tokens": 172,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 1,
+      "uncached_input_tokens": 19219
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 1,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step5-evaluator",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "evaluator",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 20864,
+      "cache_write_tokens": null,
+      "cached_tokens": 20864,
+      "completeness": "partial",
+      "cost": 0.0510006,
+      "duration_seconds": 13.649980083107948,
+      "input_tokens": 51983,
+      "output_tokens": 159,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 1,
+      "uncached_input_tokens": 31119
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 30,
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "campaign:harness-p3-worker-vibe-review:live9b-c1",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "worker",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 132608,
+      "cache_write_tokens": null,
+      "cached_tokens": 132608,
+      "completeness": "partial",
+      "cost": 0.052111199999999996,
+      "duration_seconds": 16.024866125546396,
+      "input_tokens": 150373,
+      "output_tokens": 743,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 4,
+      "uncached_input_tokens": 17765
+    }
+  },
+  {
+    "billing": "subscription",
+    "client": "vibe",
+    "effective_cap": 1,
+    "outcome": {
+      "kind": "turn_limit",
+      "limit": null
+    },
+    "parent_run_id": "live9b:step5b-evaluator",
+    "resolved_model": "mistral-medium-3.5",
+    "run_kind": "evaluator",
+    "session_identity_present": true,
+    "subscription_key": "vibe",
+    "usage": {
+      "cache_creation_tokens": null,
+      "cache_read_tokens": 20864,
+      "cache_write_tokens": null,
+      "cached_tokens": 20864,
+      "completeness": "partial",
+      "cost": 0.0303546,
+      "duration_seconds": 10.98307429254055,
+      "input_tokens": 36824,
+      "output_tokens": 438,
+      "reasoning_tokens": null,
+      "source": "vibe-export-json",
+      "turns": 1,
+      "uncached_input_tokens": 15960
+    }
+  }
+]

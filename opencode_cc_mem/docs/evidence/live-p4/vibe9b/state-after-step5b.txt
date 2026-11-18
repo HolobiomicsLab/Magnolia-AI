@@ -1,0 +1,46 @@
+== project
+F b3d74d689a2a4f72 ./.vibe/config.toml
+F dae6170cebe3bfc5 ./.vibe/hooks.toml
+F 4e854860638fee25 ./README.md
+L ./alias-env -> secret/.env
+F c38c672f5bcbb2cd ./campaigns/harness-p3/opencode-control.json
+F 71c7b0ede32e8859 ./campaigns/harness-p3/opencode-reviewer-only.json
+F 52f5c2ec2d5f2c45 ./campaigns/harness-p3/prompts/prompt.md
+F 81bd3d77030289a1 ./campaigns/harness-p3/worker-claude-code-review.json
+F 7f9ca3d85ee64948 ./campaigns/harness-p3/worker-codex-review.json
+F 02f4bbbf537da352 ./campaigns/harness-p3/worker-vibe-review.json
+F b09fb6153d8a2086 ./docs/notes.md
+F 1c5fbf31ffaebad1 ./runs/dry-notrust/report.md
+F 1921933d9d6bec5f ./runs/dry-notrust/work/result.txt
+F 2f1884b66430ae5a ./runs/live9b-c1/attempts/work/001/receipt.json
+F 32ef50c1f9766c23 ./runs/live9b-c1/attempts/work/001/worker_1.err.log
+F 48e29c14ffce7ddd ./runs/live9b-c1/attempts/work/001/worker_1.jsonl
+F 2806b83bc09a3a72 ./runs/live9b-c1/attempts/work/001/worker_1.out/export.json
+F f8ceece7ccbe153e ./runs/live9b-c1/attempts/work/001/worker_1.out/session/CURRENT
+F 3e5c026e265f8767 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/chunks/73433eb0b6ccb0387d6d2b42ac2ddd84ddd675449583f7553170afa5f77a8c65.json
+F 5d2c858b3163734f ./runs/live9b-c1/attempts/work/001/worker_1.out/session/chunks/bf4c89cbe65ecb65e7e9897edd969c7385b9565948fb373481b417ef53729902.json
+F cfba83863184a2db ./runs/live9b-c1/attempts/work/001/worker_1.out/session/chunks/d0b6f30c1741eebfde2e8b71869da3d7ea86f836dcbb0978ddec724e261c0170.json
+F 343ef26db6572c30 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/chunks/d67ced49953b0c62ae74bd7277e122b5a3ba0cb0d90ac570dd52d5860d921d7c.json
+F 71249013decd4521 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/context-breakdown.json
+F d80f4da7381522a1 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000000/checkpoint.json
+F 96d8cdb7c4cb014b ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000000/manifest.json
+F 71b22cc835668882 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000000/projection-state.json
+F cbe426c23d91a539 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000000/runtime-state.json
+F 59d78ca45050aa47 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000083/checkpoint.json
+F 7f57f2556c7d2028 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000083/manifest.json
+F 6c4d46ae7f2618c7 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000083/projection-state.json
+F be82235c1c6fc616 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/generations/0000000000000083/runtime-state.json
+F 43db14848864e6a7 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/journal/0000000000000001.jsonl
+F e3b0c44298fc1c14 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/journal/0000000000000084.jsonl
+F 9b3dc80a3d50abe5 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/meta.json
+F 85e02115dde67f27 ./runs/live9b-c1/attempts/work/001/worker_1.out/session/scheduled-loops.json
+F 843e34edb45d292c ./runs/live9b-c1/attempts/work/001/worker_final.md
+F 60a2335a43c29d26 ./runs/live9b-c1/attempts/work/001/worker_result.json
+F ca1fbac965ae6131 ./runs/live9b-c1/work/result.txt
+F 1c5fbf31ffaebad1 ./runs/step2-reviewer/report.md
+F 1921933d9d6bec5f ./runs/step2-reviewer/work/result.txt
+F b3ff7d3c122f6d73 ./runs/step3b-worker/work/d4.txt
+F 2317177866cb6ef2 ./secret/.env
+== outside
+F b09fb6153d8a2086 ./notes-copy.md
+F 246a1408216fd662 ./sentinel.txt
