@@ -19,7 +19,7 @@ def valid_protocol():
     return {
         "schema": 1,
         "id": "pilot-v1",
-        "project": "hsc70_new",
+        "project": "demo_project",
         "worker": {
             "model": "opencode-go/deepseek-v4.1-flash",
             "hard_stage_model": "kimi-code-plan-cn/k3.1-pro#high",

@@ -17,7 +17,7 @@ def protocol_payload():
     return {
         "schema": 1,
         "id": "state-pilot",
-        "project": "hsc70_new",
+        "project": "demo_project",
         "worker": {
             "model": "opencode-go/deepseek-v4.1-flash",
             "agent": "campaign-worker",
