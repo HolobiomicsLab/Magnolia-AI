@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Mapping
 
 from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.hook.state import private_mkdir
 
 DEFAULT_AGENTS = ("literature", "xiulian")
 _REPLACEMENT = "[→ sent to @{agent}; the agents daemon will run it]"
@@ -108,7 +109,7 @@ def _letter(request: str, source: str, now: datetime) -> str:
 
 
 def _append_letter(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_mkdir(path.parent)
     descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     with os.fdopen(descriptor, "wb", closefd=True) as letter:
         os.write(letter.fileno(), content.encode("utf-8"))

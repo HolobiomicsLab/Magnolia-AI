@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from compchem_memory.hook.events import HookEvent, ToolCall
-from compchem_memory.hook.state import safe_component
+from compchem_memory.hook.state import private_mkdir, safe_component
 from compchem_memory.opencode_ingest import scrub_secrets
 
 _INPUT_LIMIT = 4000
@@ -46,7 +46,7 @@ def append_event(store: Path, event: HookEvent) -> None:
     if row is None:
         return
     path = transcript_path(store, event.harness, event.session_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_mkdir(path.parent)
     _append_jsonl(path, row)
 
 
@@ -136,7 +136,7 @@ def _timestamp() -> str:
 
 def _append_jsonl(path: Path, row: dict) -> None:
     line = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         os.write(descriptor, line)

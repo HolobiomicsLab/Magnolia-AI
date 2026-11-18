@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -29,6 +30,19 @@ def _paths(tmp_path: Path, name: str = "project") -> ProjectPaths:
     store = project_dir / ".magnolia"
     store.mkdir(parents=True)
     return ProjectPaths(tmp_path, project_dir, store, name, False)
+
+
+def test_action_log_is_private_regardless_of_umask(tmp_path):
+    store = tmp_path / "nested" / "store"
+    paths = ProjectPaths(tmp_path, tmp_path, store, "project", False)
+    previous_umask = os.umask(0o022)
+    try:
+        _log(paths, {"callID": "private"})
+    finally:
+        os.umask(previous_umask)
+
+    assert store.stat().st_mode & 0o777 == 0o700
+    assert (store / "action-retrieval.jsonl").stat().st_mode & 0o777 == 0o600
 
 
 def _event(

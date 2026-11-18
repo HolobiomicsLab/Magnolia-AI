@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Mapping, Protocol
 
 from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.hook.state import private_mkdir
 
 DIRECTIVE = (
     "\n\n[Magnolia · auto-memory] Before acting on this request, your FIRST tool "
@@ -34,7 +35,7 @@ def _timestamp() -> str:
 
 
 def _append_ledger(paths: ProjectPaths, session_id: str) -> None:
-    paths.store.mkdir(parents=True, exist_ok=True)
+    private_mkdir(paths.store)
     row = {"ts": _timestamp(), "sessionID": session_id, "action": "inject"}
     data = (json.dumps(row, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
     descriptor = os.open(paths.store / "auto-retrieval.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)

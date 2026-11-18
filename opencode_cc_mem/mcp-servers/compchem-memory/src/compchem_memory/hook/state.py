@@ -14,6 +14,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +25,19 @@ from compchem_memory.atomic_io import atomic_write_text
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_.-]")
 _SAFE = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}")
+
+
+def private_mkdir(path: Path) -> None:
+    """Create directories readable only by their owner, independent of umask."""
+    path = Path(path)
+    missing = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for directory in missing:
+        directory.chmod(0o700)
 
 
 def safe_component(value: str) -> str:
@@ -71,12 +85,13 @@ class SessionState:
     def open(cls, store: Path, harness: str, session_id: str) -> Iterator["SessionState"]:
         """Lock, load, yield, then save atomically; save nothing on error."""
         directory = Path(store) / "hook-state"
-        directory.mkdir(parents=True, exist_ok=True)
+        private_mkdir(directory)
         name = f"{_sanitise(harness)}-{_sanitise(session_id)}"
         path = directory / f"{name}.json"
         lock_path = directory / f"{name}.json.lock"
 
-        with open(lock_path, "a+", encoding="utf-8") as lock_file:
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        with os.fdopen(descriptor, "a+", encoding="utf-8") as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             try:
                 state = cls(path, lock_path, _read_data(path))
