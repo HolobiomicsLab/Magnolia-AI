@@ -502,32 +502,38 @@ def probe_application(
     session_id: str,
     reply_text: str,
 ) -> None:
-    """Probe pending notes using one short state transaction.
+    """Probe pending notes in one state transaction, removing each after its row.
 
-    The caller must not hold this session's state while calling this function.
+    An item leaves ``pending_application`` only once its ``application`` row is
+    logged, so a crash cannot lose a probe; a hard crash before the state is
+    saved can log an item twice on the next probe. Malformed items are dropped.
+    Holding the state lock while logging keeps a concurrent probe of the same
+    session from logging the same items. The caller must not hold this
+    session's state while calling this function.
     """
     with SessionState.open(paths.store, harness, session_id) as state:
-        items = state.data.get("pending_application", [])
-        if not isinstance(items, list) or not items:
+        pending = state.data.get("pending_application", [])
+        if not isinstance(pending, list) or not pending:
             return
-        state.data["pending_application"] = []
-    reply = reply_text.lower()
-    for item in items:
-        try:
-            tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
-            matched = [token for token in tokens if token in reply]
-            applied = bool(tokens) and len(matched) >= min(2, len(tokens))
-            _log(
-                paths,
-                {
+        reply = reply_text.lower()
+        for item in list(pending):
+            try:
+                tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
+                matched = [token for token in tokens if token in reply]
+                row = {
                     "event": "application",
                     "sessionID": session_id,
                     "tool": item.get("tool"),
                     "callID": item.get("callID"),
-                    "applied": applied,
+                    "applied": bool(tokens) and len(matched) >= min(2, len(tokens)),
                     "matched": matched,
                     "distinct": len(tokens),
-                },
-            )
-        except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
-            continue
+                }
+            except Exception:  # noqa: BLE001 - malformed pending telemetry is dropped
+                pending.remove(item)
+                continue
+            try:
+                _log(paths, row)
+            except Exception:  # noqa: BLE001 - keep this and later items for the next probe
+                break
+            pending.remove(item)
