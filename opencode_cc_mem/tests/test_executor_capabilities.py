@@ -343,7 +343,8 @@ def test_final_fold_accepts_claude_codex_and_vibe_campaign_roles():
     assert len(changed_rows) == 8
     # Plan 4 Task 4 changed the hook adapter: the six accepted rows were rebound to the
     # new hook_source and re-observed live in Plan 4 Tasks 6 and 6b; the PR2/PR3 restack on
-    # the PR1 follow-up moved hook_source again (Plan 4 Task 13a re-observation). Codex helper
+    # the PR1 follow-up moved hook_source again (Plan 4 Task 13a re-observation), and the v3
+    # rebase on always-on + PR #26 moved it once more (Plan 4 Task 17). Codex helper
     # and evaluator stay refused (and stale).
     stale_rows = {(row["client"], row["role"]) for row in changed_rows if row["stale"]}
     assert stale_rows == {("codex", "helper"), ("codex", "evaluator")}
@@ -356,7 +357,7 @@ def test_final_fold_accepts_claude_codex_and_vibe_campaign_roles():
         row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
         for row in changed_rows
         if not (row["client"] == "codex" and row["role"] in {"helper", "evaluator"})
-    } == {"170065f4a87c85e1a35609d569f55a185d2250858fd23d7269616815ad81de8d"}
+    } == {"90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55"}
     for client in projected.values():
         assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
 
@@ -428,7 +429,7 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert {
         row["role"]: row["gate"]["artifact"] for row in rows
     } == {
-        role: f"opencode_cc_mem/docs/evidence/live-p4/reobserve2/claude-{role}-run.json"
+        role: f"opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-{role}-run.json"
         for role in ("worker", "reviewer", "helper", "evaluator")
     }
     assert {row["gate"]["value"]["client_identity"]["version"] for row in rows} == {"2.1.327"}
@@ -437,8 +438,10 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert any("evidence-path rule fixed by F-L3" in note for note in reviewer["notes"])
     assert any("Plan 4 Task 6 live re-observation" in note for note in reviewer["notes"])
     assert all(any("Plan 4 Task 11 live" in note for note in row["notes"]) for row in rows)
-    # Re-observed again after the PR2/PR3 restack on the PR1 follow-up (Plan 4 Task 13a).
-    assert all("Plan 4 Task 13a live" in row["notes"][-1] for row in rows)
+    # Re-observed again after the PR2/PR3 restack on the PR1 follow-up (Plan 4 Task 13a)
+    # and after the v3 rebase (Plan 4 Task 17).
+    assert all(any("Plan 4 Task 13a live" in note for note in row["notes"]) for row in rows)
+    assert all("Plan 4 Task 17 live" in row["notes"][-1] for row in rows)
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
     assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(
@@ -478,14 +481,14 @@ def test_codex_campaign_rows_accepted_from_live_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows.values())
     assert all(projected["codex"][role]["gate_accepted"] for role in rows)
     # Re-observed live on the rebound hook_source in Plan 4 Task 6, and again after the
-    # PR2/PR3 restack in Plan 4 Task 13a.
+    # PR2/PR3 restack in Plan 4 Task 13a and the v3 rebase in Plan 4 Task 17.
     assert all(projected["codex"][role]["accepted"] for role in rows)
     assert not any(projected["codex"][role]["stale"] for role in rows)
     assert rows["worker"]["gate"]["artifact"].endswith(
-        "docs/evidence/live-p4/reobserve2/codex-worker-run.json"
+        "docs/evidence/live-p4/reobserve3/codex-worker-run.json"
     )
     assert rows["reviewer"]["gate"]["artifact"].endswith(
-        "docs/evidence/live-p4/reobserve2/codex-reviewer-run.json"
+        "docs/evidence/live-p4/reobserve3/codex-reviewer-run.json"
     )
     assert rows["worker"]["gate"]["value"]["configuration_binding"][
         "configuration_identity_sha256"

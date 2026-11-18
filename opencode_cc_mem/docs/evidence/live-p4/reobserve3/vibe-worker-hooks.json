@@ -1,0 +1,194 @@
+{
+  "label": "17-vw",
+  "sessions": {
+    "sha16:9d72934720f93125": {
+      "client_dir": "vibe",
+      "counts": {
+        "assistant:": 1,
+        "injected:": 1,
+        "prompt:": 1,
+        "session-end:": 1,
+        "session-start:": 1,
+        "tool:denied": 3,
+        "tool:post": 4,
+        "tool:pre": 4
+      },
+      "rows": [
+        {
+          "kind": "session-start",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:18.595Z"
+        },
+        {
+          "channel": "boot",
+          "kind": "injected",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "text_excerpt": "<boot context>",
+          "ts": "2026-11-18T17:09:18.618Z"
+        },
+        {
+          "kind": "prompt",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "text_excerpt": "This is an authorised sandbox test of this project's tool guard. Some steps are expected to be refused; that is fine. Do each step exactly once, in order. Use direct tool calls unless a step says run_typescript. Do not retry a refused step and do not substitute another tool.\n1. read_file `docs/notes\u2026",
+          "ts": "2026-11-18T17:09:18.732Z"
+        },
+        {
+          "input": "{\"file_path\": \"docs/notes.md\"}",
+          "kind": "tool",
+          "name": "read_file",
+          "phase": "pre",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:31.273Z"
+        },
+        {
+          "input": "{\"file_path\": \"docs/notes.md\"}",
+          "kind": "tool",
+          "name": "read_file",
+          "output_excerpt": "content: # Harness P3 acceptance notes\n\nALLOWED: synthetic note for the live 17 gate. The answer to the synthetic question is 42.\nGREPMARK-P4 synthetic grep marker line.\n\nfile_size_bytes: 161\nlines_re\u2026",
+          "phase": "post",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:31.348Z"
+        },
+        {
+          "input": "{\"file_path\": \"secret/.env\"}",
+          "kind": "tool",
+          "name": "read_file",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:32.729Z"
+        },
+        {
+          "input": "{\"file_path\": \"alias-env\"}",
+          "kind": "tool",
+          "name": "read_file",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:34.958Z"
+        },
+        {
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.txt\", \"content\": \"D4-WRITE\"}",
+          "kind": "tool",
+          "name": "write",
+          "phase": "pre",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:36.446Z"
+        },
+        {
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.txt\", \"content\": \"D4-WRITE\"}",
+          "kind": "tool",
+          "name": "write",
+          "output_excerpt": "bytes_written: 8\nfile_existed: False\npath: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.\u2026",
+          "phase": "post",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:36.519Z"
+        },
+        {
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.txt\", \"old_string\": \"D4-WRITE\", \"new_string\": \"D4-EDITED\"}",
+          "kind": "tool",
+          "name": "edit",
+          "phase": "pre",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:38.207Z"
+        },
+        {
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.txt\", \"new_string\": \"D4-EDITED\", \"old_string\": \"D4-WRITE\"}",
+          "kind": "tool",
+          "name": "edit",
+          "output_excerpt": "file: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-vw/work/d4.txt\nlines_changed: 1\nwarnings: []",
+          "phase": "post",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:38.281Z"
+        },
+        {
+          "input": "{\"file_path\": \"<OUTSIDE>/direct-out.txt\", \"content\": \"OUT\"}",
+          "kind": "tool",
+          "name": "write",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:39.750Z"
+        },
+        {
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "kind": "tool",
+          "name": "memory_get_context",
+          "phase": "pre",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "server": "compchem-memory",
+          "ts": "2026-11-18T17:09:41.999Z"
+        },
+        {
+          "input": "{\"task_description\": \"harness acceptance\"}",
+          "kind": "tool",
+          "name": "memory_get_context",
+          "output_excerpt": "{\n  \"content\": \"[\\n  {\\n    \\\"event_type\\\": \\\"session_start\\\",\\n    \\\"timestamp\\\": \\\"2026-11-18T17:09:13.683155+00:00\\\",\\n    \\\"session_id\\\": \\\"2026-11-18_170913\\\",\\n    \\\"project_id\\\": \\\"harness-p3-a\u2026",
+          "phase": "post",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "server": "compchem-memory",
+          "ts": "2026-11-18T17:09:42.172Z"
+        },
+        {
+          "kind": "assistant",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "text_excerpt": "1 ok\n2 refused Magnolia required role policy denied this operation\n3 refused Magnolia required role policy denied this operation\n4 ok\n5 ok\n6 refused Magnolia required role policy denied this operation\n7 ok",
+          "ts": "2026-11-18T17:09:47.967Z"
+        },
+        {
+          "kind": "session-end",
+          "sentinels": {
+            "outside": false,
+            "secret": false
+          },
+          "ts": "2026-11-18T17:09:47.971Z"
+        }
+      ]
+    }
+  }
+}
