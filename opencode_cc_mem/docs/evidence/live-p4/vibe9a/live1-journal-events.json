@@ -1,0 +1,196 @@
+[
+ {
+  "seq": 4,
+  "kind": "hook",
+  "hook": "pre_agent_turn",
+  "bindings": [
+   "magnolia-prompt",
+   "session_start_context"
+  ],
+  "decision": "continue"
+ },
+ {
+  "seq": 10,
+  "kind": "llm_call",
+  "tool_catalog": {
+   "revision": 0,
+   "tools": [
+    "todo",
+    "unified_harness_scratchpad",
+    "search_tool_functions",
+    "run_typescript",
+    "read_file",
+    "write_file",
+    "edit",
+    "bash",
+    "skill"
+   ],
+   "type": "replace"
+  },
+  "tool_results_in_input": []
+ },
+ {
+  "seq": 14,
+  "kind": "hook",
+  "hook": "pre_tool_call",
+  "bindings": [
+   "magnolia-pre-tool"
+  ],
+  "tool_name_on_wire": "file_system.read_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:0:tool:0",
+  "arguments": {
+   "path": "nested-read-ok.txt"
+  },
+  "decision": "continue"
+ },
+ {
+  "seq": 20,
+  "kind": "tool_execution",
+  "name": "file_system.read_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:0:tool:0",
+  "parent_call_id": null,
+  "state": "succeeded",
+  "result_type": "tool_succeeded",
+  "approval": {
+   "approvalSource": "bypass",
+   "approvalType": "always",
+   "decision": "execute"
+  }
+ },
+ {
+  "seq": 25,
+  "kind": "hook",
+  "hook": "post_tool_call",
+  "bindings": [
+   "magnolia-post-tool",
+   "agents_md"
+  ],
+  "tool_name_on_wire": "file_system.read_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:0:tool:0",
+  "arguments": {
+   "path": "nested-read-ok.txt"
+  },
+  "decision": null
+ },
+ {
+  "seq": 31,
+  "kind": "hook",
+  "hook": "pre_tool_call",
+  "bindings": [
+   "magnolia-pre-tool"
+  ],
+  "tool_name_on_wire": "file_system.write_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:1:tool:1",
+  "arguments": {
+   "content": "IN",
+   "path": "work/nested-in.txt"
+  },
+  "decision": "continue"
+ },
+ {
+  "seq": 37,
+  "kind": "tool_execution",
+  "name": "file_system.write_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:1:tool:1",
+  "parent_call_id": null,
+  "state": "succeeded",
+  "result_type": "tool_succeeded",
+  "approval": {
+   "approvalSource": "bypass",
+   "approvalType": "always",
+   "decision": "execute"
+  }
+ },
+ {
+  "seq": 42,
+  "kind": "hook",
+  "hook": "post_tool_call",
+  "bindings": [
+   "magnolia-post-tool",
+   "agents_md"
+  ],
+  "tool_name_on_wire": "file_system.write_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:1:tool:1",
+  "arguments": {
+   "content": "IN",
+   "path": "work/nested-in.txt"
+  },
+  "decision": null
+ },
+ {
+  "seq": 48,
+  "kind": "hook",
+  "hook": "pre_tool_call",
+  "bindings": [
+   "magnolia-pre-tool"
+  ],
+  "tool_name_on_wire": "file_system.write_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:2:tool:2",
+  "arguments": {
+   "content": "OUT",
+   "path": "<OUTSIDE>/nested-out.txt"
+  },
+  "decision": "skip",
+  "reason": "Magnolia required role policy denied this operation."
+ },
+ {
+  "seq": 55,
+  "kind": "hook",
+  "hook": "pre_tool_call",
+  "bindings": [
+   "magnolia-pre-tool"
+  ],
+  "tool_name_on_wire": "file_system.read_file",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:3:tool:3",
+  "arguments": {
+   "path": "secret/.env"
+  },
+  "decision": "skip",
+  "reason": "Magnolia required role policy denied this operation."
+ },
+ {
+  "seq": 62,
+  "kind": "hook",
+  "hook": "pre_tool_call",
+  "bindings": [
+   "magnolia-pre-tool"
+  ],
+  "tool_name_on_wire": "file_system.bash",
+  "call_type": "runtime_builtin",
+  "call_id": "typescript:3:we6wC0gNR:4:tool:4",
+  "arguments": {
+   "command": "printf BASH_RAN > work/nested-bash.txt",
+   "timeout_seconds": 120
+  },
+  "decision": "skip",
+  "reason": "Magnolia required role policy denied this operation."
+ },
+ {
+  "seq": 69,
+  "kind": "llm_call",
+  "tool_catalog": {
+   "revision": 0,
+   "type": "keep"
+  },
+  "tool_results_in_input": [
+   "{\"steps\":[{\"tool\":\"tools.file_system.read_file\",\"success\":true,\"error\":{\"name\":null,\"code\":null,\"message\":null}},{\"tool\":\"tools.file_system.write_file\",\"success\":true,\"error\":{\"name\":null,\"code\":null,\"message\":null}},{\"tool\":\"tools.file_system.write_file\",\"success\":false,\"error\":{\"name\":\"ToolError\",\"code\":\"tool_skipped\",\"message\":\"Magnolia required role policy denied this operation.\"}},{\"tool\":\"tools.file_system.read_file\",\"success\":false,\"error\":{\"name\":\"ToolError\",\"code\":\"tool_skipped\",\"message\":\"Magnolia required role policy denied this operation.\"}},{\"tool\":\"tools.file_system.bash\",\"success\":false,\"error\":{\"name\":\"ToolError\",\"code\":\"tool_skipped\",\"message\":\"Magnolia required role policy denied this operation.\"}}],\"step6\":{\"typeof\":{\"fetch\":\"function\",\"process\":\"undefined\",\"Deno\":\"undefined\",\"require\":\"undefined\",\"Buffer\":\"undefined\"},\"importNodeFs\":{\"name\":\"Error\",\"message\":\"Not supported\"}}}"
+  ]
+ },
+ {
+  "seq": 73,
+  "kind": "hook",
+  "hook": "post_agent_turn",
+  "bindings": [
+   "magnolia-turn-end"
+  ],
+  "decision": "accept"
+ }
+]

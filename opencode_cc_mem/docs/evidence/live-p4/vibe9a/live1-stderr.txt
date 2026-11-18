@@ -1,0 +1,2 @@
+Reading API keys from the macOS Keychain (set them as environment variables to skip this)
+Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.

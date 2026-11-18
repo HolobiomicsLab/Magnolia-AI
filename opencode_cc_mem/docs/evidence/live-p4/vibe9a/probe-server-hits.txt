@@ -1,0 +1,1 @@
+0 requests received by the loopback probe server during call 2

@@ -54,9 +54,9 @@ def test_default_claude_capability_projection_refuses_every_role(role):
         executor_for(route, role, context)
 
 
-@pytest.mark.parametrize("client", ("codex", "vibe"))
+@pytest.mark.parametrize("client", ("codex",))
 @pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
-def test_default_codex_and_vibe_projection_refuses_every_role(client, role):
+def test_default_codex_projection_refuses_every_role(client, role):
     route = resolve_route(
         role,
         {
@@ -74,3 +74,26 @@ def test_default_codex_and_vibe_projection_refuses_every_role(client, role):
 
     with pytest.raises(ExecutorRefused, match="lacks accepted"):
         executor_for(route, role, context)
+
+
+def test_default_vibe_projection_passes_capability_admission(tmp_path):
+    route = resolve_route(
+        "worker",
+        {
+            "harness": "vibe",
+            "models": {"vibe": "vibe/fixture-model"},
+            "routes": {"worker": "vibe/fixture-model"},
+            "model": "vibe/fixture-model",
+        },
+    )
+    context = ExecContext(
+        route=route,
+        role="worker",
+        project_dir=tmp_path,
+        launch_argv=("vibe",),
+        role_capabilities=load_role_capabilities(),
+        setup={"vibe_trust_path": str(tmp_path / "trusted_folders.toml")},
+    )
+
+    with pytest.raises(ExecutorRefused, match="not persistently trusted"):
+        executor_for(route, "worker", context)

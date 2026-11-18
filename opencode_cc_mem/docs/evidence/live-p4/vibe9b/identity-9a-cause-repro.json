@@ -1,0 +1,97 @@
+{
+ "what": "offline recomputation (no model call) of the normalized policy component with production launch helpers; 9a layout has run_dir == project_dir; campaign layout has run_dir = project/runs/<id>",
+ "task_9a_observed_values": [
+  "b23448a1",
+  "57184f9a"
+ ],
+ "runs": [
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "b23448a1e83144f0",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{project_dir}",
+    "{run_dir}"
+   ]
+  },
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "57184f9ac0dbf8a7",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}",
+    "{project_dir}"
+   ]
+  },
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "57184f9ac0dbf8a7",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}",
+    "{project_dir}"
+   ]
+  },
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "57184f9ac0dbf8a7",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}",
+    "{project_dir}"
+   ]
+  },
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "b23448a1e83144f0",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{project_dir}",
+    "{run_dir}"
+   ]
+  },
+  {
+   "layout": "9a",
+   "seed": null,
+   "policy_component": "57184f9ac0dbf8a7",
+   "raw_policy_digest": "29b00820f1b344d8",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}",
+    "{project_dir}"
+   ]
+  },
+  {
+   "layout": "campaign",
+   "seed": null,
+   "policy_component": "b23448a1e83144f0",
+   "raw_policy_digest": "605c81e604f2e0f9",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}"
+   ]
+  },
+  {
+   "layout": "campaign",
+   "seed": null,
+   "policy_component": "b23448a1e83144f0",
+   "raw_policy_digest": "605c81e604f2e0f9",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}"
+   ]
+  },
+  {
+   "layout": "campaign",
+   "seed": null,
+   "policy_component": "b23448a1e83144f0",
+   "raw_policy_digest": "605c81e604f2e0f9",
+   "replacement_names_for_run_dir_spelling": [
+    "{run_dir}"
+   ]
+  }
+ ],
+ "cause": "campaign_runner/launch.py:1172-1198 _identity_replacements builds a set of (spelling, placeholder) pairs and sorts it only by spelling length (also re-sorted at :611-614 in _normalized_launch_identity); when two placeholders share one spelling the order among them follows set iteration order, which depends on per-process string-hash randomisation, so the first of {project_dir}/{run_dir} applied by _replace_identity_text (:1242-1247) varies"
+}

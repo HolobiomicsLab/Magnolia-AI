@@ -1921,7 +1921,7 @@ def test_claude_no_tools_helper_refuses_observed_read_binding(tmp_path):
         prepare_launch(context)
 
 
-@pytest.mark.parametrize("client", ("claude-code", "codex"))
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
 @pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
 def test_bound_identity_matches_two_independent_installations(
     tmp_path, monkeypatch, client, role
@@ -1952,9 +1952,33 @@ def test_bound_identity_matches_two_independent_installations(
     }
     expected = projected[client][role]["launch_identity"]["components"]
     monkeypatch.setattr(module, "_installed_client_version", lambda *args, **kwargs: expected["client_version"])
-    monkeypatch.setattr(module, "_file_digest", lambda *args, **kwargs: expected["client_sha256"])
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda _handle: True,
+    )
+
+    def expected_file_digest(path):
+        if client == "codex" and Path(path).name == "codex-code-mode-host":
+            return expected["code_mode_host"]["sha256"]
+        return expected["client_sha256"]
+
+    monkeypatch.setattr(module, "_file_digest", expected_file_digest)
+    if client == "codex" and "codex_package" in expected:
+        monkeypatch.setattr(
+            module,
+            "_resolved_codex_package",
+            lambda executable: (
+                Path(executable).parent.parent,
+                expected["codex_package"],
+            ),
+        )
     launches = []
-    for name in ("first", "second installation"):
+    installation_names = (
+        ("first", "second")
+        if client == "vibe"
+        else ("first", "second installation")
+    )
+    for name in installation_names:
         location = tmp_path / name
         location.mkdir()
         context = _production_claude_context(location, role=role)
@@ -1985,6 +2009,52 @@ def test_bound_identity_matches_two_independent_installations(
                 route=route,
                 launch_argv=(str(_fake_codex_client(location)),),
                 role_capabilities=capabilities,
+            )
+        elif client == "vibe":
+            from test_executor_vibe_p4_candidate import _managed_handle
+
+            binary, _, _ = _fake_vibe_environment(location)
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            config_dir = context.project_dir / ".vibe"
+            config_dir.mkdir()
+            (config_dir / "config.toml").write_text("disabled_tools = []\n")
+            (config_dir / "hooks.toml").write_text("[[hooks]]\nname = \"fixture\"\n")
+            token_file = location / "memory-token"
+            token_file.write_text("offline-memory-bearer-sentinel\n", encoding="utf-8")
+            token_file.chmod(0o600)
+            handle = _managed_handle(token_file)
+            monkeypatch.setattr(
+                "compchem_memory.harness.memory_service.ensure_memory_service",
+                lambda _context, *, tool_allowlist, handle=handle: handle,
+            )
+            context = replace(
+                context,
+                route=ResolvedRoute(
+                    client,
+                    "mistral-medium-3.5",
+                    "mistral",
+                    client,
+                    role,
+                    "bound identity test",
+                ),
+                launch_argv=(str(binary),),
+                python_executable=sys.executable,
+                environment={
+                    "PATH": os.environ.get("PATH", ""),
+                    "MAGNOLIA_PYTHON": sys.executable,
+                },
+                role_capabilities=capabilities,
+                memory_service=(
+                    {
+                        "transport": "http",
+                        "url": "http://127.0.0.1:43101/mcp",
+                        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                        "token_file": str(token_file),
+                    }
+                    if role == "worker"
+                    else context.memory_service
+                ),
             )
         assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
         launches.append(prepare_launch(context))
@@ -3270,5 +3340,5 @@ def test_vibe_memory_candidate_table_serialization_stays_unobserved(tmp_path):
 
     real = project_role_capabilities(load_capability_table())
     for role in ("worker", "reviewer", "helper", "evaluator"):
-        assert real["vibe"][role]["accepted"] is False
-        assert real["vibe"][role]["vibe_memory"] is False
+        assert real["vibe"][role]["accepted"] is True
+        assert real["vibe"][role]["vibe_memory"] is (role == "worker")

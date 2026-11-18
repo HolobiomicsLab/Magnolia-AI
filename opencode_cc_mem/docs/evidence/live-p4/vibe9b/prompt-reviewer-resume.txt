@@ -1,0 +1,1 @@
+Return the same review JSON object again, exactly one JSON object and nothing else. Do not call any tool.

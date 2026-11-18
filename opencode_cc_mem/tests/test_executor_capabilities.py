@@ -323,7 +323,7 @@ def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
     assert projected["reviewer"]["stale"] is True
 
 
-def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
+def test_final_fold_accepts_claude_codex_and_vibe_campaign_roles():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
     changed_rows = [
@@ -375,9 +375,12 @@ def test_final_fold_accepts_claude_and_reobserved_codex_campaign_roles():
     for role in ("helper", "evaluator"):
         assert projected["codex"][role]["accepted"] is False
         assert projected["codex"][role]["blocking_cells"]
-    assert all(not role["accepted"] for role in projected["vibe"].values())
-    assert all(role["blocking_cells"] for role in projected["vibe"].values())
-    assert any("D4" in reason for reason in projected["vibe"]["worker"]["reasons"])
+    for name, role in projected["vibe"].items():
+        assert role["accepted"] is True
+        assert role["stale"] is False
+        assert role["blocking_cells"] == []
+        assert "launch_identity" in role
+        assert role["vibe_memory"] is (name == "worker")
 
 
 def test_live_candidate_can_clear_stale_rows_without_changing_recorded_values():
@@ -518,19 +521,31 @@ def test_codex_campaign_rows_accepted_from_live_gate():
         )
 
 
-def test_codex_helper_evaluator_and_vibe_rows_still_refused():
+def test_codex_helper_evaluator_stay_refused_and_vibe_memory_is_worker_only():
     table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
     projected = project_role_capabilities(table)
 
     assert projected["codex"]["helper"]["accepted"] is False
     assert projected["codex"]["evaluator"]["accepted"] is False
+    assert projected["vibe"]["worker"]["vibe_memory"] is True
     assert all(
-        row["cells"]["vibe_memory"]["status"] != "observed"
-        for row in table["rows"]
-        if row["client"] == "vibe"
+        projected["vibe"][role]["vibe_memory"] is False
+        for role in ("reviewer", "helper", "evaluator")
     )
-    assert projected["vibe"]["worker"]["vibe_memory"] is False
-    assert all(not row["accepted"] for row in projected["vibe"].values())
+
+
+def test_accepted_vibe_rows_name_the_accepted_limitation_and_known_issues():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)["vibe"]
+
+    for row in table["rows"]:
+        if row["client"] != "vibe":
+            continue
+        assert projected[row["role"]]["accepted"] is True
+        notes = "\n".join(row["notes"])
+        assert "Accepted limitation:" in notes
+        assert "strict deny-unknown pre_tool" in notes
+        assert "opencode_cc_mem/docs/vibe-known-issues.md" in notes
 
 
 def test_codex_rows_share_their_reaudited_client_version_and_hash():

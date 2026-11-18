@@ -1,0 +1,62 @@
+{
+ "invocation": "live2",
+ "model_pin": "mistral-medium-3.5",
+ "configuration_identity": "3f6f3bde5f27218ca093bc14a6b20d35a7a669dc18a52cae999cb8ee5ef1809a",
+ "policy_digest": "47eb1a082b3a1859bea0a2a4448a1738cd8a6fc5863bb6198708fec41bc0b10e",
+ "config_digest": "3f6f3bde5f27218ca093bc14a6b20d35a7a669dc18a52cae999cb8ee5ef1809a",
+ "launch_identity_sha256": "365ea919d924289ceaa43897af3d9967ff6f97e53acbcc0ac940f130b6da95d9",
+ "components": {
+  "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+  "client_version": "3.1.2",
+  "settings": "de2916383297e0689849b43baebea3d9212419268f34c6b36ae46652a0da6460",
+  "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+  "native_files": "1506b6dfa747f280607e84370b297f3ad6a33e7da825f86980eca0db753693aa",
+  "policy": "57184f9ac0dbf8a7e797c7d59874d4b321471a95ef1a36340818d6b7ae3b0850",
+  "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+  "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+  "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+  "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+ },
+ "argv_shape": [
+  "<HOME>/.local/share/uv/tools/mistral-vibe/bin/vibe"
+ ],
+ "env_keys": [
+  "COMPCHEM_TOOLS_PORT",
+  "HOME",
+  "LANG",
+  "MAGNOLIA_CLIENT",
+  "MAGNOLIA_CONTROL_DIR",
+  "MAGNOLIA_DISTILL_INTERVAL_MIN",
+  "MAGNOLIA_DOORBELL",
+  "MAGNOLIA_HOOK_POLICY",
+  "MAGNOLIA_HOOK_POLICY_REQUIRED",
+  "MAGNOLIA_HOOK_POLICY_SHA256",
+  "MAGNOLIA_INSTALLATION_ROOT",
+  "MAGNOLIA_MODEL",
+  "MAGNOLIA_PROJECT_DIR",
+  "MAGNOLIA_PROJECT_IDENTITY",
+  "MAGNOLIA_PYTHON",
+  "MAGNOLIA_ROLE",
+  "MAGNOLIA_ROOT",
+  "MAGNOLIA_RULES_DIR",
+  "MAGNOLIA_RUN_DIR",
+  "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+  "MAGNOLIA_WORKSPACE_ROOT",
+  "MAGNOLIA_WORK_DIR",
+  "PATH",
+  "PYTHONPYCACHEPREFIX",
+  "TMPDIR",
+  "VIBE_ENABLE_TELEMETRY",
+  "XDG_STATE_HOME"
+ ],
+ "telemetry": "false",
+ "project_files_equal": {
+  ".vibe/config.toml": true,
+  ".vibe/hooks.toml": true
+ },
+ "native_sha": {
+  ".vibe/config.toml": "c96c779e125e37ff20da9da24b6f68fb1bc77935f87e70dac65c3bad4eb609cd",
+  ".vibe/hooks.toml": "666ece66bfab47657ed54a719f6f97732dd6987918f321f25b6055ae2a5a577c"
+ }
+}

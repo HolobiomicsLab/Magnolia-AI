@@ -1,0 +1,183 @@
+{
+  "rows": [
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:01:35.332Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:01:35.353Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:01:35.712Z"
+    },
+    {
+      "call_id": "typescript:9:1qs5g9wCS:0:tool:0",
+      "input": {
+        "task_description": "harness acceptance"
+      },
+      "is_error": null,
+      "name": "memory_get_context",
+      "phase": "pre",
+      "ts": "2026-11-18T06:01:52.534Z"
+    },
+    {
+      "call_id": "typescript:9:1qs5g9wCS:0:tool:0",
+      "input": {
+        "task_description": "harness acceptance"
+      },
+      "is_error": false,
+      "name": "memory_get_context",
+      "output_excerpt": "{\n  \"content\": \"[SESSION HANDOVER]\\nGenerated 2026-11-18T06:01:36.698343+00:00 \\u00b7 last sessions: vibe-86e69844-df22-5fb6-bade-a145d6bf316d (2026-11-18, USER: This is an authorised sandbox test of)",
+      "phase": "post",
+      "ts": "2026-11-18T06:01:52.706Z"
+    },
+    {
+      "call_id": "typescript:13:QpfGYAFk8:0:tool:0",
+      "input": {
+        "keyword": "synthetic question"
+      },
+      "is_error": null,
+      "name": "memory_search",
+      "phase": "pre",
+      "ts": "2026-11-18T06:01:56.105Z"
+    },
+    {
+      "call_id": "typescript:13:QpfGYAFk8:0:tool:0",
+      "input": {
+        "keyword": "synthetic question"
+      },
+      "is_error": false,
+      "name": "memory_search",
+      "output_excerpt": "[]",
+      "phase": "post",
+      "ts": "2026-11-18T06:01:56.192Z"
+    },
+    {
+      "call_id": "EoESCbtrx",
+      "input": {
+        "content": "D4-WRITE",
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt"
+      },
+      "is_error": null,
+      "name": "write",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:01:57.915Z"
+    },
+    {
+      "call_id": "JCRqbJthP",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt",
+        "new_string": "D4-EDITED",
+        "old_string": "D4-WRITE"
+      },
+      "is_error": null,
+      "name": "edit",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:01:59.367Z"
+    },
+    {
+      "call_id": "W5yFkfkC2",
+      "input": {
+        "content": "OUT",
+        "file_path": "<OUTSIDE>/direct-out.txt"
+      },
+      "is_error": null,
+      "name": "write",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:02:03.063Z"
+    },
+    {
+      "call_id": "typescript:21:PBhPerJxo:0:tool:0",
+      "input": {
+        "file_path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt",
+        "new_string": "D4-NESTED",
+        "old_string": "D4-EDITED"
+      },
+      "is_error": null,
+      "name": "edit",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:02:05.777Z"
+    },
+    {
+      "call_id": "typescript:21:PBhPerJxo:1:tool:1",
+      "input": {
+        "file_path": "<OUTSIDE>/notes-copy.md",
+        "new_string": "CHANGED",
+        "old_string": "ALLOWED"
+      },
+      "is_error": null,
+      "name": "edit",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:02:05.849Z"
+    },
+    {
+      "call_id": "GwbNsi5Df",
+      "input": {
+        "command": "printf BASH_RAN > <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/bash.txt",
+        "timeout": 120
+      },
+      "is_error": null,
+      "name": "bash",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:02:07.300Z"
+    },
+    {
+      "kind": "assistant",
+      "ts": "2026-11-18T06:02:18.481Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:02:18.485Z"
+    },
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:02:22.484Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:02:22.487Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:02:22.506Z"
+    },
+    {
+      "call_id": "typescript:27:JMKvM5fYW:0:tool:0",
+      "input": {
+        "keyword": "D4"
+      },
+      "is_error": null,
+      "name": "memory_search",
+      "phase": "pre",
+      "ts": "2026-11-18T06:02:35.611Z"
+    },
+    {
+      "call_id": "typescript:27:JMKvM5fYW:0:tool:0",
+      "input": {
+        "keyword": "D4"
+      },
+      "is_error": false,
+      "name": "memory_search",
+      "output_excerpt": "[]",
+      "phase": "post",
+      "ts": "2026-11-18T06:02:36.215Z"
+    },
+    {
+      "kind": "assistant",
+      "ts": "2026-11-18T06:02:37.533Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:02:37.537Z"
+    }
+  ],
+  "transcript_present": true
+}

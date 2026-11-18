@@ -43,7 +43,7 @@
       "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
     ]
   },
-  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. Plan 4 Task 6b then re-observed the Claude Code worker's denied outside write, clearing that row too. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe remains refused: Vibe 3.1.2 cannot remove its filesystem builtins from the model-visible catalogue (Plan 4 Task 7a; live evidence docs/evidence/live-p4/vibe).",
+  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. Plan 4 Task 6b then re-observed the Claude Code worker's denied outside write, clearing that row too. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe 3.1.2 rows are accepted (Plan 4 Task 9b, 18 Nov 2026) as an accepted limitation: Vibe cannot remove its builtins from the model catalogue (mistralai/mistral-vibe#1552) and run_typescript fires no hook (#1431); the strict pre_tool hook and Vibe's deny-on-call are the enforcement boundary, and calls nested in run_typescript are hooked (Task 9a). See docs/vibe-known-issues.md.",
   "rows": [
     {
       "client": "claude-code",
@@ -1640,91 +1640,255 @@
       "role_label": "worker",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "D4: Vibe worker edits are refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "430081b044c4f2e810be0f6d9cf3d735e537d9816bcd37355167b865d773e62a",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+              "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+              "native_files": "174dbe7574d45d27cf4ae8dd611eb43af0822bd76e909c69984be8f3843a31a5",
+              "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "de2916383297e0689849b43baebea3d9212419268f34c6b36ae46652a0da6460"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026): Vibe 3.1.2 offers a 9-tool catalogue wider than the role (upstream mistralai/mistral-vibe#1552, #1431); the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt in live gate 9b. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked and the sandbox has no ambient filesystem/process/network access (gate 9a)."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
           "value": {
             "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
             "version": "3.1.2",
             "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
-          }
+          },
+          "note": "Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "30",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": [
+              "todo",
+              "unified_harness_scratchpad",
+              "search_tool_functions",
+              "run_typescript",
+              "read_file",
+              "write_file",
+              "edit",
+              "bash",
+              "skill"
+            ]
+          },
+          "note": "Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.2:active_model=mistral-medium-3.5"
+          },
+          "note": "Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/trust-and-owner-state.json",
+          "value": true,
+          "note": "Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
+          "value": "430081b044c4f2e810be0f6d9cf3d735e537d9816bcd37355167b865d773e62a",
+          "note": "Configuration identity; normalized launch identity 8469cfe39ab92ae8222c223e8741af72480dc9b247d9799a7482ab4bd74ff869; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "role": "worker",
+            "source": "live 9b recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}",
+              "mcp_compchem_memory.<tool>",
+              "typescript:<n>:<program>:<i>:tool:<i> nested call ids"
+            ]
+          },
+          "note": "The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "allowed: memory_get_context and memory_search (both from inside run_typescript, hooked and allowed), direct write_file and edit in work/, nested run_typescript edit in work/ (step3b; file ends D4-NESTED), memory_search on the bound resume; campaign worker reads + work/result.txt write. native_glob/native_grep: Vibe 3.1.2 has no native glob/grep tool, so these were not exercised."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3b-worker.json",
+          "value": {
+            "actions": [
+              "direct write_file outside the project",
+              "nested run_typescript edit outside the project",
+              "direct bash",
+              "edit/write while the edit root is absent (fail-closed)"
+            ],
+            "layer": "strict pre_tool hook (Vibe tool_skipped); Vibe's own bash deny never reached"
+          },
+          "note": "Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3-worker.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "One bound resume; ledger shows one row per physical call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 30,
+            "ledger_matches_launch": true
+          },
+          "note": "argv --max-turns equals the ledger effective_cap."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
-        },
-        "http_api_key_env": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3-worker.json",
+          "value": {
+            "env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "auth": "static api_key_env in .vibe/config.toml",
+            "absent_from": [
+              "run-owned artifacts",
+              "project .vibe files",
+              "ledger",
+              "logs",
+              "evidence",
+              "hook transcripts"
+            ]
+          },
+          "note": "Bearer digest scan over 18,245 gate files: 0 hits."
+        },
+        "vibe_memory": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step3-worker.json",
+          "value": {
+            "accepted": true,
+            "transport": "http loopback",
+            "operations": [
+              "memory_get_context",
+              "memory_search"
+            ],
+            "continuation": "memory_search on the bound resume",
+            "cleanup": "lease released; no service process left"
+          },
+          "note": "OpenRouter key only in the memory server process; 13 memory LLM calls US$0.0048."
         }
-      }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Campaign 9b: Vibe worker succeeded in the real runner (receipt, ledger); the Claude haiku reviewer was refused before spawn (Claude Code 2.1.327 differs from its row's 2.1.326).",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431."
+      ]
     },
     {
       "client": "vibe",
@@ -1732,183 +1896,466 @@
       "role_label": "reviewer",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "46680c7822539e2e5f4d391ff169fe85ea9d97c1c98abd308b9632c08716794b",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "eb95486a0a37546883abb2f8f9b786837b49c9c783c12549c10831cbe37ab588"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026): Vibe 3.1.2 offers a 9-tool catalogue wider than the role (upstream mistralai/mistral-vibe#1552, #1431); the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt in live gate 9b. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked and the sandbox has no ambient filesystem/process/network access (gate 9a)."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
           "value": {
             "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
             "version": "3.1.2",
             "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
-          }
+          },
+          "note": "Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "8",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": [
+              "todo",
+              "unified_harness_scratchpad",
+              "search_tool_functions",
+              "run_typescript",
+              "read_file",
+              "write_file",
+              "edit",
+              "bash",
+              "skill"
+            ]
+          },
+          "note": "Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.2:active_model=mistral-medium-3.5"
+          },
+          "note": "Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/trust-and-owner-state.json",
+          "value": true,
+          "note": "Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
+          "value": "46680c7822539e2e5f4d391ff169fe85ea9d97c1c98abd308b9632c08716794b",
+          "note": "Configuration identity; normalized launch identity 3f5be1103f404a8ac4c8af329199325b09c2c6349640ef04cf3e6e398e5df7e7; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "role": "reviewer",
+            "source": "live 9b recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}"
+            ]
+          },
+          "note": "The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "allowed: read_file of docs/notes.md and of two run files; the bound resume returned review JSON that the production parser accepted and validate_review validated (1 issue)."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "actions": [
+              "write_file",
+              "bash",
+              "secret read (secret/.env)",
+              "symlink-alias read (alias-env)",
+              "unified_harness_scratchpad write",
+              "todo write"
+            ],
+            "layer": "strict pre_tool hook (deny-unknown for provided tools)"
+          },
+          "note": "Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step2-reviewer.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "One bound resume; ledger shows one row per physical call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_launch": true
+          },
+          "note": "argv --max-turns equals the ledger effective_cap."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
-        },
-        "http_api_key_env": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
         }
-      }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431."
+      ]
     },
     {
       "client": "vibe",
       "role": "helper",
-      "role_label": "service-less helper",
+      "role_label": "helper",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "72a1c986fcf623f7b1d760ce0159f57cd8d6dcaf8d6ace74880d5debb427194f",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "756302ab630e020bb9df6a148129c210995574f7ba009e9528d58a38c974b5df"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026): Vibe 3.1.2 offers a 9-tool catalogue wider than the role (upstream mistralai/mistral-vibe#1552, #1431); the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt in live gate 9b. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked and the sandbox has no ambient filesystem/process/network access (gate 9a)."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
           "value": {
             "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
             "version": "3.1.2",
             "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
-          }
+          },
+          "note": "Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "40",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": [
+              "todo",
+              "unified_harness_scratchpad",
+              "search_tool_functions",
+              "run_typescript",
+              "read_file",
+              "write_file",
+              "edit",
+              "bash",
+              "skill"
+            ]
+          },
+          "note": "Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.2:active_model=mistral-medium-3.5"
+          },
+          "note": "Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/trust-and-owner-state.json",
+          "value": true,
+          "note": "Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
+          "value": "72a1c986fcf623f7b1d760ce0159f57cd8d6dcaf8d6ace74880d5debb427194f",
+          "note": "Configuration identity; normalized launch identity cc8a756ab27cd1e5b409254996a88341658dda9c9cfac1236aa976378f487e57; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "role": "helper",
+            "source": "live 9b recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}"
+            ]
+          },
+          "note": "The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "allowed: bound read of docs/notes.md (lane read root docs/); plain-text reply; resume answered from the session ('42')."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "actions": [
+              "read outside the bound lane root (README.md)",
+              "secret read",
+              "write_file",
+              "bash",
+              "skill.read"
+            ],
+            "layer": "strict pre_tool hook"
+          },
+          "note": "Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step4-helper.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "One bound resume; ledger shows one row per physical call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 40,
+            "ledger_matches_launch": true
+          },
+          "note": "argv --max-turns equals the ledger effective_cap."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
-        },
-        "http_api_key_env": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
         }
-      }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431."
+      ]
     },
     {
       "client": "vibe",
@@ -1916,91 +2363,227 @@
       "role_label": "evaluator",
       "stale": false,
       "gate": {
-        "status": "refused",
-        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
-        "reason": "Refused: Vibe 3.1.2 always offers its filesystem builtins (shell, write_file, edit) to the model: enabled_tools/disabled_tools only make them deny-on-call, so tool removal is not supported by design (Plan 4 Task 7a source analysis; live gate docs/evidence/live-p4/vibe). Revisit when upstream removes filtered builtins from the model catalogue."
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "378d373110088bcae33833088d7dcaa9561fb4a944b959b1e120da4f5592958c",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "d21a64962472d402847631282d285c458a0a5309ffe3e6ea982f6590c2826d00"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026): Vibe 3.1.2 offers a 9-tool catalogue wider than the role (upstream mistralai/mistral-vibe#1552, #1431); the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt in live gate 9b. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked and the sandbox has no ambient filesystem/process/network access (gate 9a)."
       },
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
           "value": {
             "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
             "version": "3.1.2",
             "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
-          }
+          },
+          "note": "Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
         },
         "argv": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "1",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": [
+              "todo",
+              "unified_harness_scratchpad",
+              "search_tool_functions",
+              "run_typescript",
+              "read_file",
+              "write_file",
+              "edit",
+              "bash",
+              "skill"
+            ]
+          },
+          "note": "Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
         },
         "model_delivery": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.2:active_model=mistral-medium-3.5"
+          },
+          "note": "Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
         },
         "discovery_dir": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
         },
         "trust": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/trust-and-owner-state.json",
+          "value": true,
+          "note": "Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
         },
         "hook_policy_digest": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/identity-stability.json",
+          "value": "378d373110088bcae33833088d7dcaa9561fb4a944b959b1e120da4f5592958c",
+          "note": "Configuration identity; normalized launch identity 0c9c96a02dcc700e1201ce9d59ee291a5a7c0ce5f77ef4c36a233808f5033e01; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
         },
         "native_schemas": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
-          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "role": "evaluator",
+            "source": "live 9b recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}"
+            ]
+          },
+          "note": "The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
         },
         "allowed_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "capabilities": []
+          },
+          "note": "no capability: one-turn structured reply {\"verdict\":\"EVAL-OK\",\"tools_offered\":9} parsed as JSON on both the initial call and the bound resume."
         },
         "denied_actions": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5b-evaluator.json",
+          "value": {
+            "actions": [
+              "secret read",
+              "write_file",
+              "bash"
+            ],
+            "layer": "strict pre_tool hook (reserve call step5b, one turn)"
+          },
+          "note": "Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
         },
         "resume": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/step5-evaluator.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "One bound resume; ledger shows one row per physical call."
         },
         "caps": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "awaits live Task 0 (owner's go)"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 1,
+            "ledger_matches_launch": true
+          },
+          "note": "argv --max-turns equals the ledger effective_cap. The 1-turn cap ended a tool-calling turn as turn_limit (step5b)."
         },
         "usage_semantics": {
-          "status": "unknown",
-          "artifact": null,
-          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
-        },
-        "http_api_key_env": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
-        },
-        "vibe_memory": {
-          "status": "synthetic-only",
-          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
-          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe9b/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
         },
         "quota_evidence": {
           "status": "synthetic-only",
           "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
           "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
         }
-      }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431."
+      ]
     }
   ]
 }
