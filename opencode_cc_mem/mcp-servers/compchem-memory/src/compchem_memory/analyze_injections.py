@@ -42,9 +42,16 @@ def application_report(events: list[dict]) -> dict:
     before a probe, plugin reload, older schema) — it must NOT count as
     not-applied, or the rate would be biased downward. Probes with no
     matching injection row are ``orphans`` (injection logged pre-upgrade).
+    Repeated application rows with the same (sessionID, callID) are one probe:
+    a hard crash can write the same row twice, and this keeps the rate stable.
     The ``applied`` signal is a LEXICAL PROXY (>=2 distinctive tokens of the
     entry title/path appearing in the turn's reply), not semantic proof."""
-    probes = [e for e in events if e.get("event") == "application"]
+    probes: dict[tuple[str, str], dict] = {}
+    for e in events:
+        if e.get("event") != "application":
+            continue
+        key = (str(e.get("sessionID", "")), str(e.get("callID", "")))
+        probes.setdefault(key, e)
     inj_keys: set[tuple[str, str]] = set()
     for e in events:
         if _injected(e) and e.get("callID"):
@@ -60,8 +67,7 @@ def application_report(events: list[dict]) -> dict:
         tiers = {h.get("tier", "?") for h in (e.get("entries") or [])} or {"?"}
         tier_by_key[key] = "/".join(sorted(str(t) for t in tiers))
 
-    for p in probes:
-        key = (str(p.get("sessionID", "")), str(p.get("callID", "")))
+    for key, p in probes.items():
         if key not in inj_keys:
             orphans += 1
             continue

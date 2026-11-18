@@ -49,7 +49,7 @@
  * OpenCode 2.3.0 (probed 2026-11-14): loads; setup() completed without a
  * "failed to load plugin" warning. Not yet observed acting on 2.3.0.
  */
-import { appendFileSync, existsSync, mkdirSync } from "node:fs"
+import { appendFileSync, chmodSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 const ENABLED = !!process.env.MAGNOLIA_CRITIC
@@ -212,14 +212,24 @@ async function judge(route: JudgeRoute, report: string, traceText: string): Prom
   return parseVerdict(String(text))
 }
 
+function privateDir(path: string) {
+  mkdirSync(path, { recursive: true, mode: 0o700 })
+  try { chmodSync(path, 0o700) } catch { /* best effort */ }
+}
+
+function privateAppend(path: string, line: string) {
+  appendFileSync(path, line, { mode: 0o600 })
+  try { chmodSync(path, 0o600) } catch { /* best effort */ }
+}
+
 function logError(outDir: string, sessionID: string, route: JudgeRoute, err: unknown) {
   try {
-    mkdirSync(outDir, { recursive: true })
+    privateDir(outDir)
     const rec = {
       ts: new Date().toISOString(), sessionID, provider: route.provider, model: route.model,
       error: String((err as any)?.message ?? err).slice(0, 300),
     }
-    appendFileSync(join(outDir, "errors.jsonl"), JSON.stringify(rec) + "\n")
+    privateAppend(join(outDir, "errors.jsonl"), JSON.stringify(rec) + "\n")
   } catch {
     /* never throw into opencode */
   }
@@ -290,7 +300,7 @@ async function auditSession(
     }
 
     // Observe-only: log EVERY verdict (flagged or not) so we can measure precision later.
-    mkdirSync(outDir, { recursive: true })
+    privateDir(outDir)
     const rec = {
       ts: new Date().toISOString(),
       sessionID,
@@ -303,7 +313,7 @@ async function auditSession(
       n_tools: traceItems.length,
       report_preview: report.slice(0, 200),
     }
-    appendFileSync(join(outDir, `${sessionID}.jsonl`), JSON.stringify(rec) + "\n")
+    privateAppend(join(outDir, `${sessionID}.jsonl`), JSON.stringify(rec) + "\n")
 
     if (verdict?.flag) {
       toast("claim-audit", `⚠ (${rec.severity}) ${String(rec.why).slice(0, 140)}`, "warning")
