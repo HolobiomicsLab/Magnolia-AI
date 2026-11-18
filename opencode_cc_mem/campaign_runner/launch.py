@@ -83,6 +83,7 @@ from compchem_memory.tool_catalog import (
 )
 
 from .executors.contracts import ExecContext
+from .executors.claude_code import NATIVE_TOOLS as CLAUDE_NATIVE_TOOLS
 from .executors.registry import ExecutorRefused
 from .process import _resolve_executable
 from .roles import RolePolicy, load_role
@@ -105,6 +106,12 @@ _IDENTITY_PLACEHOLDER_PRECEDENCE = {
             "{memory_service_url}",
         )
     )
+}
+
+CLIENT_NATIVE_CAPABILITIES = {
+    "claude-code": frozenset(CLAUDE_NATIVE_TOOLS),
+    "codex": frozenset(CLAUDE_NATIVE_TOOLS),
+    "vibe": frozenset(CLAUDE_NATIVE_TOOLS) - {"native_glob", "native_grep"},
 }
 
 
@@ -568,7 +575,16 @@ def _required_capabilities(
     if unsupported:
         raise ExecutorRefused("unsupported required capabilities: " + ", ".join(unsupported))
     if context.role in {"worker", "reviewer"}:
-        baseline = (*policy.allowed_native_capabilities, *memory_tools)
+        assert context.route is not None
+        client_native = CLIENT_NATIVE_CAPABILITIES[context.route.client]
+        baseline = (
+            *(
+                capability
+                for capability in policy.allowed_native_capabilities
+                if capability in client_native
+            ),
+            *memory_tools,
+        )
         requested = tuple(dict.fromkeys((*baseline, *requested)))
     if context.role == "helper" and "native_read" in requested:
         if not context.capability_read_roots:
@@ -603,6 +619,27 @@ def _capability_evidence(
         if isolation.get("model") != context.route.model or not isolation.get("identity"):
             raise ExecutorRefused("model isolation evidence does not match selected model")
     return evidence
+
+
+def _hook_policy_capabilities(
+    policy: RolePolicy, context: ExecContext
+) -> tuple[str, ...]:
+    """Capabilities written to the hook policy, before client filtering.
+
+    Unlike ``_required_capabilities``, the worker/reviewer baseline here is not
+    narrowed by ``CLIENT_NATIVE_CAPABILITIES``: the policy body stays the one the
+    live gates observed, and a capability the client cannot offer (Vibe glob and
+    grep) allows nothing.
+    """
+    required = tuple(dict.fromkeys(context.required_capabilities))
+    if context.role in {"worker", "reviewer"}:
+        memory_tools = _resolved_memory_tools(context, policy).neutral_names
+        required = tuple(dict.fromkeys((
+            *policy.allowed_native_capabilities,
+            *memory_tools,
+            *required,
+        )))
+    return required
 
 
 def _launch_project_discovery(
@@ -1399,6 +1436,7 @@ def _policy_payload(
     capability_identity: str,
 ) -> dict[str, Any]:
     mcp_tools = list(_resolved_memory_tools(context, policy).neutral_names)
+    policy_capabilities = _hook_policy_capabilities(policy, context)
     if context.route is not None and (
         context.route.client == "codex" and context.role in {"worker", "reviewer"}
     ):
@@ -1411,7 +1449,7 @@ def _policy_payload(
         "read_deny_patterns": list(policy.read_deny_patterns),
         "deny_path_forms": ["requested", "resolved"],
         "edit_roots": list(edit_roots),
-        "effective_capabilities": list(required),
+        "effective_capabilities": list(policy_capabilities),
         "mcp_tool_allowlist": list(dict.fromkeys(mcp_tools)),
         "delegation_policy": policy.delegation_policy,
         "required_capability_identity": capability_identity,
