@@ -72,7 +72,8 @@ VIBE_312_DENIED_TOOL_NAMES = (
     "agents.interrupt",
     "task",
 )
-VIBE_312_WORKER_DISABLED_TOOLS = frozenset(VIBE_312_DENIED_TOOL_NAMES[:-1])
+VIBE_312_WORKER_DISABLED_TOOLS = frozenset({"bash"})
+VIBE_312_READ_ONLY_DISABLED_TOOLS = frozenset({"bash", "edit", "write_file"})
 VIBE_312_MCP_TOOL_NAMES = (
     "mcp_compchem-memory.memory_get_context",
     "mcp_compchem-tools.run_shell",
@@ -420,6 +421,9 @@ def test_vibe_disabled_tools_match_role_in_toml_and_argv(tmp_path, role):
     )[".vibe/config.toml"].decode())
 
     assert set(config["disabled_tools"]) == expected
+    assert config["disabled_tools"] == sorted(expected)
+    assert config["enable_subagents"] is False
+    assert config["enable_background_processes"] is False
     if role != "worker":
         assert expected == set(READ_ONLY_DISABLED_TOOLS)
     executor = executor_for(context.route, role, context)
@@ -434,7 +438,7 @@ def test_vibe_worker_retains_only_edit_and_write(tmp_path):
     executor = executor_for(context.route, "worker", context)
 
     assert disabled == VIBE_312_WORKER_DISABLED_TOOLS
-    assert not {"file_system.edit", "file_system.write_file"} & disabled
+    assert not {"edit", "write_file"} & disabled
     config = tomllib.loads(
         (executor.prepared.invocation_dir / ".vibe" / "config.toml").read_text()
     )
@@ -444,7 +448,7 @@ def test_vibe_worker_retains_only_edit_and_write(tmp_path):
 def test_vibe_nonworker_roles_retain_full_read_only_deny_set():
     for role in ("reviewer", "helper", "evaluator"):
         assert set(disabled_tools_for_role(role)) == set(READ_ONLY_DISABLED_TOOLS)
-        assert VIBE_312_WORKER_DISABLED_TOOLS <= set(disabled_tools_for_role(role))
+        assert set(disabled_tools_for_role(role)) == VIBE_312_READ_ONLY_DISABLED_TOOLS
 
 
 def _live_native_payload(tool: str, cwd: Path, target: object) -> dict:
@@ -679,13 +683,9 @@ def test_vibe_worker_shell_process_delegation_and_unapproved_mcp_denied(tmp_path
         assert json.loads(denied.stdout)["decision"] == "deny"
 
 
-def test_vibe_312_disabled_tool_inventory_is_versioned_and_complete():
-    # Static inventory from Vibe 3.1.2 _process_actions.py and _subagents/_core_adapter.py.
-    assert VIBE_312_WORKER_DISABLED_TOOLS == {
-        "file_system.bash",
-        "process.start", "process.write", "process.output", "process.list", "process.stop",
-        "agents.list", "agents.spawn", "agents.send_message", "agents.interrupt",
-    }
+def test_vibe_312_disabled_tool_inventory_matches_python_catalogue():
+    assert VIBE_312_WORKER_DISABLED_TOOLS == {"bash"}
+    assert VIBE_312_READ_ONLY_DISABLED_TOOLS == {"bash", "edit", "write_file"}
 
 
 def test_vibe_worker_strict_hook_failure_fails_closed_before_spawn(tmp_path, monkeypatch):

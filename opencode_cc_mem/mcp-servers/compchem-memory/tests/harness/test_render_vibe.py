@@ -46,7 +46,7 @@ def test_vibe_mcp_timeout_is_660(make_render):
     assert memory["command"] == "/venv/bin/python"
     assert memory["args"] == ["-m", "compchem_memory.server"]
     assert config["active_model"] == "devstral"
-    assert config["disabled_tools"] == ["file_system.bash"]
+    assert config["disabled_tools"] == ["bash"]
 
 
 def test_vibe_http_memory_uses_native_api_key_env_auth(make_render, monkeypatch):
@@ -150,7 +150,7 @@ def test_vibe_preserves_member_entries_and_is_idempotent(make_render):
     apply(render(neutral, context))
     config = tomllib.loads((folder / "config.toml").read_text())
     hooks = tomllib.loads((folder / "hooks.toml").read_text())["hooks"]
-    assert config["disabled_tools"] == ["mine.tool", "file_system.bash"]
+    assert config["disabled_tools"] == ["mine.tool", "bash"]
     assert config["mcp_servers"][0]["name"] == "mine"
     assert [h["name"] for h in hooks][0] == "member"
     assert hooks[1] == {"name": "magnolia-old", "type": "pre_tool", "command": "x"}
@@ -177,7 +177,16 @@ def test_vibe_disabled_tools_is_append_only_and_never_duplicates(make_render):
     _apply(render(neutral, context))
     _apply(render(neutral, context))
     config = tomllib.loads((folder / "config.toml").read_text())
-    assert config["disabled_tools"] == ["file_system.bash", "extra.tool"]
+    assert config["disabled_tools"] == ["file_system.bash", "extra.tool", "bash"]
+
+
+def test_vibe_member_render_maps_all_neutral_names(make_render):
+    neutral, context = make_render()
+    neutral.deny_tools = frozenset({"bash", "write", "edit", "write_file", "custom"})
+
+    config = _config(render(neutral, context), context)
+
+    assert config["disabled_tools"] == ["bash", "custom", "edit", "write_file"]
 
 
 def test_vibe_explicit_model_overwrites_member_active_model(make_render):
