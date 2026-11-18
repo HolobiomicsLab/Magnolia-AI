@@ -52,13 +52,13 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
           "configuration_binding": {
             "kind": "claude-role-shape-v1",
@@ -92,17 +92,17 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
-          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "entrypoint": [
               "claude",
@@ -117,18 +117,18 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "accepted": true,
             "model": "haiku",
             "reported_model": "claude-haiku-5-5",
-            "identity": "claude-code-2.1.325:--model=haiku"
+            "identity": "claude-code-2.1.327:--model=haiku"
           },
           "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "scope": "launch-project",
             "configuration": "run-owned --settings and --mcp-config"
@@ -137,13 +137,13 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": true,
           "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "kind": "claude-role-shape-v1",
             "observed_revision": "02b5f43",
@@ -163,7 +163,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "role": "worker",
             "source": "Claude live role gate / What was established"
@@ -172,7 +172,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -188,7 +188,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "actions": [
               "secret and recursive reads",
@@ -222,7 +222,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -249,7 +249,8 @@
         "No additional role-specific live caveat.",
         "Live pass 2a re-observed the worker identity, tool surface, policy boundaries and usage on the final role shape.",
         "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): identity matched; read, grep, secret and alias denials and work/ write and edit observed (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cw.json). Still stale: the model declined to attempt the outside write, so that denial was not re-observed; one live call that attempts it clears the row.",
-        "Plan 4 Task 6b live (17-18 Nov 2026): identity recomputed equal (launch 88de138b, config 7f544ae3, hook_source 496c1102); the outside write was attempted and denied by the hook before execution, outside directory unchanged (opencode_cc_mem/docs/evidence/live-p4/live6b/c1-claude-worker-hooks.json). The allowed work/ write and edit on this identity are from Task 6 (live-p4/reobserve/B-cw-hooks.json); 6b's own work/ write was denied only because the gate had not created work/, which the campaign run store always creates."
+        "Plan 4 Task 6b live (17-18 Nov 2026): identity recomputed equal (launch 88de138b, config 7f544ae3, hook_source 496c1102); the outside write was attempted and denied by the hook before execution, outside directory unchanged (opencode_cc_mem/docs/evidence/live-p4/live6b/c1-claude-worker-hooks.json). The allowed work/ write and edit on this identity are from Task 6 (live-p4/reobserve/B-cw-hooks.json); 6b's own work/ write was denied only because the gate had not created work/, which the campaign run store always creates.",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row (hook_source 496c1102). One call: read, grep, memory_get_context and work/ write and edit allowed; secret and alias reads and the sanctioned outside write denied by the hook before execution; outside directory unchanged; catalogue identical to 2.1.326 (33 tools) (opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json)."
       ]
     },
     {
@@ -259,13 +260,13 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
           "configuration_binding": {
             "kind": "claude-role-shape-v1",
@@ -299,17 +300,17 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
-          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "entrypoint": [
               "claude",
@@ -324,18 +325,18 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "accepted": true,
             "model": "haiku",
             "reported_model": "claude-haiku-5-5",
-            "identity": "claude-code-2.1.325:--model=haiku"
+            "identity": "claude-code-2.1.327:--model=haiku"
           },
           "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "scope": "launch-project",
             "configuration": "run-owned --settings and --mcp-config"
@@ -344,13 +345,13 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": true,
           "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "kind": "claude-role-shape-v1",
             "observed_revision": "02b5f43",
@@ -370,7 +371,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "role": "reviewer",
             "source": "Claude live role gate / What was established"
@@ -379,7 +380,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "capabilities": [
               "native_read",
@@ -391,7 +392,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "actions": [
               "all edits and writes",
@@ -413,7 +414,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "effective_max_turns": 8,
             "ledger_matches_argv": true
@@ -422,7 +423,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -449,7 +450,8 @@
         "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
         "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
         "Live pass 2a re-observed the reviewer identity and read-only policy boundaries. First-try review validation failed because the prompt omitted the run-directory evidence-path rule fixed by F-L3.",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, grep; denied: secret read, alias read, edit, write; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, grep; denied: secret read, alias read, edit, write; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One call: read x2 and grep allowed; secret and alias reads, edit and write denied by the hook; valid review JSON (1 issue); catalogue identical to 2.1.326 (27 tools) (opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json)."
       ]
     },
     {
@@ -459,13 +461,13 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
           "configuration_binding": {
             "kind": "claude-role-shape-v1",
@@ -499,17 +501,17 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
-          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "entrypoint": [
               "claude",
@@ -524,18 +526,18 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "accepted": true,
             "model": "haiku",
             "reported_model": "claude-haiku-5-5",
-            "identity": "claude-code-2.1.325:--model=haiku"
+            "identity": "claude-code-2.1.327:--model=haiku"
           },
           "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "scope": "launch-project",
             "configuration": "run-owned --settings and --mcp-config"
@@ -544,13 +546,13 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": true,
           "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "kind": "claude-role-shape-v1",
             "observed_revision": "02b5f43",
@@ -570,7 +572,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "role": "helper",
             "source": "Claude live role gate / What was established"
@@ -579,7 +581,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "capabilities": [
               "native_read"
@@ -589,7 +591,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "actions": [
               "reads outside the named root",
@@ -621,7 +623,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -648,7 +650,8 @@
         "No additional role-specific live caveat.",
         "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted.",
         "Live pass 2a re-observed the native_read helper identity, docs-only boundary and usage.",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; bound native_read allowed, secret and alias reads denied; grep and write/edit absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ch.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; bound native_read allowed, secret and alias reads denied; grep and write/edit absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ch.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One call in the bound native_read shape: docs/notes.md read allowed; secret, alias and README (outside the read root) denied by the hook; offered tools exactly [Read] (opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json)."
       ]
     },
     {
@@ -658,13 +661,13 @@
       "stale": false,
       "gate": {
         "status": "observed",
-        "artifact": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
         "value": {
           "decision": "accepted-live",
           "client_identity": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
           "configuration_binding": {
             "kind": "claude-role-shape-v1",
@@ -698,17 +701,17 @@
       "cells": {
         "identity": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
-            "version": "2.1.326",
-            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
           },
-          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
         },
         "argv": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "entrypoint": [
               "claude",
@@ -723,18 +726,18 @@
         },
         "model_delivery": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "accepted": true,
             "model": "haiku",
             "reported_model": "claude-haiku-5-5",
-            "identity": "claude-code-2.1.325:--model=haiku"
+            "identity": "claude-code-2.1.327:--model=haiku"
           },
           "note": "Requested haiku was reported by the init/modelUsage stream."
         },
         "discovery_dir": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "scope": "launch-project",
             "configuration": "run-owned --settings and --mcp-config"
@@ -743,13 +746,13 @@
         },
         "trust": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": true,
           "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
         },
         "hook_policy_digest": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "kind": "claude-role-shape-v1",
             "observed_revision": "02b5f43",
@@ -769,7 +772,7 @@
         },
         "native_schemas": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "role": "evaluator",
             "source": "Claude live role gate / What was established"
@@ -778,7 +781,7 @@
         },
         "allowed_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "capabilities": []
           },
@@ -786,7 +789,7 @@
         },
         "denied_actions": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "actions": [
               "all tools"
@@ -806,7 +809,7 @@
         },
         "caps": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "effective_max_turns": 1,
             "ledger_matches_argv": true
@@ -815,7 +818,7 @@
         },
         "usage_semantics": {
           "status": "observed",
-          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json",
           "value": {
             "scope": "physical invocation",
             "counters": [
@@ -841,7 +844,8 @@
         "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
         "No additional role-specific live caveat.",
         "Live pass 2a re-observed the no-tools evaluator identity, boundary and usage.",
-        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; one turn with no tools exposed; write absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ce.json)."
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; one turn with no tools exposed; write absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ce.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One turn, zero tools offered, no tool call, answer parsed (EVAL-OK 0 / TOOLS: NONE) (opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json)."
       ]
     },
     {

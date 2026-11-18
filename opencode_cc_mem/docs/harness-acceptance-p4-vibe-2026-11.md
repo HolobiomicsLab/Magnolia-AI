@@ -35,14 +35,20 @@ The 17 November ruling that kept Vibe refused is superseded.
 **Five Claude Code and Codex rows made stale by the Plan 4 hook-adapter change are current again.** The
 change touched only `hook/adapters/vibe.py`, but `hook_source` hashes the whole hook tree.
 
+**The four Claude Code rows are rebound to Claude Code 2.1.327.** Claude Code updated itself from 2.1.326 on
+18 November, which made every Claude role refuse before launch. Task 11 re-observed the four rows on 2.1.327: only
+the client version and executable hash changed, the nine bound configuration components equal the stored rows,
+the offered tool catalogue is identical, and every forbidden attempt (secret, alias, outside write, read-only
+writes and edits, the helper's read outside its root) was denied by the hook with no effect.
+
 ## Matrix (Plan 4 changes only)
 
 | Client | Role | Status | Evidence |
 | --- | --- | --- | --- |
-| claude-code | worker | re-observed, current | `live-p4/reobserve/B-cw*.json`, `live-p4/live6b/c1-claude-worker-*.json` |
-| claude-code | reviewer | re-observed, current | `live-p4/reobserve/B-cr*.json` |
-| claude-code | helper | re-observed, current | `live-p4/reobserve/B-ch*.json` |
-| claude-code | evaluator | re-observed, current | `live-p4/reobserve/B-ce*.json` |
+| claude-code | worker | rebound to 2.1.327 | `live-p4/claude327/worker-*.json` (2.1.326: `live-p4/reobserve/B-cw*.json`, `live-p4/live6b/c1-claude-worker-*.json`) |
+| claude-code | reviewer | rebound to 2.1.327 | `live-p4/claude327/reviewer-*.json` (2.1.326: `live-p4/reobserve/B-cr*.json`) |
+| claude-code | helper | rebound to 2.1.327 | `live-p4/claude327/helper-*.json` (2.1.326: `live-p4/reobserve/B-ch*.json`) |
+| claude-code | evaluator | rebound to 2.1.327 | `live-p4/claude327/evaluator-*.json` (2.1.326: `live-p4/reobserve/B-ce*.json`) |
 | codex | worker | re-observed, current | `live-p4/reobserve/B-xw*.json` |
 | codex | reviewer | re-observed, current | `live-p4/reobserve/B-xr*.json` |
 | vibe | worker, reviewer, helper, evaluator | accepted, accepted limitation (`docs/vibe-known-issues.md`) | `live-p4/vibe9b/`, `live-p4/vibe9a/` (earlier refusal evidence `live-p4/vibe/`) |
@@ -67,7 +73,7 @@ tool names, which Vibe's filter does not match, so Vibe's own deny-on-call never
 | Client | Plan 4 live calls | Cumulative |
 | --- | --- | --- |
 | Vibe | 24 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b) | 29 of 30 |
-| Claude Code | 5 (re-observation) | 36 of 40 |
+| Claude Code | 9 (5 re-observation on 2.1.326, 4 on 2.1.327) | 40 of 40 |
 | Codex | 2 (re-observation) | 36 of 44 |
 | OpenRouter (memory server) | 29 calls, US$0.006 | — |
 

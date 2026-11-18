@@ -1,0 +1,194 @@
+[
+  {
+    "actual_work": {
+      "pgid": 40724,
+      "pid": 40724,
+      "process_start_token": "ps:40724:Wed Nov 18 09:33:17 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 30,
+    "ended_at": "2026-11-18T09:33:39.600868+00:00",
+    "invocation_id": "live11:p4-11-cw:worker:1:41ccb3c06dbe45e088a982ced9273f86",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live11:p4-11-cw",
+    "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+    "reserved_at": "2026-11-18T09:33:17.128146+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "worker",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "3606445d3121e54237363b3fa0a5781d3d26d90b9fa4019ce9fca09d0f9e816c",
+      "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+      "role": "worker",
+      "session_id": "sha16:d1f7c6b73b55f487"
+    },
+    "started_at": "2026-11-18T09:33:17.499045+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 17676,
+      "cache_read_tokens": 276902,
+      "cache_write_tokens": 17676,
+      "cached_tokens": 276902,
+      "completeness": "complete",
+      "cost": 0.007286220000000001,
+      "duration_seconds": 22.308995542116463,
+      "input_tokens": 20,
+      "output_tokens": 1960,
+      "reasoning_tokens": 283,
+      "source": "claude-stream-json",
+      "turns": 10,
+      "uncached_input_tokens": 20
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 44169,
+      "pid": 44169,
+      "process_start_token": "ps:44169:Wed Nov 18 09:37:07 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 8,
+    "ended_at": "2026-11-18T09:37:19.223802+00:00",
+    "invocation_id": "live11:p4-11-cr:reviewer:1:b039057b07284fe08a10ad7993f0ae15",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live11:p4-11-cr",
+    "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+    "reserved_at": "2026-11-18T09:37:07.628681+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "reviewer",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "d2771495bc51f3c85124382bae33355b5714603e98027a458ad22e6ef2919425",
+      "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+      "role": "reviewer",
+      "session_id": "sha16:f7f46be9c2369d4b"
+    },
+    "started_at": "2026-11-18T09:37:07.979854+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 15770,
+      "cache_read_tokens": 68327,
+      "cache_write_tokens": 15770,
+      "cached_tokens": 68327,
+      "completeness": "complete",
+      "cost": 0.0048093699999999994,
+      "duration_seconds": 11.430391625501215,
+      "input_tokens": 6,
+      "output_tokens": 1943,
+      "reasoning_tokens": 632,
+      "source": "claude-stream-json",
+      "turns": 8,
+      "uncached_input_tokens": 6
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 44350,
+      "pid": 44350,
+      "process_start_token": "ps:44350:Wed Nov 18 09:37:38 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 40,
+    "ended_at": "2026-11-18T09:37:49.660093+00:00",
+    "invocation_id": "live11:p4-11-ch:helper:1:92d1f3d5c12b4e67ae25a1f5a6ac44a4",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live11:p4-11-ch",
+    "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+    "reserved_at": "2026-11-18T09:37:38.248967+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "helper",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "7a25e8cec4b55246732f5dd34bb7b2d3b515860ae347ef51ad619298010f5b84",
+      "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+      "role": "helper",
+      "session_id": "sha16:ba37aac49fe1e7d0"
+    },
+    "started_at": "2026-11-18T09:37:38.596285+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 11290,
+      "cache_read_tokens": 51177,
+      "cache_write_tokens": 11290,
+      "cached_tokens": 51177,
+      "completeness": "complete",
+      "cost": 0.0033332700000000006,
+      "duration_seconds": 11.247062666341662,
+      "input_tokens": 10,
+      "output_tokens": 1125,
+      "reasoning_tokens": 400,
+      "source": "claude-stream-json",
+      "turns": 5,
+      "uncached_input_tokens": 10
+    }
+  },
+  {
+    "actual_work": {
+      "pgid": 44487,
+      "pid": 44487,
+      "process_start_token": "ps:44487:Wed Nov 18 09:38:08 2026",
+      "service_request_id": null
+    },
+    "billing": "subscription",
+    "client": "claude-code",
+    "effective_cap": 1,
+    "ended_at": "2026-11-18T09:38:12.104953+00:00",
+    "invocation_id": "live11:p4-11-ce:evaluator:1:95df472605954497a218071d33a4cd1b",
+    "outcome": {
+      "kind": "success",
+      "limit": null
+    },
+    "parent_run_id": "live11:p4-11-ce",
+    "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+    "reserved_at": "2026-11-18T09:38:08.607931+00:00",
+    "resolved_model": "haiku",
+    "run_kind": "evaluator",
+    "schema_version": "magnolia-invocation-v1",
+    "session_identity": {
+      "client": "claude-code",
+      "model": "haiku",
+      "policy_digest": "1f5f96aa455f6f8167c22fee3d91b8d83095023d82a95a72637a1f9a213246f2",
+      "project_digest": "8a903374fba79541c895b1ef02ddfe45e4bd4a14b327134a44392238a574831c",
+      "role": "evaluator",
+      "session_id": "sha16:506eb504c80f9f7d"
+    },
+    "started_at": "2026-11-18T09:38:08.990724+00:00",
+    "subscription_key": "claude-code",
+    "usage": {
+      "cache_creation_tokens": 9819,
+      "cache_read_tokens": 649,
+      "cache_write_tokens": 9819,
+      "cached_tokens": 649,
+      "completeness": "complete",
+      "cost": 0.0021114899999999997,
+      "duration_seconds": 3.298554666340351,
+      "input_tokens": 2,
+      "output_tokens": 282,
+      "reasoning_tokens": 261,
+      "source": "claude-stream-json",
+      "turns": 1,
+      "uncached_input_tokens": 2
+    }
+  }
+]

@@ -1,0 +1,188 @@
+{
+  "evaluator": {
+    "added_in_2_1_327": [],
+    "agents_baseline": null,
+    "agents_observed": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "Plan",
+      "statusline-setup"
+    ],
+    "apiKeySource": "none",
+    "baseline_artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json (Claude Code 2.1.326)",
+    "baseline_version": "2.1.326",
+    "count_baseline": 0,
+    "count_observed": 0,
+    "mcp_servers_baseline": [],
+    "mcp_servers_observed": [],
+    "observed_model": "claude-haiku-5-5",
+    "observed_tools": [],
+    "observed_version": "2.1.327",
+    "permissionMode": "default",
+    "removed_in_2_1_327": [],
+    "tools_called": []
+  },
+  "helper": {
+    "added_in_2_1_327": [],
+    "agents_baseline": null,
+    "agents_observed": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "Plan",
+      "statusline-setup"
+    ],
+    "apiKeySource": "none",
+    "baseline_artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json (Claude Code 2.1.326)",
+    "baseline_version": "2.1.326",
+    "count_baseline": 1,
+    "count_observed": 1,
+    "mcp_servers_baseline": [],
+    "mcp_servers_observed": [],
+    "observed_model": "claude-haiku-5-5",
+    "observed_tools": [
+      "Read"
+    ],
+    "observed_version": "2.1.327",
+    "permissionMode": "default",
+    "removed_in_2_1_327": [],
+    "tools_called": [
+      "Read"
+    ]
+  },
+  "reviewer": {
+    "added_in_2_1_327": [],
+    "agents_baseline": null,
+    "agents_observed": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "Plan",
+      "statusline-setup"
+    ],
+    "apiKeySource": "none",
+    "baseline_artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json (Claude Code 2.1.326)",
+    "baseline_version": "2.1.326",
+    "count_baseline": 27,
+    "count_observed": 27,
+    "mcp_servers_baseline": [],
+    "mcp_servers_observed": [],
+    "observed_model": "claude-haiku-5-5",
+    "observed_tools": [
+      "Task",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "DesignSync",
+      "Edit",
+      "EnterWorktree",
+      "ExitWorktree",
+      "Glob",
+      "Grep",
+      "ListAgents",
+      "Monitor",
+      "NotebookEdit",
+      "PushNotification",
+      "Read",
+      "RemoteTrigger",
+      "ReportFindings",
+      "ScheduleWakeup",
+      "SendMessage",
+      "Skill",
+      "TaskStop",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Workflow",
+      "Write"
+    ],
+    "observed_version": "2.1.327",
+    "permissionMode": "default",
+    "removed_in_2_1_327": [],
+    "tools_called": [
+      "Edit",
+      "Grep",
+      "Read",
+      "Write"
+    ]
+  },
+  "worker": {
+    "added_in_2_1_327": [],
+    "agents_baseline": null,
+    "agents_observed": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "Plan",
+      "statusline-setup"
+    ],
+    "apiKeySource": "none",
+    "baseline_artifact": "opencode_cc_mem/docs/evidence/live2a/cont-runs.json (Claude Code 2.1.326)",
+    "baseline_version": "2.1.326",
+    "count_baseline": 33,
+    "count_observed": 33,
+    "mcp_servers_baseline": [
+      {
+        "name": "compchem-memory",
+        "source": "dynamic",
+        "status": "connected"
+      }
+    ],
+    "mcp_servers_observed": [
+      {
+        "name": "compchem-memory",
+        "source": "dynamic",
+        "status": "connected"
+      }
+    ],
+    "observed_model": "claude-haiku-5-5",
+    "observed_tools": [
+      "Task",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "DesignSync",
+      "Edit",
+      "EnterWorktree",
+      "ExitWorktree",
+      "Glob",
+      "Grep",
+      "ListAgents",
+      "ListMcpResourcesTool",
+      "Monitor",
+      "NotebookEdit",
+      "PushNotification",
+      "Read",
+      "ReadMcpResourceDirTool",
+      "ReadMcpResourceTool",
+      "RemoteTrigger",
+      "ReportFindings",
+      "ScheduleWakeup",
+      "SendMessage",
+      "Skill",
+      "TaskStop",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Workflow",
+      "Write",
+      "mcp__compchem-memory__memory_get_context",
+      "mcp__compchem-memory__memory_get_run_history",
+      "mcp__compchem-memory__memory_search"
+    ],
+    "observed_version": "2.1.327",
+    "permissionMode": "default",
+    "removed_in_2_1_327": [],
+    "tools_called": [
+      "Edit",
+      "Grep",
+      "Read",
+      "ToolSearch",
+      "Write",
+      "mcp__compchem-memory__memory_get_context"
+    ]
+  }
+}

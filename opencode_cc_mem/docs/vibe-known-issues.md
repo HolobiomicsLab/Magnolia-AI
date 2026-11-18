@@ -93,7 +93,8 @@ from the pinned one.
 Each accepted row binds the client's exact version and executable hash. When Vibe, Claude Code or Codex updates
 itself, Magnolia refuses that client before launch ("capability launch identity mismatch") and a campaign stops in
 `waiting_human`. The rows must be re-observed live on the new version, or the update rolled back. This happened
-during the Vibe gate: Claude Code updated itself from 2.1.326 to 2.1.327.
+during the Vibe gate: Claude Code updated itself from 2.1.326 to 2.1.327. The four Claude rows were re-observed on 2.1.327
+the same day (four calls) and rebound.
 
 ### 9. Worker writes need the run's `work/` directory
 
@@ -124,4 +125,5 @@ usage in total.
   "differing paths" rule has offline coverage only for Vibe.
 - Models sent `path` rather than `file_path` for nested calls; the adapter accepted both.
 - The full campaign step ran the Vibe worker in the real runner successfully, but the Claude reviewer half could
-  not run (see 8).
+  not run (see 8). The Claude rows have since been rebound; the mixed Vibe-worker / Claude-reviewer campaign has
+  not been re-run, because the Claude call budget is spent.
