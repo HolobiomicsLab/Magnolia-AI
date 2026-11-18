@@ -161,6 +161,6 @@ so can get the answer "tool not found" without any attempt.
 - Vibe's schema rejects a `read_file` carrying both `path` and `file_path` before the hook runs, so the hook's
   "differing paths" rule has offline coverage only for Vibe.
 - Models sent `path` rather than `file_path` for nested calls; the adapter accepted both.
-- The full campaign step ran the Vibe worker in the real runner successfully, but the Claude reviewer half could
-  not run (see 8). The Claude rows have since been rebound; the mixed Vibe-worker / Claude-reviewer campaign has
-  not been re-run, because the Claude call budget is spent.
+- The mixed Vibe-worker / Claude-reviewer campaign first could not reach its reviewer (see 8). It was re-run on
+  18 November on Vibe 3.1.3 and passed end to end, including a review repair
+  (`docs/harness-acceptance-p4-vibe-2026-11.md`, "Restack and campaign rerun").

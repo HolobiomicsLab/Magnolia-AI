@@ -78,15 +78,47 @@ Magnolia defects were found and fixed: Vibe 3.1.2 `--output json` is one message
 tool-name mismatch analysis showed no hook-adapter gap. A third was found later: Magnolia rendered Vibe's core
 tool names, which Vibe's filter does not match, so Vibe's own deny-on-call never applied (fixed in `0f762c9`).
 
+## Restack and campaign rerun (18 November 2026)
+
+PR2 was replayed on the PR1 follow-up (upstream review changes: Tao's job-notice lock, private hook files, the
+lossless application probe), and Plans 3 and 4 were replayed on it. The replay moved `hook_source`
+(`496c1102…` → `170065f4…`), so Task 13a re-observed the ten accepted rows live, one call each: only `hook_source`
+differed, and every forbidden read, write, edit and outside write was denied before execution with no effect
+(`live-p4/reobserve2/`). The Claude reviewer's review JSON in that call cited a path outside the run directory and
+failed validation; the row records it, and the campaigns below exercised that reviewer end to end.
+
+Task 13 then ran the five campaigns through the real runner on the committed table (`live-p4/campaigns13/`):
+
+| Campaign | Result |
+| --- | --- |
+| `worker-codex-review` (Codex worker, Claude reviewer) | PASS: receipt `passed`, drain once, re-drain 0 |
+| `worker-claude-code-review` (Claude worker, Codex reviewer) | PASS |
+| `opencode-control` (OpenRouter) | PASS |
+| `opencode-reviewer-only` (Claude worker, OpenCode reviewer) | PASS |
+| `worker-vibe-review` (Vibe 3.1.3 worker, Claude reviewer) | FAIL, then PASS after `65171f8` (`campaigns13/c5-rerun/`) |
+
+The first Vibe campaign failed on a defect that had never been exercised: when a review fails validation, the runner
+resumes the reviewer's session with a format note, but the Claude Code and Codex executors refused any resume without
+a resume artifact, even of the session they had just created. Commit `65171f8` lets an executor resume a session it
+created itself, and only that. In the rerun the first review failed validation, the repair resumed the same session,
+and the repaired review validated; the campaign completed with a passed receipt. The Vibe worker's `session_end`
+finished within Vibe 3.1.3's 2 s limit in every campaign (at most 0.54 s).
+
+Open: in campaign 1 a Codex worker passed a mistyped `project_dir` and the managed HTTP memory service refused the
+call, although bound servers are meant to ignore a model-supplied project (Plan 3 F-L8). The fix is on branch
+`fix/memory-http-ignore-model-project-dir`, not merged: `memory_http.py` is part of `hook_source`, so it needs another
+re-observation of the ten rows, and one memory-server test must be fixed first.
+
 ## Budgets
 
 | Client | Plan 4 live calls | Cumulative |
 | --- | --- | --- |
-| Vibe | 38 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b, 14 gate 12 on 3.1.3) | 43 of 52 (cap raised 18 Nov) |
-| Claude Code | 9 (5 re-observation on 2.1.326, 4 on 2.1.327) | 40 of 52 (cap raised 18 Nov) |
-| Codex | 2 (re-observation) | 36 of 52 (cap raised 18 Nov) |
-| OpenRouter (memory server) | 33 calls, US$0.007 | — |
+| Vibe | 45 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b, 14 gate 12 on 3.1.3, 4 re-observation 13a, 3 campaigns) | 50 of 52 (cap raised 18 Nov) |
+| Claude Code | 20 (5 re-observation on 2.1.326, 4 on 2.1.327, 4 re-observation 13a, 7 campaigns) | 51 of 52 (cap raised 18 Nov) |
+| Codex | 6 (2 re-observation, 2 re-observation 13a, 2 campaigns) | 40 of 52 (cap raised 18 Nov) |
+| OpenCode | 3 (campaigns) | — |
+| OpenRouter | 60 memory calls and 3 OpenCode campaign calls, about US$0.034 | — |
 
-Vibe reported about US$2.17 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b,
-US$0.79 gate 12). The owner's Vibe trust file and Codex `config.toml`
+Vibe reported about US$2.48 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b,
+US$0.79 gate 12, US$0.31 campaigns). The owner's Vibe trust file and Codex `config.toml`
 were restored byte-identical after each pass (`cmp`); owner Magnolia state was unchanged.
