@@ -1,0 +1,401 @@
+{
+  "ledger": [
+    {
+      "actual_work": {
+        "pgid": 76805,
+        "pid": 76805,
+        "process_start_token": "ps:76805:Wed Nov 18 12:50:05 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 8,
+      "ended_at": "2026-11-18T12:50:43.572446+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step2-reviewer",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "reviewer",
+      "started_at": "2026-11-18T12:50:05.791332+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 222336,
+        "cache_write_tokens": null,
+        "cached_tokens": 222336,
+        "completeness": "partial",
+        "cost": 0.1120374,
+        "duration_seconds": 37.78493874985725,
+        "input_tokens": 260589,
+        "output_tokens": 2841,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 7,
+        "uncached_input_tokens": 38253
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 78738,
+        "pid": 78738,
+        "process_start_token": "ps:78738:Wed Nov 18 12:51:53 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 8,
+      "ended_at": "2026-11-18T12:52:13.549901+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step2-reviewer",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "reviewer",
+      "started_at": "2026-11-18T12:51:53.256800+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 17408,
+        "cache_write_tokens": null,
+        "cached_tokens": 17408,
+        "completeness": "partial",
+        "cost": 0.0598512,
+        "duration_seconds": 20.29715133458376,
+        "input_tokens": 54483,
+        "output_tokens": 217,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 37075
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 80165,
+        "pid": 80165,
+        "process_start_token": "ps:80165:Wed Nov 18 12:53:16 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 30,
+      "ended_at": "2026-11-18T12:54:18.609790+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step3-worker",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "started_at": "2026-11-18T12:53:16.760531+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 198016,
+        "cache_write_tokens": null,
+        "cached_tokens": 198016,
+        "completeness": "partial",
+        "cost": 0.1301079,
+        "duration_seconds": 61.85261412523687,
+        "input_tokens": 236398,
+        "output_tokens": 5711,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 6,
+        "uncached_input_tokens": 38382
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 81360,
+        "pid": 81360,
+        "process_start_token": "ps:81360:Wed Nov 18 12:55:34 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 30,
+      "ended_at": "2026-11-18T12:55:57.717699+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step3b-worker",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "started_at": "2026-11-18T12:55:34.232969+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 170880,
+        "cache_write_tokens": null,
+        "cached_tokens": 170880,
+        "completeness": "partial",
+        "cost": 0.064083,
+        "duration_seconds": 23.48810545913875,
+        "input_tokens": 189779,
+        "output_tokens": 1347,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 5,
+        "uncached_input_tokens": 18899
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 82295,
+        "pid": 82295,
+        "process_start_token": "ps:82295:Wed Nov 18 12:57:13 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 30,
+      "ended_at": "2026-11-18T12:57:34.773185+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step3b-worker",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "started_at": "2026-11-18T12:57:13.257064+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 71936,
+        "cache_write_tokens": null,
+        "cached_tokens": 71936,
+        "completeness": "partial",
+        "cost": 0.0722664,
+        "duration_seconds": 21.519736459478736,
+        "input_tokens": 109865,
+        "output_tokens": 611,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 2,
+        "uncached_input_tokens": 37929
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 82924,
+        "pid": 82924,
+        "process_start_token": "ps:82924:Wed Nov 18 12:58:01 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 40,
+      "ended_at": "2026-11-18T12:58:23.860713+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step4-helper",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "helper",
+      "started_at": "2026-11-18T12:58:01.183036+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 280320,
+        "cache_write_tokens": null,
+        "cached_tokens": 280320,
+        "completeness": "partial",
+        "cost": 0.077826,
+        "duration_seconds": 22.68146450072527,
+        "input_tokens": 298347,
+        "output_tokens": 1165,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 8,
+        "uncached_input_tokens": 18027
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 83294,
+        "pid": 83294,
+        "process_start_token": "ps:83294:Wed Nov 18 12:58:31 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 40,
+      "ended_at": "2026-11-18T12:58:47.556400+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step4-helper",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "helper",
+      "started_at": "2026-11-18T12:58:31.219514+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 20992,
+        "cache_write_tokens": null,
+        "cached_tokens": 20992,
+        "completeness": "partial",
+        "cost": 0.053304300000000006,
+        "duration_seconds": 16.347934333607554,
+        "input_tokens": 53894,
+        "output_tokens": 107,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 32902
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 84335,
+        "pid": 84335,
+        "process_start_token": "ps:84335:Wed Nov 18 12:59:55 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 1,
+      "ended_at": "2026-11-18T13:00:06.809489+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step5-evaluator",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "started_at": "2026-11-18T12:59:55.698303+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 20864,
+        "cache_write_tokens": null,
+        "cached_tokens": 20864,
+        "completeness": "partial",
+        "cost": 0.0281001,
+        "duration_seconds": 11.114998249337077,
+        "input_tokens": 36681,
+        "output_tokens": 166,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 15817
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 87176,
+        "pid": 87176,
+        "process_start_token": "ps:87176:Wed Nov 18 13:00:25 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 1,
+      "ended_at": "2026-11-18T13:00:41.981372+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step5-evaluator",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "started_at": "2026-11-18T13:00:25.718841+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 20864,
+        "cache_write_tokens": null,
+        "cached_tokens": 20864,
+        "completeness": "partial",
+        "cost": 0.051413099999999996,
+        "duration_seconds": 16.267476708628237,
+        "input_tokens": 52313,
+        "output_tokens": 148,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 31449
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 88580,
+        "pid": 88580,
+        "process_start_token": "ps:88580:Wed Nov 18 13:00:55 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 1,
+      "ended_at": "2026-11-18T13:01:06.375293+00:00",
+      "outcome": {
+        "kind": "turn_limit",
+        "limit": null
+      },
+      "parent_run_id": "live12:step5b-evaluator",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "started_at": "2026-11-18T13:00:55.736356+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 20864,
+        "cache_write_tokens": null,
+        "cached_tokens": 20864,
+        "completeness": "partial",
+        "cost": 0.029840099999999998,
+        "duration_seconds": 10.64405645802617,
+        "input_tokens": 36716,
+        "output_tokens": 391,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 1,
+        "uncached_input_tokens": 15852
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 89508,
+        "pid": 89508,
+        "process_start_token": "ps:89508:Wed Nov 18 13:01:25 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "vibe",
+      "effective_cap": 40,
+      "ended_at": "2026-11-18T13:01:55.848415+00:00",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live12:step6x-helper-connector",
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "helper",
+      "started_at": "2026-11-18T13:01:25.765726+00:00",
+      "subscription_key": "vibe",
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 57472,
+        "cache_write_tokens": null,
+        "cached_tokens": 57472,
+        "completeness": "partial",
+        "cost": 0.062164800000000006,
+        "duration_seconds": 30.091853791847825,
+        "input_tokens": 76643,
+        "output_tokens": 3305,
+        "reasoning_tokens": null,
+        "source": "vibe-export-json",
+        "turns": 2,
+        "uncached_input_tokens": 19171
+      }
+    }
+  ],
+  "rows": 11
+}

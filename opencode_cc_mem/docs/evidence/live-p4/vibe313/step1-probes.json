@@ -1,0 +1,250 @@
+{
+  "1a": {
+    "final_text": "Probe complete. Both calls were denied on the first attempt, and per your instruction I did not retry.\n\n| Tool category | Tool called | Invocation | Result |\n|---|---|---|---|\n| Shell | `bash` | `printf TOOL_FILTER_PROBE` | Denied \u2014 \"Tool execution denied by approval policy\" |\n| File-writing | `write_file` | write `probe.txt` containing `probe` | Denied \u2014 \"Tool execution denied by approval policy\" |\n\n**Unavailable tools:** both the shell tool and the file-writing tool were unavailable (blocked by the approval policy, not by absence). No probe output was produced and no file was written.",
+    "project_config": {
+      "config.toml": "enable_telemetry = false\nenable_subagents = false\nenable_background_processes = false\nenabled_tools = [\"read_file\"]\ndisabled_tools = [\"bash\", \"write_file\", \"edit\"]\n"
+    },
+    "provided_tool_groups": {},
+    "run": {
+      "argv_shape": [
+        "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "--workdir",
+        "<G>/probe/1a",
+        "-p",
+        "<text len=221>",
+        "--output",
+        "json",
+        "--auto-approve",
+        "--max-turns",
+        "3",
+        "--output-dir",
+        "<text len=101>",
+        "--enabled-tools",
+        "read_file",
+        "--disabled-tools",
+        "bash",
+        "--disabled-tools",
+        "write_file",
+        "--disabled-tools",
+        "edit"
+      ],
+      "duration_s": 19.09,
+      "env_keys": [
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_PYTHON",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME"
+      ],
+      "probe": "1a",
+      "returncode": 0
+    },
+    "stderr": [
+      "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+      "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Large 4'. Pick another model to stop this notice.",
+      "Tool call denied: file_system.bash (Tool execution denied by approval policy)",
+      "Tool call denied: file_system.write_file (Tool execution denied by approval policy)"
+    ]
+  },
+  "1b": {
+    "final_text": "Both probes were denied on the first attempt, and per your instruction I did not retry.\n\n| Tool type | Tool called | Payload | Result |\n|---|---|---|---|\n| Shell | `bash` | `printf TOOL_FILTER_PROBE` | Denied (`tool_denied`: \"Tool execution denied by approval policy\") |\n| File-writing | `write_file` | `probe.txt` containing `probe` | Denied (`tool_denied`: \"Tool execution denied by approval policy\") |\n\n**Unavailable tools:** both the shell tool and the file-writing tool were unavailable in this session \u2014 each returned `tool_denied` from the approval policy, so neither `TOOL_FILTER_PROBE` was printed nor `probe.txt` was written.",
+    "project_config": {
+      "config.toml": "enable_telemetry = false\nenable_subagents = false\nenable_background_processes = false\ndisabled_tools = [\"*\"]\n"
+    },
+    "provided_tool_groups": {},
+    "run": {
+      "argv_shape": [
+        "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "--workdir",
+        "<G>/probe/1b",
+        "-p",
+        "<text len=221>",
+        "--output",
+        "json",
+        "--auto-approve",
+        "--max-turns",
+        "3",
+        "--output-dir",
+        "<text len=101>",
+        "--disabled-tools",
+        "*"
+      ],
+      "duration_s": 12.28,
+      "env_keys": [
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_PYTHON",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME"
+      ],
+      "probe": "1b",
+      "returncode": 0
+    },
+    "stderr": [
+      "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+      "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Large 4'. Pick another model to stop this notice.",
+      "Tool call denied: file_system.bash (Tool execution denied by approval policy)",
+      "Tool call denied: file_system.write_file (Tool execution denied by approval policy)"
+    ]
+  },
+  "1c": {
+    "final_text": "PERIWINKLE",
+    "hook_log": [
+      {
+        "agent_name": "auto-approve",
+        "event": "pre_agent",
+        "has_parent_session_id": false,
+        "hook_event_name": "pre_agent",
+        "keys": [
+          "agent_name",
+          "cwd",
+          "hook_event_name",
+          "parent_session_id",
+          "prompt",
+          "session_id",
+          "transcript_path",
+          "turn_id"
+        ],
+        "response_text_len": null,
+        "response_text_type": null,
+        "t": 1795006058.819608,
+        "turn_id_present": true
+      },
+      {
+        "agent_name": "auto-approve",
+        "event": "pre_agent",
+        "has_parent_session_id": true,
+        "hook_event_name": "pre_agent",
+        "keys": [
+          "agent_name",
+          "cwd",
+          "hook_event_name",
+          "parent_session_id",
+          "prompt",
+          "session_id",
+          "transcript_path",
+          "turn_id"
+        ],
+        "response_text_len": null,
+        "response_text_type": null,
+        "t": 1795006077.666482,
+        "turn_id_present": true
+      },
+      {
+        "agent_name": "auto-approve",
+        "event": "post_agent",
+        "has_parent_session_id": true,
+        "hook_event_name": "post_agent",
+        "keys": [
+          "agent_name",
+          "cwd",
+          "hook_event_name",
+          "parent_session_id",
+          "response_text",
+          "session_id",
+          "transcript_path",
+          "turn_id"
+        ],
+        "response_text_len": 10,
+        "response_text_type": "str",
+        "t": 1795006088.535255,
+        "turn_id_present": true
+      },
+      {
+        "agent_name": "auto-approve",
+        "event": "post_agent",
+        "has_parent_session_id": false,
+        "hook_event_name": "post_agent",
+        "keys": [
+          "agent_name",
+          "cwd",
+          "hook_event_name",
+          "parent_session_id",
+          "response_text",
+          "session_id",
+          "transcript_path",
+          "turn_id"
+        ],
+        "response_text_len": 10,
+        "response_text_type": "str",
+        "t": 1795006089.989732,
+        "turn_id_present": true
+      }
+    ],
+    "hook_script": "import json, os, sys\nevent = sys.argv[1]\nraw = sys.stdin.read()\ntry:\n    payload = json.loads(raw)\nexcept ValueError:\n    payload = None\nrec = {\"event\": event, \"t\": __import__(\"time\").time()}\nif isinstance(payload, dict):\n    rec[\"keys\"] = sorted(payload)\n    rt = payload.get(\"response_text\")\n    rec[\"response_text_len\"] = len(rt) if isinstance(rt, str) else None\n    rec[\"response_text_type\"] = type(rt).__name__ if \"response_text\" in payload else None\n    rec[\"has_parent_session_id\"] = bool(payload.get(\"parent_session_id\"))\n    rec[\"agent_name\"] = payload.get(\"agent_name\")\n    rec[\"hook_event_name\"] = payload.get(\"hook_event_name\")\n    rec[\"turn_id_present\"] = bool(payload.get(\"turn_id\"))\nelse:\n    rec[\"unparsed_len\"] = len(raw)\nwith open(os.path.join(os.path.dirname(os.path.abspath(__file__)), \"hook-log.jsonl\"), \"a\") as handle:\n    handle.write(json.dumps(rec, sort_keys=True) + \"\\n\")\n",
+    "project_config": {
+      "config.toml": "enable_telemetry = false\nenable_subagents = true\nenable_background_processes = false\n",
+      "hooks.toml": "[[hooks]]\nname = \"probe-pre-agent\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/probe/1c/hook.py pre_agent\"\ntimeout = 30\n\n[[hooks]]\nname = \"probe-post-agent\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/probe/1c/hook.py post_agent\"\ntimeout = 30\n"
+    },
+    "provided_tool_groups": {
+      "connector_web_search": [
+        "finance_search (programmatic)",
+        "news_search (programmatic)",
+        "open_url (programmatic)",
+        "weather_search (programmatic)",
+        "web_search (programmatic)"
+      ],
+      "vibe": [
+        "todo (direct_and_programmatic)",
+        "unified_harness_scratchpad (direct)"
+      ]
+    },
+    "run": {
+      "argv_shape": [
+        "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "--workdir",
+        "<G>/probe/1c",
+        "-p",
+        "<text len=257>",
+        "--output",
+        "json",
+        "--auto-approve",
+        "--max-turns",
+        "6",
+        "--output-dir",
+        "<text len=101>"
+      ],
+      "duration_s": 34.08,
+      "env_keys": [
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_PYTHON",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME"
+      ],
+      "probe": "1c",
+      "returncode": 0
+    },
+    "stderr": [
+      "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+      "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Large 4'. Pick another model to stop this notice."
+    ]
+  }
+}

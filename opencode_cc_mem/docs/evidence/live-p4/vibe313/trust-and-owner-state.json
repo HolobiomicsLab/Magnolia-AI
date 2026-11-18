@@ -1,0 +1,64 @@
+{
+  "free_kb_after": [
+    "free_kb 39633312"
+  ],
+  "free_kb_before": [
+    "free_kb 41323892"
+  ],
+  "owner_state_after_sha16": "01f3fb29f28a832a",
+  "owner_state_before_sha16": "122534dd3787f303",
+  "owner_state_listing_equal_excluding_free_disk": true,
+  "ports_equal": true,
+  "state_after_listing": [
+    "== ~/.local/state/magnolia",
+    "~/.local/state/magnolia 96 1794865991 drwx------",
+    "~/.local/state/magnolia/bindings 64 1794868284 drwx------",
+    "== ~/.config/magnolia",
+    "ABSENT",
+    "== ~/.magnolia",
+    "ABSENT",
+    "== ~/.magnolia/services",
+    "ABSENT",
+    "== opencode",
+    "size_kb 25844",
+    "files 80",
+    "manifest_sha256 0b5aa29bda4b936fcd78fe57c16e42f35561e85a185ee3856862cdd6d70b367f",
+    "== trust sha",
+    "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+    "28 -rw------- 1794811114",
+    "== codex config sha",
+    "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "== pid 61561",
+    "absent",
+    "free_kb 39633312"
+  ],
+  "trust_journal": [
+    {
+      "appended": 4,
+      "before_mode": "0o600",
+      "before_mtime": 1794811114.62612,
+      "before_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "before_size": 28,
+      "event": "begin",
+      "gate_written_sha256": "bd3a6b5c6c3f96c0756935da4000046d100111c2da9d8b4a6d13bad25e425ca6",
+      "gate_written_size": 461,
+      "keys": [
+        "trusted",
+        "untrusted"
+      ],
+      "t": "13:45:57",
+      "trusted_count_after": 4,
+      "untrusted_count_after": 0
+    },
+    {
+      "backup_deleted": true,
+      "cmp_identical": true,
+      "event": "end",
+      "mode": "0o600",
+      "mtime": 1794811114.62612,
+      "restored_sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "size": 28,
+      "t": "14:02:14"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "load_capability_table_projection": {
+    "evaluator": {
+      "accepted": true,
+      "blocking_cells": [],
+      "gate_accepted": true,
+      "launch_identity_bound": true,
+      "launch_identity_client_version": "3.1.3",
+      "stale": false,
+      "vibe_memory": false
+    },
+    "helper": {
+      "accepted": true,
+      "blocking_cells": [],
+      "gate_accepted": true,
+      "launch_identity_bound": true,
+      "launch_identity_client_version": "3.1.3",
+      "stale": false,
+      "vibe_memory": false
+    },
+    "reviewer": {
+      "accepted": true,
+      "blocking_cells": [],
+      "gate_accepted": true,
+      "launch_identity_bound": true,
+      "launch_identity_client_version": "3.1.3",
+      "stale": false,
+      "vibe_memory": false
+    },
+    "worker": {
+      "accepted": true,
+      "blocking_cells": [],
+      "gate_accepted": true,
+      "launch_identity_bound": true,
+      "launch_identity_client_version": "3.1.3",
+      "stale": false,
+      "vibe_memory": true
+    }
+  },
+  "production_identity_recomputed_against_proposed_table": {
+    "evaluator": {
+      "configuration_identity_equal_live": true,
+      "launch_identity_sha256_equal_live": true,
+      "mismatch_vs_proposed_row": {}
+    },
+    "helper": {
+      "configuration_identity_equal_live": true,
+      "launch_identity_sha256_equal_live": true,
+      "mismatch_vs_proposed_row": {}
+    },
+    "reviewer": {
+      "configuration_identity_equal_live": true,
+      "launch_identity_sha256_equal_live": true,
+      "mismatch_vs_proposed_row": {}
+    },
+    "worker": {
+      "configuration_identity_equal_live": true,
+      "launch_identity_sha256_equal_live": true,
+      "mismatch_vs_proposed_row": {}
+    }
+  }
+}

@@ -1,9 +1,10 @@
 # Mistral Vibe as a Magnolia client: known issues and accepted limitations
 
-Applies to Mistral Vibe 3.1.2 (unified runtime), the version the four Vibe capability rows bind (worker,
-reviewer, helper, evaluator; accepted 18 November 2026). Each entry says what happens, why, what Magnolia does
-about it and what a member should do. Evidence: `docs/evidence/live-p4/` (`vibe9a/` for the `run_typescript`
-probe, `vibe9b/` for the acceptance gate). Acceptance record: `docs/harness-acceptance-p4-vibe-2026-11.md`.
+Applies to Mistral Vibe 3.1.3 (unified runtime), the version the four Vibe capability rows bind (worker,
+reviewer, helper, evaluator). The rows were accepted on 3.1.2 on 18 November 2026 and re-observed and rebound on
+3.1.3 the same day. Each entry says what happens, why, what Magnolia does about it and what a member should do.
+Evidence: `docs/evidence/live-p4/` (`vibe9a/` for the `run_typescript` probe, `vibe9b/` for the 3.1.2 acceptance
+gate, `vibe313/` for the 3.1.3 gate). Acceptance record: `docs/harness-acceptance-p4-vibe-2026-11.md`.
 
 ## Summary
 
@@ -24,7 +25,11 @@ makes is hooked, and the program's sandbox has no filesystem, process or network
   `bash`, `edit` and `write_file`, and the worker, for which it disables `bash`.
 - **Why.** Vibe's `enabled_tools` / `disabled_tools` settings and its `--disabled-tools` flag only make a tool
   "denied when called"; they do not remove it from what the model sees. Vibe's core enables its filesystem tools
-  unconditionally. Upstream: [mistralai/mistral-vibe#1552](https://github.com/mistralai/mistral-vibe/issues/1552).
+  unconditionally. Upstream: [mistralai/mistral-vibe#1552](https://github.com/mistralai/mistral-vibe/issues/1552),
+  still open on 3.1.3 (its reproduction gives the same result there).
+- **New in 3.1.3.** Every role is also offered the provided group `connector_web_search` (`web_search`, `open_url`,
+  `news_search`, `finance_search`, `weather_search`), callable from `run_typescript`. Those calls reach the strict
+  hook and are denied as unknown tools; no network result reached the model.
 - **What Magnolia does.** The strict hook denies every call outside the role's policy before it runs: in the
   acceptance gate, every forbidden write, edit, shell command, secret read and alias read was denied with no effect,
   in every role. Magnolia also renders the names Vibe's filter matches, and switches off subagents and background
@@ -34,11 +39,11 @@ makes is hooked, and the program's sandbox has no filesystem, process or network
 
 ### 2. `run_typescript` and `search_tool_functions` leave no hook record
 
-- **What happens.** Vibe's programmatic tool calling cannot be switched off in 3.1.2. Vibe does not call Magnolia's
+- **What happens.** Vibe's programmatic tool calling cannot be switched off in 3.1.2 or 3.1.3. Vibe does not call Magnolia's
   hook for the `run_typescript` call itself, nor for `search_tool_functions` (tool discovery). Upstream:
   [mistralai/mistral-vibe#1431](https://github.com/mistralai/mistral-vibe/issues/1431).
 - **Why it is still safe, as far as observed.** Every tool call made from inside a `run_typescript` program reaches
-  the hook like a direct call (probe 9a and gate 9b): nested reads and memory calls inside policy were allowed;
+  the hook like a direct call (probe 9a, gates 9b and 12): nested reads and memory calls inside policy were allowed;
   nested outside writes, outside edits, secret reads and shell commands were denied with no effect. The program's
   sandbox has no `process`, `require`, `Deno` or `Buffer`; `import('node:fs')` fails; `fetch` exists but throws
   ("not supported in the sandbox"), and a loopback server received no request.
@@ -56,7 +61,8 @@ makes is hooked, and the program's sandbox has no filesystem, process or network
 
 ### 3b. No glob or grep
 
-Vibe 3.1.2's unified runtime offers no glob or grep tool, and `bash` is denied to read-only roles, so a Vibe
+Vibe's unified runtime offers no glob or grep tool (observed on 3.1.2; 3.1.3 no longer records the
+catalogue, see 5), and `bash` is denied to read-only roles, so a Vibe
 reviewer or helper finds files by reading them. Magnolia's worker and reviewer baselines therefore do not require
 `native_glob` or `native_grep` from Vibe. A campaign that explicitly requires either capability is refused before
 Vibe is launched; route it to Claude Code or Codex instead.
@@ -64,14 +70,16 @@ Vibe is launched; route it to Claude Code or Codex instead.
 ### 4. `todo` and `unified_harness_scratchpad` are denied
 
 Both are hooked, unknown to Magnolia's policy, and therefore denied. Neither touches the project (`todo` is an
-in-session list; the scratchpad is a Vibe-private, per-session folder). The model works without them.
+in-session list; the scratchpad is a Vibe-private, per-session folder). The model works without them. Both are
+still offered on 3.1.3.
 
 ### 5. No record of which tools were offered
 
 Vibe exports the effective configuration and the calls made, but no manifest of the tools offered per model request.
 The live gates read the offered catalogue from the session journal under `--output-dir`
 (`model_input.tool_catalog`), which is not a documented interface. The capability rows do not depend on it at run
-time.
+time. On 3.1.3 this is worse: the journal records the direct catalogue as `{type: keep}` with no list, so only the
+provided groups remain visible (in `core_input`), and journal segments rotate and can be pruned.
 
 ## Operating notes
 
@@ -85,8 +93,10 @@ and accept Vibe's trust prompt. Magnolia refuses to launch Vibe in a project who
 Vibe uses the member's own Mistral account; Magnolia never handles the key. On macOS the notice "Reading API keys from
 the macOS Keychain" is expected; a member without Vibe credentials must run Vibe's own setup once. A member who
 configured other models in Vibe sees "Settings for model … are ignored": harmless, because Magnolia pins the model
-per run. The 3.1.2 catalogue offers `mistral-medium-3.5` only, and Magnolia refuses a run whose delivered model differs
-from the pinned one.
+per run. Vibe 3.1.3 makes Mistral Large 4 (`mistral-large-4-0`) its default and also offers `mistral-medium-3.5`;
+Magnolia keeps the `mistral-medium-3.5` pin, which held on every 3.1.3 call, and refuses a run whose delivered model
+differs from the pinned one. Outside Magnolia, a member whose Vibe settings name an unavailable model sees "Model … is
+not available — running 'Mistral Large 4'".
 
 ### 8. A client update invalidates its accepted rows
 
@@ -94,7 +104,9 @@ Each accepted row binds the client's exact version and executable hash. When Vib
 itself, Magnolia refuses that client before launch ("capability launch identity mismatch") and a campaign stops in
 `waiting_human`. The rows must be re-observed live on the new version, or the update rolled back. This happened
 during the Vibe gate: Claude Code updated itself from 2.1.326 to 2.1.327. The four Claude rows were re-observed on 2.1.327
-the same day (four calls) and rebound.
+the same day (four calls) and rebound. Vibe itself was then upgraded from 3.1.2 to 3.1.3 (18 November 2026): all
+four Vibe rows refused with `client_version` (the `bin/vibe` hash did not change; the version is the binding
+component), and were re-observed the same day (14 calls) and rebound.
 
 ### 9. Worker writes need the run's `work/` directory
 
@@ -104,8 +116,33 @@ hand-driven runs must create it too.
 ### 10. Cost, not quota
 
 Vibe reports per-call cost and tokens, which Magnolia records in the usage ledger. It reports no quota or
-rate-limit signal, so `quota_evidence` stays synthetic-only. The acceptance gates cost about US$1.40 of Mistral
-usage in total.
+rate-limit signal, so `quota_evidence` stays synthetic-only. The acceptance gates cost about US$2.17 of Mistral
+usage in total (US$1.38 on 3.1.2, US$0.79 on 3.1.3).
+
+### 11. A bound worker resume with memory
+
+A bound Vibe worker resume needs the managed memory service held between the initial call and the resume (its URL
+changes on restart), and the project's `.vibe` files must hold the run's render before launch, because the
+configuration digest covers the discovered project files. The campaign runner does both. A hand-driven run that skips
+either is refused before spawn with `config_digest`: safe, but confusing.
+
+### 12. Memory tools are reached from `run_typescript`
+
+The Vibe worker reaches Magnolia's `memory_*` tools only from a `run_typescript` program. A prompt that does not say
+so can get the answer "tool not found" without any attempt.
+
+## Fixed upstream in Vibe 3.1.3
+
+- **[#1538](https://github.com/mistralai/mistral-vibe/issues/1538)**: a `pre_agent` hook without `match` no longer
+  breaks sub-agents (observed: the hook fired for the root and the child, and the child completed). Magnolia keeps
+  `match = "main"` and `enable_subagents = false`; dropping the match only matters if sub-agents are re-enabled, and
+  needs a re-observation then.
+- **[#1540](https://github.com/mistralai/mistral-vibe/issues/1540)**: the `post_agent` payload now carries `turn_id`
+  and `response_text` (the turn's final answer). Magnolia still recovers the reply and turn id from Vibe's transcript,
+  which worked on every 3.1.3 call; reading them from the payload is a later simplification.
+- Still open: [#1539](https://github.com/mistralai/mistral-vibe/issues/1539) (MCP `additional_context` dropped) and
+  #1552 (entry 1). `session_end` hooks are now awaited 2 s at most on quit (was 5 s); Magnolia's session-end row was
+  written on every 3.1.3 call, and Vibe exited at most 0.48 s after the last commit.
 
 ## Fixed in Magnolia during Plan 4
 

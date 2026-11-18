@@ -1,0 +1,1 @@
+Do not call any tool. Repeat the same JSON object, exactly one JSON object and nothing else.

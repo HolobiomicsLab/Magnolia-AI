@@ -1,0 +1,264 @@
+{
+  "launch_identity_sha256": "sha256 of canonical JSON {schema_version, components}",
+  "processes": [
+    "before1",
+    "before2",
+    "after1"
+  ],
+  "roles": {
+    "evaluator": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "d21a64962472d402847631282d285c458a0a5309ffe3e6ea982f6590c2826d00"
+      },
+      "configuration_identity": "683e83a34834eb2966a40b38a214f4a71e8d458ca481148a817fdc73edcce8d0",
+      "equal_across_3_processes": true,
+      "launch_identity_sha256": "97dff0a6096fa583d0710ab8d133fbafe476b0dae6d0ba75f71437dbb9199612",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_production_row": {
+        "mismatch_vs_row": {
+          "client_version": {
+            "observed": "3.1.3",
+            "row": "3.1.2"
+          }
+        }
+      },
+      "rendered_native_files": {
+        ".vibe/config.toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        ".vibe/hooks.toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n"
+      }
+    },
+    "helper": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "756302ab630e020bb9df6a148129c210995574f7ba009e9528d58a38c974b5df"
+      },
+      "configuration_identity": "9abfb76c97fd27ab274ac56bfd9a4b516b27b2c16aa175dd7b48a6d9dfeebc55",
+      "equal_across_3_processes": true,
+      "launch_identity_sha256": "2e4c79fdec703b17d292f2656e4a3d1cc6141c2d0dde3c702d23dce410481cb1",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_production_row": {
+        "mismatch_vs_row": {
+          "client_version": {
+            "observed": "3.1.3",
+            "row": "3.1.2"
+          }
+        }
+      },
+      "rendered_native_files": {
+        ".vibe/config.toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        ".vibe/hooks.toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n"
+      }
+    },
+    "reviewer": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+        "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "eb95486a0a37546883abb2f8f9b786837b49c9c783c12549c10831cbe37ab588"
+      },
+      "configuration_identity": "4ef776badacc0ebf3c71b652285bac1e63ee35861e26ea6ff527f9c398aac147",
+      "equal_across_3_processes": true,
+      "launch_identity_sha256": "5e9a465a712384cb9c1a9c567ecd4b1598d117816a623eb426b65bb715178a40",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_production_row": {
+        "mismatch_vs_row": {
+          "client_version": {
+            "observed": "3.1.3",
+            "row": "3.1.2"
+          }
+        }
+      },
+      "rendered_native_files": {
+        ".vibe/config.toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        ".vibe/hooks.toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n"
+      }
+    },
+    "worker": {
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "VIBE_ENABLE_TELEMETRY",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+        "client_version": "3.1.3",
+        "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+        "native_files": "174dbe7574d45d27cf4ae8dd611eb43af0822bd76e909c69984be8f3843a31a5",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "de2916383297e0689849b43baebea3d9212419268f34c6b36ae46652a0da6460"
+      },
+      "configuration_identity": "d4aa8f8c2019f9ae2cc1e08155b5d6c117851211d7aacbf0f92e0068aa5379e9",
+      "equal_across_3_processes": true,
+      "launch_identity_sha256": "5697909958eca3c5a7c3f5605d9d6068e5fbab97b403c32e6b16f0f8fc9e2d9c",
+      "mismatch_vs_candidate_row": {},
+      "mismatch_vs_production_row": {
+        "mismatch_vs_row": {
+          "client_version": {
+            "observed": "3.1.3",
+            "row": "3.1.2"
+          }
+        }
+      },
+      "rendered_native_files": {
+        ".vibe/config.toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\"]\nenable_subagents = false\nenable_background_processes = false\n\n[[mcp_servers]]\nname = \"compchem-memory\"\ntransport = \"http\"\nurl = \"http://127.0.0.1:0/mcp\"\n\n[mcp_servers.auth]\ntype = \"static\"\napi_key_env = \"MAGNOLIA_MEMORY_SERVICE_TOKEN\"\n",
+        ".vibe/hooks.toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n"
+      }
+    }
+  }
+}

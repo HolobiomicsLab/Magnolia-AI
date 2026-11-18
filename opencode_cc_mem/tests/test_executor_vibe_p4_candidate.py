@@ -401,8 +401,9 @@ def test_vibe_worker_reviewer_baseline_omits_unavailable_glob_grep(
 ):
     from test_executor_vibe import _context
 
-    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
     production = project_role_capabilities(load_capability_table())["vibe"]
+    installed = production[role]["launch_identity"]["components"]["client_version"]
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path, version=installed)
     context = _context(tmp_path, role=role, binary=binary)
     if role == "worker":
         token_file = tmp_path / "memory-token"
@@ -449,8 +450,9 @@ def test_vibe_explicit_unavailable_capabilities_refuse_before_spawn(
 ):
     from test_executor_vibe import _context
 
-    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
     production = project_role_capabilities(load_capability_table())["vibe"]
+    installed = production[role]["launch_identity"]["components"]["client_version"]
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path, version=installed)
     context = _context(tmp_path, role=role, binary=binary)
     if role == "worker":
         token_file = tmp_path / "memory-token"

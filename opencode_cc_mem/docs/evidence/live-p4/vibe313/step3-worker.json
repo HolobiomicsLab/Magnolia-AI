@@ -1,0 +1,517 @@
+{
+  "calls": {
+    "initial": {
+      "children": [],
+      "client_notices": [
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        },
+        {
+          "kind": "client_notice",
+          "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+        },
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        }
+      ],
+      "context_breakdown": {
+        "conversation": 73237,
+        "skills": 0,
+        "system": 73364,
+        "tools": 13311
+      },
+      "export": {
+        "cost_usd": 0.1301079,
+        "ended_at": "2026-11-18T12:54:18.555200Z",
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 30,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "started_at": "2026-11-18T12:53:16.845871Z",
+        "steps": 6,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 198016,
+          "input_tokens": 236398,
+          "output_tokens": 5711,
+          "total_tokens": 242109
+        },
+        "vibe_version": "3.1.3",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "export_config": {
+        "active_model": "mistral-medium-3.5",
+        "bypass_tool_permissions": true,
+        "disabled_tools": [
+          "bash",
+          "bash",
+          "ask_user_question",
+          "cron"
+        ],
+        "enable_background_processes": false,
+        "enable_subagents": false,
+        "enable_telemetry": false,
+        "enabled_tools": []
+      },
+      "final_text": "1. refused, Tool memory_get_context not found\n2. refused, Tool memory_search not found\n3. ok\n4. ok\n5. refused, Magnolia required role policy denied this operation.\n6. ok\n7. refused, Magnolia required role policy denied this operation.",
+      "final_text_json": null,
+      "hook_points_bound": [
+        "post_agent_turn:magnolia-turn-end",
+        "post_tool_call:agents_md",
+        "post_tool_call:magnolia-post-tool",
+        "pre_agent_turn:magnolia-prompt",
+        "pre_agent_turn:session_start_context",
+        "pre_tool_call:magnolia-pre-tool"
+      ],
+      "journal_hook_results": [
+        {
+          "hook": "pre_agent_turn",
+          "output_type": "{\"action_id\": \"d26bbcf5-75ec-51fc-846d-45f4f916ee8b\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\"\u2026",
+          "seq": 7,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 17,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"af6f86e3-9cec-541a-bf40-cba102904341\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 28,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 38,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"f5ef7cdd-5205-5fdd-9e88-789d6e9f6734\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 49,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "skip",
+          "seq": 60,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "continue",
+          "seq": 70,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_tool_call",
+          "output_type": "{\"action_id\": \"85ff00a3-637e-5394-912c-b87c1b2492f5\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_\u2026",
+          "seq": 81,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "skip",
+          "seq": 88,
+          "state": "succeeded"
+        },
+        {
+          "hook": "pre_tool_call",
+          "output_type": "skip",
+          "seq": 99,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_agent_turn",
+          "output_type": "accept",
+          "seq": 109,
+          "state": "succeeded"
+        }
+      ],
+      "journal_hooks": [
+        {
+          "hook": "pre_agent_turn",
+          "input_keys": [
+            "user_content"
+          ],
+          "seq": 4,
+          "tool": null
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 14,
+          "tool": "file_system.write_file"
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 25,
+          "tool": "file_system.write_file"
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 35,
+          "tool": "file_system.edit"
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 46,
+          "tool": "file_system.edit"
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 56,
+          "tool": "file_system.write_file"
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 67,
+          "tool": "file_system.edit"
+        },
+        {
+          "hook": "post_tool_call",
+          "input_keys": [
+            "duration_ms",
+            "tool_call",
+            "tool_result"
+          ],
+          "seq": 78,
+          "tool": "file_system.edit"
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 84,
+          "tool": "file_system.edit"
+        },
+        {
+          "hook": "pre_tool_call",
+          "input_keys": [
+            "tool_call"
+          ],
+          "seq": 95,
+          "tool": "file_system.bash"
+        },
+        {
+          "hook": "post_agent_turn",
+          "input_keys": [
+            "candidate"
+          ],
+          "seq": 106,
+          "tool": null
+        }
+      ],
+      "journal_segments": [
+        {
+          "file": "0000000000000001.jsonl",
+          "records": 112,
+          "seq": [
+            1,
+            112
+          ]
+        },
+        {
+          "file": "0000000000000113.jsonl",
+          "records": 0,
+          "seq": null
+        }
+      ],
+      "journal_tools": [
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"content\": \"D4-WRITE\", \"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\"}",
+          "call_id": "76bUznO7O",
+          "call_type": "runtime_builtin",
+          "error": null,
+          "name": "file_system.write_file",
+          "parent_call_id": null,
+          "result_excerpt": "{\"bytes_written\": 8, \"file_existed\": false, \"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step\u2026",
+          "result_type": "tool_succeeded",
+          "seq": 20,
+          "state": "succeeded"
+        },
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-EDITED\", \"old_string\": \"D4-WRITE\"}",
+          "call_id": "1nFX29pLP",
+          "call_type": "runtime_builtin",
+          "error": null,
+          "name": "file_system.edit",
+          "parent_call_id": null,
+          "result_excerpt": "{\"file\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"lines_changed\": 1, \u2026",
+          "result_type": "tool_succeeded",
+          "seq": 41,
+          "state": "succeeded"
+        },
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-NESTED\", \"old_string\": \"D4-EDITED\"}",
+          "call_id": "typescript:9:c2FUDOKXe:0:tool:0",
+          "call_type": "runtime_builtin",
+          "error": null,
+          "name": "file_system.edit",
+          "parent_call_id": null,
+          "result_excerpt": "{\"file\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"lines_changed\": 1, \u2026",
+          "result_type": "tool_succeeded",
+          "seq": 73,
+          "state": "succeeded"
+        }
+      ],
+      "llm_calls": 6,
+      "magnolia_transcript_rows": [
+        {
+          "kind": "session-start",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:20.513Z"
+        },
+        {
+          "kind": "injected",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:20.533Z"
+        },
+        {
+          "kind": "prompt",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:20.801Z"
+        },
+        {
+          "call_id": "76bUznO7O",
+          "input": "{\"content\": \"D4-WRITE\", \"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\"}",
+          "kind": "tool",
+          "name": "write",
+          "phase": "pre",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:45.231Z"
+        },
+        {
+          "call_id": "76bUznO7O",
+          "input": "{\"content\": \"D4-WRITE\", \"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\"}",
+          "is_error": false,
+          "kind": "tool",
+          "name": "write",
+          "output_excerpt": "bytes_written: 8\nfile_existed: False\npath: <G>/snap/opencode_cc_mem/projects/h\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:45.300Z"
+        },
+        {
+          "call_id": "1nFX29pLP",
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-EDITED\", \"old_str\u2026",
+          "kind": "tool",
+          "name": "edit",
+          "phase": "pre",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:47.822Z"
+        },
+        {
+          "call_id": "1nFX29pLP",
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-EDITED\", \"old_str\u2026",
+          "is_error": false,
+          "kind": "tool",
+          "name": "edit",
+          "output_excerpt": "file: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worke\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:47.892Z"
+        },
+        {
+          "call_id": "px7YSZcET",
+          "input": "{\"content\": \"OUT\", \"file_path\": \"<OUTSIDE>/direct-out.txt\"}",
+          "kind": "tool",
+          "name": "write",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:49.313Z"
+        },
+        {
+          "call_id": "typescript:9:c2FUDOKXe:0:tool:0",
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-NESTED\", \"old_str\u2026",
+          "kind": "tool",
+          "name": "edit",
+          "phase": "pre",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:52.009Z"
+        },
+        {
+          "call_id": "typescript:9:c2FUDOKXe:0:tool:0",
+          "input": "{\"file_path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/d4.txt\", \"new_string\": \"D4-NESTED\", \"old_str\u2026",
+          "is_error": false,
+          "kind": "tool",
+          "name": "edit",
+          "output_excerpt": "file: <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worke\u2026",
+          "phase": "post",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:52.077Z"
+        },
+        {
+          "call_id": "typescript:9:c2FUDOKXe:1:tool:1",
+          "input": "{\"file_path\": \"<OUTSIDE>/notes-copy.md\", \"new_string\": \"CHANGED\", \"old_string\": \"ALLOWED\"}",
+          "kind": "tool",
+          "name": "edit",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:52.153Z"
+        },
+        {
+          "call_id": "WfHyu7YCa",
+          "input": "{\"command\": \"printf BASH_RAN > <G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step3-worker/work/bash.txt\", \"timeout\": 120}",
+          "kind": "tool",
+          "name": "bash",
+          "output_excerpt": "Magnolia required role policy denied this operation.",
+          "phase": "denied",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:53:56.812Z"
+        },
+        {
+          "kind": "assistant",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:54:18.177Z"
+        },
+        {
+          "kind": "session-end",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:54:18.180Z"
+        }
+      ],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "returncode": 0,
+      "review_validation": null,
+      "same_session": null,
+      "secret_in_session_files": false,
+      "session_end": {
+        "assistant_row_recovered": true,
+        "commit_to_exit_upper_bound_s": 0.484,
+        "last_message_commit_ts": "2026-11-18T12:54:18.071000+00:00",
+        "magnolia_session_end_row": true,
+        "row_after_commit_s": 0.109,
+        "session_end_row_ts": "2026-11-18T12:54:18.180Z",
+        "vibe_ended_at": "2026-11-18T12:54:18.555200Z"
+      },
+      "session_id": "1f34ec29-8c33-2f3c-813b-a7cdc2730c46",
+      "t": "13:53:16",
+      "tool_catalog_records": [
+        "{\"revision\": 9007199254740991, \"type\": \"keep\"}"
+      ],
+      "tool_modes": {
+        "background_processes": "disabled",
+        "bash_timeout": null,
+        "command_environment": "unix",
+        "file_system": "enabled",
+        "large_output": "filesystem",
+        "max_wait_ms": 3600000,
+        "model_wait": "enabled",
+        "programmatic": null,
+        "subagents": "disabled"
+      }
+    }
+  },
+  "driver_errors": {},
+  "gate_side_cause": "driver synced the project .vibe files after prepare_launch; the initial config_digest therefore hashed the previous render (old memory URL); the unheld memory service also changed port between calls",
+  "hook_error_rows": [],
+  "hook_state": {
+    "1f34ec29-8c33-2f3c-813b-a7cdc2730c46": {
+      "background_turns": {
+        "main--turn-6322e1e19d99b29d0c1369bcd2fb0884": {
+          "attempts": 1,
+          "started": 1795006458.212372,
+          "status": "done"
+        }
+      },
+      "background_worker": {
+        "started": 1795006458.4656901,
+        "status": "idle"
+      },
+      "catchup_pending": 1,
+      "recovered_turns": 1
+    }
+  },
+  "invocation_id": "5712ee5eda5c41a5abb4b4043930d34a",
+  "label": "step3-worker",
+  "ledger_rows": [
+    {
+      "client": "vibe",
+      "cost": null,
+      "input_tokens": null,
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "output_tokens": null,
+      "parent_run_id": "live12:step3-worker",
+      "reported_model": null,
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "worker",
+      "subscription_key": "vibe",
+      "turns": null
+    }
+  ],
+  "ledger_total_rows": 3,
+  "max_turns": 30,
+  "resume_invocation_dir_same": null,
+  "resume_refused_before_spawn": "ExecutorRefused: stale or untrusted resume launch reference: config_digest",
+  "role": "worker",
+  "secret_sentinel_hits": [],
+  "tamper": null,
+  "tamper_note": "refused on config_digest (not the artifact check): the resume itself was refused, see resume_refused_before_spawn",
+  "tree_diff": {
+    "added_or_changed": [
+      "F 1bcb741fb9f507e5 ./.vibe/config.toml",
+      "F b3ff7d3c122f6d73 ./runs/step3-worker/work/d4.txt"
+    ],
+    "removed_or_changed": [
+      "F b3d74d689a2a4f72 ./.vibe/config.toml"
+    ]
+  }
+}

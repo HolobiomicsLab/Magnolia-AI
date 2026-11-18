@@ -1,0 +1,317 @@
+{
+  "bin_vibe_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+  "dist_info": [
+    "mistral_vibe-3.1.3.dist-info"
+  ],
+  "dry_executor_checks": {
+    "evaluator": {
+      "candidate": {
+        "argv_shape": [
+          "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+          "-p",
+          "<prompt>",
+          "--output",
+          "json",
+          "--workdir",
+          "<len 137>",
+          "--max-turns",
+          "1",
+          "--output-dir",
+          "<out>",
+          "--auto-approve",
+          "--disabled-tools",
+          "bash",
+          "--disabled-tools",
+          "edit",
+          "--disabled-tools",
+          "write_file"
+        ],
+        "client_env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_STATE_HOME"
+        ],
+        "config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        "hooks_toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n",
+        "max_turns": 1,
+        "result": "accepted VibeExecutor",
+        "telemetry": "false"
+      },
+      "no_trust": "refused ExecutorRefused: Vibe project is not persistently trusted; trust it interactively without --trust",
+      "production": {
+        "result": "refused ExecutorRefused: capability launch identity mismatch: client_version",
+        "tb_tail": "^^\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 324, in _prepare_launch\n    _verify_bound_launch_identity(evidence, launch_identity)\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 752, in _verify_bound_launch_identity\n    raise ExecutorRefused(f\"capability launch identity mismatch: {name}\")\ncampaign_runner.executors.registry.ExecutorRefused: capability launch identity mismatch: client_version\n"
+      },
+      "project_sync": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "3519f751d1689f00ff9ecb283850b6f3b6294c176190bac59bbc0c03e424ab18"
+      }
+    },
+    "helper": {
+      "candidate": {
+        "argv_shape": [
+          "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+          "-p",
+          "<prompt>",
+          "--output",
+          "json",
+          "--workdir",
+          "<len 137>",
+          "--max-turns",
+          "40",
+          "--output-dir",
+          "<out>",
+          "--auto-approve",
+          "--disabled-tools",
+          "bash",
+          "--disabled-tools",
+          "edit",
+          "--disabled-tools",
+          "write_file"
+        ],
+        "client_env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_STATE_HOME"
+        ],
+        "config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        "hooks_toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n",
+        "max_turns": 40,
+        "result": "accepted VibeExecutor",
+        "telemetry": "false"
+      },
+      "no_trust": "refused ExecutorRefused: Vibe project is not persistently trusted; trust it interactively without --trust",
+      "production": {
+        "result": "refused ExecutorRefused: capability launch identity mismatch: client_version",
+        "tb_tail": "^^\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 324, in _prepare_launch\n    _verify_bound_launch_identity(evidence, launch_identity)\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 752, in _verify_bound_launch_identity\n    raise ExecutorRefused(f\"capability launch identity mismatch: {name}\")\ncampaign_runner.executors.registry.ExecutorRefused: capability launch identity mismatch: client_version\n"
+      },
+      "project_sync": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "3519f751d1689f00ff9ecb283850b6f3b6294c176190bac59bbc0c03e424ab18"
+      }
+    },
+    "reviewer": {
+      "candidate": {
+        "argv_shape": [
+          "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+          "-p",
+          "<prompt>",
+          "--output",
+          "json",
+          "--workdir",
+          "<len 137>",
+          "--max-turns",
+          "8",
+          "--output-dir",
+          "<out>",
+          "--auto-approve",
+          "--disabled-tools",
+          "bash",
+          "--disabled-tools",
+          "edit",
+          "--disabled-tools",
+          "write_file"
+        ],
+        "client_env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_STATE_HOME"
+        ],
+        "config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n",
+        "hooks_toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n",
+        "max_turns": 8,
+        "result": "accepted VibeExecutor",
+        "telemetry": "false"
+      },
+      "no_trust": "refused ExecutorRefused: Vibe project is not persistently trusted; trust it interactively without --trust",
+      "production": {
+        "result": "refused ExecutorRefused: capability launch identity mismatch: client_version",
+        "tb_tail": "^^\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 324, in _prepare_launch\n    _verify_bound_launch_identity(evidence, launch_identity)\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 752, in _verify_bound_launch_identity\n    raise ExecutorRefused(f\"capability launch identity mismatch: {name}\")\ncampaign_runner.executors.registry.ExecutorRefused: capability launch identity mismatch: client_version\n"
+      },
+      "project_sync": {
+        ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+        ".vibe/hooks.toml": "3519f751d1689f00ff9ecb283850b6f3b6294c176190bac59bbc0c03e424ab18"
+      }
+    },
+    "worker": {
+      "candidate": {
+        "argv_shape": [
+          "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+          "-p",
+          "<prompt>",
+          "--output",
+          "json",
+          "--workdir",
+          "<len 137>",
+          "--max-turns",
+          "30",
+          "--output-dir",
+          "<out>",
+          "--auto-approve",
+          "--disabled-tools",
+          "bash"
+        ],
+        "client_env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+          "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+          "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_STATE_HOME"
+        ],
+        "config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\"]\nenable_subagents = false\nenable_background_processes = false\n\n[[mcp_servers]]\nname = \"compchem-memory\"\ntransport = \"http\"\nurl = \"http://127.0.0.1:55201/mcp\"\n\n[mcp_servers.auth]\ntype = \"static\"\napi_key_env = \"MAGNOLIA_MEMORY_SERVICE_TOKEN\"\n",
+        "hooks_toml": "[[hooks]]\nname = \"magnolia-session-start\"\ntype = \"session_start\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-start\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-prompt\"\ntype = \"pre_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe prompt\"\ntimeout = 30\nmatch = \"main\"\n\n[[hooks]]\nname = \"magnolia-pre-tool\"\ntype = \"pre_tool\"\ncommand = \"/bin/sh -c 'fallback='\\\"'\\\"'{\\\"decision\\\": \\\"deny\\\", \\\"reason\\\": \\\"Magnolia required role policy denied this operation.\\\"}'\\\"'\\\"'\\nblock() { printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' \\\"$fallback\\\"; }\\nexec 3<&0 || { block; exit $?; }\\nout=$(mktemp \\\"${TMPDIR:-/tmp}/magnolia-hook.XXXXXX\\\") || { block; exit $?; }\\ncleanup() { rm -f \\\"$out\\\"; }\\ntrap cleanup 0\\n<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe pre-tool <&3 3<&- >\\\"$out\\\" &\\nhook_pid=$!\\nexec 3<&-\\n(\\n  elapsed=0\\n  while kill -0 \\\"$hook_pid\\\" 2>/dev/null; do\\n    if [ \\\"$elapsed\\\" -ge 12 ]; then\\n      kill -TERM \\\"$hook_pid\\\" 2>/dev/null\\n      sleep 1\\n      kill -KILL \\\"$hook_pid\\\" 2>/dev/null\\n      exit 0\\n    fi\\n    sleep 1\\n    elapsed=$((elapsed + 1))\\n  done\\n) </dev/null >/dev/null 2>&1 &\\ntimer_pid=$!\\nwait \\\"$hook_pid\\\"\\nstatus=$?\\nkill \\\"$timer_pid\\\" 2>/dev/null\\nwait \\\"$timer_pid\\\" 2>/dev/null\\nif [ \\\"$status\\\" -eq 0 ]; then cat \\\"$out\\\" || block; else block; fi\\nexit $?'\"\ntimeout = 30\nstrict = true\n\n[[hooks]]\nname = \"magnolia-post-tool\"\ntype = \"post_tool\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe post-tool\"\ntimeout = 10\n\n[[hooks]]\nname = \"magnolia-turn-end\"\ntype = \"post_agent\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe turn-end\"\ntimeout = 30\n\n[[hooks]]\nname = \"magnolia-session-end\"\ntype = \"session_end\"\ncommand = \"<G>/venv/bin/python3 -I <G>/snap/opencode_cc_mem/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py vibe session-end\"\ntimeout = 30\n",
+        "max_turns": 30,
+        "result": "accepted VibeExecutor",
+        "telemetry": "false"
+      },
+      "no_trust": "refused ExecutorRefused: Vibe project is not persistently trusted; trust it interactively without --trust",
+      "production": {
+        "result": "refused ExecutorRefused: capability launch identity mismatch: client_version",
+        "tb_tail": "^^\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 324, in _prepare_launch\n    _verify_bound_launch_identity(evidence, launch_identity)\n  File \"<G>/snap/opencode_cc_mem/campaign_runner/launch.py\", line 752, in _verify_bound_launch_identity\n    raise ExecutorRefused(f\"capability launch identity mismatch: {name}\")\ncampaign_runner.executors.registry.ExecutorRefused: capability launch identity mismatch: client_version\n"
+      },
+      "project_sync": {
+        ".vibe/config.toml": "9d77f5aa30a9dfcf7ec72950d06c41acb62ac149ccf5f70c831a6b0458bf6173",
+        ".vibe/hooks.toml": "3519f751d1689f00ff9ecb283850b6f3b6294c176190bac59bbc0c03e424ab18"
+      }
+    }
+  },
+  "harness_dist_info": [
+    "mistralai_vibe_harness-0.1.22.dist-info"
+  ],
+  "pinned_model": "mistral-medium-3.5",
+  "vibe_schema_py": {
+    "DEFAULT_ACTIVE_MODEL_CONFIG": {
+      "alias": "mistral-large-4-0",
+      "cached_input_price": 0.07,
+      "display_name": "Mistral Large 4",
+      "input_price": 0.7,
+      "max_context_length": 1048576,
+      "name": "mistral-large-4-0",
+      "output_price": 2.1,
+      "provider": "mistral",
+      "thinking": "high"
+    },
+    "DEFAULT_MODELS": "[DEFAULT_ACTIVE_MODEL_CONFIG, MEDIUM_3_5_MODEL_CONFIG] (line 257)",
+    "MEDIUM_3_5_MODEL_CONFIG": {
+      "alias": "mistral-medium-3.5",
+      "cached_input_price": 0.15,
+      "input_price": 1.5,
+      "max_context_length": 262144,
+      "name": "mistral-vibe-cli-latest",
+      "output_price": 7.5,
+      "provider": "mistral"
+    },
+    "enable_connectors_default": true,
+    "path": "~/.local/share/uv/tools/mistral-vibe/lib/python3.14/site-packages/vibe/core/config/vibe_schema.py",
+    "sha256": "f0b4a6b699245733103d1c86374e088053daa99b11d3147c20b20995d64a0acb"
+  }
+}
