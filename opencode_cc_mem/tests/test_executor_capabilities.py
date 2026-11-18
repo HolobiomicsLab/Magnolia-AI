@@ -420,20 +420,22 @@ def test_claude_rows_accepted_from_live2a_gate():
     assert all(row["gate"]["status"] == "observed" for row in rows)
     assert all(not item["blocking_cells"] for item in projected.values())
     assert all(item["gate_accepted"] is True for item in projected.values())
-    # Re-observed live on the rebound hook_source in Plan 4 Tasks 6 and 6b.
+    # Re-observed live on the rebound hook_source in Plan 4 Tasks 6 and 6b, then
+    # rebound to Claude Code 2.1.327 in Plan 4 Task 11.
     assert all(item["stale"] is False for item in projected.values())
     assert all(item["accepted"] is True for item in projected.values())
     assert {
         row["role"]: row["gate"]["artifact"] for row in rows
     } == {
-        "worker": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
-        "reviewer": "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
-        "helper": "opencode_cc_mem/docs/evidence/live2a/README.md",
-        "evaluator": "opencode_cc_mem/docs/evidence/live2a/README.md",
+        role: f"opencode_cc_mem/docs/evidence/live-p4/claude327/{role}-run.json"
+        for role in ("worker", "reviewer", "helper", "evaluator")
     }
+    assert {row["gate"]["value"]["client_identity"]["version"] for row in rows} == {"2.1.327"}
+    assert {row["cells"]["identity"]["value"]["version"] for row in rows} == {"2.1.327"}
     reviewer = next(row for row in rows if row["role"] == "reviewer")
     assert any("evidence-path rule fixed by F-L3" in note for note in reviewer["notes"])
-    assert "Plan 4 Task 6 live re-observation" in reviewer["notes"][-1]
+    assert any("Plan 4 Task 6 live re-observation" in note for note in reviewer["notes"])
+    assert all("Plan 4 Task 11 live" in row["notes"][-1] for row in rows)
     worker = next(row for row in rows if row["role"] == "worker")
     assert "MCP allowlist" in worker["gate"]["reason"]
     assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(

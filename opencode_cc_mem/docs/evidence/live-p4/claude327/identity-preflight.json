@@ -1,0 +1,567 @@
+{
+  "candidate_table_changes": [
+    "src_sha256 9d0fc7b2848176aaaf255d20eb41ce06c6f25592441c133ab256c38890aa06db",
+    "cand_sha256 697918607b859c66fc4bba6635802310fcd12c820398f988d58ed4c982f4db26",
+    "worker:cells.identity.value.version: 2.1.326 -> 2.1.327",
+    "worker:cells.identity.value.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "worker:gate.value.client_identity.version: 2.1.326 -> 2.1.327",
+    "worker:gate.value.client_identity.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "reviewer:cells.identity.value.version: 2.1.326 -> 2.1.327",
+    "reviewer:cells.identity.value.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "reviewer:gate.value.client_identity.version: 2.1.326 -> 2.1.327",
+    "reviewer:gate.value.client_identity.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "helper:cells.identity.value.version: 2.1.326 -> 2.1.327",
+    "helper:cells.identity.value.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "helper:gate.value.client_identity.version: 2.1.326 -> 2.1.327",
+    "helper:gate.value.client_identity.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "evaluator:cells.identity.value.version: 2.1.326 -> 2.1.327",
+    "evaluator:cells.identity.value.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "evaluator:gate.value.client_identity.version: 2.1.326 -> 2.1.327",
+    "evaluator:gate.value.client_identity.sha256: e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 -> 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+  ],
+  "client_preflight": [
+    "t 2026-11-18T09:29:32Z",
+    "version_cli 2.1.327 (Claude Code)",
+    "resolved ~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+    "sha256 76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+    "package_json 2.1.327",
+    "name   \"name\": \"@anthropic-ai/claude-code\",",
+    "size 354515104 mtime Nov 18 06:06:05 2026"
+  ],
+  "components_vs_task6": {
+    "evaluator": {
+      "component_diff_vs_task6": {
+        "client_sha256": [
+          "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+          "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+        ],
+        "client_version": [
+          "2.1.326",
+          "2.1.327"
+        ]
+      },
+      "env_key_diff_vs_task6": [],
+      "native_files_raw_t6_vs_now": {
+        "claude-mcp.json": [
+          "d8e397af",
+          "d8e397af"
+        ],
+        "claude-settings.json": [
+          "3e4075eb",
+          "1088e343"
+        ]
+      }
+    },
+    "helper": {
+      "component_diff_vs_task6": {
+        "client_sha256": [
+          "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+          "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+        ],
+        "client_version": [
+          "2.1.326",
+          "2.1.327"
+        ]
+      },
+      "env_key_diff_vs_task6": [],
+      "native_files_raw_t6_vs_now": {
+        "claude-mcp.json": [
+          "d8e397af",
+          "d8e397af"
+        ],
+        "claude-settings.json": [
+          "3e4075eb",
+          "1088e343"
+        ]
+      }
+    },
+    "reviewer": {
+      "component_diff_vs_task6": {
+        "client_sha256": [
+          "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+          "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+        ],
+        "client_version": [
+          "2.1.326",
+          "2.1.327"
+        ]
+      },
+      "env_key_diff_vs_task6": [],
+      "native_files_raw_t6_vs_now": {
+        "claude-mcp.json": [
+          "d8e397af",
+          "d8e397af"
+        ],
+        "claude-settings.json": [
+          "3e4075eb",
+          "1088e343"
+        ]
+      }
+    },
+    "worker": {
+      "component_diff_vs_task6": {
+        "client_sha256": [
+          "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+          "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+        ],
+        "client_version": [
+          "2.1.326",
+          "2.1.327"
+        ]
+      },
+      "env_key_diff_vs_task6": [],
+      "native_files_raw_t6_vs_now": {
+        "claude-mcp.json": [
+          "1972bd50",
+          "1972bd50"
+        ],
+        "claude-settings.json": [
+          "3e4075eb",
+          "1088e343"
+        ]
+      }
+    }
+  },
+  "dry_candidate_table": {
+    "evaluator": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "config_digest": "33aca928575d4a84100389cc1b60e7cb68b8313d9df158f9693a285992173675",
+      "max_turns": 1,
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "helper": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "config_digest": "b90098974516f13e2c5edab79274bef55a1b234ae902772c7861fab98b882f54",
+      "max_turns": 40,
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "reviewer": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "config_digest": "ab5cd61fc9877ebeb0b39f1598f6758dafad0b8e102f465ff819e692a3963f87",
+      "max_turns": 8,
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    },
+    "worker": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "config_digest": "f46327c571ea095f6f24d4588c9eb1e2a5578c28e3e7d01d01615566a44f4390",
+      "max_turns": 30,
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "accepted"
+    }
+  },
+  "dry_production_table": {
+    "evaluator": {
+      "error": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "refused"
+    },
+    "helper": {
+      "error": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "refused"
+    },
+    "reviewer": {
+      "error": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "refused"
+    },
+    "worker": {
+      "error": "ExecutorRefused: capability launch identity mismatch: client_version",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "result": "refused"
+    }
+  },
+  "per_role": {
+    "evaluator": {
+      "candidate_mismatch": {},
+      "candidate_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534"
+      },
+      "configuration_equal_task6": false,
+      "configuration_identity": "33aca928575d4a84100389cc1b60e7cb68b8313d9df158f9693a285992173675",
+      "configuration_identity_production_table": "33aca928575d4a84100389cc1b60e7cb68b8313d9df158f9693a285992173675",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_equal_task6_after_client_swap": false,
+      "launch_identity_sha256": "7de7536eda990682ff6f049860aca68903b4cd0d9c62a40e0456ec5864f4f017",
+      "launch_identity_sha256_with_2_1_326_client": "79cbbf19a58a24bed5b959e5cb8091754fb2084a4d2cbe5a99902139b9289d0d",
+      "native_files": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "1088e34361bd4ec006a5e044a221161b329d9ec19cf4e750701041d0b0a29c60"
+      },
+      "production_mismatch": {
+        "client_sha256": {
+          "observed": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+          "row": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+        },
+        "client_version": {
+          "observed": "2.1.327",
+          "row": "2.1.326"
+        }
+      },
+      "production_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "required_capabilities": [],
+      "task6_configuration_identity": "21fbf85ff1ab400129cff22cf8c16ec133ee13a46d89c302874a91fae32049ec",
+      "task6_launch_identity_sha256": "a43acc57014bffef0314fa311a73ee76feb628623920716f28b2151f4d33e64e"
+    },
+    "helper": {
+      "candidate_mismatch": {},
+      "candidate_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06"
+      },
+      "configuration_equal_task6": false,
+      "configuration_identity": "b90098974516f13e2c5edab79274bef55a1b234ae902772c7861fab98b882f54",
+      "configuration_identity_production_table": "b90098974516f13e2c5edab79274bef55a1b234ae902772c7861fab98b882f54",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_equal_task6_after_client_swap": false,
+      "launch_identity_sha256": "ae40556a18203c5d47800842749be0a7d1c28c7b336208bd14d05d5adec189cc",
+      "launch_identity_sha256_with_2_1_326_client": "d33019220f8e5a05f59458e0622a3a01436c2cbac24f7d3e89e3ed070a1ee622",
+      "native_files": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "1088e34361bd4ec006a5e044a221161b329d9ec19cf4e750701041d0b0a29c60"
+      },
+      "production_mismatch": {
+        "client_sha256": {
+          "observed": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+          "row": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+        },
+        "client_version": {
+          "observed": "2.1.327",
+          "row": "2.1.326"
+        }
+      },
+      "production_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "required_capabilities": [
+        "native_read"
+      ],
+      "task6_configuration_identity": "4d6d2dfed7ad8d67553a5ff55c3cea411d3c942679b751ef0fbd9f920478f5ae",
+      "task6_launch_identity_sha256": "26d5bffc9f40b00f0ca02ab3a81b3b8a13db57dc41c3f801a70d5141270b1ea7"
+    },
+    "reviewer": {
+      "candidate_mismatch": {},
+      "candidate_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+        "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+        "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6"
+      },
+      "configuration_equal_task6": false,
+      "configuration_identity": "ab5cd61fc9877ebeb0b39f1598f6758dafad0b8e102f465ff819e692a3963f87",
+      "configuration_identity_production_table": "ab5cd61fc9877ebeb0b39f1598f6758dafad0b8e102f465ff819e692a3963f87",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_equal_task6_after_client_swap": false,
+      "launch_identity_sha256": "aa6160f2b2b30662b97a97b59fe8a98b855f41bf8ace0aa8c1d1ec9991bd88a1",
+      "launch_identity_sha256_with_2_1_326_client": "a05ee2626b481c6da6a30d4938e18af5510bade37c5882e36d13364fea786974",
+      "native_files": {
+        "claude-mcp.json": "d8e397af03b5b032f21d0aa967086f0c78b33c87b76f2e9898ae0a144df7de02",
+        "claude-settings.json": "1088e34361bd4ec006a5e044a221161b329d9ec19cf4e750701041d0b0a29c60"
+      },
+      "production_mismatch": {
+        "client_sha256": {
+          "observed": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+          "row": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+        },
+        "client_version": {
+          "observed": "2.1.327",
+          "row": "2.1.326"
+        }
+      },
+      "production_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "required_capabilities": [
+        "native_read",
+        "native_glob",
+        "native_grep"
+      ],
+      "task6_configuration_identity": "fab5f7dda9b04a8c6583888f927d549c8483d2c1c4e0d867bf9c3fff7af32d8f",
+      "task6_launch_identity_sha256": "e7357374432f291d3d25bd522e1a03057cd821c4d0d79ee2bef3f29fbd140230"
+    },
+    "worker": {
+      "candidate_mismatch": {},
+      "candidate_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "client_env_keys": [
+        "COMPCHEM_TOOLS_PORT",
+        "HOME",
+        "LANG",
+        "LOGNAME",
+        "MAGNOLIA_CLIENT",
+        "MAGNOLIA_CONTROL_DIR",
+        "MAGNOLIA_DISTILL_INTERVAL_MIN",
+        "MAGNOLIA_DOORBELL",
+        "MAGNOLIA_HOOK_POLICY",
+        "MAGNOLIA_HOOK_POLICY_REQUIRED",
+        "MAGNOLIA_HOOK_POLICY_SHA256",
+        "MAGNOLIA_INSTALLATION_ROOT",
+        "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+        "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+        "MAGNOLIA_MODEL",
+        "MAGNOLIA_PROJECT_DIR",
+        "MAGNOLIA_PROJECT_IDENTITY",
+        "MAGNOLIA_PYTHON",
+        "MAGNOLIA_ROLE",
+        "MAGNOLIA_ROOT",
+        "MAGNOLIA_RULES_DIR",
+        "MAGNOLIA_RUN_DIR",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+        "MAGNOLIA_WORKSPACE_ROOT",
+        "MAGNOLIA_WORK_DIR",
+        "PATH",
+        "PYTHONPYCACHEPREFIX",
+        "SHELL",
+        "TMPDIR",
+        "USER",
+        "XDG_STATE_HOME"
+      ],
+      "components": {
+        "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+        "client_version": "2.1.327",
+        "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+        "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+        "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+        "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+        "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+        "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
+        "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+        "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+        "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517"
+      },
+      "configuration_equal_task6": false,
+      "configuration_identity": "2a88eb35451308ddef2f3601161e2dc0bc44b93aff69744864a6a90083d1dd6b",
+      "configuration_identity_production_table": "2a88eb35451308ddef2f3601161e2dc0bc44b93aff69744864a6a90083d1dd6b",
+      "executable": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+      "launch_equal_task6_after_client_swap": false,
+      "launch_identity_sha256": "feaf5e5db41f6135c581e9d45672df2fa4f18974fa74a66f4a908f5568168105",
+      "launch_identity_sha256_with_2_1_326_client": "fe759c260e5ea9e55a2d327d86f20d75b754d2310d6a79db6aac4197d684166a",
+      "native_files": {
+        "claude-mcp.json": "1972bd501078329f2d494056b385fb44098c04b1edcbf40f74c743019abfe5bc",
+        "claude-settings.json": "1088e34361bd4ec006a5e044a221161b329d9ec19cf4e750701041d0b0a29c60"
+      },
+      "production_mismatch": {
+        "client_sha256": {
+          "observed": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+          "row": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+        },
+        "client_version": {
+          "observed": "2.1.327",
+          "row": "2.1.326"
+        }
+      },
+      "production_projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      },
+      "required_capabilities": [
+        "native_read",
+        "native_glob",
+        "native_grep",
+        "native_edit",
+        "mcp:compchem-memory.memory_get_context",
+        "mcp:compchem-memory.memory_search",
+        "mcp:compchem-memory.memory_get_run_history"
+      ],
+      "task6_configuration_identity": "7f544ae3cd4c09f4e4c7aa75110b21cbe078c6d000d9d16a93235454a6888b36",
+      "task6_launch_identity_sha256": "88de138b3237976bf31f29b55451333e1f6c345d454b66e4902de0bc346dc525"
+    }
+  }
+}
