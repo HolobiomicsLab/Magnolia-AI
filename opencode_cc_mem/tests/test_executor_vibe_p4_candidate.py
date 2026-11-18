@@ -275,11 +275,9 @@ def test_vibe_p4_candidate_worker_memory_dry_run(tmp_path, monkeypatch):
     assert record["executor"].prepared.memory_service_handle is handle
     assert record["config"]["active_model"] == "selected-model"
     assert set(record["config"]["disabled_tools"]) == set(disabled_tools_for_role("worker"))
-    assert set(record["config"]["disabled_tools"]) == {
-        "file_system.bash", "process.start", "process.write", "process.output",
-        "process.list", "process.stop", "agents.spawn", "agents.list",
-        "agents.send_message", "agents.interrupt",
-    }
+    assert set(record["config"]["disabled_tools"]) == {"bash"}
+    assert record["config"]["enable_subagents"] is False
+    assert record["config"]["enable_background_processes"] is False
     assert record["mcp"]["memory_service"]["url"] == "http://127.0.0.1:43101/mcp"
     assert record["mcp"]["memory_service"]["authorization_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
     assert record["mcp"]["tool_allowlist"] == list(MEMORY_TOOLS)
@@ -324,6 +322,9 @@ def test_vibe_p4_candidate_readonly_roles_dry_run(tmp_path, monkeypatch):
         assert "MAGNOLIA_MEMORY_SERVICE_TOKEN" not in record["launch"].env
         assert record["config"]["active_model"] == "selected-model"
         assert set(record["config"]["disabled_tools"]) == set(READ_ONLY_DISABLED_TOOLS)
+        assert set(record["config"]["disabled_tools"]) == {"bash", "edit", "write_file"}
+        assert record["config"]["enable_subagents"] is False
+        assert record["config"]["enable_background_processes"] is False
         assert record["argv"][0] == str(context.launch_argv[0])
         assert record["launch"].env["MAGNOLIA_MODEL"] == "selected-model"
         assert record["launch"].env["VIBE_ENABLE_TELEMETRY"] == "false"
