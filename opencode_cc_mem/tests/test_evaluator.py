@@ -636,5 +636,6 @@ def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
     observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
     assert observed == snapshot
     assert calls[0][0][-1] == (
-        '\n\n{"message": "dock", "context": {"projects": ["proj_a"]}}'
+        EVALUATOR_SYSTEM_PROMPT
+        + '\n\n{"message": "dock", "context": {"projects": ["proj_a"]}}'
     )

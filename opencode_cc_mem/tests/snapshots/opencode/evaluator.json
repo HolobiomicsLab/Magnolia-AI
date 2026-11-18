@@ -5,7 +5,7 @@
     "run",
     "--model",
     "opencode-go/deepseek-v4.1-flash",
-    "\n\n{\"message\": \"dock\", \"context\": {\"projects\": [\"proj_a\"]}}"
+    "You are an admission evaluator. Given a user message and optional context, return ONLY a JSON object with keys: action (accept|attach|stop|ignore), project (string or null), work_item_id (string or null), confidence (0..1), reason (short). accept means create/route new work to the named project; attach means follow up an existing Work Item; stop means stop it; ignore means no action. Never invent project names not present in context.\n\n{\"message\": \"dock\", \"context\": {\"projects\": [\"proj_a\"]}}"
   ],
   "catalog_argv": [
     "@@TMP@@/opencode",

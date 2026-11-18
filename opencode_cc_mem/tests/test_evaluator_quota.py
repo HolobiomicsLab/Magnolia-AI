@@ -11,7 +11,7 @@ from campaign_runner.governor import Governor, Policy
 from campaign_runner.process import ProcessOutcome
 from campaign_runner.routing import resolve_route
 from router_runner import agentd
-from router_runner.evaluator import EvalDecision, GenerativeEvaluator
+from router_runner.evaluator import EVALUATOR_SYSTEM_PROMPT, EvalDecision, GenerativeEvaluator
 from router_runner.router import Router
 from router_runner.store import ControlStore
 
@@ -195,7 +195,9 @@ def test_opencode_go_evaluator_keeps_base_prompt_and_two_steps(
     assert result.outcome.kind == "success"
     exec_context, prompt = prompts[0]
     assert exec_context.role_cap == 2
-    assert prompt == '\n\n{"message": "hello", "context": {}}'
+    assert prompt == (
+        EVALUATOR_SYSTEM_PROMPT + '\n\n{"message": "hello", "context": {}}'
+    )
 
 
 def test_evaluator_context_satisfies_native_launch_contract(tmp_path, monkeypatch):
