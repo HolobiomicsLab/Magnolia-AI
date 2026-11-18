@@ -206,7 +206,7 @@ Starting a campaign copies the protocol into a run directory and records its
 hash.
 
 ```text
-projects/hsc70_new/runs/YYYY-MM-DD_nle-paired-pilot/
+projects/demo_project/runs/YYYY-MM-DD_nle-paired-pilot/
   control/
     brief.md                 # frozen human-approved brief
     protocol.json            # frozen copy of the protocol
@@ -241,7 +241,7 @@ Reject unknown top-level fields and unknown stage types.
 {
   "schema": 1,
   "id": "nle-paired-pilot-v1",
-  "project": "hsc70_new",
+  "project": "demo_project",
   "worker": {
     "model": "opencode-go/deepseek-v4.1-flash",
     "hard_stage_model": "kimi-code-plan-cn/k3.1-pro#high",
@@ -320,7 +320,7 @@ Each stage may define:
     "human_minutes": 0
   },
   "memory_state": {
-    "project": "hsc70_new",
+    "project": "demo_project",
     "entries_sha256": "<optional reproducibility hash>"
   },
   "created_at": "<utc>",
@@ -550,7 +550,7 @@ Do not use a simple `approved: true` field. Use issue objects:
   ],
   "followups": [
     {
-      "observation": "position-6 contact pattern changed",
+      "observation": "contact pattern changed at the substituted position",
       "proposed_test": "short paired MD simulation",
       "estimated_core_hours": 2,
       "reason": "tests persistence of the difference"
@@ -592,7 +592,7 @@ A later implementation may accept `followups/*.json` with:
 
 ```json
 {
-  "observation": "Nle changes the position-6 contact pattern",
+  "observation": "Nle changes the contact pattern at the substituted position",
   "expected": "Met-like contact pattern",
   "proposed_test": "short paired MD simulation",
   "estimated_core_hours": 2,
@@ -617,7 +617,7 @@ Use three separate records:
 
 1. Campaign state: `campaign.json`, receipts, and artifacts.
 2. Exact session evidence: opencode transcripts and run JSONL.
-3. Reusable lessons: normal `hsc70_new` memory entries.
+3. Reusable lessons: normal `demo_project` memory entries.
 
 Rules:
 
@@ -694,7 +694,8 @@ the independent reviewer instead of DeepSeek.
 
 ### 16.1 Required human inputs before launch
 
-- Exact sequence: `TGGQNleALT` versus `TGGFQNleALT`.
+- Exact design sequences for the parent and Nle variant: supplied privately; do
+  not record them in this repository.
 - Reference peptide identity.
 - Construct termini and linker representation.
 - Available IP/FP values and replicate information, if the report will mention
@@ -712,9 +713,9 @@ If sequence or construct identity is unresolved, remain in `waiting_human`.
    - Worker writes the additive NLE block and required link lines.
    - Gate: a Met control before and after the patch is unchanged.
 
-3. **Build and validate TGGFQNleALT**
+3. **Build and validate the Nle variant**
    - Build from the validated parent structure.
-   - Gate: no missing parameters, charge 0, Q5–Nle6 and Nle6–A7 bonds present,
+   - Gate: no missing parameters, charge 0, the two engineered backbone bonds present,
      peptide C–N near 1.33 Å, and side-chain geometry within the runbook limits.
 
 4. **Paired docking**
@@ -727,7 +728,7 @@ If sequence or construct identity is unresolved, remain in `waiting_human`.
    - Recompute AIR-free with `w_air` read from each run config.
    - Require deep-groove analysis: core-19 at least 80 percent and zero NBD.
    - Require true clustfcc cluster size at least 50/200 for the main comparison.
-   - Inspect the position-6 contact map and binding mode before comparing scores.
+   - Inspect the contact map at the substituted position and binding mode before comparing scores.
    - Nle improvement greater than 2–3 points in the same mode may motivate an
      extension. A difference within noise points to MD. Different modes cannot
      be compared directly.
@@ -738,7 +739,7 @@ If sequence or construct identity is unresolved, remain in `waiting_human`.
    - If laboratory numbers are absent, mark experimental validation as missing.
 
 The optional reviewer should specifically check for cross-mode score comparison,
-incorrect `w_air`, overclaiming, and missed position-6 anomalies.
+incorrect `w_air`, overclaiming, and missed anomalies at the substituted position.
 
 ## 17. Implementation phases and exit criteria
 
@@ -853,11 +854,11 @@ Create small fixtures for:
 - missing NLE block or link line;
 - changed Met control output;
 - missing parameters or wrong charge;
-- missing Q5–Nle6 or Nle6–A7 bond;
+- missing one of the two engineered backbone bonds;
 - incorrect `w_air` or different `w_air` across protocols;
 - high AIR penalty and off-mode poses;
 - cluster below and above the convergence threshold;
-- position-6 contact differences;
+- contact differences at the substituted position;
 - a report that overclaims experimental validation.
 
 Each fixture must assert both the failing case and the nearest passing case.
@@ -913,7 +914,7 @@ Accept the partial-automation pilot only if all are true:
 7. The final report separates computational and experimental validation.
 8. Operator stop terminates workers and cancels active jobs.
 9. Token, core-hour, and human-time usage is present in the final record.
-10. A live interactive hsc70 session can inspect the same project safely.
+10. A live interactive project session can inspect the same project safely.
 
 ## 20. Explicit handoff instructions for the implementing agent
 

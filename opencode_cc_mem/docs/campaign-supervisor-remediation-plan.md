@@ -312,9 +312,9 @@ a small per-project service registry:
 
 ```json
 {
-  "project": "hsc70_new",
+  "project": "demo_project",
   "port": 4112,
-  "db": "/home/tjiang/.local/share/opencode/opencode-v2-hsc70.db",
+  "db": "/home/tjiang/.local/share/opencode/opencode-v2-demo.db",
   "pid": 12345,
   "started_at": "<utc>"
 }
