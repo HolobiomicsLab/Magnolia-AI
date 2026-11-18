@@ -1311,6 +1311,26 @@ def test_codex_refuses_forged_resume_session_without_starting_client(tmp_path):
     assert len(_calls(state)) == 1
 
 
+def test_codex_refuses_foreign_session_without_artifact(tmp_path):
+    stream = _jsonl(tmp_path / "first.jsonl", [
+        {"type": "thread.started", "thread_id": "bound"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    ])
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, role="evaluator", binary=binary, stub_config=config)
+    executor = executor_for(context.route, "evaluator", context)
+    executor.run("first", context.project_dir, tmp_path / "attempt-1", retries=0)
+
+    with pytest.raises(ExecutorRefused, match="creating launch identity"):
+        executor.run(
+            "continue", context.project_dir, tmp_path / "attempt-2",
+            resume_session="foreign-session", retries=0,
+        )
+
+    assert len(_calls(state)) == 1
+
+
 @pytest.mark.parametrize(
     "session_id",
     ("-last", "../escape", "thread name", "name/child", "a" * 129),

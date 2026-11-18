@@ -189,6 +189,7 @@ class VibeExecutor:
     governance: InvocationGovernance | None = None
     max_price: float | None = None
     resume_artifact: ResumeArtifact | None = None
+    _created_sessions: set[str] = field(init=False, repr=False, default_factory=set)
     _memory_service_finalizer: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
@@ -285,7 +286,7 @@ class VibeExecutor:
             if resume_session not in (None, self.resume_artifact.session_id):
                 raise ExecutorRefused("Vibe resume session differs from its artifact")
             resume_session = self.resume_artifact.session_id
-        elif resume_session is not None:
+        elif resume_session is not None and resume_session not in self._created_sessions:
             raise ExecutorRefused("Vibe resume requires a bound resume artifact")
         if retries not in (None, 0):
             raise ExecutorRefused("Vibe empty retry requires live-certified same-session resume")
@@ -371,6 +372,7 @@ class VibeExecutor:
                 elif parsed.session_id:
                     if not resume_session:
                         self._bind_session(parsed.session_id)
+                        self._created_sessions.add(parsed.session_id)
                     identity = self._identity(parsed.session_id)
                 usage = self._usage(parsed.usage, identity, admission, process.duration_seconds, outcome)
                 if admission is not None and process.client_started:

@@ -24,6 +24,19 @@ from campaign_runner.reviewers import (  # noqa: E402
 )
 from campaign_runner.workers import empty_usage  # noqa: E402
 from campaign_runner.workers import WorkerResult  # noqa: E402
+from test_executor_claude import (  # noqa: E402
+    _calls as _claude_calls,
+    _context as _claude_context,
+    _jsonl as _claude_jsonl,
+    _stub as _claude_stub,
+)
+from test_executor_codex import (  # noqa: E402
+    _calls as _codex_calls,
+    _context as _codex_context,
+    _enable_campaign_role as _enable_codex_campaign_role,
+    _jsonl as _codex_jsonl,
+    _stub as _codex_stub,
+)
 
 
 FAKE = r'''#!/usr/bin/env python3
@@ -109,6 +122,94 @@ def test_review_prompt_limits_evidence_to_run_directory(tmp_path):
     evidence_rule = "Evidence paths must be inside the run directory"
     assert evidence_rule in prompt
     assert evidence_rule in REVIEW_FORMAT_NOTE
+    assert "relative to the run directory" in REVIEW_FORMAT_NOTE
+    assert "work/result.txt" in REVIEW_FORMAT_NOTE
+
+
+def _repaired_review_text():
+    return json.dumps({
+        "issues": [{
+            "severity": "minor",
+            "claim": "repaired",
+            "evidence": ["work/result.txt"],
+            "suggested_action": "act",
+        }],
+        "followups": [],
+    })
+
+
+def test_claude_reviewer_repairs_on_its_created_session(tmp_path):
+    session_id = "claude-review-session"
+    streams = [
+        _claude_jsonl(tmp_path / "claude-first.jsonl", [
+            {"type": "system", "subtype": "init", "session_id": session_id},
+            {"type": "result", "subtype": "success", "session_id": session_id,
+             "result": "not valid review JSON", "is_error": False},
+        ]),
+        _claude_jsonl(tmp_path / "claude-retry.jsonl", [
+            {"type": "system", "subtype": "init", "session_id": session_id},
+            {"type": "result", "subtype": "success", "session_id": session_id,
+             "result": _repaired_review_text(), "is_error": False},
+        ]),
+    ]
+    binary, config, state = _claude_stub(tmp_path, streams)
+    context = _claude_context(tmp_path, binary, config, role="reviewer")
+    (context.run_dir / "work" / "result.txt").write_text("evidence")
+    reviewer = Reviewer(
+        binary="unused",
+        context_factory=lambda route, cwd, attempt_dir: context,
+    )
+
+    result = reviewer.run(
+        "claude-code/haiku", "review", context.project_dir,
+        context.run_dir / "attempt", context.run_dir,
+    )
+
+    calls = _claude_calls(state)
+    assert result.issues[0]["claim"] == "repaired"
+    assert result.session_id == session_id
+    assert result.attempts == 2
+    assert len(calls) == 2
+    assert "--resume" not in calls[0]["argv"]
+    assert calls[1]["argv"][calls[1]["argv"].index("--resume") + 1] == session_id
+    assert calls[1]["argv"][calls[1]["argv"].index("-p") + 1] == REVIEW_FORMAT_NOTE
+
+
+def test_codex_reviewer_repairs_on_its_created_session(tmp_path):
+    session_id = "codex-review-session"
+    streams = [
+        _codex_jsonl(tmp_path / "codex-first.jsonl", [
+            {"type": "thread.started", "thread_id": session_id},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "not valid"}},
+            {"type": "turn.completed", "usage": {"input_tokens": 10}},
+        ]),
+        _codex_jsonl(tmp_path / "codex-retry.jsonl", [
+            {"type": "thread.started", "thread_id": session_id},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": _repaired_review_text()}},
+            {"type": "turn.completed", "usage": {"input_tokens": 15}},
+        ]),
+    ]
+    binary, config, state = _codex_stub(tmp_path, streams)
+    context = _codex_context(tmp_path, role="reviewer", binary=binary, stub_config=config)
+    _enable_codex_campaign_role(context, "reviewer")
+    (context.run_dir / "work" / "result.txt").write_text("evidence")
+    reviewer = Reviewer(
+        binary="unused",
+        context_factory=lambda route, cwd, attempt_dir: context,
+    )
+
+    result = reviewer.run(
+        "codex/gpt-test", "review", context.project_dir,
+        context.run_dir / "attempt", context.run_dir,
+    )
+
+    calls = _codex_calls(state)
+    assert result.issues[0]["claim"] == "repaired"
+    assert result.session_id == session_id
+    assert result.attempts == 2
+    assert len(calls) == 2
+    assert "resume" not in calls[0]["argv"]
+    assert calls[1]["argv"][-3:] == [session_id, "--", REVIEW_FORMAT_NOTE]
 
 
 def test_validate_review_requires_evidence_paths(tmp_path):

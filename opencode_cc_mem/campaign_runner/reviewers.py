@@ -30,7 +30,8 @@ _FOLLOWUPS_SHAPE = (
 )
 _EVIDENCE_PATH_RULE = (
     "Evidence paths must be inside the run directory; project-only and other "
-    "outside paths are invalid."
+    "outside paths are invalid. Write paths relative to the run directory, for "
+    "example work/result.txt when that file exists there."
 )
 REVIEW_FORMAT_NOTE = (
     "Your previous answer was not valid review JSON. Return only one JSON "

@@ -654,6 +654,25 @@ def test_claude_resume_refuses_unknown_session(tmp_path):
     assert _calls(state) == []
 
 
+def test_claude_refuses_foreign_session_without_artifact(tmp_path):
+    stream = _jsonl(
+        tmp_path / "first.jsonl",
+        [_live_event("c1", "17-stream-init.json"), _live_event("c1", "24-stream-result.json")],
+    )
+    binary, config, state = _stub(tmp_path, [stream])
+    context = _context(tmp_path, binary, config)
+    executor = executor_for(context.route, "worker", context)
+    executor.run("first", context.project_dir, tmp_path / "attempt-1")
+
+    with pytest.raises(ExecutorRefused, match="same prepared configuration identity"):
+        executor.run(
+            "continue", context.project_dir, tmp_path / "attempt-2",
+            resume_session="foreign-session",
+        )
+
+    assert len(_calls(state)) == 1
+
+
 def test_claude_empty_retry_refuses_changed_session_identity(tmp_path):
     first = _jsonl(
         tmp_path / "first.jsonl",
