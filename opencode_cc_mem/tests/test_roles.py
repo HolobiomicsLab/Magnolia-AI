@@ -13,8 +13,8 @@ from campaign_runner.launch import ROLE_CONFIG_NAMES
 
 ROOT = Path(__file__).parents[1]
 BASE_OPENCODE_SHA256 = {
-    "campaign-worker": "f0782167d44c4c42233216ad8889cc4e7935509ae1161ce6f9e382c7c5e06a79",
-    "campaign-reviewer": "e2e093c9fa5ed0bbf14e2f18fd6c6345ae47f83e25c82504b6a8a285acef4269",
+    "campaign-worker": "7ba0074627cd59d1cf0e2845430642b516540a8466844240d08b6ce0f6727af8",
+    "campaign-reviewer": "db7bfef5aecfd5387d9febf3a7cd041705435ec8e687d68076d91efc641bf20d",
 }
 
 
@@ -125,15 +125,29 @@ def test_service_state_deny_covers_opencode_read_glob_and_grep(role):
     policy = roles.load_role(role)
 
     assert "**/.magnolia/services/**" in policy.read_deny_patterns
-    rendered = roles.render_opencode(role).decode("utf-8")
-    for action in ("read", "glob", "grep"):
-        assert (
-            f"  - action: {action}\n"
-            '    resource: "**/.magnolia/services/**"\n'
-            "    effect: deny"
-        ) in rendered
-    assert '**/.magnolia/campaign-service.json' in rendered
-    assert '**/.magnolia/campaign-service.log' in rendered
+    rendered = yaml.safe_load(
+        roles.render_opencode(role).decode("utf-8").split("---")[1]
+    )
+    capabilities = set(policy.allowed_native_capabilities)
+    actions = {"read"}
+    if "native_glob" in capabilities:
+        actions.add("glob")
+    if "native_grep" in capabilities:
+        actions.add("grep")
+    expected_resources = roles._opencode_read_denials(
+        tuple(
+            pattern
+            for pattern in policy.read_deny_patterns
+            if pattern not in policy.opencode_omitted_read_deny_patterns
+        )
+    )
+    for action in actions:
+        denied = {
+            rule["resource"]
+            for rule in rendered["permissions"]
+            if rule["action"] == action and rule["effect"] == "deny"
+        }
+        assert set(expected_resources) <= denied
 
 
 @pytest.mark.parametrize(

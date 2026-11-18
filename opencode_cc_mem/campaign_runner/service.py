@@ -43,7 +43,9 @@ def _write_service(project_dir: Path, value: dict[str, Any]) -> None:
     path = _record_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(value, indent=2, sort_keys=True) + "\n")
     os.chmod(temporary, 0o600)
     temporary.replace(path)
 
@@ -253,6 +255,9 @@ def ensure_service(
     port = _choose_port()
     log_path = _log_path(project)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.close(log_descriptor)
+    os.chmod(log_path, 0o600)
     environment = dict(os.environ)
     environment.update(
         {
@@ -282,6 +287,7 @@ def ensure_service(
             stderr=log,
             start_new_session=True,
         )
+    os.chmod(log_path, 0o600)
     record = {
         "project": project.name,
         "project_path": str(project),

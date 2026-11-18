@@ -25,11 +25,29 @@ permissions:
     resource: "*"
     effect: allow
   - action: glob
+    resource: "*.env*"
+    effect: deny
+  - action: glob
+    resource: "**/.magnolia/campaign-service.json"
+    effect: deny
+  - action: glob
+    resource: "**/.magnolia/campaign-service.log"
+    effect: deny
+  - action: glob
     resource: "**/.magnolia/services/**"
     effect: deny
   - action: grep
     resource: "*"
     effect: allow
+  - action: grep
+    resource: "*.env*"
+    effect: deny
+  - action: grep
+    resource: "**/.magnolia/campaign-service.json"
+    effect: deny
+  - action: grep
+    resource: "**/.magnolia/campaign-service.log"
+    effect: deny
   - action: grep
     resource: "**/.magnolia/services/**"
     effect: deny

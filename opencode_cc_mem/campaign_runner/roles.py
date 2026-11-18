@@ -121,22 +121,21 @@ def _opencode_permissions(policy: RolePolicy) -> list[tuple[str, str, str]]:
     capabilities = set(policy.allowed_native_capabilities)
     if "native_read" in capabilities and policy.canonical_read_roots:
         permissions.append(("read", "*", "allow"))
-    permissions.extend(
-        ("read", resource, "deny")
-        for resource in _opencode_read_denials(
-            tuple(
-                pattern
-                for pattern in policy.read_deny_patterns
-                if pattern not in policy.opencode_omitted_read_deny_patterns
-            )
+    read_denials = _opencode_read_denials(
+        tuple(
+            pattern
+            for pattern in policy.read_deny_patterns
+            if pattern not in policy.opencode_omitted_read_deny_patterns
         )
     )
+    permissions.extend(("read", resource, "deny") for resource in read_denials)
     for capability in ("native_glob", "native_grep"):
         if capability in capabilities:
             action = capability.removeprefix("native_")
             permissions.append((action, "*", "allow"))
-            if "**/.magnolia/services/**" in policy.read_deny_patterns:
-                permissions.append((action, "**/.magnolia/services/**", "deny"))
+            permissions.extend(
+                (action, resource, "deny") for resource in read_denials
+            )
     if "native_edit" in capabilities:
         for root in policy.edit_roots:
             permissions.extend(

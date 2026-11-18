@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -14,6 +15,34 @@ from campaign_runner.service import (  # noqa: E402
     service_status,
     stop_service,
 )
+
+
+def test_service_state_and_log_are_private_under_permissive_umask(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    log_path = project / ".magnolia" / "campaign-service.log"
+    process = type("Process", (), {"pid": 4321, "poll": lambda self: None})()
+
+    def fake_popen(*args, **kwargs):
+        assert (log_path.stat().st_mode & 0o777) == 0o600
+        return process
+
+    monkeypatch.setattr("campaign_runner.service.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("campaign_runner.service._choose_port", lambda: 4999)
+    monkeypatch.setattr("campaign_runner.service._healthy", lambda port, password: True)
+    monkeypatch.setattr("campaign_runner.service.redact_file", lambda path: None)
+    previous_umask = os.umask(0)
+    try:
+        ensure_service(project, "opencode", str(tmp_path / "service.db"))
+    finally:
+        os.umask(previous_umask)
+
+    record_path = project / ".magnolia" / "campaign-service.json"
+    # The project's .magnolia/ also holds shared project memory: its mode is left alone;
+    # the service record and log themselves are private.
+    assert (record_path.stat().st_mode & 0o777) == 0o600
+    assert (log_path.stat().st_mode & 0o777) == 0o600
 
 
 def test_missing_service_is_not_running(tmp_path):

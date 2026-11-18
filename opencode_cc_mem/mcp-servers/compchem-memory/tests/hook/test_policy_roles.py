@@ -12,7 +12,7 @@ import unicodedata
 
 import pytest
 
-from compchem_memory.hook.adapters import claude, codex
+from compchem_memory.hook.adapters import claude, codex, vibe
 from compchem_memory.hook.events import HookEvent, ToolCall, ToolTarget
 from compchem_memory.hook import policy
 from compchem_memory.hook.policy import decide
@@ -34,7 +34,11 @@ def _write_policy(
         "role": role,
         "policy_role": f"campaign-{role}",
         "canonical_read_roots": [str(project)],
-        "read_deny_patterns": ["**/*.env*", "**/*.env*/**", "**/secret/**"],
+        "read_deny_patterns": [
+            "**/*.env*", "**/*.env*/**", "**/secret/**",
+            "**/.magnolia/campaign-service.json",
+            "**/.magnolia/campaign-service.log",
+        ],
         "deny_path_forms": ["requested", "resolved"],
         "edit_roots": [str(work)] if edit_roots is None else edit_roots,
         "effective_capabilities": [
@@ -247,6 +251,71 @@ def test_role_policy_all_targets(tmp_path):
     )
     assert dollar_search is not None
     assert decide(dollar_search, env) is not None
+
+
+@pytest.mark.parametrize("adapter", (claude, vibe))
+@pytest.mark.parametrize(
+    "filename", ("campaign-service.json", "campaign-service.log")
+)
+def test_native_grep_denies_campaign_service_files(adapter, filename, tmp_path):
+    project = tmp_path / "project"
+    work = project / "work"
+    service_dir = project / ".magnolia"
+    work.mkdir(parents=True)
+    service_dir.mkdir()
+    (service_dir / filename).write_text("secret", encoding="utf-8")
+    (project / "allowed.txt").write_text("ok", encoding="utf-8")
+    env = _write_policy(tmp_path / "policy.json", project, work)
+    payload = {
+        "session_id": "session",
+        "cwd": str(project),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Grep",
+        "tool_input": {"path": str(project), "pattern": "secret"},
+    }
+    if adapter is vibe:
+        payload["tool_name"] = "grep"
+
+    parsed = adapter.parse(payload, "pre-tool")
+
+    assert parsed is not None
+    assert decide(parsed, env) is not None
+
+
+@pytest.mark.parametrize(
+    ("path", "access", "broad"),
+    (
+        (".magnolia/campaign-service.json", "read", False),
+        (".magnolia/campaign-service.log", "read", False),
+        (".", "search", True),
+    ),
+)
+def test_codex_read_server_denies_campaign_service_files(
+    path, access, broad, tmp_path
+):
+    project = tmp_path / "project"
+    work = project / "work"
+    service_dir = project / ".magnolia"
+    work.mkdir(parents=True)
+    service_dir.mkdir()
+    (service_dir / "campaign-service.json").write_text("secret", encoding="utf-8")
+    (service_dir / "campaign-service.log").write_text("secret", encoding="utf-8")
+    (project / "allowed.txt").write_text("ok", encoding="utf-8")
+    env = _write_policy(tmp_path / "policy.json", project, work)
+
+    parsed = codex.parse(
+        {
+            "session_id": "session",
+            "cwd": str(project),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "mcp__magnolia_read__search" if broad else "mcp__magnolia_read__read_file",
+            "tool_input": {"path": path},
+        },
+        "pre-tool",
+    )
+
+    assert parsed is not None
+    assert decide(parsed, env) is not None
 
 
 def test_broad_search_scan_bound_denies(tmp_path, monkeypatch):
