@@ -259,6 +259,7 @@ class ClaudeCodeExecutor:
     resume_permitted: bool = False
     resume_artifact: ResumeArtifact | None = None
     quota_detector: QuotaDetector | None = None
+    _created_sessions: set[str] = field(init=False, repr=False, default_factory=set)
     _memory_service_finalizer: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
@@ -342,7 +343,7 @@ class ClaudeCodeExecutor:
                 raise ExecutorRefused("Claude resume session differs from its artifact")
             resume_session = self.resume_artifact.session_id
         if resume_session is not None and not self.resume_permitted:
-            if self.resume_artifact is None:
+            if self.resume_artifact is None and resume_session not in self._created_sessions:
                 raise ExecutorRefused(
                     "Claude resume requires the same prepared configuration identity"
                 )
@@ -431,6 +432,7 @@ class ClaudeCodeExecutor:
                     if parsed.session_id is not None and outcome.kind != "refused":
                         if session_id is None:
                             self._bind_session(parsed.session_id)
+                            self._created_sessions.add(parsed.session_id)
                         else:
                             self._require_bound_session(parsed.session_id)
                     identity = self._identity(parsed.session_id or session_id)

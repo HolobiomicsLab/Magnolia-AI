@@ -533,6 +533,7 @@ class CodexExecutor:
     reasoning_effort: str = "low"
     user_config_path: Path | None = None
     trust_setup: Mapping[str, Any] = field(default_factory=dict)
+    _created_sessions: set[str] = field(init=False, repr=False, default_factory=set)
     _disable_overrides: tuple[str, ...] = field(default=(), init=False, repr=False)
     _owner_config_digest: str = field(default="", init=False, repr=False)
     _memory_service_finalizer: Any = field(init=False, repr=False, default=None)
@@ -606,7 +607,7 @@ class CodexExecutor:
                 raise ExecutorRefused("Codex resume session differs from its artifact")
             resume_session = self.resume_artifact.session_id
         if resume_session is not None and not self.resume_permitted:
-            if self.resume_artifact is None:
+            if self.resume_artifact is None and resume_session not in self._created_sessions:
                 raise ExecutorRefused("Codex resume requires the creating launch identity")
         if resume_session is not None:
             self._require_bound_session(resume_session)
@@ -675,6 +676,8 @@ class CodexExecutor:
                         errors.append({"kind": "resume_identity_mismatch"})
                         outcome = RunOutcome("refused")
                     if parsed.session_id and outcome.kind != "refused":
+                        if session_id is None:
+                            self._created_sessions.add(parsed.session_id)
                         self._bind_session(parsed.session_id, parsed.cumulative_usage)
                     identity = self._identity(parsed.session_id or session_id)
                     usage = self._usage(parsed.usage, identity, admission, process.duration_seconds, outcome)

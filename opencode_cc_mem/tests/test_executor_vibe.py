@@ -1140,6 +1140,32 @@ def test_vibe_refuses_forged_resume_session_without_starting_client(tmp_path):
     assert len(_calls(state)) == 1
 
 
+def test_vibe_resumes_only_its_created_session_without_artifact(tmp_path):
+    first_export = tmp_path / "first.json"
+    first_export.write_text(json.dumps(_real_export()))
+    resumed_export = tmp_path / "resumed.json"
+    resumed_export.write_text(json.dumps(_real_export()))
+    binary, config, state = _stub(tmp_path, [first_export, resumed_export])
+    context = _context(tmp_path, binary=binary)
+    executor = executor_for(context.route, "reviewer", context)
+    first = executor.run("first", context.project_dir, tmp_path / "attempt-1")
+
+    second = executor.run(
+        "repair", context.project_dir, tmp_path / "attempt-2",
+        resume_session=first.session_id,
+    )
+
+    assert second.session_id == first.session_id
+    resume_argv = _calls(state)[1]["argv"]
+    assert resume_argv[resume_argv.index("--resume") + 1] == first.session_id
+    with pytest.raises(ExecutorRefused, match="bound resume artifact"):
+        executor.run(
+            "foreign", context.project_dir, tmp_path / "attempt-3",
+            resume_session="foreign-session",
+        )
+    assert len(_calls(state)) == 2
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
