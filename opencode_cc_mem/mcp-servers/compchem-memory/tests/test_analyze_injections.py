@@ -87,6 +87,18 @@ def test_application_report_full_join():
     assert r["by_tier"]["project"]["not_applied"] == 1
 
 
+def test_application_report_deduplicates_repeated_probe_rows():
+    events = _events() + [
+        _probe("s1", "c1", True),
+        _probe("s1", "c1", True),  # same key: a crash wrote the row twice
+    ]
+    r = summarize(events)["application"]
+    assert r["probes"] == 1
+    assert r["applied"] == 1
+    assert r["not_applied"] == 0
+    assert r["probes_missing"] == 1  # c2 has no probe
+
+
 def test_application_report_missing_probes_not_counted_as_not_applied():
     events = [e for e in _events()]  # c1, c2 injected; no probes at all
     r = summarize(events)["application"]

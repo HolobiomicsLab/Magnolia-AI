@@ -464,12 +464,27 @@ def test_probe_application_keeps_items_after_a_logging_crash(tmp_path, monkeypat
         attempts.append(row["callID"])
         if len(attempts) == 2:
             raise RuntimeError("simulated logging crash")
+        return True
 
     monkeypatch.setattr(action_retrieval, "_log", fail_on_second_log)
     probe_application(paths, "claude", "s1", "alpha catalyst protocol")
 
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["pending_application"] == items[1:]
+
+
+def test_probe_application_keeps_items_when_real_log_write_fails(tmp_path) -> None:
+    paths = _paths(tmp_path)
+    items = _pending_items(1)
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        state.data["pending_application"] = items
+    # A directory at the log path makes os.open fail with IsADirectoryError.
+    (paths.store / "action-retrieval.jsonl").mkdir(parents=True)
+
+    probe_application(paths, "claude", "s1", "alpha catalyst protocol")
+
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["pending_application"] == items
 
 
 def test_probe_application_drops_malformed_items_and_logs_the_rest(tmp_path) -> None:

@@ -65,6 +65,13 @@ def _isolate_opencode_runtime_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_project_workspace(monkeypatch):
+    """Tests run outside root mode unless they opt in: a developer shell
+    inside a Magnolia workspace carries MAGNOLIA_PROJECT_WORKSPACE=1."""
+    monkeypatch.delenv("MAGNOLIA_PROJECT_WORKSPACE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_session_list(monkeypatch):
     """Never shell out to `opencode session list` from the test suite.
 

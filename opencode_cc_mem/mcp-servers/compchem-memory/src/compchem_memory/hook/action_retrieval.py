@@ -223,8 +223,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _log(paths: ProjectPaths, row: dict) -> None:
-    """Append one O_APPEND write per row without ever breaking a hook call."""
+def _log(paths: ProjectPaths, row: dict) -> bool:
+    """Append one O_APPEND write per row; return True only if it was written.
+
+    A failed write returns False instead of raising, so a probe can keep its
+    pending item for the next attempt.
+    """
     try:
         private_mkdir(paths.store)
         data = json.dumps({"ts": _now(), **row}, ensure_ascii=False).encode("utf-8") + b"\n"
@@ -241,8 +245,9 @@ def _log(paths: ProjectPaths, row: dict) -> None:
                 remaining = remaining[written:]
         finally:
             os.close(descriptor)
+        return True
     except Exception:  # noqa: BLE001 - telemetry is never session-critical
-        pass
+        return False
 
 
 def _coarse_row(event: HookEvent, tool_key: str, injected: int) -> dict:
@@ -505,11 +510,13 @@ def probe_application(
     """Probe pending notes in one state transaction, removing each after its row.
 
     An item leaves ``pending_application`` only once its ``application`` row is
-    logged, so a crash cannot lose a probe; a hard crash before the state is
-    saved can log an item twice on the next probe. Malformed items are dropped.
-    Holding the state lock while logging keeps a concurrent probe of the same
-    session from logging the same items. The caller must not hold this
-    session's state while calling this function.
+    written. A failed write keeps that item and every later item for the next
+    probe. A hard crash before the state is saved can write an item twice; the
+    analyzer deduplicates application rows by (sessionID, callID), so the
+    duplicate does not bias the rate. Malformed items are dropped. Holding the
+    state lock while logging keeps a concurrent probe of the same session from
+    writing the same items. The caller must not hold this session's state while
+    calling this function.
     """
     with SessionState.open(paths.store, harness, session_id) as state:
         pending = state.data.get("pending_application", [])
@@ -533,7 +540,9 @@ def probe_application(
                 pending.remove(item)
                 continue
             try:
-                _log(paths, row)
+                logged = _log(paths, row)
             except Exception:  # noqa: BLE001 - keep this and later items for the next probe
+                logged = False
+            if not logged:
                 break
             pending.remove(item)

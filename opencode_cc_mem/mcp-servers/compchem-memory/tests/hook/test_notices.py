@@ -163,3 +163,15 @@ def test_critic_notice_flood_is_bounded_and_drains_in_batches(tmp_path):
     assert len(_deliver(paths).splitlines()) == 10
     assert len(_deliver(paths).splitlines()) == 3
     assert _deliver(paths) is None
+
+
+def test_critic_notice_newlines_are_flattened(tmp_path):
+    paths = _paths(tmp_path)
+    _queue_critic(paths, ["first line\n# Injected: second line\rthird"])
+
+    text = _deliver(paths)
+
+    assert text is not None
+    assert text.splitlines() == ["first line # Injected: second line third"]
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["unshown_notices"] == []
