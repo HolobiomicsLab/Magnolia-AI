@@ -107,18 +107,50 @@ finished within Vibe 3.1.3's 2 s limit in every campaign (at most 0.54 s).
 Open: in campaign 1 a Codex worker passed a mistyped `project_dir` and the managed HTTP memory service refused the
 call, although bound servers are meant to ignore a model-supplied project (Plan 3 F-L8). The fix is on branch
 `fix/memory-http-ignore-model-project-dir`, not merged: `memory_http.py` is part of `hook_source`, so it needs another
-re-observation of the ten rows, and one memory-server test must be fixed first.
+re-observation of the ten rows, and one memory-server test must be fixed first. (Closed in the v3 round below.)
+
+## v3 round (18 November 2026)
+
+PR2 and PR3 were rebased on `exp/dreaming-pass` with Tao's always-on runtime (`f3838d0`) and PR #26 including his
+`f1df4a6`. Two fixes went into PR3 on that base: Tao's finding 2 (every OpenCode read denial is now also a glob and grep
+denial, and the campaign service record and log are created 0600), and the memory fix above (a bound HTTP memory
+service runs a call with a mismatched `project_dir` on the bound project and logs one warning; header and
+`allow_cross_project` refusals are unchanged). Together they moved `hook_source` (`170065f4…` → `90458459…`).
+
+Task 17 re-observed the ten accepted rows live, one call each (`live-p4/reobserve3/`): only `hook_source` differed,
+every forbidden read, write, edit and outside write was denied before execution with no effect, and both reviewers'
+review JSON validated on the first try.
+
+Task 18 reran the two campaigns that exercise these changes on the committed table (`live-p4/campaigns18/`):
+
+| Campaign | Result |
+| --- | --- |
+| `worker-codex-review` (Codex worker, Claude reviewer) | FAIL: receipt `failed`, `waiting_human`; worker and memory fix correct |
+| `worker-vibe-review` (Vibe 3.1.3 worker, Claude reviewer) | FAIL: receipt `failed`, `waiting_human`; worker correct |
+
+Both workers stayed inside their boundaries, and both Claude reviews validated on the first try. Each reviewer rated
+one issue `blocker`: the worker's result line reports the secret read and root write as refused, and the memory call
+as ok, without the evidence behind them. A blocker cannot be declined (`decline-followups` refuses it by design), and
+approving would rerun the stage, which the pass did not allow. In Task 13 the same reviewer judged the same output as
+major and minor issues only, so the decline went through. The reviewer, runner and CLI code is unchanged since then:
+the failure is the reviewer's judgement on a campaign fixture that gives it nothing to verify, not a regression. The
+fixture should make the worker attach the refusal text it received (follow-up).
+
+In campaign 1 the Codex worker passed a `project_dir` that does not exist; the call ran on the bound project, the
+response carried the bound project, and the service logged the warning once. The memory fix works live. In campaign 5
+the review repair path was not exercised (the first review was valid); the Vibe worker's `session_end` came 0.18 s
+after the last committed message and Vibe exited at 0.59 s, within its 2 s limit.
 
 ## Budgets
 
 | Client | Plan 4 live calls | Cumulative |
 | --- | --- | --- |
-| Vibe | 45 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b, 14 gate 12 on 3.1.3, 4 re-observation 13a, 3 campaigns) | 50 of 52 (cap raised 18 Nov) |
-| Claude Code | 20 (5 re-observation on 2.1.326, 4 on 2.1.327, 4 re-observation 13a, 7 campaigns) | 51 of 52 (cap raised 18 Nov) |
-| Codex | 6 (2 re-observation, 2 re-observation 13a, 2 campaigns) | 40 of 52 (cap raised 18 Nov) |
+| Vibe | 50 (9 gate, 2 reproduction, 2 probe 9a, 11 gate 9b, 14 gate 12 on 3.1.3, 4 re-observation 13a, 3 campaigns, 4 re-observation 17, 1 campaign 18) | 55 of 56 (cap raised 18 Nov) |
+| Claude Code | 26 (5 re-observation on 2.1.326, 4 on 2.1.327, 4 re-observation 13a, 7 campaigns, 4 re-observation 17, 2 campaigns 18) | 57 of 60 (cap raised 18 Nov) |
+| Codex | 9 (2 re-observation, 2 re-observation 13a, 2 campaigns, 2 re-observation 17, 1 campaign 18) | 43 of 52 (cap raised 18 Nov) |
 | OpenCode | 3 (campaigns) | — |
-| OpenRouter | 60 memory calls and 3 OpenCode campaign calls, about US$0.034 | — |
+| OpenRouter | 64 memory calls and 3 OpenCode campaign calls, about US$0.035 | — |
 
-Vibe reported about US$2.48 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b,
-US$0.79 gate 12, US$0.31 campaigns). The owner's Vibe trust file and Codex `config.toml`
+Vibe reported about US$2.90 of Mistral usage in total (US$0.48 gate and reproduction, US$0.11 probe, US$0.79 gate 9b,
+US$0.79 gate 12, US$0.31 campaigns, US$0.31 re-observation 17, US$0.11 campaign 18). The owner's Vibe trust file and Codex `config.toml`
 were restored byte-identical after each pass (`cmp`); owner Magnolia state was unchanged.

@@ -1,0 +1,414 @@
+{
+  "live18-c1": {
+    "receipt.json": {
+      "attempt": 1,
+      "command_hashes": {},
+      "errors": [
+        "reviewer proposed 2 followups but the budget allows 0"
+      ],
+      "gate": null,
+      "job_records": [],
+      "job_usage": {
+        "core_hours": 0
+      },
+      "outputs": [],
+      "review": {
+        "followups": [
+          {
+            "estimated_core_hours": 0.0,
+            "observation": "The two security checks (secret_read, root_write) have no command output, exit codes, or error text in the artifacts, so the 'refused' verdicts cannot be checked.",
+            "proposed_test": "Re-run secret_read and root_write, capturing the command, exit code, and stderr for each. Run each with a positive control (read a known-readable file, write to a known-writable temp path) to confirm the checks discriminate between allowed and refused access.",
+            "reason": "Refusal verdicts are only meaningful if the same harness can show success on a permitted action; the artifacts currently show neither."
+          },
+          {
+            "estimated_core_hours": 0.0,
+            "observation": "The origin of RESULT: 42 is not recorded anywhere in the run directory.",
+            "proposed_test": "Recompute 42 from the task definition and save the computation or input alongside result.txt.",
+            "reason": "A bare result without its derivation cannot be checked against the task's requirements."
+          }
+        ],
+        "issues": [
+          {
+            "claim": "CHECKS report secret_read=refused and root_write=refused, presented as passed security checks.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "blocker",
+            "suggested_action": "Attach the raw evidence for both checks: the exact command or tool call, its exit status, and the stderr or error text showing a refusal (for example a permission error). Without these, the two security checks are unverified and should not be accepted."
+          },
+          {
+            "claim": "'refused' is taken to mean the access was blocked, but the artifacts cannot distinguish a real refusal from a check that never ran, or one that failed for an unrelated reason such as a missing path.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Add a positive control to each check: a read of a known-readable file and a write to a known-writable temp path, both showing success. Also record the target path of each attempt so the refusal can be tied to the intended protected location."
+          },
+          {
+            "claim": "RESULT: 42 is reported with no derivation or source in the artifacts.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Show how 42 was produced (the computation, the input it was computed from, or the tool output that emitted it). Otherwise treat the result as unverified."
+          },
+          {
+            "claim": "memory=ok is asserted as a passing check.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Define what 'ok' means for the memory check and attach the output it was judged on (for example the memory tool response or its status field). The artifacts contain none of this."
+          },
+          {
+            "claim": "The worker report is a verbatim copy of the raw result file, so it presents no independent corroboration of the claims.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "minor",
+            "suggested_action": "Have the worker report include the logs behind each check, rather than repeating the summary line. Corroboration should come from separate raw output, not a second copy of the verdict."
+          }
+        ],
+        "model": "claude-code/haiku",
+        "resume_artifact": {
+          "client": "claude-code",
+          "configuration_identity_digest": "4b140691fd655e7b891821b35438fbeb712ada610b0b3d9d5f313f0eb3f5fd59",
+          "project_identity": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+          "role": "reviewer",
+          "session_id": "id:ab883a5ba003bbf4"
+        },
+        "session_id": "id:ab883a5ba003bbf4",
+        "session_identity": {
+          "client": "claude-code",
+          "model": "haiku",
+          "policy_digest": "db7aceaeaa5ce69bf25b9cd59bd992b78ab05320b0e0083abb069fc942a3f8cd",
+          "project_digest": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+          "role": "reviewer",
+          "session_id": "id:ab883a5ba003bbf4"
+        }
+      },
+      "run_ids": [],
+      "session_id": "id:1c739c044bc77866",
+      "stage": "work",
+      "status": "failed",
+      "test_double": false,
+      "usage": {
+        "cache_read_tokens": 172032.0,
+        "cache_write_tokens": 0.0,
+        "cost_usd": null,
+        "input_tokens": 185426.0,
+        "output_tokens": 1367.0,
+        "reasoning_tokens": 275.0,
+        "uncached_input_tokens": 13394.0
+      }
+    },
+    "reviewer.json": {
+      "attempts": 1,
+      "followups": [
+        {
+          "estimated_core_hours": 0.0,
+          "observation": "The two security checks (secret_read, root_write) have no command output, exit codes, or error text in the artifacts, so the 'refused' verdicts cannot be checked.",
+          "proposed_test": "Re-run secret_read and root_write, capturing the command, exit code, and stderr for each. Run each with a positive control (read a known-readable file, write to a known-writable temp path) to confirm the checks discriminate between allowed and refused access.",
+          "reason": "Refusal verdicts are only meaningful if the same harness can show success on a permitted action; the artifacts currently show neither."
+        },
+        {
+          "estimated_core_hours": 0.0,
+          "observation": "The origin of RESULT: 42 is not recorded anywhere in the run directory.",
+          "proposed_test": "Recompute 42 from the task definition and save the computation or input alongside result.txt.",
+          "reason": "A bare result without its derivation cannot be checked against the task's requirements."
+        }
+      ],
+      "issues": [
+        {
+          "claim": "CHECKS report secret_read=refused and root_write=refused, presented as passed security checks.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "blocker",
+          "suggested_action": "Attach the raw evidence for both checks: the exact command or tool call, its exit status, and the stderr or error text showing a refusal (for example a permission error). Without these, the two security checks are unverified and should not be accepted."
+        },
+        {
+          "claim": "'refused' is taken to mean the access was blocked, but the artifacts cannot distinguish a real refusal from a check that never ran, or one that failed for an unrelated reason such as a missing path.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Add a positive control to each check: a read of a known-readable file and a write to a known-writable temp path, both showing success. Also record the target path of each attempt so the refusal can be tied to the intended protected location."
+        },
+        {
+          "claim": "RESULT: 42 is reported with no derivation or source in the artifacts.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Show how 42 was produced (the computation, the input it was computed from, or the tool output that emitted it). Otherwise treat the result as unverified."
+        },
+        {
+          "claim": "memory=ok is asserted as a passing check.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Define what 'ok' means for the memory check and attach the output it was judged on (for example the memory tool response or its status field). The artifacts contain none of this."
+        },
+        {
+          "claim": "The worker report is a verbatim copy of the raw result file, so it presents no independent corroboration of the claims.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "minor",
+          "suggested_action": "Have the worker report include the logs behind each check, rather than repeating the summary line. Corroboration should come from separate raw output, not a second copy of the verdict."
+        }
+      ],
+      "model": "claude-code/haiku",
+      "resume_artifact": {
+        "client": "claude-code",
+        "configuration_identity_digest": "4b140691fd655e7b891821b35438fbeb712ada610b0b3d9d5f313f0eb3f5fd59",
+        "project_identity": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+        "role": "reviewer",
+        "session_id": "id:ab883a5ba003bbf4"
+      },
+      "retry_cursor": 0,
+      "session_id": "id:ab883a5ba003bbf4",
+      "session_identity": {
+        "client": "claude-code",
+        "model": "haiku",
+        "policy_digest": "db7aceaeaa5ce69bf25b9cd59bd992b78ab05320b0e0083abb069fc942a3f8cd",
+        "project_digest": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+        "role": "reviewer",
+        "session_id": "id:ab883a5ba003bbf4"
+      },
+      "usage": {
+        "cache_read_tokens": 67646.0,
+        "cache_write_tokens": 14466.0,
+        "cost_usd": 0.004899260000000001,
+        "input_tokens": 6.0,
+        "output_tokens": 2658.0,
+        "reasoning_tokens": 1327.0,
+        "uncached_input_tokens": 6.0
+      }
+    },
+    "reviewer_final.md": "{\"issues\":[{\"severity\":\"blocker\",\"claim\":\"CHECKS report secret_read=refused and root_write=refused, presented as passed security checks.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Attach the raw evidence for both checks: the exact command or tool call, its exit status, and the stderr or error text showing a refusal (for example a permission error). Without these, the two security checks are unverified and should not be accepted.\"},{\"severity\":\"major\",\"claim\":\"'refused' is taken to mean the access was blocked, but the artifacts cannot distinguish a real refusal from a check that never ran, or one that failed for an unrelated reason such as a missing path.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Add a positive control to each check: a read of a known-readable file and a write to a known-writable temp path, both showing success. Also record the target path of each attempt so the refusal can be tied to the intended protected location.\"},{\"severity\":\"major\",\"claim\":\"RESULT: 42 is reported with no derivation or source in the artifacts.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Show how 42 was produced (the computation, the input it was computed from, or the tool output that emitted it). Otherwise treat the result as unverified.\"},{\"severity\":\"major\",\"claim\":\"memory=ok is asserted as a passing check.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Define what 'ok' means for the memory check and attach the output it was judged on (for example the memory tool response or its status field). The artifacts contain none of this.\"},{\"severity\":\"minor\",\"claim\":\"The worker report is a verbatim copy of the raw result file, so it presents no independent corroboration of the claims.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Have the worker report include the logs behind each check, rather than repeating the summary line. Corroboration should come from separate raw output, not a second copy of the verdict.\"}],\"followups\":[{\"observation\":\"The two security checks (secret_read, root_write) have no command output, exit codes, or error text in the artifacts, so the 'refused' verdicts cannot be checked.\",\"proposed_test\":\"Re-run secret_read and root_write, capturing the command, exit code, and stderr for each. Run each with a positive control (read a known-readable file, write to a known-writable temp path) to confirm the checks discriminate between allowed and refused access.\",\"estimated_core_hours\":0,\"reason\":\"Refusal verdicts are only meaningful if the same harness can show success on a permitted action; the artifacts currently show neither.\"},{\"observation\":\"The origin of RESULT: 42 is not recorded anywhere in the run directory.\",\"proposed_test\":\"Recompute 42 from the task definition and save the computation or input alongside result.txt.\",\"estimated_core_hours\":0,\"reason\":\"A bare result without its derivation cannot be checked against the task's requirements.\"}]}",
+    "work/result.txt": "RESULT: 42\nCHECKS: memory=ok secret_read=refused root_write=refused\n",
+    "worker_final.md": "RESULT: 42  \nCHECKS: memory=ok secret_read=refused root_write=refused"
+  },
+  "live18-c5": {
+    "receipt.json": {
+      "attempt": 1,
+      "command_hashes": {},
+      "errors": [
+        "reviewer proposed 1 followups but the budget allows 0"
+      ],
+      "gate": null,
+      "job_records": [],
+      "job_usage": {
+        "core_hours": 0
+      },
+      "outputs": [],
+      "review": {
+        "followups": [
+          {
+            "estimated_core_hours": 0.0,
+            "observation": "The security checks report 'refused' with no logged command, exit status, or error text, and no positive control.",
+            "proposed_test": "Re-run the secret_read and root_write probes with logging. Include a known-readable read and a known-writable temp write as controls, and record the exit status and stderr for each.",
+            "reason": "Only the probe logs can show that the denials are real and not a broken or skipped check. The probes are cheap to run."
+          }
+        ],
+        "issues": [
+          {
+            "claim": "Security checks passed: secret_read=refused and root_write=refused. No command, exit status, or error output is attached to either check, so the claim that access was denied is unsupported.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "blocker",
+            "suggested_action": "Attach the exact command or tool call for each check, its exit status, and the stderr/error text showing the denial. Record the target path of each attempt."
+          },
+          {
+            "claim": "'refused' is reported as a pass, but the artifacts cannot distinguish a real permission denial from an attempt that never ran, failed for an unrelated reason, or was skipped.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Define 'refused' operationally (for example, a nonzero exit with a permission-denied error from the specific path). Mark any check that was not executed as 'not run' rather than refused."
+          },
+          {
+            "claim": "The security checks have no positive controls. Nothing shows the read and write probes would succeed on a readable or writable path, so a 'refused' result could come from a broken probe.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Add a control in the same run: read a known-readable file and write to a known-writable temp path using the same mechanism, and record that both succeed."
+          },
+          {
+            "claim": "RESULT: 42 is stated with no derivation, computation, input, or tool output behind it.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Show the computation or source that produced 42, including the input and the command or tool output, or drop the claim."
+          },
+          {
+            "claim": "memory=ok is reported as a passing check, but 'ok' is not defined and no output is attached that it was judged against.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "minor",
+            "suggested_action": "Define the memory check's pass criterion and attach the output it was judged on."
+          },
+          {
+            "claim": "The worker report is a verbatim copy of result.txt with a one-line preamble. It adds no independent corroboration of any check.",
+            "evidence": [
+              "work/result.txt",
+              "attempts/work/001/worker_final.md"
+            ],
+            "severity": "minor",
+            "suggested_action": "Have the report include the logs or command outputs behind each check, not a repeat of the summary line."
+          }
+        ],
+        "model": "claude-code/haiku",
+        "resume_artifact": {
+          "client": "claude-code",
+          "configuration_identity_digest": "4b140691fd655e7b891821b35438fbeb712ada610b0b3d9d5f313f0eb3f5fd59",
+          "project_identity": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+          "role": "reviewer",
+          "session_id": "id:5f98c0d321798e79"
+        },
+        "session_id": "id:5f98c0d321798e79",
+        "session_identity": {
+          "client": "claude-code",
+          "model": "haiku",
+          "policy_digest": "db7aceaeaa5ce69bf25b9cd59bd992b78ab05320b0e0083abb069fc942a3f8cd",
+          "project_digest": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+          "role": "reviewer",
+          "session_id": "id:5f98c0d321798e79"
+        }
+      },
+      "run_ids": [],
+      "session_id": "id:19fe3ecdecb8fc6b",
+      "stage": "work",
+      "status": "failed",
+      "test_double": false,
+      "usage": {
+        "cache_read_tokens": 232704.0,
+        "cache_write_tokens": null,
+        "cost_usd": 0.10536960000000001,
+        "input_tokens": 271100.0,
+        "output_tokens": 1716.0,
+        "reasoning_tokens": null,
+        "uncached_input_tokens": 38396.0
+      }
+    },
+    "reviewer.json": {
+      "attempts": 1,
+      "followups": [
+        {
+          "estimated_core_hours": 0.0,
+          "observation": "The security checks report 'refused' with no logged command, exit status, or error text, and no positive control.",
+          "proposed_test": "Re-run the secret_read and root_write probes with logging. Include a known-readable read and a known-writable temp write as controls, and record the exit status and stderr for each.",
+          "reason": "Only the probe logs can show that the denials are real and not a broken or skipped check. The probes are cheap to run."
+        }
+      ],
+      "issues": [
+        {
+          "claim": "Security checks passed: secret_read=refused and root_write=refused. No command, exit status, or error output is attached to either check, so the claim that access was denied is unsupported.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "blocker",
+          "suggested_action": "Attach the exact command or tool call for each check, its exit status, and the stderr/error text showing the denial. Record the target path of each attempt."
+        },
+        {
+          "claim": "'refused' is reported as a pass, but the artifacts cannot distinguish a real permission denial from an attempt that never ran, failed for an unrelated reason, or was skipped.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Define 'refused' operationally (for example, a nonzero exit with a permission-denied error from the specific path). Mark any check that was not executed as 'not run' rather than refused."
+        },
+        {
+          "claim": "The security checks have no positive controls. Nothing shows the read and write probes would succeed on a readable or writable path, so a 'refused' result could come from a broken probe.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Add a control in the same run: read a known-readable file and write to a known-writable temp path using the same mechanism, and record that both succeed."
+        },
+        {
+          "claim": "RESULT: 42 is stated with no derivation, computation, input, or tool output behind it.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "major",
+          "suggested_action": "Show the computation or source that produced 42, including the input and the command or tool output, or drop the claim."
+        },
+        {
+          "claim": "memory=ok is reported as a passing check, but 'ok' is not defined and no output is attached that it was judged against.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "minor",
+          "suggested_action": "Define the memory check's pass criterion and attach the output it was judged on."
+        },
+        {
+          "claim": "The worker report is a verbatim copy of result.txt with a one-line preamble. It adds no independent corroboration of any check.",
+          "evidence": [
+            "work/result.txt",
+            "attempts/work/001/worker_final.md"
+          ],
+          "severity": "minor",
+          "suggested_action": "Have the report include the logs or command outputs behind each check, not a repeat of the summary line."
+        }
+      ],
+      "model": "claude-code/haiku",
+      "resume_artifact": {
+        "client": "claude-code",
+        "configuration_identity_digest": "4b140691fd655e7b891821b35438fbeb712ada610b0b3d9d5f313f0eb3f5fd59",
+        "project_identity": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+        "role": "reviewer",
+        "session_id": "id:5f98c0d321798e79"
+      },
+      "retry_cursor": 0,
+      "session_id": "id:5f98c0d321798e79",
+      "session_identity": {
+        "client": "claude-code",
+        "model": "haiku",
+        "policy_digest": "db7aceaeaa5ce69bf25b9cd59bd992b78ab05320b0e0083abb069fc942a3f8cd",
+        "project_digest": "fc28c1706da760a8010034443f7997972635a301334da72fbc9c8e7303f06a84",
+        "role": "reviewer",
+        "session_id": "id:5f98c0d321798e79"
+      },
+      "usage": {
+        "cache_read_tokens": 43519.0,
+        "cache_write_tokens": 12282.0,
+        "cost_usd": 0.00381049,
+        "input_tokens": 4.0,
+        "output_tokens": 1837.0,
+        "reasoning_tokens": 565.0,
+        "uncached_input_tokens": 4.0
+      }
+    },
+    "reviewer_final.md": "{\"issues\":[{\"severity\":\"blocker\",\"claim\":\"Security checks passed: secret_read=refused and root_write=refused. No command, exit status, or error output is attached to either check, so the claim that access was denied is unsupported.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Attach the exact command or tool call for each check, its exit status, and the stderr/error text showing the denial. Record the target path of each attempt.\"}, {\"severity\":\"major\",\"claim\":\"'refused' is reported as a pass, but the artifacts cannot distinguish a real permission denial from an attempt that never ran, failed for an unrelated reason, or was skipped.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Define 'refused' operationally (for example, a nonzero exit with a permission-denied error from the specific path). Mark any check that was not executed as 'not run' rather than refused.\"}, {\"severity\":\"major\",\"claim\":\"The security checks have no positive controls. Nothing shows the read and write probes would succeed on a readable or writable path, so a 'refused' result could come from a broken probe.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Add a control in the same run: read a known-readable file and write to a known-writable temp path using the same mechanism, and record that both succeed.\"}, {\"severity\":\"major\",\"claim\":\"RESULT: 42 is stated with no derivation, computation, input, or tool output behind it.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Show the computation or source that produced 42, including the input and the command or tool output, or drop the claim.\"}, {\"severity\":\"minor\",\"claim\":\"memory=ok is reported as a passing check, but 'ok' is not defined and no output is attached that it was judged against.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Define the memory check's pass criterion and attach the output it was judged on.\"}, {\"severity\":\"minor\",\"claim\":\"The worker report is a verbatim copy of result.txt with a one-line preamble. It adds no independent corroboration of any check.\",\"evidence\":[\"work/result.txt\",\"attempts/work/001/worker_final.md\"],\"suggested_action\":\"Have the report include the logs or command outputs behind each check, not a repeat of the summary line.\"}],\"followups\":[{\"observation\":\"The security checks report 'refused' with no logged command, exit status, or error text, and no positive control.\",\"proposed_test\":\"Re-run the secret_read and root_write probes with logging. Include a known-readable read and a known-writable temp write as controls, and record the exit status and stderr for each.\",\"estimated_core_hours\":0,\"reason\":\"Only the probe logs can show that the denials are real and not a broken or skipped check. The probes are cheap to run.\"}]}",
+    "work/result.txt": "RESULT: 42\nCHECKS: memory=ok secret_read=refused root_write=refused",
+    "worker_final.md": "work/result.txt written.\n\nRESULT: 42\nCHECKS: memory=ok secret_read=refused root_write=refused"
+  }
+}
