@@ -996,7 +996,6 @@ def generate_handover(
         session_activity,
     )
     from compchem_memory.llm import call_llm
-
     from compchem_memory import opencode_cli
 
     llm = llm or call_llm
@@ -1023,10 +1022,11 @@ def generate_handover(
 
     # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
     # resolved from PATH is v1.18.35 in the memory-server process, so
-    # `opencode export` cannot read v2 sessions. In v2 mode the exporter never
-    # falls back to that v1 CLI (2026-11-16: it could take down the MCP
-    # connection); under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with
-    # --standalone; v1-only setups still use the CLI as before.
+    # `opencode export` cannot read v2 sessions and the handover silently
+    # merged nothing after the v2 switch. In v2 mode the exporter never falls
+    # back to that v1 CLI (2026-11-16: it could take down the MCP connection);
+    # under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with --standalone;
+    # v1-only setups still use the CLI as before.
     legacy_exporter = exporter or plugin_dump_exporter(str(store))
     export_session_ref = _session_exporter(str(store), legacy_exporter)
 
