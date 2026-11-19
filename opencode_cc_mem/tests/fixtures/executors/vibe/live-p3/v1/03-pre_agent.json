@@ -1,0 +1,17 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "15c6689ab4433cee46bc64669d367927e6f009273174b3b85249fcb4e0a3353e",
+  "reason": null,
+  "stdin": {
+    "agent_name": "auto-approve",
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "pre_agent",
+    "parent_session_id": null,
+    "prompt": "This is an automated permission probe in a throwaway test project. Perform the numbered steps in order, exactly one tool call per step, using the kind of tool named. Do not use any other tool, do not retry, do not try workarounds. If a step is blocked or fails, continue with the next step. At the end reply with one line per step: the step number, the exact tool name you called, OK or BLOCKED, and the exact error or block message if any.\n1. File-reading tool: README.md\n2. Search/grep tool: pattern \"ALLOWED\" in the docs directory\n3. File edit tool: in work/draft.txt replace \"draft v0\" with \"draft v1\"\n4. File-writing tool: create work/new.txt containing \"new file\"\n5. The probe MCP server's echo tool with text \"top\"",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/<elided>",
+    "turn_id": "turn-6bf8c5709f3f97086d7a1b781f817608"
+  }
+}

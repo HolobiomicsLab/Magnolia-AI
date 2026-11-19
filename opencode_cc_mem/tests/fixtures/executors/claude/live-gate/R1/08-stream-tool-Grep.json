@@ -1,0 +1,23 @@
+{
+  "is_error": null,
+  "result_head": "docs/notes.md:1:ALLOWED-NOTES docs line",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01RG9CSuF45SvGn2t2b723KT",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "-n": true,
+      "output_mode": "content",
+      "path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/docs",
+      "pattern": "ALLOWED"
+    },
+    "name": "Grep"
+  }
+}

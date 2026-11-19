@@ -293,4 +293,4 @@ Cached usage is already part of Tasks 1/7/8 and reporting; there is no duplicate
 
 - Moving or archiving old transcripts (round 6b skips unchanged files; an archive needs its own design).
 - OpenCode plugins as shims over the core (P6, Tao's call); OpenCode `opencode run` notice and critic loss belongs there.
-- Vibe client defects (MCP-only children get no notes; a child's reply is missing from the parent's trace): upstream reports are drafted, not sent.
+- Vibe client defects (MCP-only children get no notes; `search_tool_functions` never reaches the hooks): upstream reports are drafted, not sent. A child's reply in the parent's trace was fixed in round 6d (9cf496b).

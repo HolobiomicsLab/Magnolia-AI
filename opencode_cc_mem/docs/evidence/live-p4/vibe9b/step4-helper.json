@@ -1,0 +1,467 @@
+{
+  "calls": [
+    {
+      "all_text": "1 ok\n2 refused Magnolia required role policy denied this operation\n3 refused Magnolia required role policy denied this operation\n4 refused Magnolia required role policy denied this operation\n5 refused Magnolia required role policy denied this operation\n6 refused Magnolia required role policy denied this operation\n7 ok",
+      "attempt_dir": "<G>/attempts/step4-helper/initial",
+      "call": "initial",
+      "catalog_first_llm_call": [
+        "todo",
+        "unified_harness_scratchpad",
+        "search_tool_functions",
+        "run_typescript",
+        "read_file",
+        "write_file",
+        "edit",
+        "bash",
+        "skill"
+      ],
+      "diagnostics": null,
+      "duration_seconds": 20.38855883292854,
+      "export_summary": {
+        "active_model": "mistral-medium-3.5",
+        "cost_usd": 0.0782526,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enabled_tools": [],
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 40,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "session_id": "bce43e66-d5df-564d-f66d-cdf9626772e4",
+        "steps": 8,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 279424,
+          "input_tokens": 297485,
+          "output_tokens": 1233,
+          "total_tokens": 298718
+        },
+        "vibe_version": "3.1.2",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "final_text": "1 ok\n2 refused Magnolia required role policy denied this operation\n3 refused Magnolia required role policy denied this operation\n4 refused Magnolia required role policy denied this operation\n5 refused Magnolia required role policy denied this operation\n6 refused Magnolia required role policy denied this operation\n7 ok",
+      "hook_actions": [
+        {
+          "arguments": {
+            "path": "docs/notes.md"
+          },
+          "call_id": "Gr7DsypCk",
+          "call_type": "runtime_builtin",
+          "decision": "continue",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "seq": 14,
+          "tool_name_on_wire": "file_system.read_file"
+        },
+        {
+          "arguments": {
+            "path": "docs/notes.md"
+          },
+          "call_id": "Gr7DsypCk",
+          "call_type": "runtime_builtin",
+          "decision": null,
+          "hook": "post_tool_call",
+          "kind": "hook",
+          "seq": 25,
+          "tool_name_on_wire": "file_system.read_file"
+        },
+        {
+          "arguments": {
+            "path": "README.md"
+          },
+          "call_id": "i3WfuqRn4",
+          "call_type": "runtime_builtin",
+          "decision": "skip",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "reason": "Magnolia required role policy denied this operation.",
+          "seq": 35,
+          "tool_name_on_wire": "file_system.read_file"
+        },
+        {
+          "arguments": {
+            "path": "secret/.env"
+          },
+          "call_id": "XQr4FEc8M",
+          "call_type": "runtime_builtin",
+          "decision": "skip",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "reason": "Magnolia required role policy denied this operation.",
+          "seq": 46,
+          "tool_name_on_wire": "file_system.read_file"
+        },
+        {
+          "arguments": {
+            "content": "H",
+            "path": "docs/helper-note.txt"
+          },
+          "call_id": "I4TGyjeZp",
+          "call_type": "runtime_builtin",
+          "decision": "skip",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "reason": "Magnolia required role policy denied this operation.",
+          "seq": 57,
+          "tool_name_on_wire": "file_system.write_file"
+        },
+        {
+          "arguments": {
+            "command": "ls",
+            "timeout_seconds": 120
+          },
+          "call_id": "VMRf7fK9P",
+          "call_type": "runtime_builtin",
+          "decision": "skip",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "reason": "Magnolia required role policy denied this operation.",
+          "seq": 68,
+          "tool_name_on_wire": "file_system.bash"
+        },
+        {
+          "arguments": {
+            "name": "vibe:vibe"
+          },
+          "call_id": "digvqBoCN",
+          "call_type": "runtime_builtin",
+          "decision": "skip",
+          "hook": "pre_tool_call",
+          "kind": "hook",
+          "reason": "Magnolia required role policy denied this operation.",
+          "seq": 79,
+          "tool_name_on_wire": "skill.read"
+        }
+      ],
+      "model_tool_calls": [],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "physical_attempts": null,
+      "resume_artifact": {
+        "client": "vibe",
+        "configuration_identity_digest": "bce038e249f32efb4ffdf790d7767cba8ca2cdb77d8669c799a0faf758bf52c4",
+        "project_identity": "914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142",
+        "role": "helper",
+        "session_id": "bce43e66-d5df-564d-f66d-cdf9626772e4"
+      },
+      "returncode": 0,
+      "session_id": "bce43e66-d5df-564d-f66d-cdf9626772e4",
+      "session_identity": "SessionIdentity(client='vibe', model='mistral-medium-3.5', session_id='bce43e66-d5df-564d-f66d-cdf9626772e4', project_digest='914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142', role='helper', policy_digest='bce038e249f32efb4ffdf790d7767cba8ca2cdb77d8669c799a0faf758bf52c4')",
+      "stderr_lines": [
+        "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+        "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      ],
+      "stopped_reason": null,
+      "timed_out": false,
+      "tool_executions": [
+        {
+          "approval": {
+            "approvalSource": "bypass",
+            "approvalType": "always",
+            "decision": "execute"
+          },
+          "arguments": {
+            "path": "docs/notes.md"
+          },
+          "call_id": "Gr7DsypCk",
+          "call_type": "runtime_builtin",
+          "kind": "tool_execution",
+          "name": "file_system.read_file",
+          "parent_call_id": null,
+          "result_excerpt": "{\"action_id\": \"ca2e49d3-c4de-5e0f-aa53-de558a13fab6\", \"call_id\": \"Gr7DsypCk\", \"result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"# Harness P3 acceptance notes\\n\\nALLOWED: synthetic note for the live 9b gate. The answer to the synthetic question is 42.\\n\", \"file_size_bytes\": 121, \"lines_r",
+          "result_type": "tool_succeeded",
+          "seq": 20,
+          "state": "succeeded"
+        }
+      ],
+      "usage": {
+        "cache_read_tokens": 279424.0,
+        "cache_write_tokens": null,
+        "cost_usd": 0.0782526,
+        "input_tokens": 297485.0,
+        "output_tokens": 1233.0,
+        "reasoning_tokens": null,
+        "uncached_input_tokens": 18061.0
+      },
+      "vibe_spawns": 1,
+      "wall_s": 20.4
+    },
+    {
+      "all_text": "1 ok\n2 refused Magnolia required role policy denied this operation\n3 refused Magnolia required role policy denied this operation\n4 refused Magnolia required role policy denied this operation\n5 refused Magnolia required role policy denied this operation\n6 refused Magnolia required role policy denied this operation\n7 ok\n42",
+      "attempt_dir": "<G>/attempts/step4-helper/resume",
+      "call": "resume",
+      "catalog_first_llm_call": [
+        "todo",
+        "unified_harness_scratchpad",
+        "search_tool_functions",
+        "run_typescript",
+        "read_file",
+        "write_file",
+        "edit",
+        "bash",
+        "skill"
+      ],
+      "diagnostics": null,
+      "duration_seconds": 17.86532283294946,
+      "export_summary": {
+        "active_model": "mistral-medium-3.5",
+        "cost_usd": 0.0775704,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enabled_tools": [],
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 40,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "session_id": "bce43e66-d5df-564d-f66d-cdf9626772e4",
+        "steps": 1,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 2816,
+          "input_tokens": 53628,
+          "output_tokens": 124,
+          "total_tokens": 53752
+        },
+        "vibe_version": "3.1.2",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "final_text": "42",
+      "hook_actions": [],
+      "model_tool_calls": [],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "physical_attempts": null,
+      "returncode": 0,
+      "same_session": true,
+      "session_id": "bce43e66-d5df-564d-f66d-cdf9626772e4",
+      "session_identity": "SessionIdentity(client='vibe', model='mistral-medium-3.5', session_id='bce43e66-d5df-564d-f66d-cdf9626772e4', project_digest='914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142', role='helper', policy_digest='bce038e249f32efb4ffdf790d7767cba8ca2cdb77d8669c799a0faf758bf52c4')",
+      "stderr_lines": [
+        "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+        "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      ],
+      "stopped_reason": null,
+      "timed_out": false,
+      "tool_executions": [],
+      "usage": {
+        "cache_read_tokens": 2816.0,
+        "cache_write_tokens": null,
+        "cost_usd": 0.0775704,
+        "input_tokens": 53628.0,
+        "output_tokens": 124.0,
+        "reasoning_tokens": null,
+        "uncached_input_tokens": 50812.0
+      },
+      "vibe_spawns": 1,
+      "wall_s": 27.4
+    }
+  ],
+  "executor_accepted": true,
+  "identity_recomputed": {
+    "client_env_keys": [
+      "COMPCHEM_TOOLS_PORT",
+      "HOME",
+      "LANG",
+      "LOGNAME",
+      "MAGNOLIA_CLIENT",
+      "MAGNOLIA_CONTROL_DIR",
+      "MAGNOLIA_DISTILL_INTERVAL_MIN",
+      "MAGNOLIA_DOORBELL",
+      "MAGNOLIA_HOOK_POLICY",
+      "MAGNOLIA_HOOK_POLICY_REQUIRED",
+      "MAGNOLIA_HOOK_POLICY_SHA256",
+      "MAGNOLIA_INSTALLATION_ROOT",
+      "MAGNOLIA_MODEL",
+      "MAGNOLIA_PROJECT_DIR",
+      "MAGNOLIA_PROJECT_IDENTITY",
+      "MAGNOLIA_PYTHON",
+      "MAGNOLIA_ROLE",
+      "MAGNOLIA_ROOT",
+      "MAGNOLIA_RULES_DIR",
+      "MAGNOLIA_RUN_DIR",
+      "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+      "MAGNOLIA_WORKSPACE_ROOT",
+      "MAGNOLIA_WORK_DIR",
+      "PATH",
+      "PYTHONPYCACHEPREFIX",
+      "SHELL",
+      "TMPDIR",
+      "USER",
+      "VIBE_ENABLE_TELEMETRY",
+      "XDG_STATE_HOME"
+    ],
+    "components": {
+      "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+      "client_version": "3.1.2",
+      "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+      "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+      "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+      "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+      "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+      "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+      "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+      "settings": "756302ab630e020bb9df6a148129c210995574f7ba009e9528d58a38c974b5df"
+    },
+    "configuration_identity": "a41f3199220fbad22f265d120c4f0f5db2982f07149edb856f546dc2dcfe0c4c",
+    "launch_identity_sha256": "cc8a756ab27cd1e5b409254996a88341658dda9c9cfac1236aa976378f487e57",
+    "mismatch_vs_candidate_row": {},
+    "native_sha256": {
+      ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+      ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+    },
+    "policy_digest_raw": "46dbe983551f7cecfe0fe29a0b625490253d34c0ba326e6ccf3b24a49835e415"
+  },
+  "label": "step4-helper",
+  "model_pinned": "mistral-medium-3.5",
+  "prepared": {
+    "argv_shape": [
+      "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "-p",
+      "<PROMPT>",
+      "--output",
+      "json",
+      "--workdir",
+      "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance",
+      "--max-turns",
+      "40",
+      "--output-dir",
+      "<OUT>",
+      "--auto-approve",
+      "--disabled-tools",
+      "bash",
+      "--disabled-tools",
+      "edit",
+      "--disabled-tools",
+      "write_file"
+    ],
+    "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+    "config_digest": "72a1c986fcf623f7b1d760ce0159f57cd8d6dcaf8d6ace74880d5debb427194f",
+    "env_keys": [
+      "COMPCHEM_TOOLS_PORT",
+      "HOME",
+      "LANG",
+      "LOGNAME",
+      "MAGNOLIA_CLIENT",
+      "MAGNOLIA_CONTROL_DIR",
+      "MAGNOLIA_DISTILL_INTERVAL_MIN",
+      "MAGNOLIA_DOORBELL",
+      "MAGNOLIA_HOOK_POLICY",
+      "MAGNOLIA_HOOK_POLICY_REQUIRED",
+      "MAGNOLIA_HOOK_POLICY_SHA256",
+      "MAGNOLIA_INSTALLATION_ROOT",
+      "MAGNOLIA_MODEL",
+      "MAGNOLIA_PROJECT_DIR",
+      "MAGNOLIA_PROJECT_IDENTITY",
+      "MAGNOLIA_PYTHON",
+      "MAGNOLIA_ROLE",
+      "MAGNOLIA_ROOT",
+      "MAGNOLIA_RULES_DIR",
+      "MAGNOLIA_RUN_DIR",
+      "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+      "MAGNOLIA_WORKSPACE_ROOT",
+      "MAGNOLIA_WORK_DIR",
+      "PATH",
+      "PYTHONPYCACHEPREFIX",
+      "SHELL",
+      "TMPDIR",
+      "USER",
+      "VIBE_ENABLE_TELEMETRY",
+      "XDG_STATE_HOME"
+    ],
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step4-helper/control/executors/80552ede014842e79e888be8258893b4",
+    "max_price": null,
+    "max_turns": 40,
+    "mcp_json": {
+      "memory_service": null,
+      "schema_version": "magnolia-launch-mcp-v1",
+      "tool_allowlist": []
+    },
+    "memory_service_handle": false,
+    "native_sha256": {
+      ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+      ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+    },
+    "policy_digest": "46dbe983551f7cecfe0fe29a0b625490253d34c0ba326e6ccf3b24a49835e415",
+    "telemetry": "false",
+    "vibe_config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n"
+  },
+  "preview": {
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step4-helper/control/executors/a5511c98221649c686b6d5b40975ae29",
+    "mcp_memory_service": null
+  },
+  "preview_released": true,
+  "project_files_synced": {
+    ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+    ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+  },
+  "prompt_initial": "This is an authorised sandbox test of this project's tool guard. Some steps are expected to be refused; that is fine. Do each step exactly once, in order, using a direct tool call (do not use run_typescript). Do not retry a refused step and do not substitute another tool.\n1. read_file `docs/notes.md`.\n2. read_file `README.md`.\n3. read_file `secret/.env`.\n4. write_file `docs/helper-note.txt` with content `H`.\n5. bash with command `ls`.\n6. skill: call it once (list or read any available skill).\n7. search_tool_functions: call it once with the query `read file`.\nAfter step 7 call no other tool. Then answer in plain text with one line per step: the step number, ok or refused, and the error message if any. Do not quote file contents other than the synthetic answer from docs/notes.md.\n",
+  "prompt_resume": "In one plain-text line, what is the synthetic answer stated in docs/notes.md? Do not call any tool.\n",
+  "render_equals_prepared": true,
+  "resume_prepared": {
+    "argv_shape": [
+      "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "-p",
+      "<PROMPT>",
+      "--output",
+      "json",
+      "--workdir",
+      "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance",
+      "--max-turns",
+      "40",
+      "--output-dir",
+      "<OUT>",
+      "--auto-approve",
+      "--resume",
+      "bce43e66-d5df-564d-f66d-cdf9626772e4",
+      "--disabled-tools",
+      "bash",
+      "--disabled-tools",
+      "edit",
+      "--disabled-tools",
+      "write_file"
+    ],
+    "config_digest_equal": true,
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step4-helper/control/executors/80552ede014842e79e888be8258893b4",
+    "policy_digest_equal": true,
+    "same_invocation_dir": true
+  },
+  "resume_tamper": "refused before spawn: Vibe resume artifact does not match client, role, policy, or project",
+  "resume_tamper_vibe_spawns": 0,
+  "role": "helper",
+  "t_end": "07:05:31",
+  "t_start": "07:04:43"
+}

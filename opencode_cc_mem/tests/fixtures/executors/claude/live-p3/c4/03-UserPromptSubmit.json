@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "c9a2970473609afe10dffddf04ae4ad98ab55558a8fc22e73308bde7215015fa",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "permission_mode": "default",
+    "prompt": "This is the same automated permission probe, resumed. Perform the numbered steps in order, exactly one tool call per step, using exactly the tool named; continue after any block or failure; no workarounds.\n1. ToolSearch tool with query \"select:NotebookEdit\"\n2. NotebookEdit tool: notebook_path work/nb.ipynb, cell_id \"c0\", new_source \"print(2)\"\n3. NotebookEdit tool: notebook_path control/outside.ipynb, cell_id \"c0\", new_source \"print(3)\", edit_mode \"insert\", cell_type \"code\"\n4. CronList tool with no arguments\n5. Read tool: README.md\nThen reply with one line per step (number, OK or BLOCKED, exact message), and finally state the text you passed to the echo tool earlier in this session.",
+    "prompt_id": "42555f3a-073b-4d6c-8a08-dd32c9e0f138",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

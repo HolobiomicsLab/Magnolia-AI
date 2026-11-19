@@ -60,17 +60,50 @@ def test_dialogue_primary_runs_and_skips_tool_events(project_dir, monkeypatch):
 
 
 def test_falls_back_to_tool_events_when_no_llm(project_dir, monkeypatch):
+    from compchem_memory import llm
+
     _mapping(project_dir, ["ses_a"])
     _session(project_dir, "2026-05-10_000000", [{"event_type": "tool_call", "tool": "x"}])
     monkeypatch.setattr(startup_scan, "is_llm_available", lambda: False)
+    monkeypatch.setattr(llm, "resolve_route", lambda _role: None)
     monkeypatch.setattr(startup_scan, "_opencode_available", lambda: True)
     called = _track(monkeypatch)
+    drained = []
+    monkeypatch.setattr(
+        "compchem_memory.hook.background.drain_opencode_payloads",
+        lambda store, **kwargs: drained.append((Path(store), kwargs)),
+    )
 
     result = startup_scan.scan_and_distill(str(project_dir))
 
     assert called["ingest"] == 0
     assert called["commit"] == 1
     assert result["mode"] == "tool_event"
+    assert drained == [(project_dir / ".magnolia", {"critic_skip_reason": "no route"})]
+
+
+def test_independent_critic_route_drains_backlog_when_memory_route_is_unavailable(
+    project_dir, monkeypatch,
+):
+    from compchem_memory import llm
+
+    _session(project_dir, "2026-05-10_000000", [{"event_type": "tool_call", "tool": "x"}])
+    monkeypatch.setattr(startup_scan, "is_llm_available", lambda: False)
+    monkeypatch.setattr(
+        llm,
+        "resolve_route",
+        lambda role: object() if role == "critic" else None,
+    )
+    _track(monkeypatch)
+    drained = []
+    monkeypatch.setattr(
+        "compchem_memory.hook.background.drain_opencode_payloads",
+        lambda store, **kwargs: drained.append((Path(store), kwargs)),
+    )
+
+    startup_scan.scan_and_distill(str(project_dir))
+
+    assert drained == [(project_dir / ".magnolia", {})]
 
 
 def test_falls_back_when_no_opencode_binary(project_dir, monkeypatch):

@@ -13,6 +13,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 OPENCODE_DIR = HERE.parent
 LAUNCHER = OPENCODE_DIR / "softwares" / "bin" / "magnolia"
@@ -36,6 +38,7 @@ def make_workspace(tmp_path: Path) -> Path:
     shutil.copy2(OPENCODE_DIR / "opencode.json.template", oc / "opencode.json.template")
     shutil.copy2(OPENCODE_DIR / "AGENTS.md", oc / "AGENTS.md")
     shutil.copytree(OPENCODE_DIR / "rules", oc / "rules")
+    shutil.copytree(OPENCODE_DIR / "campaign_runner", oc / "campaign_runner")
     (oc / ".magnolia").mkdir()
     (oc / "projects" / PROJECT / ".magnolia").mkdir(parents=True)
     venv_bin = root / ".venv" / "bin"
@@ -54,7 +57,12 @@ def make_workspace(tmp_path: Path) -> Path:
     agents = bin_dir / "magnolia-agents-daemon"
     agents.write_text(
         "import os, pathlib\n"
-        "pathlib.Path(os.environ['SENTINEL_DIR'], 'daemon-ran-agents').touch()\n")
+        "root = pathlib.Path(os.environ['SENTINEL_DIR'])\n"
+        "(root / 'daemon-ran-agents').touch()\n"
+        "(root / 'daemon-agents-env.json').write_text(__import__('json').dumps({\n"
+        "  'deepseek': os.environ.get('DEEPSEEK_API_KEY'),\n"
+        "  'bearer': os.environ.get('MAGNOLIA_MEMORY_SERVICE_TOKEN'),\n"
+        "}))\n")
     return root
 
 
@@ -154,12 +162,39 @@ def test_opencode_config_snapshot(tmp_path):
     assert rendered == SNAPSHOT.read_text()
 
 
+@pytest.mark.parametrize(
+    ("setup", "expected"),
+    (
+        (
+            {"routes": {"interactive": "openrouter/deepseek/deepseek-v4.1-flash"}},
+            "openrouter/deepseek/deepseek-v4.1-flash",
+        ),
+        (
+            {"main_model": "opencode/deepseek-v4.1-flash-free"},
+            "opencode/deepseek-v4.1-flash-free",
+        ),
+    ),
+)
+def test_opencode_small_model_matches_selected_route(tmp_path, setup, expected):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, setup)
+
+    proc = run_raw(ws, [PROJECT])
+    assert proc.returncode == 0, proc.stderr
+
+    rendered = json.loads(
+        (ws / "opencode_cc_mem" / "projects" / PROJECT / "opencode.json").read_text()
+    )
+    assert rendered["model"] == expected
+    assert rendered["small_model"] == expected
+
+
 # ---- --harness claude|codex|vibe (Task 9) ---------------------------------
 
 PKG_SRC = OPENCODE_DIR / "mcp-servers" / "compchem-memory" / "src"
 
 
-def run_raw(ws: Path, args, env=None, stubs=None, dry=True):
+def run_raw(ws: Path, args, env=None, stubs=None, dry=True, cwd=None):
     """Run the launcher and return the CompletedProcess (any exit code).
 
     `stubs` names the directory put first on PATH (default: all stubs). The
@@ -184,6 +219,7 @@ def run_raw(ws: Path, args, env=None, stubs=None, dry=True):
     return subprocess.run(
         ["/bin/bash", str(script), *args],
         env=full_env, capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+        cwd=cwd,
     )
 
 
@@ -230,10 +266,11 @@ def test_unknown_harness_is_an_error(tmp_path):
     ws = make_workspace(tmp_path)
     proc = run_raw(ws, ["--harness", "emacs", PROJECT])
     assert proc.returncode == 1
-    assert "emacs" in proc.stderr and proc.stdout == ""
+    assert "unknown harness" in proc.stderr and "emacs" not in proc.stderr
+    assert proc.stdout == ""
     write_setup(ws, {"harness": "emacs"})
     proc = run_raw(ws, [PROJECT])
-    assert proc.returncode == 1 and "emacs" in proc.stderr
+    assert proc.returncode == 1 and "emacs" not in proc.stderr
 
 
 def test_missing_client_binary_exits_before_daemons(tmp_path):
@@ -339,6 +376,107 @@ def test_real_claude_launch_execs_client_after_daemons(tmp_path):
     assert (tmp_path / "daemon-ran-tools").exists()
 
 
+def test_vibe_client_stripping_does_not_strip_shared_daemon_environment(tmp_path):
+    ws = make_workspace(tmp_path)
+    fake_src = (
+        ws
+        / "opencode_cc_mem"
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    harness = fake_src / "harness"
+    harness.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("")
+    (harness / "__init__.py").write_text("")
+    (harness / "__main__.py").write_text(
+        "import sys\n"
+        "sys.stdout.buffer.write("
+        "b'vibe\\0\\0MAGNOLIA_MEMORY_SERVICE_TOKEN=service-bearer\\0'"
+        "+ b'MAGNOLIA_MEMORY_SERVICE_HANDLE=fake-handle\\0')\n"
+    )
+    proc = run_raw(
+        ws,
+        ["--harness", "vibe", PROJECT],
+        env={"DEEPSEEK_API_KEY": "daemon-provider-key"},
+        dry=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    deadline = time.time() + 3
+    path = tmp_path / "daemon-agents-env.json"
+    while time.time() < deadline and not path.exists():
+        time.sleep(0.1)
+    assert json.loads(path.read_text()) == {
+        "deepseek": "daemon-provider-key",
+        "bearer": None,
+    }
+
+
+def test_vibe_bearer_is_never_in_spawned_argv(tmp_path):
+    ws = make_workspace(tmp_path)
+    fake_src = (
+        ws
+        / "opencode_cc_mem"
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    harness = fake_src / "harness"
+    harness.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("")
+    (harness / "__init__.py").write_text("")
+    (harness / "__main__.py").write_text(
+        "import json, os, sys\n"
+        "(open(os.environ['SENTINEL_DIR'] + '/render-argv.json', 'w')"
+        ".write(json.dumps(sys.argv)))\n"
+        "sys.stdout.buffer.write("
+        "b'vibe\\0\\0MAGNOLIA_MEMORY_SERVICE_TOKEN=service-bearer\\0'"
+        "+ b'MAGNOLIA_MEMORY_SERVICE_HANDLE=fake-handle\\0')\n"
+    )
+    (harness / "memory_service.py").write_text(
+        "import json, os, sys\n"
+        "open(os.environ['SENTINEL_DIR'] + '/release-argv.json', 'w')"
+        ".write(json.dumps(sys.argv))\n"
+    )
+    vibe = tmp_path / "stubbin" / "vibe"
+    vibe.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "open(os.environ['SENTINEL_DIR'] + '/client-argv.json', 'w')"
+        ".write(json.dumps(sys.argv))\n"
+    )
+    vibe.chmod(0o755)
+    env_stub = tmp_path / "stubbin" / "env"
+    env_stub.write_text(
+        "#!/usr/bin/python3\n"
+        "import json, os, sys\n"
+        "path = os.path.join(os.environ['SENTINEL_DIR'], 'env-argv.jsonl')\n"
+        "with open(path, 'a') as stream:\n"
+        "    stream.write(json.dumps(sys.argv) + '\\n')\n"
+        "os.execv('/usr/bin/env', ['/usr/bin/env', *sys.argv[1:]])\n"
+    )
+    env_stub.chmod(0o755)
+
+    proc = run_raw(ws, ["--harness", "vibe", PROJECT], dry=False)
+
+    assert proc.returncode == 0, proc.stderr
+    argv_files = (
+        "render-argv.json",
+        "client-argv.json",
+        "release-argv.json",
+        "env-argv.jsonl",
+    )
+    for name in argv_files:
+        deadline = time.time() + 3
+        path = tmp_path / name
+        while time.time() < deadline and not path.exists():
+            time.sleep(0.05)
+        if path.exists():
+            assert "service-bearer" not in path.read_text(encoding="utf-8")
+
+
 def test_setup_set_json_keeps_other_keys(tmp_path):
     ws = make_workspace(tmp_path)
     path = write_setup(ws, {"main_model": "a/b", "models": {"codex": "gpt"}, "memory_enabled": True})
@@ -368,11 +506,147 @@ def _helper_source(script: Path, name: str) -> str:
     return "\n".join(lines[start:end + 1]) + "\n"
 
 
+def _run_memory_setup_function(ws: Path, function: str, commands: str):
+    """Run one launcher setup function with successful, non-network probes."""
+    script = ws / "opencode_cc_mem/softwares/bin/magnolia"
+    names = [
+        "setup_get", "setup_set", "provider_key_name", "memory_provider_for_model",
+        "memory_setup_default", function,
+    ]
+    driver = (
+        f'LLM_SETUP="{ws}/opencode_cc_mem/.magnolia/llm-setup.json"\n'
+        f'PYTHON_CMD="{ws}/.venv/bin/python3"\nCONFIG="{ws}/missing.json"\n'
+        + "".join(_helper_source(script, name) for name in names)
+        + "_read_from_tty() { return 1; }\n"
+        + "probe_memory() { return 0; }\n"
+        + "render_active_project() { :; }\n"
+        + commands
+    )
+    return subprocess.run(
+        ["/bin/bash", "-c", driver], capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin"},
+    )
+
+
+def test_new_memory_setup_prefers_openrouter_and_preserves_existing(tmp_path):
+    script = make_workspace(tmp_path) / "opencode_cc_mem/softwares/bin/magnolia"
+    helpers = _helper_source(script, "memory_provider_for_model") + _helper_source(
+        script, "memory_setup_default"
+    )
+    driver = helpers + "memory_setup_default \"$CURRENT_MODEL\" \"$CURRENT_PROVIDER\"\n"
+
+    def select(env):
+        return subprocess.run(
+            ["/bin/bash", "-c", driver], env={"PATH": "/usr/bin:/bin", **env},
+            capture_output=True, text=True, check=True,
+        ).stdout.strip().split("\t")
+
+    assert select({"OPENROUTER_API_KEY": "stub", "CURRENT_MODEL": "", "CURRENT_PROVIDER": ""}) == [
+        "deepseek/deepseek-v4.1-flash", "openrouter",
+    ]
+    assert select({"CURRENT_MODEL": "", "CURRENT_PROVIDER": ""}) == [
+        "deepseek-flash", "deepseek",
+    ]
+    assert select({"OPENROUTER_API_KEY": "stub", "CURRENT_MODEL": "k3", "CURRENT_PROVIDER": "kimi"}) == [
+        "k3", "kimi",
+    ]
+
+
+@pytest.mark.parametrize("probe_status", [0, 1])
+@pytest.mark.parametrize("critic", [
+    {},
+    {"critic_provider": "mistral", "critic_model": "mistral-small-latest"},
+])
+def test_setup_rerun_keeps_existing_memory_route_and_does_not_add_critic(
+    tmp_path, probe_status, critic,
+):
+    ws = make_workspace(tmp_path)
+    configured = {
+        "memory_model": "deepseek-v4-flash",
+        "memory_provider": "openrouter",
+        "memory_enabled": True,
+        **critic,
+    }
+    path = write_setup(ws, configured)
+
+    commands = f"probe_memory() {{ return {probe_status}; }}\nsetup_run\n"
+    proc = _run_memory_setup_function(ws, "setup_run", commands)
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == configured
+
+
+def test_memory_set_only_adds_critic_default_to_new_configuration(tmp_path):
+    ws = make_workspace(tmp_path)
+    existing = write_setup(ws, {
+        "memory_model": "k3", "memory_provider": "kimi", "memory_enabled": True,
+    })
+    new_setup = ws / "opencode_cc_mem/.magnolia/new-llm-setup.json"
+    commands = (
+        "cmd_memory_set k3 --provider kimi\n"
+        f'LLM_SETUP="{new_setup}"\n'
+        "cmd_memory_set deepseek/deepseek-v4.1-flash --provider openrouter\n"
+    )
+
+    proc = _run_memory_setup_function(ws, "cmd_memory_set", commands)
+
+    assert proc.returncode == 0, proc.stderr
+    assert "critic_provider" not in json.loads(existing.read_text())
+    assert json.loads(new_setup.read_text()) | {
+        "critic_provider": "openrouter",
+        "critic_model": "deepseek/deepseek-v4.1-flash",
+    } == json.loads(new_setup.read_text())
+
+
+def test_memory_setup_keeps_mistral_and_zai_selectable(tmp_path):
+    script = make_workspace(tmp_path) / "opencode_cc_mem/softwares/bin/magnolia"
+    driver = _helper_source(script, "memory_provider_for_model") + (
+        "memory_provider_for_model mistral-small-latest\n"
+        "memory_provider_for_model glm-5.3-flash\n"
+    )
+    proc = subprocess.run(
+        ["/bin/bash", "-c", driver], env={"PATH": "/usr/bin:/bin"},
+        capture_output=True, text=True, check=True,
+    )
+    assert proc.stdout.splitlines() == ["mistral", "zai"]
+
+
+def test_existing_memory_and_critic_routes_are_rendered_unchanged(tmp_path):
+    ws = make_workspace(tmp_path)
+    configured = {
+        "memory_enabled": True,
+        "memory_provider": "kimi",
+        "memory_model": "k3",
+        "critic_provider": "mistral",
+        "critic_model": "mistral-small-latest",
+        "direct_fallback_provider": "zai",
+        "direct_fallback_model": "glm-5.3-flash",
+    }
+    path = write_setup(ws, configured)
+
+    proc = run_raw(ws, [PROJECT])
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == configured
+    rendered = json.loads(
+        (ws / "opencode_cc_mem/projects" / PROJECT / "opencode.json").read_text()
+    )
+    environment = rendered["mcp"]["servers"]["compchem-memory"]["environment"]
+    assert environment | {
+        "MAGNOLIA_MEMORY_PROVIDER": "kimi",
+        "MAGNOLIA_MEMORY_MODEL": "k3",
+        "MAGNOLIA_CRITIC_PROVIDER": "mistral",
+        "MAGNOLIA_CRITIC_MODEL": "mistral-small-latest",
+        "MAGNOLIA_DIRECT_FALLBACK_PROVIDER": "zai",
+        "MAGNOLIA_DIRECT_FALLBACK_MODEL": "glm-5.3-flash",
+    } == environment
+
+
 def test_setup_harness_writes_after_check_passes(tmp_path):
     ws = make_workspace(tmp_path)
     path = write_setup(ws, {"main_model": "a/b"})
     proc = run_raw(ws, ["setup", "--harness", "claude", "--model", "sonnet", PROJECT],
-                   env={"STUB_SAY": "MAIN_MODEL_OK"})
+                   env={"MAGNOLIA_SETUP_NONCE": "magnolia-test", "STUB_SAY": "MAGNOLIA-TEST"})
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.count("\n") == 1 and "claude" in proc.stdout and "OpenCode" not in proc.stdout
     data = json.loads(path.read_text())
@@ -380,7 +654,7 @@ def test_setup_harness_writes_after_check_passes(tmp_path):
     assert data["main_model"] == "a/b"
     calls = [json.loads(line) for line in (tmp_path / "stub.log").read_text().splitlines()]
     assert calls == [{"name": "claude",
-                      "argv": ["-p", "Reply with exactly: MAIN_MODEL_OK", "--model", "sonnet"]}]
+                      "argv": ["-p", "Uppercase this token and reply with only the result: magnolia-test", "--model", "sonnet"]}]
 
 
 def test_setup_harness_failure_writes_nothing(tmp_path):
@@ -396,27 +670,50 @@ def test_setup_harness_failure_writes_nothing(tmp_path):
 
 def test_setup_harness_call_shapes(tmp_path):
     ws = make_workspace(tmp_path)
-    run_raw(ws, ["setup", "--harness", "codex", "--model", "gpt-x", PROJECT], env={"STUB_SAY": "MAIN_MODEL_OK"})
-    run_raw(ws, ["setup", "--harness", "vibe", PROJECT], env={"STUB_SAY": "MAIN_MODEL_OK"})
+    env = {"MAGNOLIA_SETUP_NONCE": "magnolia-test", "STUB_SAY": "MAGNOLIA-TEST"}
+    run_raw(ws, ["setup", "--harness", "codex", "--model", "gpt-x", PROJECT], env=env)
+    run_raw(ws, ["setup", "--harness", "vibe", PROJECT], env=env)
     calls = [json.loads(line) for line in (tmp_path / "stub.log").read_text().splitlines()]
-    assert calls[0] == {"name": "codex", "argv": ["exec", "-m", "gpt-x", "Reply with exactly: MAIN_MODEL_OK"]}
-    assert calls[1] == {"name": "vibe", "argv": ["-p", "Reply with exactly: MAIN_MODEL_OK"]}
+    prompt = "Uppercase this token and reply with only the result: magnolia-test"
+    assert calls[0] == {"name": "codex", "argv": ["exec", "-m", "gpt-x", prompt]}
+    assert calls[1] == {"name": "vibe", "argv": ["-p", prompt]}
 
 
 def test_setup_check_needs_exit_zero_and_exact_line(tmp_path):
-    ws = make_workspace(tmp_path)
-    path = write_setup(ws, {"main_model": "a/b"})
     cases = [
         ({}, 1),  # the stub echoes the prompt as JSON: must fail
-        ({"STUB_SAY": "Reply with exactly: MAIN_MODEL_OK"}, 1),
-        ({"STUB_SAY": "MAIN_MODEL_OK", "STUB_EXIT": "3"}, 1),  # token but nonzero exit
-        ({"STUB_SAY": "  MAIN_MODEL_OK  "}, 0),
+        ({"STUB_SAY": "Uppercase this token and reply with only the result: magnolia-test"}, 1),
+        ({"STUB_SAY": "MAGNOLIA-TEST", "STUB_EXIT": "3"}, 1),
+        ({"STUB_SAY": "  MAGNOLIA-TEST  "}, 0),
     ]
-    for env, code in cases:
+    for index, (env, code) in enumerate(cases):
+        case_root = tmp_path / f"case-{index}"
+        case_root.mkdir()
+        ws = make_workspace(case_root)
+        path = write_setup(ws, {"main_model": "a/b"})
+        env = {"MAGNOLIA_SETUP_NONCE": "magnolia-test", **env}
         proc = run_raw(ws, ["setup", "--harness", "claude", "--model", "m", PROJECT], env=env)
         assert proc.returncode == code, (env, proc.stderr)
         if code:
             assert json.loads(path.read_text()) == {"main_model": "a/b"}
+
+
+def test_tools_daemon_uses_portable_session_and_date_primitives():
+    daemon = OPENCODE_DIR / "softwares" / "bin" / "compchem-tools-daemon.sh"
+    text = daemon.read_text(encoding="utf-8")
+
+    assert "setsid bash" not in text
+    assert "date -Is" not in text
+    assert "os.setsid()" in text
+    assert "date -u '+%Y-%m-%dT%H:%M:%SZ'" in text
+
+
+def test_every_setup_probe_requires_a_transformed_nonce():
+    text = LAUNCHER.read_text(encoding="utf-8")
+
+    assert "MAIN_MODEL_OK" not in text
+    assert "MEMORY_OK" not in text
+    assert text.count("Uppercase this token and reply with only the result:") == 3
 
 
 def test_model_flag_is_an_error_for_opencode(tmp_path):
@@ -441,3 +738,167 @@ def test_launch_failure_prints_only_the_cli_line(tmp_path):
     assert proc.returncode == 1
     assert "not prepared" not in proc.stderr
     assert not (tmp_path / "daemon-ran-tools").exists()
+
+
+def test_setup_route_preserves_other_keys(tmp_path):
+    ws = make_workspace(tmp_path)
+    path = write_setup(ws, {
+        "main_model": "openai/gpt-oss",
+        "memory_enabled": True,
+        "routes": {"worker": "codex/gpt-5.6-sol"},
+    })
+
+    proc = run_raw(ws, ["setup", "--route", "reviewer=claude-code/opus", PROJECT])
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text()) == {
+        "main_model": "openai/gpt-oss",
+        "memory_enabled": True,
+        "routes": {
+            "worker": "codex/gpt-5.6-sol",
+            "reviewer": "claude-code/opus",
+        },
+    }
+
+
+def test_setup_route_refuses_corrupt_setup_without_replacing_it(tmp_path):
+    ws = make_workspace(tmp_path)
+    path = write_setup(ws, {"kept": True})
+    corrupt = b'{"kept": true'
+    path.write_bytes(corrupt)
+
+    proc = run_raw(ws, ["setup", "--route", "reviewer=claude-code/opus", PROJECT])
+
+    assert proc.returncode == 1
+    assert "corrupt" in proc.stderr.lower()
+    assert path.read_bytes() == corrupt
+
+
+def test_interactive_explicit_flags_and_per_harness_default(tmp_path):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, {
+        "harness": "claude",
+        "models": {"claude": "sonnet", "codex": "gpt-default"},
+        "routes": {"interactive": "vibe/zai-glm-5.2"},
+    })
+
+    configured = dry_json(run_raw(ws, [PROJECT]))
+    explicit = dry_json(run_raw(ws, ["--harness", "codex", PROJECT]))
+    model = dry_json(run_raw(ws, ["--harness", "codex", "--model", "gpt-explicit", PROJECT]))
+
+    assert configured["argv"][0] == "vibe"
+    vibe_config = ws / "opencode_cc_mem" / "projects" / PROJECT / ".vibe" / "config.toml"
+    assert "zai-glm-5.2" in vibe_config.read_text()
+    assert explicit["argv"][0] == "codex" and "gpt-default" in explicit["argv"]
+    assert model["argv"][0] == "codex" and "gpt-explicit" in model["argv"]
+
+
+def test_interactive_native_default_and_import_from_unrelated_cwd(tmp_path):
+    ws = make_workspace(tmp_path)
+    write_setup(ws, {"harness": "codex", "models": {}})
+    elsewhere = tmp_path / "unrelated"
+    elsewhere.mkdir()
+
+    out = dry_json(run_raw(ws, [PROJECT], cwd=elsewhere))
+
+    assert out["argv"][0] == "codex"
+    assert "-m" not in out["argv"]
+
+
+def test_interactive_launch_never_acquires_slot(tmp_path):
+    ws = make_workspace(tmp_path)
+    state = tmp_path / "xdg-state"
+    config = tmp_path / "xdg-config"
+
+    proc = run_raw(
+        ws,
+        ["--harness", "codex", PROJECT],
+        env={"XDG_STATE_HOME": str(state), "XDG_CONFIG_HOME": str(config)},
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert not list(state.rglob("*"))
+
+
+def test_memory_critic_api_calls_never_acquire_slot(tmp_path):
+    ws = make_workspace(tmp_path)
+    state = tmp_path / "xdg-state"
+    config = tmp_path / "xdg-config"
+    api_calls = tmp_path / "api-calls"
+    package_root = (
+        ws / "opencode_cc_mem" / "mcp-servers" / "compchem-memory" / "src"
+    )
+    shutil.copytree(PKG_SRC / "compchem_memory", package_root / "compchem_memory")
+    network_stub = tmp_path / "network-stub"
+    network_stub.mkdir()
+    (network_stub / "httpx.py").write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "class Response:\n"
+        "    status_code = 200\n"
+        "    text = ''\n"
+        "    def __init__(self, payload): self._payload = payload\n"
+        "    def json(self): return self._payload\n"
+        "    def raise_for_status(self): return None\n"
+        "def post(url, headers=None, json=None, timeout=None):\n"
+        "    is_critic = bool(json.get('response_format'))\n"
+        "    with Path(os.environ['API_CALLS']).open('a') as stream:\n"
+        "        stream.write(('critic' if is_critic else 'memory') + '\\n')\n"
+        "    if is_critic:\n"
+        "        content = '{\"flag\":false,\"severity\":\"none\",\"unsupported_claims\":[],\"why\":\"ok\"}'\n"
+        "    else:\n"
+        "        content = json['messages'][-1]['content'].rsplit(': ', 1)[-1].upper()\n"
+        "    return Response({'model':'fixture','choices':[{'message':{'content':content},'finish_reason':'stop'}]})\n",
+        encoding="utf-8",
+    )
+    client = tmp_path / "stubbin" / "opencode-v2"
+    client.write_text(
+        f"""#!{sys.executable}
+import json
+import os
+import sys
+from pathlib import Path
+if sys.argv[1:] == ['--version']:
+    print('stub 0.0')
+    raise SystemExit(0)
+sys.path[:0] = [{str(network_stub)!r}, {str(package_root)!r}]
+os.environ['OPENAI_API_KEY'] = 'fixture-key'
+os.environ['API_CALLS'] = {str(api_calls)!r}
+os.environ['MAGNOLIA_CRITIC_PROVIDER'] = 'openai'
+os.environ['MAGNOLIA_CRITIC_MODEL'] = 'fixture'
+from compchem_memory.hook.critic import run_critic
+from compchem_memory.hook.project import ProjectPaths
+store = Path.cwd() / '.magnolia'
+transcript = store / 'transcripts' / 'opencode' / 'session.jsonl'
+transcript.parent.mkdir(parents=True, exist_ok=True)
+rows = [
+    {{'kind': 'prompt', 'text': 'check this report'}},
+    {{'kind': 'assistant', 'text': 'A' * 240}},
+]
+transcript.write_text(''.join(json.dumps(row) + '\\n' for row in rows))
+paths = ProjectPaths(Path.cwd().parent.parent, Path.cwd(), store, Path.cwd().name, True)
+outcome = run_critic(paths, 'opencode', 'session', None, 'turn-1')
+raise SystemExit(0 if outcome.kind == 'verdict' else 2)
+""",
+        encoding="utf-8",
+    )
+    client.chmod(0o755)
+    env = {
+        "XDG_STATE_HOME": str(state),
+        "XDG_CONFIG_HOME": str(config),
+        "OPENAI_API_KEY": "fixture-key",
+        "MAGNOLIA_SETUP_NONCE": "fixture-probe",
+        "API_CALLS": str(api_calls),
+        "MAGNOLIA_CRITIC": "1",
+        "MAGNOLIA_CRITIC_PROVIDER": "openai",
+        "MAGNOLIA_CRITIC_MODEL": "fixture",
+        "PYTHONPATH": f"{network_stub}:{package_root}",
+    }
+
+    memory = run_raw(ws, ["memory", "set", "fixture", "--provider", "openai"], env=env)
+    critic = run_raw(ws, ["--critic", PROJECT], env=env, dry=False)
+
+    assert memory.returncode == 0, memory.stderr
+    assert critic.returncode == 0, critic.stderr
+    assert api_calls.read_text().splitlines() == ["memory", "critic"]
+    assert not list(state.rglob("*"))

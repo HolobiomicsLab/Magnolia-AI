@@ -1,0 +1,54 @@
+[
+  {
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "First response"
+      }
+    ]
+  },
+  {
+    "type": "tool_call",
+    "name": "read_file",
+    "arguments": {
+      "path": "notes.txt"
+    }
+  },
+  {
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "image",
+        "url": "fixture-image"
+      },
+      {
+        "type": "text",
+        "text": "Second response"
+      }
+    ],
+    "tool_calls": [
+      {
+        "name": "read_file",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "role": "user",
+    "content": "Later user text is not assistant output"
+  },
+  {
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "reasoning",
+        "text": "Reasoning is not production text"
+      }
+    ]
+  }
+]

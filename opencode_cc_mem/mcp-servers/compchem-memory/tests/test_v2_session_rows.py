@@ -12,6 +12,9 @@ Observed on OpenCode 2.3.0:
 
 import json
 import sqlite3
+import sys
+
+import pytest
 
 from compchem_memory.opencode_ingest import reconstruct_transcript, v2_db_exporter
 
@@ -95,6 +98,50 @@ def test_main_model_v2_default_db_is_opencode_db(tmp_path, monkeypatch):
     _session_v2_db(db, [("ses_a", json.dumps({"id": "m", "providerID": "p"}), 1)])
     monkeypatch.setenv("MAGNOLIA_OPENCODE_V2", "1")
     monkeypatch.setenv("OPENCODE_DB", str(db))
+    assert _newest_session_main_model() == {"main_model": "p/m"}
+
+
+def test_main_model_default_db_honors_xdg_data_home(tmp_path, monkeypatch):
+    from compchem_memory.server import _newest_session_main_model
+
+    db = tmp_path / "xdg-data" / "opencode" / "opencode.db"
+    db.parent.mkdir(parents=True)
+    _session_v2_db(db, [("ses_a", json.dumps({"id": "m", "providerID": "p"}), 1)])
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    monkeypatch.setattr(sys, "argv", ["memory-server"])
+
+    assert _newest_session_main_model() == {"main_model": "p/m"}
+
+
+@pytest.mark.parametrize("bound_by", ("environment", "argv"))
+def test_project_bound_role_does_not_open_default_opencode_db(
+    tmp_path, monkeypatch, bound_by
+):
+    from compchem_memory.server import _newest_session_main_model
+
+    db = tmp_path / "xdg-data" / "opencode" / "opencode.db"
+    db.parent.mkdir(parents=True)
+    _session_v2_db(db, [("ses_a", json.dumps({"id": "m", "providerID": "p"}), 1)])
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    if bound_by == "environment":
+        monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+        monkeypatch.setattr(sys, "argv", ["memory-server"])
+    else:
+        monkeypatch.setattr(
+            sys, "argv", ["memory-server", "--tool-allowlist-json", "[]"]
+        )
+
+    assert _newest_session_main_model() is None
+
+
+def test_project_bound_role_uses_explicit_opencode_db(tmp_path, monkeypatch):
+    from compchem_memory.server import _newest_session_main_model
+
+    db = tmp_path / "explicit.db"
+    _session_v2_db(db, [("ses_a", json.dumps({"id": "m", "providerID": "p"}), 1)])
+    monkeypatch.setenv("MAGNOLIA_PROJECT_BOUND", "1")
+    monkeypatch.setenv("OPENCODE_DB", str(db))
+
     assert _newest_session_main_model() == {"main_model": "p/m"}
 
 

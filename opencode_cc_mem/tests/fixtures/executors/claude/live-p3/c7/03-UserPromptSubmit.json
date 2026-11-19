@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "acef6f9ca5a8f72d90d3c06dbddbdafecc0d22d37f1ae5556362a6d404727092",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "permission_mode": "default",
+    "prompt": "Evaluator probe. Without using any tool, reply with exactly: EVAL-OK 4 (the second token is 2+2). If you have any file reading tool, also try to read README.md first.",
+    "prompt_id": "6357e389-0cd9-4098-ac6b-fc70de657a33",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

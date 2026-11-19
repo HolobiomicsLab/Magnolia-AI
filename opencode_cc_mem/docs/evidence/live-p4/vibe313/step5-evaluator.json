@@ -1,0 +1,452 @@
+{
+  "calls": {
+    "initial": {
+      "children": [],
+      "client_notices": [
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        },
+        {
+          "kind": "client_notice",
+          "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+        },
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        }
+      ],
+      "context_breakdown": {
+        "conversation": 60812,
+        "skills": 0,
+        "system": 73342,
+        "tools": 13311
+      },
+      "export": {
+        "cost_usd": 0.0281001,
+        "ended_at": "2026-11-18T13:00:06.776560Z",
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 1,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "started_at": "2026-11-18T12:59:55.785351Z",
+        "steps": 1,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 20864,
+          "input_tokens": 36681,
+          "output_tokens": 166,
+          "total_tokens": 36847
+        },
+        "vibe_version": "3.1.3",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "export_config": {
+        "active_model": "mistral-medium-3.5",
+        "bypass_tool_permissions": true,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enable_background_processes": false,
+        "enable_subagents": false,
+        "enable_telemetry": false,
+        "enabled_tools": []
+      },
+      "final_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "final_text_json": {
+        "tools_offered": 9,
+        "verdict": "EVAL-OK"
+      },
+      "hook_points_bound": [
+        "post_agent_turn:magnolia-turn-end",
+        "post_tool_call:agents_md",
+        "post_tool_call:magnolia-post-tool",
+        "pre_agent_turn:magnolia-prompt",
+        "pre_agent_turn:session_start_context",
+        "pre_tool_call:magnolia-pre-tool"
+      ],
+      "journal_hook_results": [
+        {
+          "hook": "pre_agent_turn",
+          "output_type": "{\"action_id\": \"b224a49a-5936-5c77-a555-2bcd5614e09e\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\"\u2026",
+          "seq": 7,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_agent_turn",
+          "output_type": "accept",
+          "seq": 17,
+          "state": "succeeded"
+        }
+      ],
+      "journal_hooks": [
+        {
+          "hook": "pre_agent_turn",
+          "input_keys": [
+            "user_content"
+          ],
+          "seq": 4,
+          "tool": null
+        },
+        {
+          "hook": "post_agent_turn",
+          "input_keys": [
+            "candidate"
+          ],
+          "seq": 14,
+          "tool": null
+        }
+      ],
+      "journal_segments": [
+        {
+          "file": "0000000000000001.jsonl",
+          "records": 20,
+          "seq": [
+            1,
+            20
+          ]
+        },
+        {
+          "file": "0000000000000021.jsonl",
+          "records": 0,
+          "seq": null
+        }
+      ],
+      "journal_tools": [],
+      "llm_calls": 1,
+      "magnolia_transcript_rows": [
+        {
+          "kind": "session-start",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:59:58.894Z"
+        },
+        {
+          "kind": "prompt",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:59:58.897Z"
+        },
+        {
+          "kind": "injected",
+          "secret_in_row": false,
+          "ts": "2026-11-18T12:59:58.915Z"
+        },
+        {
+          "kind": "assistant",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:06.468Z"
+        },
+        {
+          "kind": "session-end",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:06.472Z"
+        }
+      ],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "returncode": 0,
+      "review_validation": null,
+      "same_session": null,
+      "secret_in_session_files": false,
+      "session_end": {
+        "assistant_row_recovered": true,
+        "commit_to_exit_upper_bound_s": 0.398,
+        "last_message_commit_ts": "2026-11-18T13:00:06.379000+00:00",
+        "magnolia_session_end_row": true,
+        "row_after_commit_s": 0.093,
+        "session_end_row_ts": "2026-11-18T13:00:06.472Z",
+        "vibe_ended_at": "2026-11-18T13:00:06.776560Z"
+      },
+      "session_id": "6577c36e-13e4-a23d-1f0c-5571a3b646d5",
+      "t": "13:59:55",
+      "tool_catalog_records": [
+        "{\"revision\": 9007199254740991, \"type\": \"keep\"}"
+      ],
+      "tool_modes": {
+        "background_processes": "disabled",
+        "bash_timeout": null,
+        "command_environment": "unix",
+        "file_system": "enabled",
+        "large_output": "filesystem",
+        "max_wait_ms": 3600000,
+        "model_wait": "enabled",
+        "programmatic": null,
+        "subagents": "disabled"
+      }
+    },
+    "resume": {
+      "children": [],
+      "client_notices": [
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        },
+        {
+          "kind": "client_notice",
+          "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+        },
+        {
+          "kind": "client_notice",
+          "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+        }
+      ],
+      "context_breakdown": {
+        "conversation": 121436,
+        "skills": 0,
+        "system": 73342,
+        "tools": 13311
+      },
+      "export": {
+        "cost_usd": 0.051413099999999996,
+        "ended_at": "2026-11-18T13:00:41.969971Z",
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 1,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "started_at": "2026-11-18T13:00:25.818757Z",
+        "steps": 1,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 20864,
+          "input_tokens": 52313,
+          "output_tokens": 148,
+          "total_tokens": 52461
+        },
+        "vibe_version": "3.1.3",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "export_config": {
+        "active_model": "mistral-medium-3.5",
+        "bypass_tool_permissions": true,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enable_background_processes": false,
+        "enable_subagents": false,
+        "enable_telemetry": false,
+        "enabled_tools": []
+      },
+      "final_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "final_text_json": {
+        "tools_offered": 9,
+        "verdict": "EVAL-OK"
+      },
+      "hook_points_bound": [
+        "post_agent_turn:magnolia-turn-end",
+        "post_tool_call:agents_md",
+        "post_tool_call:magnolia-post-tool",
+        "pre_agent_turn:magnolia-prompt",
+        "pre_agent_turn:session_start_context",
+        "pre_tool_call:magnolia-pre-tool"
+      ],
+      "journal_hook_results": [
+        {
+          "hook": "pre_agent_turn",
+          "output_type": "{\"action_id\": \"41704c63-2c5a-5e73-ad41-7fe5ef50168e\", \"result\": {\"hook\": \"pre_agent_turn\", \"output\": {\"type\": \"continue\"\u2026",
+          "seq": 27,
+          "state": "succeeded"
+        },
+        {
+          "hook": "post_agent_turn",
+          "output_type": "accept",
+          "seq": 37,
+          "state": "succeeded"
+        }
+      ],
+      "journal_hooks": [
+        {
+          "hook": "pre_agent_turn",
+          "input_keys": [
+            "user_content"
+          ],
+          "seq": 24,
+          "tool": null
+        },
+        {
+          "hook": "post_agent_turn",
+          "input_keys": [
+            "candidate"
+          ],
+          "seq": 34,
+          "tool": null
+        }
+      ],
+      "journal_segments": [
+        {
+          "file": "0000000000000021.jsonl",
+          "records": 20,
+          "seq": [
+            21,
+            40
+          ]
+        },
+        {
+          "file": "0000000000000041.jsonl",
+          "records": 0,
+          "seq": null
+        }
+      ],
+      "journal_tools": [],
+      "llm_calls": 1,
+      "magnolia_transcript_rows": [
+        {
+          "kind": "session-start",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:28.952Z"
+        },
+        {
+          "kind": "prompt",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:28.953Z"
+        },
+        {
+          "kind": "injected",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:28.973Z"
+        },
+        {
+          "kind": "assistant",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:41.618Z"
+        },
+        {
+          "kind": "session-end",
+          "secret_in_row": false,
+          "ts": "2026-11-18T13:00:41.622Z"
+        }
+      ],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "returncode": 0,
+      "review_validation": null,
+      "same_session": true,
+      "secret_in_session_files": false,
+      "session_end": {
+        "assistant_row_recovered": true,
+        "commit_to_exit_upper_bound_s": 0.465,
+        "last_message_commit_ts": "2026-11-18T13:00:41.505000+00:00",
+        "magnolia_session_end_row": true,
+        "row_after_commit_s": 0.117,
+        "session_end_row_ts": "2026-11-18T13:00:41.622Z",
+        "vibe_ended_at": "2026-11-18T13:00:41.969971Z"
+      },
+      "session_id": "6577c36e-13e4-a23d-1f0c-5571a3b646d5",
+      "t": "14:00:07",
+      "tool_catalog_records": [
+        "{\"revision\": 9007199254740991, \"type\": \"keep\"}"
+      ],
+      "tool_modes": {
+        "background_processes": "disabled",
+        "bash_timeout": null,
+        "command_environment": "unix",
+        "file_system": "enabled",
+        "large_output": "filesystem",
+        "max_wait_ms": 3600000,
+        "model_wait": "enabled",
+        "programmatic": null,
+        "subagents": "disabled"
+      }
+    }
+  },
+  "driver_errors": {},
+  "hook_error_rows": [],
+  "hook_state": {
+    "6577c36e-13e4-a23d-1f0c-5571a3b646d5": {
+      "background_turns": {
+        "main--turn-298c2abe3ec5d446d5bfdd1efae46159": {
+          "attempts": 1,
+          "started": 1795006841.6545799,
+          "status": "done"
+        },
+        "main--turn-68b653d482f3806ddef5f4c21d774f10": {
+          "attempts": 1,
+          "started": 1795006806.50495,
+          "status": "done"
+        }
+      },
+      "background_worker": {
+        "started": 1795006841.92318,
+        "status": "idle"
+      },
+      "catchup_pending": 1,
+      "recovered_turns": 2
+    }
+  },
+  "invocation_id": "6a260229c0f341ba9a2d05683bbd16b5",
+  "label": "step5-evaluator",
+  "ledger_rows": [
+    {
+      "client": "vibe",
+      "cost": null,
+      "input_tokens": null,
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "output_tokens": null,
+      "parent_run_id": "live12:step5-evaluator",
+      "reported_model": null,
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "subscription_key": "vibe",
+      "turns": null
+    },
+    {
+      "client": "vibe",
+      "cost": null,
+      "input_tokens": null,
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "output_tokens": null,
+      "parent_run_id": "live12:step5-evaluator",
+      "reported_model": null,
+      "resolved_model": "mistral-medium-3.5",
+      "run_kind": "evaluator",
+      "subscription_key": "vibe",
+      "turns": null
+    }
+  ],
+  "ledger_total_rows": 9,
+  "max_turns": 1,
+  "resume_invocation_dir_same": true,
+  "role": "evaluator",
+  "secret_sentinel_hits": [],
+  "tamper": "refused ExecutorRefused: Vibe resume artifact does not match client, role, policy, or project",
+  "tree_diff": {
+    "added_or_changed": [],
+    "removed_or_changed": []
+  }
+}

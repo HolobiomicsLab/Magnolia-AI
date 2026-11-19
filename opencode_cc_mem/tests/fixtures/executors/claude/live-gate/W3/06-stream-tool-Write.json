@@ -1,0 +1,22 @@
+{
+  "is_error": true,
+  "result_head": "PreToolUse:Write hook error: Magnolia required role policy denied this operation.",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01CQFcduhPEzJiisfnRRzCyB",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "content": "W3",
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/w3.txt"
+    },
+    "name": "Write"
+  }
+}

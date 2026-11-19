@@ -1,0 +1,26 @@
+{
+  "run_argv": [
+    "@@TMP@@/opencode",
+    "--standalone",
+    "run",
+    "--model",
+    "opencode-go/deepseek-v4.1-flash",
+    "You are an admission evaluator. Given a user message and optional context, return ONLY a JSON object with keys: action (accept|attach|stop|ignore), project (string or null), work_item_id (string or null), confidence (0..1), reason (short). accept means create/route new work to the named project; attach means follow up an existing Work Item; stop means stop it; ignore means no action. Never invent project names not present in context.\n\n{\"message\": \"dock\", \"context\": {\"projects\": [\"proj_a\"]}}"
+  ],
+  "catalog_argv": [
+    "@@TMP@@/opencode",
+    "--standalone",
+    "api",
+    "get",
+    "/api/model"
+  ],
+  "environment_keys": [
+    "BASE_ENV",
+    "MAGNOLIA_OPENCODE_V2_BIN",
+    "OPENCODE_DB"
+  ],
+  "step_cap_config": null,
+  "run_timeout_seconds": 90,
+  "catalog_timeout_seconds": 15,
+  "agent_file_bytes": null
+}

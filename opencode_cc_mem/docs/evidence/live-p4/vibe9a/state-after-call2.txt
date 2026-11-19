@@ -1,0 +1,6 @@
+== project/work
+fed1d872f6d540f4 ./nested-in.txt
+== <OUTSIDE>
+92a214fa61579091 ./sentinel.txt
+== project/secret
+0b8c983e6262cea0 ./.env

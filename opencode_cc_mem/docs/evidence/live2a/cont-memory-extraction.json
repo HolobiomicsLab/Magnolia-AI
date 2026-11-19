@@ -1,0 +1,67 @@
+{
+  "crash_log_present": false,
+  "distilled_markers": {
+    "2026-11-17_082454.distilled": {
+      "distilled_at": "2026-11-17T08:30:37.924228+00:00",
+      "events_path": "2026-11-17_082454.jsonl"
+    },
+    "2026-11-17_083037.distilled": {
+      "distilled_at": "2026-11-17T08:37:13.392233+00:00",
+      "events_path": "2026-11-17_083037.jsonl"
+    }
+  },
+  "entries_queue_staging_files": {
+    "entries": [],
+    "queue": [],
+    "staging": []
+  },
+  "extraction_state_after": "last_cursor: '2026-11-17T08:37:13.293726+00:00'\nlast_extraction: '2026-11-17T08:37:13.396934+00:00'\n",
+  "llm_timing_rows_this_pass": [
+    {
+      "error": "ConnectError",
+      "model": "loopback-test",
+      "ms": 78,
+      "outcome": "error",
+      "provider": "openai",
+      "resolved_model": null,
+      "status": null,
+      "ts": "2026-11-17T08:37:13.389791+00:00"
+    },
+    {
+      "error": "ConnectError",
+      "model": "loopback-test",
+      "ms": 4,
+      "outcome": "error",
+      "provider": "openai",
+      "resolved_model": null,
+      "status": null,
+      "ts": "2026-11-17T08:37:13.396589+00:00"
+    }
+  ],
+  "service_log_tail": [
+    "INFO:     Uvicorn running on http://127.0.0.1:56333 (Press CTRL+C to quit)",
+    "INFO:     127.0.0.1:56343 - \"GET /health HTTP/1.1\" 200 OK",
+    "[boot-timing] startup_scan: 152 ms",
+    "[boot-timing] handover: 0 ms",
+    "[boot-timing] boot_context: 1 ms",
+    "[boot-timing] audit: 0 ms",
+    "[boot-timing] total: 162 ms",
+    "INFO:     127.0.0.1:56348 - \"POST /mcp HTTP/1.1\" 200 OK",
+    "INFO:     127.0.0.1:56348 - \"POST /mcp HTTP/1.1\" 200 OK",
+    "INFO:     127.0.0.1:56349 - \"POST /mcp HTTP/1.1\" 200 OK",
+    "INFO:     127.0.0.1:56350 - \"POST /mcp HTTP/1.1\" 200 OK",
+    "INFO:     127.0.0.1:56348 - \"POST /mcp HTTP/1.1\" 200 OK",
+    "INFO:     Shutting down",
+    "INFO:     Waiting for application shutdown.",
+    "INFO:     Application shutdown complete.",
+    "INFO:     Finished server process [21359]"
+  ],
+  "session_files": [
+    "2026-11-17_082454.distilled",
+    "2026-11-17_082454.jsonl",
+    "2026-11-17_083037.distilled",
+    "2026-11-17_083037.jsonl",
+    "2026-11-17_083713.jsonl",
+    "2026-11-17_083713.session.lock"
+  ]
+}

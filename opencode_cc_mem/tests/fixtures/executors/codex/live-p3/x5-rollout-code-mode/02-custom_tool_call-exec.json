@@ -1,0 +1,12 @@
+{
+  "call_id": "call_faf6198d8cf34790bf44421587294138",
+  "id": "ctc_04ccab6819dd2c99016afaa3b1067487d2bd2391a6dcf5e75e",
+  "input": "const names = ALL_TOOLS.filter(x => /probe|cua_repl__js|apply_patch|exec_command/.test(x.name));\ntext(names);\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810801.027774,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

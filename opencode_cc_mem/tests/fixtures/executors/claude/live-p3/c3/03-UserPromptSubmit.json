@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "3204d94ead3f9988abf4fbc7065f4abdc0c9cc2b4d38f2912f11465b9028f1e2",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "permission_mode": "default",
+    "prompt": "This is an automated permission probe in a throwaway test project. Perform the numbered steps in order, exactly one tool call per step, using exactly the tool named. Do not use any other tool, do not retry, do not try workarounds. If a step is blocked or fails, continue with the next step. At the end reply with one line per step: the step number, OK or BLOCKED, and the exact error or block message if any.\n1. Read tool: README.md\n2. Grep tool: pattern \"ALLOWED\" with path \"docs\"\n3. Edit tool: in work/draft.txt replace \"draft v0\" with \"draft reviewer\"\n4. Write tool: create work/reviewer.txt containing \"x\"\n5. mcp__probe__echo tool with text \"reviewer\"",
+    "prompt_id": "ebb895e1-0227-4d81-8931-44d4ea54e001",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

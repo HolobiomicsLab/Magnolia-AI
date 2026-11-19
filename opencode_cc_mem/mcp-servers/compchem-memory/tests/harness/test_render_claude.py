@@ -1,7 +1,7 @@
 import json
-import shlex
 
 from compchem_memory.harness import RENDERERS
+from compchem_memory.harness.ownership import is_magnolia_hook_command
 from compchem_memory.harness.render_claude import render
 
 
@@ -70,7 +70,6 @@ def test_claude_settings_hooks_cover_every_event(make_render):
     hooks = json.loads(
         render(neutral, context).files[_harness(context) / "settings.json"]
     )["hooks"]
-    python = shlex.quote("/my venv/bin/python")
     expected = {
         "SessionStart": "session-start", "UserPromptSubmit": "prompt",
         "PreToolUse": "pre-tool", "PostToolUse": "post-tool",
@@ -83,7 +82,8 @@ def test_claude_settings_hooks_cover_every_event(make_render):
         (group,) = hooks[event]
         (hook,) = group["hooks"]
         assert hook["type"] == "command"
-        assert hook["command"] == f"{python} -m compchem_memory.hook claude {name}"
+        assert is_magnolia_hook_command(hook["command"])
+        assert hook["command"].endswith(f" claude {name}")
         assert hook["timeout"] == (10 if name == "post-tool" else 30)
         assert hook.get("async") is None
     settings = json.loads(

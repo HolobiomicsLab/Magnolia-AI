@@ -30,7 +30,9 @@ VENV_PY="$REPO_ROOT/.venv/bin/python3"
 # launcher re-renders opencode.json from the template on EVERY launch, so
 # LLM choices must persist here — never in the volatile opencode.json.
 # Shape: {"main_model": "...", "memory_model": "...",
-#         "memory_provider": "...", "memory_enabled": true}
+#         "memory_provider": "...", "critic_provider": "...",
+#         "critic_model": "...", "memory_enabled": true,
+#         "direct_fallback_provider": "...", "direct_fallback_model": "..."}
 LLM_SETUP="$OPENCODE_DIR/.magnolia/llm-setup.json"
 ACTIVE_PROJECT_FILE="$OPENCODE_DIR/.magnolia/.active-project"
 
@@ -60,8 +62,11 @@ usage() {
     cat <<EOF
 Usage: magnolia [--harness opencode|claude|codex|vibe] [--profile NAME] [setup] [--critic] <project>
        magnolia setup --harness claude|codex|vibe [--model M] <project>
-       magnolia memory set <model> [--provider P]
+       magnolia setup --route ROLE=MODEL [<project>]
+       magnolia usage [resume <subscription-key>]
+       magnolia memory set <model> [--provider P] [--fallback-provider P --fallback-model M]
        magnolia memory status
+       magnolia memory retry <session>
 
 Launch opencode for the given Magnolia project. If the project does not
 exist, prompts to scaffold it under $PROJECTS_DIR/.
@@ -85,6 +90,8 @@ Options:
                    checks the client with one call, then records the choice.
   --model M        Model for the client (setup, or one launch). Else the
                    "models.<harness>" key of llm-setup.json.
+  --route ROLE=M   Record a default route for interactive, worker, reviewer,
+                   helper or evaluator while preserving the other setup keys.
   --opencode-v2    Launch the opencode v2 binary (pinned at
                    ~/.local/share/magnolia-v2/bin/opencode, override with
                    MAGNOLIA_OPENCODE_V2_BIN) with its OWN database
@@ -129,6 +136,15 @@ Options:
                    <project>/.magnolia/claim-critic/ and shown as toasts.
                    Changes nothing.
 
+Usage governor identity:
+  Subscription keys are exactly claude-code, codex, vibe and
+  opencode:<provider>. Two logins of one client share a key, and projects share
+  that key's budget. Policy and ledger files are per OS user (so a shared OS
+  account shares one budget). Interactive launches and API-billed memory or
+  critic calls never acquire a governor slot. Optional monetary caps are
+  client-native: Claude --max-budget-usd and Vibe --max-price; Codex 0.169.0
+  has no monetary-cap flag. The removed max_price_per_run policy key is invalid.
+
 Experimental switches reference (per-launch env vars; canonical list lives in
 AGENTS.md "Dormant switches" — the effective set is printed at every launch):
   MAGNOLIA_ADMISSION_GATE=1         admission gate on            [soak]
@@ -164,6 +180,17 @@ EOF
     else
         echo "  (projects dir missing at $PROJECTS_DIR/)"
     fi
+}
+
+run_harness_cli() {
+    local src="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
+    PYTHONPATH="$OPENCODE_DIR:$src${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m compchem_memory.harness "$@"
+}
+
+run_routing_cli() {
+    PYTHONPATH="$OPENCODE_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m campaign_runner.routing "$@"
 }
 
 # Scaffold a new project: <project>/.magnolia/ + standard subdirs.
@@ -384,9 +411,9 @@ if sp.exists():
     try:
         d = json.loads(sp.read_text())
     except (OSError, json.JSONDecodeError):
-        d = {}
+        raise SystemExit("error: setup file is corrupt; refusing to replace it")
     if not isinstance(d, dict):
-        d = {}
+        raise SystemExit("error: setup file is corrupt; refusing to replace it")
 parts = sys.argv[1].split(".")
 node = d
 for part in parts[:-1]:
@@ -420,6 +447,7 @@ render_config() {
     MAG_TPL="$TEMPLATE" MAG_CFG="$CONFIG" MAG_PROJ="$project" \
     MAG_ROOT="$REPO_ROOT" MAG_PY="$PYTHON_CMD" MAG_SETUP="$LLM_SETUP" \
     MAG_PORT="${COMPCHEM_TOOLS_PORT:-$project_port}" \
+    MAG_INTERACTIVE_MODEL="${RESOLVED_MODEL:-}" \
     "$PYTHON_CMD" - <<'PY'
 import json, os, pathlib
 setup = {}
@@ -441,11 +469,23 @@ cfg = (cfg.replace("@@PROJECT@@", json_string_content(os.environ["MAG_PROJ"]))
 cfg = json.loads(cfg)
 if setup.get("main_model"):
     cfg["model"] = setup["main_model"]
+if os.environ.get("MAG_INTERACTIVE_MODEL"):
+    cfg["model"] = os.environ["MAG_INTERACTIVE_MODEL"]
+if cfg.get("model"):
+    cfg["small_model"] = cfg["model"]
 if mem_on:
     env = cfg["mcp"]["compchem-memory"]["environment"]
     env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
     if setup.get("memory_provider"):
         env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+    if setup.get("critic_provider"):
+        env["MAGNOLIA_CRITIC_PROVIDER"] = setup["critic_provider"]
+    if setup.get("critic_model"):
+        env["MAGNOLIA_CRITIC_MODEL"] = setup["critic_model"]
+    if setup.get("direct_fallback_provider"):
+        env["MAGNOLIA_DIRECT_FALLBACK_PROVIDER"] = setup["direct_fallback_provider"]
+    if setup.get("direct_fallback_model"):
+        env["MAGNOLIA_DIRECT_FALLBACK_MODEL"] = setup["direct_fallback_model"]
 
 # opencode v2 shape translation (2026-10-06, gate-1 follow-up). Applied ONLY
 # in v2 mode (--opencode-v2): the template stays the single source of truth
@@ -511,15 +551,52 @@ print("on" if mem_on else "off")
 PY
 }
 
+setup_nonce() {
+    local nonce
+    nonce="$(printf '%s' "${MAGNOLIA_SETUP_NONCE:-magnolia-${RANDOM}-${RANDOM}}" \
+        | LC_ALL=C tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')"
+    case "$nonce" in
+        *[a-z]*) printf '%s' "$nonce" ;;
+        *) printf 'magnolia-%s' "$nonce" ;;
+    esac
+}
+
+# One noninteractive connectivity turn is still a governed physical invocation.
+setup_probe() {
+    local harness="$1" model="$2" prompt="$3" binary="$4"
+    local -a cmd
+    cmd=("$PYTHON_CMD" -m campaign_runner.helper_admission setup-probe
+         --harness "$harness" --prompt "$prompt" --project "$PROJECT_WORKSPACE"
+         --binary "$binary")
+    [ -z "$model" ] || cmd+=(--model "$model")
+    PYTHONPATH="$OPENCODE_DIR${PYTHONPATH:+:$PYTHONPATH}" "${cmd[@]}"
+}
+
+uppercase_ascii() {
+    LC_ALL=C tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+}
+
+reply_has_exact_line() {
+    local reply="$1" expected="$2" line
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ "$line" = "$expected" ] && return 0
+    done <<EOF2
+$reply
+EOF2
+    return 1
+}
+
 # One real call_llm round-trip against a candidate (model, provider).
 # Fresh subprocess — the running MCP server's stale env can't mask a bad
-# config. Exit 0 + "MEMORY_OK" only on a genuinely working combination.
+# config. Exit 0 only when the model returns the nonce transformation.
 probe_memory() {
     local model="$1" provider="${2:-}"
     MAGNOLIA_MEMORY_MODEL="$model" MAGNOLIA_MEMORY_PROVIDER="$provider" \
     MEM_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
     "$PYTHON_CMD" - <<'PY'
-import os, sys
+import os, secrets, sys
 sys.path.insert(0, os.environ["MEM_SRC"])
 from compchem_memory.llm import call_llm, _resolve_call
 provider, model = _resolve_call()
@@ -528,10 +605,56 @@ if not provider:
           "ANTHROPIC_API_KEY / OPENAI_API_KEY / KIMI_API_KEY)", file=sys.stderr)
     sys.exit(1)
 sys.stderr.write(f"probe: provider={provider} model={model}\n")
-out = call_llm("You are a connectivity probe. Reply with exactly: MEMORY_OK",
-               "ping", max_tokens=200, temperature=0, disable_thinking=True)
-sys.exit(0 if (out and "MEMORY_OK" in out) else 1)
+nonce = (os.environ.get("MAGNOLIA_SETUP_NONCE") or f"magnolia-{secrets.token_hex(8)}").lower()
+if not any("a" <= character <= "z" for character in nonce):
+    nonce = f"magnolia-{nonce}"
+expected = nonce.upper()
+out = call_llm(
+    "You are a connectivity probe. Follow the user's transformation exactly.",
+    f"Uppercase this token and reply with only the result: {nonce}",
+    max_tokens=200, temperature=0, disable_thinking=True,
+)
+sys.exit(0 if out and out.strip() == expected else 1)
 PY
+}
+
+memory_provider_for_model() {
+    local lower
+    lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$lower" in
+        */*) echo "openrouter" ;;
+        deepseek*) echo "deepseek" ;;
+        claude*) echo "anthropic" ;;
+        gpt-*|o1*|o3*|o4*|chatgpt*) echo "openai" ;;
+        kimi*|k3*|moonshot*) echo "kimi" ;;
+        mistral*|ministral*|magistral*|devstral*|codestral*|pixtral*|open-mistral*) echo "mistral" ;;
+        glm*) echo "zai" ;;
+        *) echo "" ;;
+    esac
+}
+
+provider_key_name() {
+    case "$1" in
+        openrouter) echo "OPENROUTER_API_KEY" ;;
+        deepseek) echo "DEEPSEEK_API_KEY" ;;
+        anthropic) echo "ANTHROPIC_API_KEY" ;;
+        openai) echo "OPENAI_API_KEY" ;;
+        kimi) echo "KIMI_PLAN_MAGNOLIA_API_KEY or KIMI_API_KEY" ;;
+        mistral) echo "MISTRAL_API_KEY" ;;
+        zai) echo "ZHIPU_API_KEY or ZAI_API_KEY" ;;
+        *) echo "provider-specific API key" ;;
+    esac
+}
+
+memory_setup_default() {
+    local current_model="$1" current_provider="$2"
+    if [ -n "$current_model" ]; then
+        printf '%s\t%s\n' "$current_model" "${current_provider:-$(memory_provider_for_model "$current_model")}"
+    elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
+        printf '%s\t%s\n' "deepseek/deepseek-v4.1-flash" "openrouter"
+    else
+        printf '%s\t%s\n' "deepseek-flash" "deepseek"
+    fi
 }
 
 # Re-render for the active project if one is known (best-effort).
@@ -547,25 +670,46 @@ render_active_project() {
 }
 
 cmd_memory_set() {
-    local model="" provider=""
+    local model="" provider="" fallback_provider="" fallback_model=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --provider) provider="$2"; shift 2 ;;
+            --fallback-provider) fallback_provider="$2"; shift 2 ;;
+            --fallback-model) fallback_model="$2"; shift 2 ;;
             --*) echo "error: unknown option '$1'" >&2; exit 1 ;;
             *) model="$1"; shift ;;
         esac
     done
     if [ -z "$model" ]; then
-        echo "usage: magnolia memory set <model> [--provider P]" >&2
+        echo "usage: magnolia memory set <model> [--provider P] [--fallback-provider P --fallback-model M]" >&2
         exit 1
     fi
+    if [ -n "$fallback_provider$fallback_model" ] && { [ -z "$fallback_provider" ] || [ -z "$fallback_model" ]; }; then
+        echo "error: direct fallback requires both provider and model" >&2
+        exit 1
+    fi
+    if [ "$fallback_provider" = "openrouter" ]; then
+        echo "error: direct fallback provider cannot be openrouter" >&2
+        exit 1
+    fi
+    local had_memory_model
+    had_memory_model="$(setup_get memory_model)"
+    [ -n "$provider" ] || provider="$(memory_provider_for_model "$model")"
+    echo "route: ${provider:-autodetect} via $(provider_key_name "$provider")"
     echo "verifying memory model '$model' with one real call…"
     if ! probe_memory "$model" "$provider"; then
         echo "verification FAILED — nothing written." >&2
         echo "hints: wrong model id? missing API key for that provider? network?" >&2
         exit 1
     fi
-    setup_set "memory_model=$model" "memory_provider=$provider" "memory_enabled=true"
+    local settings=("memory_model=$model" "memory_provider=$provider" "memory_enabled=true")
+    if [ -z "$had_memory_model" ] && [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+        settings+=("critic_provider=$provider" "critic_model=$model")
+    fi
+    if [ -n "$fallback_provider" ]; then
+        settings+=("direct_fallback_provider=$fallback_provider" "direct_fallback_model=$fallback_model")
+    fi
+    setup_set "${settings[@]}"
     render_active_project
     echo "memory model set: $model (enabled). Restart opencode to activate."
 }
@@ -590,6 +734,28 @@ print("rendered opencode.json: memory enabled =", m.get("enabled"),
               m.get("environment", {}).get("MAGNOLIA_LLM_MODEL", "(default)")))
 ' 2>/dev/null || true
     fi
+}
+
+cmd_memory_retry() {
+    local session="${1:-}" active project src
+    if [ -z "$session" ] || [ "$#" -ne 1 ]; then
+        echo "usage: magnolia memory retry <session>" >&2
+        exit 1
+    fi
+    if [ ! -s "$ACTIVE_PROJECT_FILE" ]; then
+        echo "error: no active project; launch a project before retrying memory" >&2
+        exit 1
+    fi
+    active="$(cat "$ACTIVE_PROJECT_FILE")"
+    project="$PROJECTS_DIR/$active"
+    if [ ! -d "$project" ]; then
+        echo "error: active project does not exist: $active" >&2
+        exit 1
+    fi
+    src="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
+    PYTHONPATH="$OPENCODE_DIR:$src${PYTHONPATH:+:$PYTHONPATH}" \
+        "$PYTHON_CMD" -m compchem_memory.retry_cli \
+        --project-dir "$project" --setup "$LLM_SETUP" "$session"
 }
 
 # Interactive two-step setup (step 2 can also be done later via the agent
@@ -624,8 +790,13 @@ except Exception:
     local ans
     ans="$(_read_from_tty "  main model: " || true)"
     if [ -n "$ans" ]; then
+        local nonce expected prompt reply rc=0
+        nonce="$(setup_nonce)"
+        expected="$(printf '%s' "$nonce" | uppercase_ascii)"
+        prompt="Uppercase this token and reply with only the result: $nonce"
         echo "  verifying with one real round-trip (may take ~1 min)…"
-        if timeout 180 opencode run -m "$ans" 'Reply with exactly: MAIN_MODEL_OK' 2>&1 | grep -q MAIN_MODEL_OK; then
+        reply="$(setup_probe opencode "$ans" "$prompt" "$OPENCODE_BIN" 2>&1)" || rc=$?
+        if [ "$rc" -eq 0 ] && reply_has_exact_line "$reply" "$expected"; then
             setup_set "main_model=$ans"
             echo "  OK — main model verified."
         else
@@ -639,18 +810,38 @@ except Exception:
 
     echo
     echo "Step 2 — memory model (background only: distillation, handover, re-ranking)."
-    echo "  Cheap is recommended; the provider is derived from the model name."
-    local cur_mem def_mem
+    echo "  Cheap is recommended; new setups prefer OpenRouter when its key is available."
+    local cur_mem cur_provider def_mem def_provider is_new_memory_setup
     cur_mem="$(setup_get memory_model)"
-    def_mem="${cur_mem:-deepseek-flash}"
+    cur_provider="$(setup_get memory_provider)"
+    is_new_memory_setup=false
+    [ -n "$cur_mem" ] || is_new_memory_setup=true
+    local memory_default
+    memory_default="$(memory_setup_default "$cur_mem" "$cur_provider")"
+    def_mem="${memory_default%%$'\t'*}"
+    def_provider="${memory_default##*$'\t'}"
     ans="$(_read_from_tty "  memory model [$def_mem]: " || true)"
     local mem="${ans:-$def_mem}"
-    echo "  verifying with one real call…"
-    if probe_memory "$mem" ""; then
-        setup_set "memory_model=$mem" "memory_enabled=true"
-        echo "  OK — memory verified and enabled."
+    local mem_provider
+    if [ "$mem" = "$cur_mem" ] && [ -n "$cur_provider" ]; then
+        mem_provider="$cur_provider"
     else
-        setup_set "memory_model=$mem" "memory_enabled=false"
+        mem_provider="$(memory_provider_for_model "$mem")"
+        [ -n "$mem_provider" ] || mem_provider="$def_provider"
+    fi
+    echo "  route: $mem_provider via $(provider_key_name "$mem_provider")"
+    echo "  verifying with one real call…"
+    if probe_memory "$mem" "$mem_provider"; then
+        local setup_values=("memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=true")
+        if [ "$is_new_memory_setup" = true ] && [ -z "$(setup_get critic_provider)$(setup_get critic_model)" ]; then
+            setup_values+=("critic_provider=$mem_provider" "critic_model=$mem")
+        fi
+        setup_set "${setup_values[@]}"
+        echo "  OK — memory verified and enabled."
+    elif [ "$is_new_memory_setup" = false ] && [ "$mem" = "$cur_mem" ] && [ "$mem_provider" = "$cur_provider" ]; then
+        echo "  verification FAILED — existing memory configuration left unchanged." >&2
+    else
+        setup_set "memory_model=$mem" "memory_provider=$mem_provider" "memory_enabled=false"
         echo "  verification FAILED — memory left OFF (main model still works)." >&2
         echo "  Fix the key/model and re-run setup, or ask your agent: \"set up memory\"." >&2
     fi
@@ -669,39 +860,21 @@ except Exception:
 # login), then `harness` and `models.<H>` are recorded. Nothing is written
 # unless the client answered.
 setup_run_harness() {
-    local harness="$1" model="$2" reply="" rc=0 prompt='Reply with exactly: MAIN_MODEL_OK'
-    local -a cmd
+    local harness="$1" model="$2" reply="" rc=0 nonce expected prompt
+    nonce="$(setup_nonce)"
+    expected="$(printf '%s' "$nonce" | uppercase_ascii)"
+    prompt="Uppercase this token and reply with only the result: $nonce"
+    local binary
     case "$harness" in
-        claude) cmd=(claude -p "$prompt") ;;
-        codex)  cmd=(codex exec)
-                [ -z "$model" ] || cmd+=(-m "$model")
-                cmd+=("$prompt") ;;
-        vibe)   cmd=(env VIBE_DISABLE_TELEMETRY=true vibe -p "$prompt") ;;
+        claude) binary=claude ;;
+        codex)  binary=codex ;;
+        vibe)   binary=vibe ;;
     esac
-    if [ "$harness" != "codex" ] && [ -n "$model" ]; then
-        cmd+=(--model "$model")
-    fi
-    # `timeout` is GNU coreutils and absent on stock macOS: without it the
-    # check runs unbounded (stdin is /dev/null either way). No dependency added.
-    if command -v timeout >/dev/null 2>&1; then
-        cmd=(timeout 180 "${cmd[@]}")
-    fi
     echo "verifying $harness with one real call (may take ~1 min)…" >&2
-    reply="$("${cmd[@]}" 2>/dev/null </dev/null)" || rc=$?
-    # Success = exit 0 AND a stdout line that is exactly MAIN_MODEL_OK. A
-    # client that merely echoes the prompt ("Reply with exactly: …") fails.
-    local line ok=0
-    if [ "$rc" -eq 0 ]; then
-        while IFS= read -r line || [ -n "$line" ]; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            line="${line%"${line##*[![:space:]]}"}"
-            if [ "$line" = "MAIN_MODEL_OK" ]; then ok=1; fi
-        done <<EOF2
-$reply
-EOF2
-    fi
-    if [ "$ok" != "1" ]; then
-        echo "error: $harness did not pass the check${model:+ with model '$model'} (exit $rc); log in to $harness yourself and check the model id." >&2
+    reply="$(setup_probe "$harness" "$model" "$prompt" "$binary")" || rc=$?
+    # The transformed answer never appears in the prompt, so echoing cannot pass.
+    if [ "$rc" -ne 0 ] || ! reply_has_exact_line "$reply" "$expected"; then
+        echo "error: client did not pass the setup check; log in yourself and check the model id." >&2
         return 1
     fi
     # models.<H> first: a failed second write never leaves a harness without its model.
@@ -711,7 +884,7 @@ EOF2
         setup_set_json "models.$harness" "$quoted"
     fi
     setup_set_json harness "\"$harness\""
-    echo "setup: $harness checked on your own $harness login (its subscription); recorded harness=$harness${model:+ model=$model}."
+    echo "setup: $harness checked on your own login; recorded harness selection."
 }
 
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -733,11 +906,18 @@ if [ "${1:-}" = "memory" ]; then
     case "${1:-}" in
         set) shift; cmd_memory_set "$@"; exit 0 ;;
         status) cmd_memory_status; exit 0 ;;
+        retry) shift; cmd_memory_retry "$@"; exit $? ;;
         *)
-            echo "usage: magnolia memory set <model> [--provider P]   |   magnolia memory status" >&2
+            echo "usage: magnolia memory set <model> [--provider P] | magnolia memory status | magnolia memory retry <session>" >&2
             exit 1
             ;;
     esac
+fi
+
+if [ "${1:-}" = "usage" ]; then
+    shift
+    run_harness_cli usage --root "$OPENCODE_DIR" "$@"
+    exit $?
 fi
 
 # Parse flags (--profile NAME, --opencode-v2, --print-env, --critic, setup)
@@ -749,6 +929,7 @@ PROJECT=""
 PRINT_ENV=0
 HARNESS_FLAG=""
 MODEL_FLAG=""
+ROUTE_FLAG=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --critic) CRITIC=1 ;;
@@ -783,7 +964,16 @@ while [ "$#" -gt 0 ]; do
             MODEL_FLAG="$1"
             ;;
         --model=*) MODEL_FLAG="${1#--model=}" ;;
-        --*) echo "error: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
+        --route)
+            shift
+            if [ -z "${1:-}" ]; then
+                echo "error: --route requires ROLE=MODEL" >&2
+                exit 1
+            fi
+            ROUTE_FLAG="$1"
+            ;;
+        --route=*) ROUTE_FLAG="${1#--route=}" ;;
+        --*) echo "error: unknown option" >&2; echo >&2; usage >&2; exit 1 ;;
         *)
             if [ -n "$PROJECT" ]; then
                 echo "error: expected exactly one project argument" >&2
@@ -795,6 +985,22 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
+if [ "$SETUP" = "1" ] && [ -n "$ROUTE_FLAG" ]; then
+    ROUTE_ROLE="${ROUTE_FLAG%%=*}"
+    ROUTE_MODEL="${ROUTE_FLAG#*=}"
+    if [ "$ROUTE_ROLE" = "$ROUTE_FLAG" ] || [ -z "$ROUTE_MODEL" ]; then
+        echo "error: --route requires ROLE=MODEL" >&2
+        exit 1
+    fi
+    run_routing_cli --root "$OPENCODE_DIR" --role "$ROUTE_ROLE" \
+        --model "$ROUTE_MODEL" --validate || exit $?
+    ROUTE_JSON="$(MAG_V="$ROUTE_MODEL" "$PYTHON_CMD" -c \
+        'import json, os; print(json.dumps(os.environ["MAG_V"]))')"
+    setup_set_json "routes.$ROUTE_ROLE" "$ROUTE_JSON"
+    echo "setup: recorded routes.$ROUTE_ROLE"
+    exit 0
+fi
+
 if [ -z "$PROJECT" ]; then
     echo "error: no project specified" >&2
     echo >&2
@@ -802,15 +1008,21 @@ if [ -z "$PROJECT" ]; then
     exit 1
 fi
 
-# Harness: the flag beats the setup key, which beats the default (opencode).
-# (setup_get returns "" for a null or non-string key, which is then ignored.)
-HARNESS="${HARNESS_FLAG:-$(setup_get harness)}"
-HARNESS="${HARNESS:-opencode}"
+# Resolve interactive launches through the same role resolver as campaigns,
+# helpers and evaluators. The helper returns only the selected route.
+ROUTE_ARGS=(--root "$OPENCODE_DIR" --role interactive)
+[ -z "$HARNESS_FLAG" ] || ROUTE_ARGS+=(--harness "$HARNESS_FLAG")
+[ -z "$MODEL_FLAG" ] || ROUTE_ARGS+=(--model "$MODEL_FLAG")
+ROUTE_RESULT="$(run_routing_cli "${ROUTE_ARGS[@]}")" || exit $?
+HARNESS="$(MAG_ROUTE="$ROUTE_RESULT" "$PYTHON_CMD" -c \
+    'import json, os; print(json.loads(os.environ["MAG_ROUTE"])["harness"])')"
+RESOLVED_MODEL="$(MAG_ROUTE="$ROUTE_RESULT" "$PYTHON_CMD" -c \
+    'import json, os; print(json.loads(os.environ["MAG_ROUTE"])["model"] or "")')"
 case "$HARNESS" in
     opencode) CLIENT_NAME="opencode" ;;
     claude|codex|vibe) CLIENT_NAME="$HARNESS" ;;
     *)
-        echo "error: unknown harness '$HARNESS' (opencode|claude|codex|vibe)" >&2
+        echo "error: unknown harness (opencode|claude|codex|vibe)" >&2
         exit 1
         ;;
 esac
@@ -983,7 +1195,7 @@ apply_profile() {
             : "${MAGNOLIA_RETIREMENT:=1}"
             ;;
         *)
-            echo "error: unknown profile '$1' (plain|soak|full)" >&2
+            echo "error: unknown profile (plain|soak|full)" >&2
             exit 1
             ;;
     esac
@@ -1059,16 +1271,18 @@ fi
 # NUL-terminated. Exit 2 = client binary missing, 1 = other failure; either
 # way it printed one stderr line and no daemon has run yet.
 ARGV=()
+CLIENT_ENV=()
 if [ "$HARNESS" != "opencode" ]; then
-    LAUNCH_MODEL="${MODEL_FLAG:-$(setup_get_json "models.$HARNESS")}"
+    LAUNCH_MODEL="$RESOLVED_MODEL"
     LAUNCH_OUT="$(mktemp "${TMPDIR:-/tmp}/magnolia-launch.XXXXXX")"
     trap 'rm -f "$LAUNCH_OUT"' EXIT
     LAUNCH_ARGS=(launch --harness "$HARNESS" --root "$OPENCODE_DIR" --project "$PROJECT"
-                 --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT")
+                 --python "$PYTHON_CMD" --tools-port "$COMPCHEM_TOOLS_PORT"
+                 --holder-pid "$$" --route-resolved)
     [ -z "$LAUNCH_MODEL" ] || LAUNCH_ARGS+=(--model "$LAUNCH_MODEL")
     LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src"
     LAUNCH_RC=0
-    PYTHONPATH="${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
+    PYTHONPATH="$OPENCODE_DIR:${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
         "$PYTHON_CMD" -m compchem_memory.harness "${LAUNCH_ARGS[@]}" >"$LAUNCH_OUT" || LAUNCH_RC=$?
     if [ "$LAUNCH_RC" -ne 0 ]; then
         # The CLI already printed its one stderr line; pass its exit code through.
@@ -1079,7 +1293,16 @@ if [ "$HARNESS" != "opencode" ]; then
         if [ "$in_env" = "0" ]; then
             if [ -z "$item" ]; then in_env=1; else ARGV+=("$item"); fi
         else
-            export "$item"
+            case "$item" in
+                MAGNOLIA_MEMORY_SERVICE_TOKEN=*)
+                    CLIENT_ENV+=("$item")
+                    unset MAGNOLIA_MEMORY_SERVICE_TOKEN
+                    ;;
+                MAGNOLIA_MEMORY_SERVICE_HANDLE=*)
+                    MAGNOLIA_MEMORY_SERVICE_HANDLE="${item#*=}"
+                    ;;
+                *) export "$item" ;;
+            esac
         fi
     done <"$LAUNCH_OUT"
     if [ "${#ARGV[@]}" -eq 0 ]; then
@@ -1106,7 +1329,7 @@ fi
 # Single-instance via its own flock; a second launch is a quiet no-op.
 # Kill switch: MAGNOLIA_AGENTS=0. Non-fatal by design.
 if [ "${MAGNOLIA_DRY_RUN:-0}" != "1" ] && [ "${MAGNOLIA_AGENTS:-1}" != "0" ] && [ -f "$SCRIPT_DIR/magnolia-agents-daemon" ]; then
-    nohup python3 "$SCRIPT_DIR/magnolia-agents-daemon" \
+    nohup "$PYTHON_CMD" "$SCRIPT_DIR/magnolia-agents-daemon" \
         --root "$REPO_ROOT" >/dev/null 2>&1 &
     disown || true
 fi
@@ -1147,9 +1370,37 @@ PY
     exit 0
 fi
 if [ "$HARNESS" != "opencode" ]; then
-    # The trap would not survive exec; the files are already read.
+    # Keep the process around so its service reference is released on exit.
     rm -f "$LAUNCH_OUT"
-    trap - EXIT
-    exec "${ARGV[@]}"
+    cleanup_memory_service() {
+        if [ -n "${MAGNOLIA_MEMORY_SERVICE_HANDLE:-}" ]; then
+            LAUNCH_SRC="$OPENCODE_DIR/mcp-servers/compchem-memory/src" \
+            PYTHONPATH="${LAUNCH_SRC}${PYTHONPATH:+:$PYTHONPATH}" \
+                "$PYTHON_CMD" -m compchem_memory.harness.memory_service \
+                release "$MAGNOLIA_MEMORY_SERVICE_HANDLE" >/dev/null 2>&1 || true
+            unset MAGNOLIA_MEMORY_SERVICE_HANDLE MAGNOLIA_MEMORY_SERVICE_TOKEN
+        fi
+    }
+    trap cleanup_memory_service EXIT
+    CLIENT_RC=0
+    if [ "$HARNESS" = "vibe" ]; then
+        (
+            unset MAGNOLIA_LLM_API_KEY DEEPSEEK_API_KEY ANTHROPIC_API_KEY
+            unset MAGNOLIA_OPENAI_API_KEY OPENAI_API_KEY
+            unset KIMI_PLAN_MAGNOLIA_API_KEY KIMI_API_KEY OPENROUTER_API_KEY
+            unset MAGNOLIA_MISTRAL_API_KEY MISTRAL_API_KEY ZHIPU_API_KEY ZAI_API_KEY
+            if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
+                export "${CLIENT_ENV[@]}"
+            fi
+            exec "${ARGV[@]}"
+        ) || CLIENT_RC=$?
+    else
+        if [ "${#CLIENT_ENV[@]}" -gt 0 ]; then
+            env "${CLIENT_ENV[@]}" "${ARGV[@]}" || CLIENT_RC=$?
+        else
+            "${ARGV[@]}" || CLIENT_RC=$?
+        fi
+    fi
+    exit "$CLIENT_RC"
 fi
 MAGNOLIA_PROJECT_DIR="." exec "$OPENCODE_BIN"

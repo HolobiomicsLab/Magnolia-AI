@@ -1,0 +1,12 @@
+{
+  "call_id": "call_18bd0d3c09b044a48fad071442c71bba",
+  "id": "ctc_00648f4f35d7ab34016afaa68aebc887d2b58a75b4614222e2",
+  "input": "const r = await tools.mcp__probe__echo({text:\"direct\"}); text(r);\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794811530.9224017,
+    "turn_id": "01a1e31a-6771-74a0-a2aa-21d556248cdf"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

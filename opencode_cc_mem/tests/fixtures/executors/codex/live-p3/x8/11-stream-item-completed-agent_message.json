@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_1",
+    "text": "get_goal \u2014 BLOCKED \u2014 Tool call blocked by PreToolUse hook: unknown tool get_goal denied by role policy. Tool: get_goal  \nlist_mcp_resources \u2014 BLOCKED \u2014 Tool call blocked by PreToolUse hook: unknown tool list_mcp_resources denied by role policy. Tool: list_mcp_resources  \nexec \u2014 OK \u2014 code-mode-outer-ran",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

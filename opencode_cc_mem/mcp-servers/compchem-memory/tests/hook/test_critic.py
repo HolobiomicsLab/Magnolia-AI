@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -20,8 +18,6 @@ from compchem_memory.hook.transcript import append_event, read_turns, transcript
 from compchem_memory.llm import CallResult, Route
 
 
-PLUGIN = Path(__file__).resolve().parents[4] / ".opencode" / "plugins" / "claim-critic.ts"
-NODE = shutil.which("node")
 KEY_VARS = (
     "MAGNOLIA_LLM_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
     "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY",
@@ -33,34 +29,6 @@ KEY_VARS = (
     "MAGNOLIA_OPENROUTER_PROVIDER",
     "MAGNOLIA_CRITIC", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
 )
-
-DRIVER = r"""
-const [pluginPath, directory, replyKind] = process.argv.slice(2)
-const verdict = { flag: false, severity: "none", unsupported_claims: [], why: "supported" }
-const calls = []
-globalThis.fetch = async (url, init) => {
-  calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
-  const text = JSON.stringify(verdict)
-  const data = replyKind === "anthropic"
-    ? { content: [{ type: "text", text }] }
-    : { choices: [{ message: { content: text } }] }
-  return { ok: true, status: 200, json: async () => data }
-}
-const mod = await import(pluginPath)
-const report = "The binding energy is -9.3 kcal/mol and the pose ranks first. ".repeat(5)
-const messages = [
-  { info: { role: "user" }, parts: [{ type: "text", text: "dock it" }] },
-  { info: { role: "assistant" }, parts: [{ type: "text", text: report }] },
-]
-const client = {
-  session: { messages: async () => ({ data: messages }) },
-  tui: { showToast: async () => {} },
-}
-const hooks = await mod.default.server({ client, directory })
-await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
-process.stdout.write(JSON.stringify(calls[0]))
-"""
-
 
 @pytest.fixture(autouse=True)
 def clean_provider_env(monkeypatch):
@@ -239,67 +207,6 @@ def test_legacy_llm_helpers_unchanged(monkeypatch):
     assert llm._get_base_url("deepseek") == "https://api.deepseek.com/v1"
     with pytest.raises(KeyError):
         llm._get_base_url("anthropic")
-
-
-def _node_request(tmp_path: Path, env: dict[str, str], reply_kind: str = "openai") -> dict:
-    if NODE is None:
-        pytest.skip("node is not installed")
-    driver = tmp_path / "driver.mjs"
-    driver.write_text(DRIVER, encoding="utf-8")
-    project = tmp_path / "node-project"
-    (project / ".magnolia").mkdir(parents=True)
-    (project / ".magnolia" / "GOAL.md").write_text("goal\n", encoding="utf-8")
-    process_env = {key: value for key, value in os.environ.items() if key not in KEY_VARS}
-    process_env.update({"MAGNOLIA_CRITIC": "1", **env})
-    result = subprocess.run(
-        [NODE, str(driver), PLUGIN.as_uri(), str(project), reply_kind],
-        env=process_env, capture_output=True, text=True, timeout=60, check=False,
-    )
-    if result.returncode != 0 and "ERR_UNKNOWN_FILE_EXTENSION" in result.stderr:
-        pytest.skip("this node cannot strip TypeScript types")
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
-
-
-@pytest.mark.parametrize(
-    ("env", "reply_kind"),
-    [
-        ({"DEEPSEEK_API_KEY": "ds"}, "openai"),
-        ({"KIMI_PLAN_MAGNOLIA_API_KEY": "km", "MAGNOLIA_CRITIC_PROVIDER": "kimi"}, "anthropic"),
-        ({"OPENROUTER_API_KEY": "or", "MAGNOLIA_CRITIC_PROVIDER": "openrouter"}, "openai"),
-    ],
-)
-def test_critic_request_matches_plugin(tmp_path, monkeypatch, env, reply_kind):
-    node_call = _node_request(tmp_path, env, reply_kind)
-    for name, value in env.items():
-        monkeypatch.setenv(name, value)
-    if env.get("MAGNOLIA_CRITIC_PROVIDER") == "openrouter":
-        node_call["body"].update({
-            "reasoning": {"enabled": False},
-            "provider": {
-                "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
-            },
-            "session_id": llm._openrouter_session_id("critic"),
-        })
-    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
-    paths = _paths(tmp_path / "python")
-    report = "The binding energy is -9.3 kcal/mol and the pose ranks first. " * 5
-    append_event(paths.store, _event("prompt", prompt="dock it"))
-    append_event(paths.store, _event("turn-end", assistant_text=report))
-    captured = {}
-
-    def fake_post(url, **kwargs):
-        captured.update(url=url, headers=kwargs["headers"], body=kwargs["json"])
-        data = (
-            {"content": [{"type": "text", "text": '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'}]}
-            if reply_kind == "anthropic"
-            else {"choices": [{"message": {"content": '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'}}]}
-        )
-        return FakeResponse(data)
-
-    monkeypatch.setattr(llm.httpx, "post", fake_post)
-    critic.run_critic(paths, "claude", "s1", None)
-    assert captured == node_call
 
 
 def test_critic_report_length_boundary(tmp_path, monkeypatch):
@@ -673,7 +580,7 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
 
-    critic.run_critic(paths, "claude", "s1", None)
+    outcome = critic.run_critic(paths, "claude", "s1", None)
 
     row = json.loads((paths.store / "claim-critic" / "s1.jsonl").read_text().strip())
     assert row | {"ts": row["ts"]} == row
@@ -683,8 +590,43 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row["usage"] == {"prompt_tokens": 12, "cached_tokens": 8}
     assert row["quality_floor_dropped"] is True
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
+    assert outcome.kind == "verdict" and outcome.reason is None
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
+
+
+def test_opencode_flag_stays_in_its_session_and_out_of_job_queue(tmp_path):
+    paths = _paths(tmp_path)
+    critic._save_notice(paths, "opencode", "s1", {
+        "flag": True, "severity": "high", "why": "no ranking tool output",
+    })
+
+    assert not (paths.store / ".job-notices.jsonl").exists()
+    with SessionState.open(paths.store, "opencode", "s1") as state:
+        assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
+    with SessionState.open(paths.store, "opencode", "s2") as state:
+        assert state.data.get("unshown_notices") is None
+
+
+def test_run_critic_is_idempotent_for_one_turn(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    calls = []
+    verdict = '{"flag":false,"severity":"none","unsupported_claims":[],"why":"supported"}'
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: calls.append(1) or CallResult(verdict, "stop", "judge", None, 200),
+    )
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="rank"))
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text="x" * 200))
+
+    critic.run_critic(paths, "claude", "s1", None, "t1")
+    critic.run_critic(paths, "claude", "s1", None, "t1")
+
+    assert calls == [1]
+    assert len((paths.store / "claim-critic" / "s1.jsonl").read_text().splitlines()) == 1
 
 
 def test_critic_verdict_is_private_regardless_of_umask(tmp_path, monkeypatch):
@@ -723,7 +665,7 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
-    critic.run_critic(paths, "claude", "s1", None)
+    outcome = critic.run_critic(paths, "claude", "s1", None)
 
     error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
@@ -731,6 +673,12 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     assert error["usage"] == {"prompt_tokens": 9}
     assert error["quality_floor_dropped"] is True
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
+    assert outcome.kind == "error" and outcome.reason == "HTTP 401: denied"
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert state.data["unshown_notices"] == [
+            "⚠ Claim critic unavailable: HTTP 401: denied"
+        ]
+        assert state.data["critic_route_failure_noticed"] is True
 
 
 def test_run_critic_dot_dot_session_id_stays_in_store(tmp_path, monkeypatch):
@@ -756,6 +704,34 @@ def test_route_repr_hides_the_key():
     route = Route("deepseek", "judge", "https://judge/chat", "sk-fabricated-route-key", "openai")
     assert "sk-fabricated-route-key" not in repr(route)
     assert route.key == "sk-fabricated-route-key"
+
+
+@pytest.mark.parametrize(
+    ("enabled", "reply", "route", "reason"),
+    [
+        (False, "x" * 200, None, "critic disabled"),
+        (True, "Done.", Route("openai", "judge", "u", "k", "openai"), "short reply"),
+        (True, "x" * 200, None, "no route"),
+    ],
+)
+def test_run_critic_returns_typed_skip_without_judge(
+    tmp_path, monkeypatch, enabled, reply, route, reason,
+):
+    paths = _paths(tmp_path)
+    if enabled:
+        monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    monkeypatch.setattr(critic, "resolve_route", lambda _role: route)
+    calls = []
+    monkeypatch.setattr(critic, "_judge", lambda *_args: calls.append(True))
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text=reply))
+
+    outcome = critic.run_critic(paths, "claude", "s1", None, "t1")
+
+    assert outcome.kind == "skipped"
+    assert outcome.status == "skipped"
+    assert outcome.reason == reason
+    assert calls == []
 
 
 def test_late_stop_trace_excludes_the_next_turns_tools(tmp_path):

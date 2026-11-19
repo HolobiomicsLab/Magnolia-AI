@@ -17,6 +17,7 @@ never a verbatim copy."""
 import hashlib
 import json
 import re as _re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -25,6 +26,12 @@ import yaml
 
 from compchem_memory.reflex_common import (
     parse_frontmatter_file, pending_indices, prior_rejected_keys, fenced_preview,
+)
+from compchem_memory.writer_lease import (
+    file_fingerprint,
+    fingerprint_unchanged,
+    leased_store_writer,
+    project_writer_lease,
 )
 
 _PROMOTION_MIN_SESSIONS = 3      # eligibility gate: distinct sessions
@@ -352,13 +359,20 @@ def propose_promotions(
     fact_patterns = collect_cluster_fact_patterns(load_destinations(rules_dir))
     artifact = store / "reflex" / "promotion-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
+    # The panel, drafter and checker call an LLM, so they run outside the
+    # project writer lease; the write below re-validates what was read here.
+    # Fingerprint before loading so a write in that narrow window is visible.
+    entries_dir = store / "entries"
+    entry_paths = [p for p in sorted(entries_dir.glob("*.md")) if p.name != "INDEX.md"]
+    read_set = file_fingerprint([*entry_paths, artifact])
+    eligible = eligible_entries(store_dir)
     prior_keys = prior_rejected_keys(artifact, _entry_key)
     prior_rej = _prior_rejected_records(artifact)
     now = datetime.now(timezone.utc).isoformat()
     proposals: list[dict[str, Any]] = []
     rejected_records: dict[str, dict[str, Any]] = {}
     skipped_rejected = 0
-    for entry in eligible_entries(store_dir):
+    for entry in eligible:
         key = str(entry.get("id", ""))
         content_hash = _entry_content_hash(entry)
         cached = prior_rej.get(key)
@@ -391,10 +405,17 @@ def propose_promotions(
         })
 
     rejected = [i for i, p in enumerate(proposals) if _entry_key(p) in prior_keys]
-    artifact.write_text(json.dumps(
-        {"proposals": proposals, "applied": [], "rejected": rejected,
-         "rejected_records": sorted(rejected_records.values(),
-                                    key=lambda r: r["key"])}, indent=2))
+    with project_writer_lease(store):
+        if not fingerprint_unchanged(read_set):
+            print("[promotion] store changed during the promotion review; proposals "
+                  "not written, the next sweep recomputes them", file=sys.stderr)
+            return {"candidates": 0, "artifact": str(artifact),
+                    "skipped_rejected": skipped_rejected,
+                    "skipped": "store changed during the promotion review"}
+        artifact.write_text(json.dumps(
+            {"proposals": proposals, "applied": [], "rejected": rejected,
+             "rejected_records": sorted(rejected_records.values(),
+                                        key=lambda r: r["key"])}, indent=2))
     return {"candidates": len(proposals), "artifact": str(artifact),
             "skipped_rejected": skipped_rejected}
 
@@ -545,6 +566,7 @@ def _archive_entry(source: str, store_dir: str) -> None:
         p.unlink(missing_ok=True)
 
 
+@leased_store_writer
 def apply_promotions(
     store_dir: str, rules_dir: str,
     accept: list[int] | None = None, reject: list[int] | None = None,

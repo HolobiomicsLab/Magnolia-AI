@@ -1,0 +1,16 @@
+version: magnolia-role-v1
+role: helper
+canonical_read_roots:
+  - "{capability_read_roots}"
+read_deny_patterns:
+  - "**/*.env*"
+  - "**/*.env*/**"
+  - "**/.magnolia/campaign-service.json"
+  - "**/.magnolia/campaign-service.log"
+  - "**/.magnolia/services/**"
+edit_roots: []
+allowed_native_capabilities:
+  - native_read
+mcp_tool_allowlist: []
+delegation_policy: deny
+default_cap: 40

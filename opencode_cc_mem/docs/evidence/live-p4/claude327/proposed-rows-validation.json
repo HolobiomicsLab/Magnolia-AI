@@ -1,0 +1,51 @@
+{
+  "load": "ok",
+  "non_claude_projection_unchanged": true,
+  "roles": {
+    "evaluator": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "ident_mismatch": {},
+      "prelaunch": "accepted",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    },
+    "helper": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "ident_mismatch": {},
+      "prelaunch": "accepted",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    },
+    "reviewer": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "ident_mismatch": {},
+      "prelaunch": "accepted",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    },
+    "worker": {
+      "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+      "ident_mismatch": {},
+      "prelaunch": "accepted",
+      "projection": {
+        "accepted": true,
+        "blocking_cells": [],
+        "gate_accepted": true,
+        "stale": false
+      }
+    }
+  },
+  "table_sha256": "4fb4b3123d929abd3f7c93b1b80cb356b28d4b806d4ec104cec2d6542ae9b8ad"
+}

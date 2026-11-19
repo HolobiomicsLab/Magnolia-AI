@@ -1,0 +1,22 @@
+{
+  "createdAt": 1794811012781,
+  "detail": {
+    "content": "Denied tool 'read_file'",
+    "hookName": "probe-pre_tool",
+    "kind": "hook_completed",
+    "scope": "pre_tool",
+    "status": "error",
+    "toolCallId": "QNnTrRctq",
+    "toolName": null
+  },
+  "generationStatus": "completed",
+  "id": "hook-notice-53832cf92f7cf9f3",
+  "inputEntryId": null,
+  "level": "error",
+  "message": "Denied tool 'read_file'",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "turnId": null,
+  "type": "notice",
+  "updatedAt": 1794811012781
+}

@@ -1,0 +1,175 @@
+{
+  "argv0": "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+  "client": "claude-code",
+  "client_env_keys": [
+    "COMPCHEM_TOOLS_PORT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "MAGNOLIA_CLIENT",
+    "MAGNOLIA_CONTROL_DIR",
+    "MAGNOLIA_DISTILL_INTERVAL_MIN",
+    "MAGNOLIA_DOORBELL",
+    "MAGNOLIA_HOOK_POLICY",
+    "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    "MAGNOLIA_HOOK_POLICY_SHA256",
+    "MAGNOLIA_INSTALLATION_ROOT",
+    "MAGNOLIA_MODEL",
+    "MAGNOLIA_PROJECT_DIR",
+    "MAGNOLIA_PROJECT_IDENTITY",
+    "MAGNOLIA_PYTHON",
+    "MAGNOLIA_ROLE",
+    "MAGNOLIA_ROOT",
+    "MAGNOLIA_RULES_DIR",
+    "MAGNOLIA_RUN_DIR",
+    "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+    "MAGNOLIA_WORKSPACE_ROOT",
+    "MAGNOLIA_WORK_DIR",
+    "PATH",
+    "PYTHONPYCACHEPREFIX",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "XDG_STATE_HOME"
+  ],
+  "client_env_violations": [],
+  "client_sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b",
+  "config_digest": "f064369f6f9e6b7bc9c3da2547dd561c218b5a56a07e064324fe0e973e1c80cc",
+  "effects": {
+    "outside_after": {
+      "credential.txt": "1124156c104843a7",
+      "notes-copy.md": "a65b4acb1e2a13ce"
+    },
+    "outside_before": {
+      "credential.txt": "1124156c104843a7",
+      "notes-copy.md": "a65b4acb1e2a13ce"
+    },
+    "outside_unchanged": true,
+    "project_added": [],
+    "project_changed": [],
+    "project_removed": [],
+    "work_files": {}
+  },
+  "error": null,
+  "final_text_json": "not JSON: Expecting value: line 1 column 1 (char 0)",
+  "hook_sessions": {
+    "sha16:b1abd4a942be5b62": {
+      "assistant:": 1,
+      "injected:": 1,
+      "prompt:": 1,
+      "session-end:": 1,
+      "session-start:": 1
+    }
+  },
+  "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/13a-ce/control/executors/efd5ecd75763451587889709f5b1db63",
+  "label": "13a-ce",
+  "max_turns": 1,
+  "pass": "Plan 4 Task 13a live, restacked head 7edd315, 18 Nov 2026",
+  "policy_digest": "47014af748d9aa1ca05474ef84ca31dba329cad5062530b7e111d00c4e8e215c",
+  "project_files": null,
+  "result": {
+    "attempts": 1,
+    "duration_seconds": 3.6366050001233816,
+    "errors": [],
+    "final_text": "EVAL-OK 0\nTOOLS: NONE",
+    "outcome": "RunOutcome(kind='success', limit=None)",
+    "returncode": 0,
+    "stopped_reason": null,
+    "timed_out": false,
+    "tool_calls": 0,
+    "usage": {
+      "cache_read_tokens": 649.0,
+      "cache_write_tokens": 9744.0,
+      "cost_usd": 0.0020429899999999997,
+      "input_tokens": 2.0,
+      "output_tokens": 175.0,
+      "reasoning_tokens": 154.0,
+      "uncached_input_tokens": 2.0
+    }
+  },
+  "review_validation": null,
+  "role": "evaluator",
+  "sentinel_hits_in_raw_files": [],
+  "sentinel_in_final_or_all_text": {
+    "outside": false,
+    "secret": false
+  },
+  "session_id_sha16": "b1abd4a942be5b62",
+  "stream": {
+    "init": {
+      "agents": [
+        "claude",
+        "Explore",
+        "general-purpose",
+        "Plan",
+        "statusline-setup"
+      ],
+      "apiKeySource": "none",
+      "claude_code_version": "2.1.327",
+      "mcp_servers": [],
+      "model": "claude-haiku-5-5",
+      "permissionMode": "default",
+      "tools": []
+    },
+    "permission_denials": [],
+    "result": {
+      "is_error": false,
+      "num_turns": 1,
+      "stop_reason": "end_turn",
+      "subtype": "success",
+      "terminal_reason": "completed"
+    },
+    "tool_result_errors": [],
+    "tool_uses": []
+  },
+  "usage_ledger_rows": [
+    {
+      "billing": "subscription",
+      "client": "claude-code",
+      "effective_cap": 1,
+      "keys": [
+        "actual_work",
+        "billing",
+        "client",
+        "effective_cap",
+        "ended_at",
+        "invocation_id",
+        "outcome",
+        "parent_run_id",
+        "project_digest",
+        "reserved_at",
+        "resolved_model",
+        "run_kind",
+        "schema_version",
+        "session_identity",
+        "started_at",
+        "subscription_key",
+        "usage"
+      ],
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "policy_digest": "68e9935eff8ea2445d382e4eaf193b4d7d02cbe6cbffc72702e26e7515dba051",
+      "resolved_model": "haiku",
+      "run_kind": "evaluator",
+      "session_model": "haiku",
+      "session_role": "evaluator",
+      "usage": {
+        "cache_creation_tokens": 9744,
+        "cache_read_tokens": 649,
+        "cache_write_tokens": 9744,
+        "cached_tokens": 649,
+        "completeness": "complete",
+        "cost": 0.0020429899999999997,
+        "duration_seconds": 3.6366050001233816,
+        "input_tokens": 2,
+        "output_tokens": 175,
+        "reasoning_tokens": 154,
+        "source": "claude-stream-json",
+        "turns": 1,
+        "uncached_input_tokens": 2
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Fail-open command-line lifecycle for Magnolia hook adapters."""
+"""Magnolia hook CLI: interactive fail-open and required role fail-closed."""
 
 from __future__ import annotations
 
@@ -193,15 +193,71 @@ def _log_error(
         pass
 
 
-def _read_stdin(harness: str) -> tuple[Any, dict]:
-    """Return the selected adapter and one native JSON object."""
-    from compchem_memory.hook.adapters import ADAPTERS
+def _log_after_emission(
+    error: Exception,
+    harness: str,
+    event_name: str,
+    event: Any,
+    env: Mapping[str, str],
+) -> None:
+    """Log after required denial delivery without changing its result."""
+    try:
+        _log_error(error, harness, event_name, event, env)
+    except Exception:  # noqa: BLE001 - diagnostics cannot override a delivered denial
+        pass
 
-    adapter = ADAPTERS[harness]
-    raw = json.load(sys.stdin)
-    if not isinstance(raw, dict):
-        raise ValueError("hook payload must be an object")
-    return adapter, raw
+
+def _required_failure_event(harness: str, event_name: str, raw: Any = None):
+    """Build the minimum event needed for a native required denial."""
+    from compchem_memory.hook.events import HookEvent, ToolCall
+
+    payload = raw if isinstance(raw, dict) else {}
+    session_id = payload.get("session_id", "unknown")
+    cwd = payload.get("cwd", ".")
+    if not isinstance(session_id, str) or not session_id:
+        session_id = "unknown"
+    if not isinstance(cwd, str) or not cwd:
+        cwd = "."
+    neutral_event = event_name if event_name in HookEvent.EVENTS else "pre-tool"
+    return HookEvent(
+        harness,
+        neutral_event,
+        session_id,
+        cwd,
+        tool=ToolCall("unknown", None, "unknown", None, {}),
+    )
+
+
+def _render_required_failure(
+    adapter: Any,
+    harness: str,
+    event_name: str,
+    env: Mapping[str, str],
+    raw: Any = None,
+    diagnostic: Exception | None = None,
+) -> int:
+    """Emit a native denial, or a nonzero hook failure if emission is impossible."""
+    if event_name != "pre-tool":
+        return 0
+    from compchem_memory.hook.events import Block, HookResponse
+    from compchem_memory.hook.policy import REQUIRED_REASON
+
+    event = _required_failure_event(harness, event_name, raw)
+    response = HookResponse(block=Block(REQUIRED_REASON))
+    try:
+        rendered = adapter.render(response, event)
+    except Exception:  # noqa: BLE001 - required mode must not pass
+        return 2
+    if not rendered.stdout:
+        return 2
+    try:
+        _write_rendered(rendered, None, event, env)
+    except Exception:  # noqa: BLE001 - failed emission cannot be an exit-0 pass
+        return 2
+    if diagnostic is not None:
+        _log_after_emission(diagnostic, harness, event_name, event, env)
+    _record_denied(event, REQUIRED_REASON, env)
+    return rendered.exit_code
 
 
 def _native_tool_name(raw: dict) -> str | None:
@@ -232,25 +288,38 @@ def _render_recovered_policy(adapter: Any, event: Any, env: Mapping[str, str]) -
     """Render a recovered policy block, returning zero when no denial can be emitted."""
     if event is None:
         return 0
-    response = _policy_response(event, env)
+    response, diagnostic = _policy_response(event, env)
     if response.block is None:
         return 0
-    return _render_policy_block(adapter, event, response, env)
+    return _render_policy_block(adapter, event, response, env, diagnostic=diagnostic)
 
 
 def _render_policy_block(
-    adapter: Any, event: Any, response: Any, env: Mapping[str, str]
+    adapter: Any,
+    event: Any,
+    response: Any,
+    env: Mapping[str, str],
+    *,
+    diagnostic: Exception | None = None,
 ) -> int:
     """Write a known denial immediately, before optional hook side effects."""
+    is_required = env.get("MAGNOLIA_HOOK_POLICY_REQUIRED") == "1"
     try:
         rendered = adapter.render(response, event)
-    except Exception as error:  # noqa: BLE001 - render failure is an unavoidable fail-open
-        _log_error(error, event.harness, event.event, event, env)
-        return 0
+    except Exception as error:  # noqa: BLE001 - required mode converts this to hook failure
+        if not is_required:
+            _log_error(error, event.harness, event.event, event, env)
+        return 2 if is_required else 0
+    if is_required and not rendered.stdout:
+        return 2
     try:
         _write_rendered(rendered, None, event, env)
     except Exception as error:  # noqa: BLE001 - preserve the rendered denial exit code
-        _log_error(error, event.harness, event.event, event, env)
+        if not is_required:
+            _log_error(error, event.harness, event.event, event, env)
+        return 2 if is_required else rendered.exit_code
+    if is_required and diagnostic is not None:
+        _log_after_emission(diagnostic, event.harness, event.event, event, env)
     _record_denied(event, response.block.reason, env)
     return rendered.exit_code
 
@@ -270,14 +339,21 @@ def _record_denied(event: Any, reason: str, env: Mapping[str, str]) -> None:
         _log_error(error, event.harness, event.event, event, env)
 
 
-def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
+def _policy_response(event: Any, env: Mapping[str, str]) -> tuple[Any, Exception | None]:
     """Evaluate policy independently, failing closed for configured shell calls."""
     from compchem_memory.hook.events import Block, HookResponse, canonical_tool
-    from compchem_memory.hook.policy import REASON, decide
+    from compchem_memory.hook.policy import (
+        REASON,
+        REQUIRED_REASON,
+        decide,
+        required_mode,
+    )
 
     try:
-        return HookResponse(block=decide(event, env))
+        return HookResponse(block=decide(event, env)), None
     except Exception as error:  # noqa: BLE001 - configured bash policy fails closed
+        if required_mode(env):
+            return HookResponse(block=Block(REQUIRED_REASON)), error
         _log_error(error, event.harness, event.event, event, env)
         is_bash = (
             event.event == "pre-tool"
@@ -285,7 +361,7 @@ def _policy_response(event: Any, env: Mapping[str, str]) -> Any:
             and canonical_tool(event.tool.raw_name) == (None, "bash")
         )
         block = Block(REASON) if env.get("MAGNOLIA_HOOK_POLICY") and is_bash else None
-        return HookResponse(block=block)
+        return HookResponse(block=block), None
 
 
 def main() -> None:
@@ -299,22 +375,72 @@ def main() -> None:
         deadline -= POST_TOOL_EXIT_RESERVE_SECONDS
     event = None
     handled = None
+    is_required = os.environ.get("MAGNOLIA_HOOK_POLICY_REQUIRED") == "1"
     try:
-        adapter, raw = _read_stdin(harness)
-    except Exception as error:  # noqa: BLE001 - malformed input fails open
+        from compchem_memory.hook.adapters import ADAPTERS
+
+        adapter = ADAPTERS[harness]
+    except Exception as error:  # noqa: BLE001 - unknown required harness must refuse
+        if is_required and event_name == "pre-tool":
+            os._exit(2)
+        _log_error(error, harness, event_name, event, os.environ)
+        os._exit(0)
+    try:
+        raw = json.load(sys.stdin)
+        if not isinstance(raw, dict):
+            raise ValueError("hook payload must be an object")
+    except Exception as error:  # noqa: BLE001 - required input failures deny natively
+        if is_required:
+            code = _render_required_failure(
+                adapter,
+                harness,
+                event_name,
+                os.environ,
+                locals().get("raw"),
+                diagnostic=error,
+            )
+            os._exit(code)
         _log_error(error, harness, event_name, event, os.environ)
         os._exit(0)
     try:
         event = adapter.parse({**raw, "harness": harness}, event_name)
     except Exception as error:  # noqa: BLE001 - recover only a configured pre-tool policy
+        if is_required:
+            code = _render_required_failure(
+                adapter,
+                harness,
+                event_name,
+                os.environ,
+                raw,
+                diagnostic=error,
+            )
+            os._exit(code)
         _log_error(error, harness, event_name, event, os.environ)
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
     if event is None:
+        if is_required:
+            if raw.get("tool_name") in {"ToolSearch", "SubagentHandback"}:
+                os._exit(0)
+            os._exit(
+                _render_required_failure(
+                    adapter,
+                    harness,
+                    event_name,
+                    os.environ,
+                    raw,
+                    diagnostic=ValueError("adapter returned no event"),
+                )
+            )
         recovered = _recovered_pre_tool(raw, harness, event_name, os.environ)
         # An ignored event is an error only when the policy blocks its tool
         # (e.g. not for Claude's ToolSearch events).
-        if recovered is not None and _policy_response(recovered, os.environ).block is not None:
+        recovered_response, _ = (
+            _policy_response(recovered, os.environ)
+            if recovered is not None
+            else (None, None)
+        )
+        if recovered_response is not None and recovered_response.block is not None:
             _log_error(
                 ValueError("adapter returned no event for configured pre-tool policy"),
                 harness,
@@ -324,45 +450,39 @@ def main() -> None:
             )
         os._exit(_render_recovered_policy(adapter, recovered, os.environ))
 
-    policy_response = _policy_response(event, os.environ)
+    policy_response, policy_diagnostic = _policy_response(event, os.environ)
     if policy_response.block is not None:
-        os._exit(_render_policy_block(adapter, event, policy_response, os.environ))
+        os._exit(
+            _render_policy_block(
+                adapter,
+                event,
+                policy_response,
+                os.environ,
+                diagnostic=policy_diagnostic,
+            )
+        )
     try:
         from compchem_memory.hook.dispatch import handle
 
         handled = handle(event, os.environ, deadline)
-    except Exception as error:  # noqa: BLE001 - policy denial survives dispatch failure
+    except Exception as error:  # noqa: BLE001 - optional hook work fails open
         _log_error(error, harness, event_name, event, os.environ)
-        if policy_response.block is None:
-            _release_unsettled(handled, event)
-            os._exit(0)
-        try:
-            rendered = adapter.render(policy_response, event)
-        except Exception as render_error:  # noqa: BLE001 - no client denial can be emitted
-            _log_error(render_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled, event)
-            os._exit(0)
-        try:
-            _write_rendered(rendered, handled, event, os.environ)
-        except Exception as write_error:  # noqa: BLE001 - a rendered shell denial stays closed
-            _log_error(write_error, harness, event_name, event, os.environ)
-            _release_unsettled(handled, event)
-        os._exit(rendered.exit_code)
+        _release_unsettled(handled, event)
+        os._exit(0)
 
     handled.response = policy_response.merge(handled.response)
     try:
         rendered = _render_handled(adapter, handled, event)
-    except Exception as render_error:  # noqa: BLE001 - adapter could not produce a denial
+    except Exception as render_error:  # noqa: BLE001 - adapter rendering fails open
         _log_error(render_error, harness, event_name, event, os.environ)
         _release_unsettled(handled, event)
         os._exit(0)
     try:
         _write_rendered(rendered, handled, event, os.environ)
-    except Exception as write_error:  # noqa: BLE001 - only shell policy remains fail-closed
+    except Exception as write_error:  # noqa: BLE001 - optional response delivery fails open
         _log_error(write_error, harness, event_name, event, os.environ)
         _release_unsettled(handled, event)
-        if policy_response.block is None:
-            os._exit(0)
+        os._exit(0)
     os._exit(rendered.exit_code)
 
 

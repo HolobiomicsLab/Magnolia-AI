@@ -1,0 +1,154 @@
+{
+  "hooks_list": {
+    "appended_trusted_hash": 5,
+    "event": "hooks",
+    "gate_written_sha256": "2cbb8132e927adb5ee62818de4ca36b89fc4bd62d2658531cf57be5e3972cc2b",
+    "gate_written_size": 30140,
+    "project_codex_files": {
+      ".codex/config.toml": "cf39e3b2c43a0680a2d19de44dbe9ba1dfb8b9d8bf338f7419d0a24ee13f80bf",
+      ".codex/hooks.json": "cdb921d9e3ef22badf221c262bcd7ac079ce8e1ccf82ccc6ebdef57341d159e5"
+    },
+    "rows_after": [
+      {
+        "enabled": true,
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "enabled": true,
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "enabled": true,
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "enabled": true,
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "enabled": true,
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+        "trustStatus": "trusted"
+      }
+    ],
+    "rows_before": [
+      {
+        "currentHash_sha16": "24046747320f3dd1",
+        "enabled": true,
+        "eventName": "preToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash_sha16": "4f84130de9017dc6",
+        "enabled": true,
+        "eventName": "postToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash_sha16": "19cc7673424aeb24",
+        "enabled": true,
+        "eventName": "sessionStart",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash_sha16": "e9ead1cde47e72e3",
+        "enabled": true,
+        "eventName": "userPromptSubmit",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash_sha16": "da104071f1bdaece",
+        "enabled": true,
+        "eventName": "stop",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+        "trustStatus": "untrusted"
+      }
+    ]
+  },
+  "journal": [
+    {
+      "appended": "projects.<gate project>.trust_level",
+      "before_mode": "0o600",
+      "before_mtime": 1794866952.430373,
+      "before_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+      "before_size": 28569,
+      "event": "begin",
+      "gate_written_sha256": "4b00e32468921bf9daf349498c219a1868f019b6d9fbe8d245343bea3a6a9d8c",
+      "gate_written_size": 28745,
+      "t": "18:07:34",
+      "top_level_keys": [
+        "approval_policy",
+        "approvals_reviewer",
+        "desktop",
+        "features",
+        "hooks",
+        "marketplaces",
+        "mcp_servers",
+        "model",
+        "model_providers",
+        "model_reasoning_effort",
+        "notify",
+        "plugins",
+        "project_doc_fallback_filenames",
+        "projects",
+        "sandbox_mode",
+        "service_tier",
+        "shell_environment_policy",
+        "tui"
+      ]
+    },
+    {
+      "appended": 5,
+      "event": "hooks",
+      "gate_written_sha256": "2cbb8132e927adb5ee62818de4ca36b89fc4bd62d2658531cf57be5e3972cc2b",
+      "rows_after": [
+        "trusted",
+        "trusted",
+        "trusted",
+        "trusted",
+        "trusted"
+      ],
+      "rows_before": [
+        [
+          "untrusted",
+          "preToolUse"
+        ],
+        [
+          "untrusted",
+          "postToolUse"
+        ],
+        [
+          "untrusted",
+          "sessionStart"
+        ],
+        [
+          "untrusted",
+          "userPromptSubmit"
+        ],
+        [
+          "untrusted",
+          "stop"
+        ]
+      ],
+      "t": "18:07:36"
+    },
+    {
+      "backup_deleted": true,
+      "cmp_identical": true,
+      "event": "end",
+      "mode": "0o600",
+      "mtime": 1794866952.430373,
+      "restored_sha256": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+      "size": 28569,
+      "t": "18:08:56"
+    }
+  ]
+}

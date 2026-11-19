@@ -43,7 +43,9 @@ def _write_service(project_dir: Path, value: dict[str, Any]) -> None:
     path = _record_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(value, indent=2, sort_keys=True) + "\n")
     os.chmod(temporary, 0o600)
     temporary.replace(path)
 
@@ -123,6 +125,22 @@ def _config_digest(config_content: str | None) -> str | None:
     if config_content is None:
         return None
     return hashlib.sha256(config_content.encode("utf-8")).hexdigest()
+
+
+def _agent_steps(config_content: str | None) -> dict[str, int]:
+    try:
+        config = json.loads(config_content or "{}")
+    except json.JSONDecodeError:
+        return {}
+    agents = config.get("agents") if isinstance(config, dict) else None
+    if not isinstance(agents, dict):
+        return {}
+    steps = {}
+    for name, value in agents.items():
+        cap = value.get("steps") if isinstance(value, dict) else None
+        if isinstance(cap, int) and not isinstance(cap, bool) and cap > 0:
+            steps[str(name)] = cap
+    return steps
 
 
 def merge_agent_steps(config_content: str | None, steps: dict[str, int]) -> str:
@@ -237,9 +255,13 @@ def ensure_service(
     port = _choose_port()
     log_path = _log_path(project)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.close(log_descriptor)
+    os.chmod(log_path, 0o600)
     environment = dict(os.environ)
     environment.update(
         {
+            "MAGNOLIA_DOORBELL": "0",
             "OPENCODE_DB": db_path,
             "OPENCODE_SERVER_PASSWORD": password,
             "OPENCODE_SERVER_USERNAME": "opencode",
@@ -260,12 +282,15 @@ def ensure_service(
             ],
             cwd=str(project),
             env=environment,
+            stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
             start_new_session=True,
         )
+    os.chmod(log_path, 0o600)
     record = {
         "project": project.name,
+        "project_path": str(project),
         "port": port,
         "db": db_path,
         "pid": process.pid,
@@ -276,6 +301,7 @@ def ensure_service(
     }
     if digest is not None:
         record["config_sha256"] = digest
+        record["agent_steps"] = _agent_steps(config_content)
     _write_service(project, record)
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:

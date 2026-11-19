@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:mcp__probe__shell hook error: mcp tool probe.shell not on the role allowlist",
+        "is_error": true,
+        "tool_use_id": "toolu_01Dxdtbww9t7RBgSqgyk4pwC",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:07.179Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01Dxdtbww9t7RBgSqgyk4pwC",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:mcp__probe__shell hook error: mcp tool probe.shell not on the role allowlist",
+  "type": "user",
+  "uuid": "e8f17f00-a9e5-42a7-bf7c-ad1951fd8766"
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "decision": "continue",
+    "hook": "pre_agent_turn",
+    "kind": "hook",
+    "seq": 104
+  },
+  {
+    "kind": "llm_call",
+    "model_tool_calls": [],
+    "seq": 110,
+    "tool_catalog": [
+      "todo",
+      "unified_harness_scratchpad",
+      "search_tool_functions",
+      "run_typescript",
+      "read_file",
+      "write_file",
+      "edit",
+      "bash",
+      "skill"
+    ],
+    "tool_catalog_keys": [
+      "revision",
+      "tools",
+      "type"
+    ]
+  },
+  {
+    "decision": "accept",
+    "hook": "post_agent_turn",
+    "kind": "hook",
+    "seq": 114
+  }
+]

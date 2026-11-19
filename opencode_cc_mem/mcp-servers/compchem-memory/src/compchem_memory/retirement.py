@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from compchem_memory.reflex_common import parse_frontmatter_file
+from compchem_memory.writer_lease import leased_store_writer
 
 RETIRED_DIR = "retired"
 MIN_OPPORTUNITIES_DEFAULT = 10
@@ -161,6 +162,7 @@ def retirement_candidates(store: Path) -> list[dict]:
     return out
 
 
+@leased_store_writer
 def retire_eligible(project_dir: str) -> dict:
     """Move retirement candidates out of staging under the velocity cap
     (oldest first), writing one receipt row per retired entry. The first time a

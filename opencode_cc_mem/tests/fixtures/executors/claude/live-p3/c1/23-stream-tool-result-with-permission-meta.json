@@ -1,0 +1,42 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "{\"result\":\"top\"}",
+        "tool_use_id": "toolu_01MKJ8eCTKitsLDAjRNCTnBj",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:27:33.613Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01MKJ8eCTKitsLDAjRNCTnBj",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use_result": {
+    "_meta": {
+      "fastmcp": {
+        "wrap_result": true
+      },
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "probe",
+        "version": "4.2.0"
+      }
+    },
+    "content": "{\"result\":\"top\"}",
+    "structuredContent": {
+      "result": "top"
+    }
+  },
+  "type": "user",
+  "uuid": "53802a0b-67d4-4af5-9e1a-816ef430c587"
+}

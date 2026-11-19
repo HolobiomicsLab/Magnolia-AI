@@ -42,6 +42,7 @@ from typing import Any, Callable
 import yaml
 
 from .atomic_io import atomic_write_text
+from .writer_lease import leased_store_writer, project_writer_lease
 from .reflex_common import parse_frontmatter_file, pending_indices
 
 VERDICTS = ("confirmed", "stale", "wrong", "unverifiable")
@@ -371,7 +372,9 @@ def propose_dreaming(
         "rejected": [],
         "dismissed": [],
     }
-    atomic_write_text(reflex / PROPOSAL_FILE, json.dumps(artifact, indent=2))
+    # The judge calls above run outside the lease; apply re-checks each hash.
+    with project_writer_lease(project_dir):
+        atomic_write_text(reflex / PROPOSAL_FILE, json.dumps(artifact, indent=2))
     return artifact
 
 
@@ -401,12 +404,13 @@ def _correction_section(proposal: dict[str, Any], checked_at: str) -> str:
     )
 
 
-def apply_dreaming(
+@leased_store_writer
+def _apply_dreaming_locked(
     project_dir: str | Path,
     artifact: dict[str, Any] | None = None,
     config: DreamingConfig | None = None,
-) -> dict[str, Any]:
-    """Deterministic apply of a proposal artifact.
+) -> tuple[dict[str, Any], int, bool]:
+    """Apply and re-check a proposal artifact under the short writer lease.
 
     Model proposes, code applies. Only three outcomes touch disk: a ``stale``
     frontmatter stamp, an append-only ``wrong`` correction, and the receipt
@@ -494,10 +498,6 @@ def apply_dreaming(
                 "evidence_count": len(proposal.get("evidence") or []),
             }) + "\n")
 
-    if mutations and config.commit:
-        from . import versioning
-        versioning.commit_all(store, f"dreaming: {mutations} correction(s)")
-
     verdict_counts = {v: 0 for v in VERDICTS}
     for proposal in artifact["proposals"]:
         verdict_counts[proposal["verdict"]] = verdict_counts.get(proposal["verdict"], 0) + 1
@@ -520,7 +520,7 @@ def apply_dreaming(
             not r["applied"] for r in results if r["verdict"] == "unverifiable"
         ),
     }
-    return {
+    summary = {
         "checked": len(artifact["proposals"]),
         "verdicts": verdict_counts,
         "applied": mutations,
@@ -532,6 +532,26 @@ def apply_dreaming(
         "log_path": str(log_path),
         "config": asdict(config),
     }
+    return summary, mutations, config.commit
+
+
+def apply_dreaming(
+    project_dir: str | Path,
+    artifact: dict[str, Any] | None = None,
+    config: DreamingConfig | None = None,
+) -> dict[str, Any]:
+    """Deterministically apply a proposal, then version it outside the lease."""
+    summary, mutations, should_commit = _apply_dreaming_locked(
+        project_dir, artifact=artifact, config=config,
+    )
+    if mutations and should_commit:
+        from . import versioning
+
+        versioning.commit_all(
+            Path(project_dir) / ".magnolia",
+            f"dreaming: {mutations} correction(s)",
+        )
+    return summary
 
 
 def run_dreaming(

@@ -1,0 +1,15 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "d4417cd05c05cfa2a69d15c957a660d4ae415b3c5f66198bdffcbd9f67497d49",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "session_end",
+    "parent_session_id": null,
+    "reason": "exit",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

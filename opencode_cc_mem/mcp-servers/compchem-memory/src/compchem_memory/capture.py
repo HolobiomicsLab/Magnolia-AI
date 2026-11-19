@@ -39,6 +39,18 @@ V2_RESULT_CAP = 64_000
 _session_managers: dict[str, SessionManager] = {}
 
 
+def _capture_origin(source: str, tool: str) -> dict[str, str]:
+    """Build a tool origin from capture facts and bound launch context."""
+    origin = {"tool": tool, "mcp_server": source}
+    client = os.environ.get("MAGNOLIA_CLIENT")
+    role = os.environ.get("MAGNOLIA_ROLE")
+    if client:
+        origin["client"] = client
+    if role:
+        origin["role"] = role
+    return origin
+
+
 def _resolve_project_dir(project_dir: str | None) -> str:
     """Resolve the project dir the same way the tools do: explicit kwarg, else
     the server's pinned MAGNOLIA_PROJECT_DIR, else cwd.
@@ -338,12 +350,36 @@ def captured(source: str):
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             project_dir = _resolve_project_dir(kwargs.get("project_dir"))
+            from compchem_memory.tool_catalog import memory_tool_requires_lease
+            from compchem_memory.writer_lease import (
+                has_project_writer_lease,
+                project_writer_lease,
+            )
+
+            managers: list[Any] = []
+            try:
+                if memory_tool_requires_lease(tool_name) and not has_project_writer_lease(
+                    project_dir
+                ):
+                    with project_writer_lease(project_dir):
+                        return _captured_call(managers, project_dir, args, kwargs)
+                return _captured_call(managers, project_dir, args, kwargs)
+            finally:
+                # After this call's own lease is released (success or error).
+                _maybe_inline_extract(managers[0] if managers else None, project_dir)
+
+        def _captured_call(
+            managers: list[Any], project_dir: str, args: tuple, kwargs: dict
+        ) -> Any:
+            """Run and log the tool; the caller runs inline extraction afterwards."""
             mgr = None
             try:
                 mgr = get_session_manager(project_dir)
+                managers.append(mgr)
                 mgr.record("tool_call", {
                     "source": source,
                     "tool": tool_name,
+                    "origin": _capture_origin(source, tool_name),
                     **_call_fields(full_fidelity, args, kwargs),
                 })
             except Exception:
@@ -359,6 +395,7 @@ def captured(source: str):
                         mgr.record("tool_error", {
                             "source": source,
                             "tool": tool_name,
+                            "origin": _capture_origin(source, tool_name),
                             "duration_ms": duration_ms,
                             "capture_version": (
                                 CAPTURE_VERSION_FULL
@@ -370,7 +407,6 @@ def captured(source: str):
                         })
                 except Exception:
                     pass
-                _maybe_inline_extract(mgr, project_dir)
                 raise
 
             duration_ms = int((time.time() - t0) * 1000)
@@ -379,12 +415,12 @@ def captured(source: str):
                     mgr.record("tool_success", {
                         "source": source,
                         "tool": tool_name,
+                        "origin": _capture_origin(source, tool_name),
                         "duration_ms": duration_ms,
                         **_result_fields(full_fidelity, result),
                     })
             except Exception:
                 pass
-            _maybe_inline_extract(mgr, project_dir)
             return _attach_distill_notices(result, project_dir, tool_name)
 
         return wrapper
@@ -394,11 +430,31 @@ def captured(source: str):
 
 def _maybe_inline_extract(mgr, project_dir: str) -> None:
     """Inline trigger: if should_extract returns True, fire commit().
-    All exceptions swallowed — extraction failures must never block tools."""
+    All exceptions swallowed — extraction failures must never block tools.
+
+    Extraction can call an LLM, so it never runs under a project writer lease:
+    when the caller still holds one (a leased MCP dispatch), it runs on a
+    detached thread with a fresh context and leases only its own store writes."""
     if mgr is None:
         return
     if os.environ.get("MAGNOLIA_DISABLE_INLINE_EXTRACT"):
         return
+    from compchem_memory.writer_lease import holds_any_project_writer_lease
+
+    if holds_any_project_writer_lease():
+        import contextvars
+        import threading
+
+        threading.Thread(
+            target=contextvars.Context().run,
+            args=(_inline_extract, mgr, project_dir),
+            daemon=True,
+        ).start()
+        return
+    _inline_extract(mgr, project_dir)
+
+
+def _inline_extract(mgr, project_dir: str) -> None:
     try:
         from compchem_memory.extraction import AutomaticMemoryExtractor
         log_path = mgr.get_session_log_path()

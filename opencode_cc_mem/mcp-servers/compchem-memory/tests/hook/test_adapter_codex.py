@@ -12,6 +12,14 @@ from compchem_memory.hook.events import Block, HookResponse, normalise_output
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "hooks" / "codex"
+LIVE_PATCH_FIXTURES = (
+    Path(__file__).resolve().parents[4]
+    / "tests"
+    / "fixtures"
+    / "executors"
+    / "codex"
+    / "live-p3"
+)
 EVENTS = {
     "SessionStart": "session-start",
     "UserPromptSubmit": "prompt",
@@ -144,3 +152,135 @@ def test_notice_alone_is_not_reported_as_a_tool_note() -> None:
         "[Magnolia notice] Job done"
     )
     assert rendered.emitted == frozenset({"notice"})
+
+
+def test_live_apply_patch_fixtures_decode_the_command_shape() -> None:
+    paths = sorted(LIVE_PATCH_FIXTURES.glob("x[1-6]/*PreToolUse-apply_patch.json"))
+    assert len(paths) == 11
+    for path in paths:
+        raw = json.loads(path.read_text(encoding="utf-8"))["stdin"]
+        assert set(raw["tool_input"]) == {"command"}
+        event = ADAPTERS["codex"].parse(raw, "pre-tool")
+        assert event is not None and event.tool is not None
+        expected = [
+            line.strip().split(": ", 1)[1]
+            for line in raw["tool_input"]["command"].splitlines()
+            if line.strip().startswith((
+                "*** Add File: ",
+                "*** Update File: ",
+                "*** Delete File: ",
+                "*** Move to: ",
+            ))
+        ]
+        assert [target.path for target in event.tool.targets] == expected
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    (
+        (
+            "*** Begin Patch\n  *** Add File: work/add.txt\n+x\n*** End Patch",
+            ["work/add.txt"],
+        ),
+        (
+            "*** Begin Patch\n\t*** Update File: work/update.txt\n@@\n-a\n+b\n*** End Patch",
+            ["work/update.txt"],
+        ),
+        (
+            "*** Begin Patch\n  *** Delete File: work/delete.txt\n*** End Patch",
+            ["work/delete.txt"],
+        ),
+        (
+            "*** Begin Patch\n\t*** Update File: work/source.txt\n"
+            "  *** Move to: work/moved.txt\n@@\n-a\n+b\n*** End Patch",
+            ["work/source.txt", "work/moved.txt"],
+        ),
+    ),
+)
+def test_apply_patch_headers_match_codex_0154(command, expected) -> None:
+    event = ADAPTERS["codex"].parse({
+        "hook_event_name": "PreToolUse",
+        "session_id": "session",
+        "cwd": "/project",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": command},
+    }, "pre-tool")
+
+    assert event is not None and event.tool is not None
+    assert [target.path for target in event.tool.targets] == expected
+
+
+@pytest.mark.parametrize(
+    "separator",
+    tuple(
+        chr(codepoint)
+        for codepoint in (*range(0x20), *range(0x7F, 0xA0))
+        if codepoint not in {0x09, 0x0A}
+    ) + ("\u2028", "\u2029"),
+)
+def test_apply_patch_rejects_non_newline_separators_and_controls(separator) -> None:
+    command = (
+        "*** Begin Patch\n"
+        f"*** Add File: work/ok.txt{separator}../../../escaped.txt\n"
+        "+escaped\n"
+        "*** End Patch\n"
+    )
+
+    event = ADAPTERS["codex"].parse({
+        "hook_event_name": "PreToolUse",
+        "session_id": "session",
+        "cwd": "/project",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": command},
+    }, "pre-tool")
+
+    assert event is not None and event.tool is not None
+    assert event.tool.policy_action is None
+    assert event.tool.targets == ()
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        " work/ok.txt",
+        "work/ok.txt ",
+        "\twork/ok.txt",
+        "work/ok.txt\t",
+        "\u00a0work/ok.txt",
+        "work/ok.txt\u3000",
+    ),
+)
+def test_apply_patch_rejects_header_path_whitespace(path) -> None:
+    command = f"*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch\n"
+
+    event = ADAPTERS["codex"].parse({
+        "hook_event_name": "PreToolUse",
+        "session_id": "session",
+        "cwd": "/project",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": command},
+    }, "pre-tool")
+
+    assert event is not None and event.tool is not None
+    assert event.tool.policy_action is None
+    assert event.tool.targets == ()
+
+
+def test_apply_patch_accepts_crlf_and_preserves_tabs_in_body() -> None:
+    command = (
+        "*** Begin Patch\r\n"
+        "*** Add File: work/ok.txt\r\n"
+        "+\tcontent\r\n"
+        "*** End Patch\r\n"
+    )
+
+    event = ADAPTERS["codex"].parse({
+        "hook_event_name": "PreToolUse",
+        "session_id": "session",
+        "cwd": "/project",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": command},
+    }, "pre-tool")
+
+    assert event is not None and event.tool is not None
+    assert [target.path for target in event.tool.targets] == ["work/ok.txt"]

@@ -32,23 +32,33 @@
  * DUAL-SHAPE (2026-10-07, probe-verified on 1.18.34 + 2.0.6): plain-object
  * default export; shared core in makeCore(), v1 server() returns the original
  * hooks, v2 setup(ctx) registers ctx.tool.hook("execute.before"/"execute.after")
- * + event-stream session.idle probe (probeApplication reads messages via
- * ctx.session.context). v1.18.34 also calls setup() with a limited ctx —
- * guarded. OPEN v2 QUESTION (panel M2): under Code Mode the hook may fire
+ * + a synchronous event-stream handoff to the detached Python probe worker.
+ * v1.18.34 also calls setup() with a limited ctx — guarded. OPEN v2 QUESTION
+ * (panel M2): under Code Mode the hook may fire
  * once for the outer `execute` tool with generated code as input — the
  * ACTION_TOOLS match may never fire; the v2 smoke decides (fallback:
  * codemode:false on the compchem servers, or parse the code text).
  *
  * OpenCode 2.3.0 (probed 2026-11-14): loads; in a real turn execute.before and
  * execute.after fired and wrote action-retrieval rows (callID, outcome ok).
+ * The retired in-process turn probe used shape-tolerant message accessors for
+ * v1 client.session.messages and v2 ctx.session.context; the detached Python
+ * worker now normalizes that same {info:{role}, parts:[...]} family.
  *
  * Toggle: MAGNOLIA_ACTION_RETRIEVE=0|off|false|no disables it.
  * Log: <project>/.magnolia/action-retrieval.jsonl (one line per injection).
  */
 import { execFile } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
-import { join, dirname, resolve, basename } from "node:path"
+import { join, dirname, basename } from "node:path"
 import { promisify } from "node:util"
+import { eventTurnDetails, handoffTurnEnd } from "../lib/turn-end-worker.ts"
+import {
+  isolatedModuleArgs, PACKAGE_ROOT, resolveMagnoliaPython,
+} from "../lib/magnolia-python.ts"
+
+// resolveMagnoliaPython self-locates the repository venv; no machine-specific
+// absolute path is stored here, and MAGNOLIA_PYTHON remains the override.
 
 const execFileP = promisify(execFile)
 
@@ -56,11 +66,6 @@ const DISABLED = ["0", "off", "false", "no"].includes(
   String(process.env.MAGNOLIA_ACTION_RETRIEVE ?? "").toLowerCase(),
 )
 
-// Self-locate the repo venv (<repo>/.opencode/plugins/ → repo root → .venv);
-// no machine-specific absolute paths in the repo. MAGNOLIA_PYTHON overrides.
-const REPO_ROOT = resolve(import.meta.dir, "../../..")
-const VENV_PY = join(REPO_ROOT, ".venv", "bin", "python3")
-const PYTHON = process.env.MAGNOLIA_PYTHON || (existsSync(VENV_PY) ? VENV_PY : "python3")
 const QUERY_TIMEOUT_MS = 2500
 const CACHE_TTL_MS = 120_000
 const MAX_HITS = 4
@@ -116,29 +121,8 @@ function argsToQuery(args: any): string {
 // reply counts as "applied". Rows are appended to the same ledger with
 // event="application", joined later by (sessionID, callID).
 
-const STOP = new Set(["about", "there", "these", "those", "which", "while",
-  "their", "would", "could", "should", "where", "after", "before", "under",
-  " learning", "memory", "project", "entry", "staging", "magnolia"])
-
-function distinctiveTokens(titles: string[], paths: string[]): string[] {
-  const raw = (titles.join(" ") + " " + paths.join(" "))
-    .toLowerCase()
-    .replace(/[^a-z]+/g, " ")
-  const out = new Set<string>()
-  for (const w of raw.split(/\s+/)) {
-    if (w.length >= 5 && !STOP.has(w)) out.add(w)
-  }
-  return [...out]
-}
-
-// Shape-tolerant message accessors (v1 client.session.messages and v2
-// ctx.session.context return the {info:{role}, parts:[...]} family).
-const roleOf = (m: any): string => String(m?.info?.role ?? m?.role ?? "").toLowerCase()
-const partsOf = (m: any): any[] => m?.parts ?? []
-
 /**
  * Shared core: retrieval pipeline + C1 noise control + logging + P3 probe.
- * readMessages(sessionID) abstracts the version-specific message API.
  */
 function isProjectRoot(directory: string): boolean {
   return (
@@ -158,7 +142,7 @@ function workspaceRoot(directory: string): string {
   return directory
 }
 
-function makeCore(directory: string, readMessages: (sessionID: string) => Promise<any[]>) {
+function makeCore(directory: string) {
   const rootMode = isProjectRoot(directory)
   const root = workspaceRoot(directory)
   let projectDir = ""
@@ -184,7 +168,6 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
     ...process.env,
     MAGNOLIA_ROOT: root,
     MAGNOLIA_PROJECT_DIR: projectAbs,
-    PYTHONPATH: join(root, "mcp-servers/compchem-memory/src"),
   }
 
   const logFile = rootMode
@@ -240,9 +223,9 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
     const t0 = Date.now()
     try {
       const { stdout } = await execFileP(
-        PYTHON,
-        ["-m", "compchem_memory.quick_search", query, "--k", String(MAX_HITS)],
-        { cwd: directory, env: childEnv, timeout: QUERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+        resolveMagnoliaPython(),
+        isolatedModuleArgs("compchem_memory.quick_search", [query, "--k", String(MAX_HITS)]),
+        { cwd: PACKAGE_ROOT, env: childEnv, timeout: QUERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
       )
       const lines = stdout.split("\n").filter((l) => l.startsWith("{"))
       if (hit) cache.delete(query) // stale entry replace below
@@ -257,39 +240,10 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
     }
   }
 
-  async function probeApplication(sessionID: string): Promise<void> {
-    const items = injectedTurns.get(sessionID)
-    if (!items || items.length === 0) return
-    injectedTurns.delete(sessionID)
-    try {
-      const msgs = await readMessages(sessionID)
-      if (!Array.isArray(msgs) || msgs.length === 0) return
-      let lastUser = -1
-      msgs.forEach((m, i) => { if (roleOf(m) === "user") lastUser = i })
-      const replyParts: string[] = []
-      for (const m of msgs.slice(lastUser + 1)) {
-        if (roleOf(m) !== "assistant") continue
-        for (const p of partsOf(m)) {
-          if (p?.type === "text" && !p?.synthetic && p?.text) replyParts.push(p.text)
-        }
-      }
-      const reply = replyParts.join("\n").toLowerCase()
-      for (const item of items) {
-        const tokens = distinctiveTokens(item.titles, item.paths)
-        const matched = tokens.filter((t) => reply.includes(t))
-        const applied = tokens.length > 0 && matched.length >= Math.min(2, tokens.length)
-        log({
-          event: "application",
-          sessionID,
-          tool: item.tool,
-          callID: item.callID,
-          applied,
-          matched,
-          distinct: tokens.length,
-        })
-      }
-    } catch { /* never throw into opencode */ }
-
+  function takeProbeItems(sessionID: string) {
+    const items = injectedTurns.get(sessionID) ?? []
+    if (items.length) injectedTurns.delete(sessionID)
+    return items
   }
 
   /** Kick off retrieval for an instrumented call (tool.execute.before). */
@@ -422,7 +376,7 @@ function makeCore(directory: string, readMessages: (sessionID: string) => Promis
     injectedTurns.set(sessionID, turnItems)
   }
 
-  return { onBefore, onAfter, probeApplication }
+  return { onBefore, onAfter, takeProbeItems }
 }
 
 export default {
@@ -433,13 +387,7 @@ export default {
     if (DISABLED) return
     if (!ctx?.tool?.hook) return // v1.18.34 also calls setup() with a limited ctx — v1 runs server()
     const directory = ctx.location?.directory ?? process.cwd()
-    const readMessages = async (sessionID: string): Promise<any[]> => {
-      try {
-        const msgs = await ctx.session.context({ sessionID })
-        return (msgs as any[]) ?? []
-      } catch { return [] }
-    }
-    const core = makeCore(directory, readMessages)
+    const core = makeCore(directory)
 
     await ctx.tool.hook("execute.before", async (event: any) => {
       try {
@@ -482,7 +430,14 @@ export default {
           const turnEnd =
             ev?.type === "session.idle" || ev?.type === "session.execution.succeeded"
           const sid = ev?.durable?.aggregateID ?? ev?.properties?.sessionID ?? ev?.sessionID
-          if (turnEnd && sid) await core.probeApplication(String(sid))
+          if (turnEnd && sid) {
+            const items = core.takeProbeItems(String(sid))
+            if (items.length) {
+              handoffTurnEnd(directory, String(sid), "probe", {
+                items, ...eventTurnDetails(ev),
+              })
+            }
+          }
         }
       } catch { /* aborted or stream error */ }
     })()
@@ -490,20 +445,23 @@ export default {
   },
 
   /** opencode v1: original hooks. */
-  async server({ client, directory }: any) {
+  async server({ directory }: any) {
     if (DISABLED) return {}
-    const readMessages = async (sessionID: string): Promise<any[]> => {
-      const resp: any = await client.session.messages({ path: { id: sessionID } })
-      return resp?.data ?? resp ?? []
-    }
-    const core = makeCore(directory, readMessages)
+    const core = makeCore(directory)
 
     return {
-      event: async (input: any) => {
+      event: (input: any) => {
         try {
           if (input?.event?.type === "session.idle") {
             const sid = input?.event?.properties?.sessionID
-            if (sid) await core.probeApplication(String(sid))
+            if (sid) {
+              const items = core.takeProbeItems(String(sid))
+              if (items.length) {
+                handoffTurnEnd(directory, String(sid), "probe", {
+                  items, ...eventTurnDetails(input?.event),
+                })
+              }
+            }
           }
         } catch { /* never throw into opencode */ }
       },

@@ -126,9 +126,21 @@ class AttemptLease:
             os.fsync(handle.fileno())
         return cls(run_dir, stage, attempt, path, payload)
 
-    def update_pid(self, pid: int, pgid: int, session_id: str | None = None) -> None:
+    def update_pid(
+        self,
+        pid: int,
+        pgid: int,
+        session_id: str | None = None,
+        process_start_token: str | None = None,
+    ) -> None:
         self.data["worker_pid"] = pid
         self.data["worker_pgid"] = pgid
+        if process_start_token is None:
+            from .governor import _process_start_token
+
+            process_start_token = _process_start_token(pid)
+        if process_start_token:
+            self.data["worker_start_token"] = process_start_token
         if session_id:
             self.data["opencode_session_id"] = session_id
         self.heartbeat()

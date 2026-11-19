@@ -1,0 +1,22 @@
+{
+  "createdAt": 1794811013809,
+  "detail": {
+    "content": "Denied tool 'bash'",
+    "hookName": "probe-pre_tool",
+    "kind": "hook_completed",
+    "scope": "pre_tool",
+    "status": "error",
+    "toolCallId": "QdNip5T32",
+    "toolName": null
+  },
+  "generationStatus": "completed",
+  "id": "hook-notice-dc278d1283a04e27",
+  "inputEntryId": null,
+  "level": "error",
+  "message": "Denied tool 'bash'",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "turnId": null,
+  "type": "notice",
+  "updatedAt": 1794811013809
+}

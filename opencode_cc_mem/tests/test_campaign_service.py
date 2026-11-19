@@ -1,6 +1,9 @@
 import json
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -12,6 +15,34 @@ from campaign_runner.service import (  # noqa: E402
     service_status,
     stop_service,
 )
+
+
+def test_service_state_and_log_are_private_under_permissive_umask(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    log_path = project / ".magnolia" / "campaign-service.log"
+    process = type("Process", (), {"pid": 4321, "poll": lambda self: None})()
+
+    def fake_popen(*args, **kwargs):
+        assert (log_path.stat().st_mode & 0o777) == 0o600
+        return process
+
+    monkeypatch.setattr("campaign_runner.service.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("campaign_runner.service._choose_port", lambda: 4999)
+    monkeypatch.setattr("campaign_runner.service._healthy", lambda port, password: True)
+    monkeypatch.setattr("campaign_runner.service.redact_file", lambda path: None)
+    previous_umask = os.umask(0)
+    try:
+        ensure_service(project, "opencode", str(tmp_path / "service.db"))
+    finally:
+        os.umask(previous_umask)
+
+    record_path = project / ".magnolia" / "campaign-service.json"
+    # The project's .magnolia/ also holds shared project memory: its mode is left alone;
+    # the service record and log themselves are private.
+    assert (record_path.stat().st_mode & 0o777) == 0o600
+    assert (log_path.stat().st_mode & 0o777) == 0o600
 
 
 def test_missing_service_is_not_running(tmp_path):
@@ -71,6 +102,36 @@ def test_service_status_hides_password_and_dead_pid(tmp_path):
     status = service_status(tmp_path)
     assert status["running"] is False
     assert status["password"] == "<hidden>"
+
+
+def test_managed_cap_proof_rejects_stale_service_record(tmp_path, monkeypatch):
+    from campaign_runner.executors.contracts import ExecContext
+    from campaign_runner.executors.registry import ExecutorRefused, _service_cap_checker
+    from campaign_runner.routing import ResolvedRoute
+
+    project = tmp_path / "project"
+    path = project / ".magnolia" / "campaign-service.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "project": project.name,
+        "project_path": str(project.resolve()),
+        "port": 4120,
+        "pid": 99999999,
+        "password": "old",
+        "agent_steps": {"campaign-worker": 5},
+        "config_sha256": "0" * 64,
+    }))
+    context = ExecContext(
+        route=ResolvedRoute("opencode", "m", "f", "k", "worker", "test"),
+        role="worker",
+        project_dir=project,
+        opencode_server="http://127.0.0.1:4120",
+        governor_cap=5,
+        agent="campaign-worker",
+    )
+
+    with pytest.raises(ExecutorRefused, match="live|authenticated"):
+        _service_cap_checker(context, "campaign-worker")
 
 
 # ---- behaviour observed on OpenCode 2.3.0 ------------------------------------
@@ -179,9 +240,11 @@ def test_service_starts_with_config_content_and_waits_for_agents(tmp_path, monke
     def fake_popen(argv, **kwargs):
         seen["argv"] = argv
         seen["env"] = kwargs["env"]
+        seen["stdin"] = kwargs.get("stdin")
         return _FakeProcess()
 
     monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
     monkeypatch.setattr(service_module, "_healthy", lambda port, password: True)
     monkeypatch.setattr(
         service_module, "_wait_for_agents",
@@ -193,6 +256,7 @@ def test_service_starts_with_config_content_and_waits_for_agents(tmp_path, monke
                             config_content=config,
                             required_agents=["campaign-worker"])
     assert seen["env"]["OPENCODE_CONFIG_CONTENT"] == config
+    assert seen["stdin"] is service_module.subprocess.DEVNULL
     assert seen["agents"] == ["campaign-worker"]
     assert record["running"] is True
     assert "OPENCODE_CONFIG_CONTENT" not in json.dumps(read_service(project))
@@ -256,3 +320,67 @@ def test_merge_agent_steps_keeps_other_keys():
         "agents": {"a": {"steps": 2}}}
     assert json.loads(service_module.merge_agent_steps("not json", {"a": 2})) == {
         "agents": {"a": {"steps": 2}}}
+
+
+def test_service_required_agents_and_startup_steps(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from campaign_runner.cli import _service_settings
+
+    project = tmp_path / "project"
+    project.mkdir()
+    seen = {}
+
+    def fake_popen(argv, **kwargs):
+        seen["argv"] = argv
+        seen["env"] = kwargs["env"]
+        return _FakeProcess()
+
+    def fake_wait_for_agents(port, password, names, timeout_seconds, interval=0.5):
+        seen["required_agents"] = list(names)
+        seen["timeout_seconds"] = timeout_seconds
+        return True
+
+    protocol = SimpleNamespace(
+        worker=SimpleNamespace(max_steps=30),
+        reviewer=SimpleNamespace(enabled=True, max_steps=8),
+    )
+    monkeypatch.setattr(service_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setattr(service_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(service_module, "_choose_port", lambda: 4137)
+    monkeypatch.setattr(service_module, "_healthy", lambda *args: True)
+    monkeypatch.setattr(service_module.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(
+        service_module,
+        "_wait_for_agents",
+        fake_wait_for_agents,
+    )
+    monkeypatch.setattr(service_module, "redact_file", lambda path: None)
+    config, required_agents = _service_settings(protocol)
+    ensure_service(
+        project,
+        str(tmp_path / "opencode"),
+        str(tmp_path / "opencode.db"),
+        config_content=config,
+        required_agents=required_agents,
+    )
+    snapshot = json.loads(
+        (ROOT / "tests" / "snapshots" / "opencode" / "service.json").read_text()
+    )
+    observed = {
+        "argv": [item.replace(str(tmp_path), "@@TMP@@") for item in seen["argv"]],
+        "environment_keys": sorted(seen["env"]),
+        "required_agents": seen["required_agents"],
+        "startup_steps": {
+            name: value["steps"]
+            for name, value in json.loads(config)["agents"].items()
+        },
+        "timeout_seconds": seen["timeout_seconds"],
+        "agent_file_bytes": {
+            name: (ROOT / ".opencode" / "agents" / name).read_bytes().decode("utf-8")
+            for name in ("campaign-worker.md", "campaign-reviewer.md")
+        },
+    }
+    assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
+    observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
+    assert observed == snapshot

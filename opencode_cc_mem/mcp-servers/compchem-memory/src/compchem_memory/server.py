@@ -5,16 +5,30 @@ with elevation to durable doctrine via the git-tracked rules/ directory (the
 former .magnolia/skills skill tier was retired; protocols live in
 .opencode/skills/, loaded on demand by the agent)."""
 
-import faulthandler
 import json
 import os
 import sys
 import threading
 import time
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def _project_bound_role_mode() -> bool:
+    """Return whether this server is restricted to one campaign role."""
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1":
+        return True
+    return "--tool-allowlist-json" in sys.argv[1:]
+
+
+def _default_opencode_db_path() -> Path:
+    """Resolve OpenCode's default database under the XDG data directory."""
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if data_home:
+        return Path(data_home).expanduser() / "opencode" / "opencode.db"
+    return Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+
 
 def _newest_session_main_model(db_path: str | None = None) -> dict | None:
     """Read-only probe of the shared opencode DB: the newest session's main
@@ -26,10 +40,13 @@ def _newest_session_main_model(db_path: str | None = None) -> dict | None:
     try:
         import sqlite3
         from compchem_memory import opencode_cli
+        if not db_path:
+            db_path = os.environ.get("OPENCODE_DB")
+        if not db_path and _project_bound_role_mode():
+            return None
         if not db_path and opencode_cli.is_v2():
             db_path = opencode_cli.v2_db_path()
-        db = Path(db_path) if db_path else (
-            Path.home() / ".local" / "share" / "opencode" / "opencode.db")
+        db = Path(db_path) if db_path else _default_opencode_db_path()
         if not db.exists():
             return None
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -80,7 +97,7 @@ from compchem_memory.scanning import (
     scan_memory_headers,
     format_manifest,
 )
-from compchem_memory.extraction import AutomaticMemoryExtractor
+from compchem_memory.extraction import AutomaticMemoryExtractor, ManualRetryRefused
 from compchem_memory.compaction import (
     maybe_compact_session,
     compact_session_to_notes,
@@ -98,10 +115,42 @@ from compchem_memory.project_guard import check_project
 from compchem_memory.startup_scan import scan_and_distill, _opencode_available
 from compchem_memory.llm import is_llm_available
 from compchem_memory.opencode_ingest import distill_session_transcript
+from compchem_memory.server_start import install_stdio_guards, write_crash_log
 
 RULES_DIR = resolved_rules_dir()
 PROJECT_DIR = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 GLOBAL_BASE = Path(os.path.expanduser("~/.magnolia"))
+
+if __name__ == "__main__":
+    install_stdio_guards(PROJECT_DIR)
+
+
+class ProjectBindingError(ValueError):
+    """Raised when an HTTP request targets a project other than its service pin."""
+
+
+def _has_dialogue_retry(store: Path, session_key: str) -> bool:
+    """Return whether one dialogue session has a persisted retry series."""
+    marker = store / "opencode-distilled" / f"{session_key}.json"
+    try:
+        progress = json.loads(marker.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(progress, dict) and isinstance(progress.get("retry"), dict)
+
+
+def _enforce_http_project_binding(project_dir: str | None) -> str:
+    """Resolve one target; bound tool arguments collapse to the service pin."""
+    requested = project_context.effective_project_dir(project_dir)
+    if os.environ.get("MAGNOLIA_PROJECT_BOUND") != "1":
+        return requested
+    bound = Path(PROJECT_DIR).expanduser().resolve()
+    target = Path(requested).expanduser().resolve()
+    if target != bound:
+        raise ProjectBindingError(
+            f"memory HTTP service is bound to a different project: {bound}"
+        )
+    return str(target)
 
 
 def _claim_once(name: str) -> bool:
@@ -140,30 +189,6 @@ def _build_boot_steps(project_dir):
     ]
 
 
-class _StdoutToStderr:
-    """Keep the real stdout buffer for MCP JSON-RPC; send text prints to stderr.
-
-    `mcp.server.stdio` writes frames through `sys.stdout.buffer`, while every
-    `print()` in the server path writes through `sys.stdout.write`. Sharing one
-    stream is what let a boot-handover diagnostic line corrupt a tool response
-    (2026-11-16). Exposing `.buffer` preserves the transport; routing `.write`
-    to stderr keeps diagnostics out of the protocol.
-    """
-
-    def __init__(self, real: Any):
-        self._real = real
-        self.buffer = getattr(real, "buffer", None)
-
-    def write(self, data: str) -> int:
-        return sys.stderr.write(data)
-
-    def flush(self) -> None:
-        sys.stderr.flush()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._real, name)
-
-
 def _crash_log(where: str, exc: BaseException | None = None) -> None:
     """Append a traceback to .magnolia/crash.log. Never raises.
 
@@ -171,16 +196,7 @@ def _crash_log(where: str, exc: BaseException | None = None) -> None:
     (or a native crash captured by faulthandler) leaves only a closed MCP
     connection and a missing boot-timing row. The log is intentionally separate
     from boot-timing so it survives a hard process death."""
-    try:
-        p = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as f:
-            f.write(f"--- {datetime.now(timezone.utc).isoformat()} {where} ---\n")
-            if exc is not None:
-                traceback.print_exception(type(exc), exc, exc.__traceback__, file=f)
-            f.flush()
-    except Exception:
-        pass
+    write_crash_log(PROJECT_DIR, where, exc)
 
 
 def _run_startup_scan_background():
@@ -221,6 +237,8 @@ def _run_startup_scan_background():
         print(f"[boot-timing] {step}: {int(ms)} ms{suffix}", file=sys.stderr)
 
     def _worker():
+        # No project writer lease here: the steps call LLMs and subprocesses,
+        # and each of their store writes leases its own short critical section.
         _log_boot_step("server_import", (time.monotonic() - _BOOT_T0) * 1000)
         t_all = time.monotonic()
         for step_name, step_fn in _build_boot_steps(PROJECT_DIR):
@@ -244,6 +262,8 @@ def _run_startup_scan_background():
 # for every shell call. Writing it at the end of the 70-170 s boot pipeline let
 # early calls inherit the previous session's id (2026-11-10 "Nov 5" ghost file).
 if _claim_once("session_identity"):
+    # Never the project writer lease at import: server start must not wait on
+    # a long holder, and an unwritable project still boots read-only.
     _BOOT_SESSION_ID = init_session_identity(PROJECT_DIR)
     if _BOOT_SESSION_ID is None:
         print("[session_id] error: could not initialize session identity", file=sys.stderr)
@@ -297,6 +317,8 @@ def _distill_timer_tick(project_dir: str) -> None:
     memory_distill_session are deliberately ungated. Never raises — a timer
     failure must not crash the server."""
     try:
+        # No project writer lease around the tick: the canary and the sweep
+        # call LLMs; each store write in them leases its own critical section.
         # Smoke detector (Phase 0): cadence-gated, off the boot path. Runs the
         # distiller canary + boot-duplication + dead-man checks; on drift the
         # canary freeze flag halts auto-promotion. MAGNOLIA_SMOKE_INTERVAL_H
@@ -363,7 +385,8 @@ from . import project_context
 
 
 def _resolve_project_store(project_dir: str | None = None) -> str:
-    pd = resolve_project_dir(project_dir, project_context.effective_project_dir())
+    requested = _enforce_http_project_binding(project_dir)
+    pd = resolve_project_dir(requested, project_context.effective_project_dir())
     ensure_project_store(pd)
     return pd
 
@@ -410,8 +433,13 @@ def _write_guard(project_dir: str | None, allow_cross_project: bool) -> str | No
     caller's assertion that project_dir is intentional — needed when opencode
     v2's shared service has pinned this server to another project (2026-11-10).
     """
-    pinned = PROJECT_DIR if project_dir else project_context.effective_project_dir()
-    guard = check_project(project_dir, pinned_dir=pinned, is_write=True)
+    requested = _enforce_http_project_binding(project_dir)
+    pinned = (
+        requested
+        if project_context._is_project_bound()
+        else PROJECT_DIR if project_dir else project_context.effective_project_dir()
+    )
+    guard = check_project(requested, pinned_dir=pinned, is_write=True)
     if guard.kind != "cross_write":
         return None
     if not allow_cross_project:
@@ -557,11 +585,19 @@ def memory_record_learning(
     # Resolve session_id for cross-session tracking
     sess_m = _get_session_mgr(pd)
     session_id = sess_m._current_session_id  # may be None on first call
+    origin = {"session_id": session_id} if session_id else {}
+    if os.environ.get("MAGNOLIA_CLIENT"):
+        origin["client"] = os.environ["MAGNOLIA_CLIENT"]
+    if os.environ.get("MAGNOLIA_ROLE"):
+        origin["role"] = os.environ["MAGNOLIA_ROLE"]
+    origins = [origin] if origin else []
 
     # Check for similar existing staging entry to bump instead of duplicate
     similar = proj_m.find_similar_staging(pd, title, tags or [], entry_type=entry_type)
     if similar:
-        proj_m.bump_observation_count(pd, similar, session_id=session_id, content=content)
+        proj_m.bump_observation_count(
+            pd, similar, session_id=session_id, content=content, origins=origins,
+        )
         promoted = proj_m.auto_promote_staging(pd)
         return json.dumps({
             "status": "bumped",
@@ -580,6 +616,7 @@ def memory_record_learning(
         tools=tools,
         confidence=confidence,
         run_ids=run_ids,
+        origins=origins,
     )
 
     # Stamp the new entry with the current session_id
@@ -722,6 +759,7 @@ def memory_verify_claim(
 
     Call this when: grounding a quantitative claim before writing it to
     memory, or checking an entry/receipt against the run that produced it."""
+    _enforce_http_project_binding(project_dir)
     guard = check_project(project_dir, pinned_dir=PROJECT_DIR, is_write=False)
     if guard.kind == "cross_write":
         return _project_switch_blocked_payload(guard)
@@ -874,7 +912,28 @@ def memory_extract_from_session(
     if not extractor.should_extract(session_path):
         return json.dumps({"status": "threshold_not_met", "extracted": 0})
 
-    saved = extractor.commit(session_path, pd)
+    try:
+        saved = extractor.commit(session_path, pd, force_retry=True)
+    except ManualRetryRefused as exc:
+        return json.dumps({
+            "status": "skipped",
+            "reason": exc.reason,
+            "retry": False,
+            "extracted": 0,
+            "paths": [],
+            **(
+                {"next_retry_at": exc.next_retry_at}
+                if exc.next_retry_at else {}
+            ),
+        }, indent=2)
+    if saved is None:
+        return json.dumps({
+            "status": "skipped",
+            "reason": "concurrent write",
+            "retry": True,
+            "extracted": 0,
+            "paths": [],
+        }, indent=2)
     return json.dumps(
         {
             "status": "extracted",
@@ -1005,19 +1064,36 @@ def memory_distill_session(
 
     ref = current_session(store)
     has_source = False
-    if ref and is_llm_available():
+    llm_available = is_llm_available()
+    has_dialogue_retry = bool(
+        ref and commit and _has_dialogue_retry(store, ref.key)
+    )
+    if ref and (llm_available or has_dialogue_retry):
         has_source = (
-            (ref.sealable and _opencode_available())
-            or (not ref.sealable and resolve_transcript(store, ref.key) is not None)
+            has_dialogue_retry
+            or (ref.sealable and _opencode_available())
+            or (
+                not ref.sealable
+                and resolve_transcript(store, ref.key) is not None
+            )
         )
     if ref and has_source:
-        res = distill_session_transcript(str(store), ref, commit=commit)
+        res = distill_session_transcript(
+            str(store), ref, commit=commit, force_retry=commit,
+            llm_available=llm_available,
+        )
         if res is not None:
             if res["status"] == "committed":
                 _safe_version_commit(store, f"manual distill: {len(res['saved'])} dialogue")
                 return json.dumps(
                     {"status": "committed", "saved_count": len(res["saved"]),
                      "paths": res["saved"], "source": "dialogue",
+                     "reflection": pick_quote("closing")},
+                    indent=2,
+                )
+            if res["status"] == "skipped":
+                return json.dumps(
+                    {**res, "source": "dialogue",
                      "reflection": pick_quote("closing")},
                     indent=2,
                 )
@@ -1039,7 +1115,38 @@ def memory_distill_session(
     session_path = Path(log_path)
 
     if commit:
-        saved = extractor.commit(session_path, pd)
+        try:
+            saved = extractor.commit(session_path, pd, force_retry=True)
+        except ManualRetryRefused as exc:
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": exc.reason,
+                    "retry": False,
+                    "saved_count": 0,
+                    "paths": [],
+                    "source": "tool_event",
+                    **(
+                        {"next_retry_at": exc.next_retry_at}
+                        if exc.next_retry_at else {}
+                    ),
+                    "reflection": pick_quote("closing"),
+                },
+                indent=2,
+            )
+        if saved is None:
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "concurrent write",
+                    "retry": True,
+                    "saved_count": 0,
+                    "paths": [],
+                    "source": "tool_event",
+                    "reflection": pick_quote("closing"),
+                },
+                indent=2,
+            )
         _safe_version_commit(Path(pd) / ".magnolia", f"manual distill: {len(saved)} tool-event")
         return json.dumps(
             {
@@ -1359,31 +1466,4 @@ def get_runs_index() -> str:
 
 
 if __name__ == "__main__":
-    # A native crash (sqlite/ssl/…) must leave a stack trace, not just a closed
-    # MCP pipe. Keep the handle alive for the lifetime of the process.
-    _crash_file = None
-    try:
-        _crash_path = Path(PROJECT_DIR) / ".magnolia" / "crash.log"
-        _crash_path.parent.mkdir(parents=True, exist_ok=True)
-        _crash_file = _crash_path.open("a", encoding="utf-8")
-        faulthandler.enable(file=_crash_file, all_threads=True)
-    except Exception:
-        pass
-
-    def _thread_excepthook(args) -> None:
-        if args.exc_type is SystemExit:
-            return
-        _crash_log(
-            f"thread {args.thread.name if args.thread else '?'}",
-            args.exc_value,
-        )
-        threading.__excepthook__(args)
-
-    threading.excepthook = _thread_excepthook
-
-    # stdout is the MCP transport. Route stray diagnostics to stderr while
-    # preserving the real buffer for JSON-RPC (see _StdoutToStderr).
-    if getattr(sys.stdout, "buffer", None) is not None:
-        sys.stdout = _StdoutToStderr(sys.stdout)
-
     mcp.run()

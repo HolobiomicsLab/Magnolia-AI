@@ -1,0 +1,322 @@
+"""Typed execution, outcome, identity and usage contracts."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, fields
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Mapping
+
+if TYPE_CHECKING:
+    from campaign_runner.routing import ResolvedRoute
+    from compchem_memory.transcript_source import SessionRef
+
+
+@dataclass
+class LimitInfo:
+    reason: str
+    reset_at: datetime | None
+    evidence_source: str
+    hold_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.reset_at is not None and (
+            self.reset_at.tzinfo is None or self.reset_at.utcoffset() is None
+        ):
+            raise ValueError("limit reset_at must be timezone-aware UTC")
+        if self.reset_at is not None:
+            self.reset_at = self.reset_at.astimezone(timezone.utc)
+
+
+@dataclass
+class RunOutcome:
+    kind: str
+    limit: LimitInfo | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in {
+            "success",
+            "failure",
+            "timeout",
+            "cancelled",
+            "quota",
+            "refused",
+            "cap_reached",
+            "turn_limit",
+            "price_limit",
+            "model_mismatch",
+        }:
+            raise ValueError(f"unknown run outcome: {self.kind}")
+        if self.kind == "quota" and self.limit is None:
+            self.limit = LimitInfo("quota or rate limit", None, "unspecified")
+
+    @property
+    def overrides_repair(self) -> bool:
+        return self.kind in {
+            "quota",
+            "cap_reached",
+            "turn_limit",
+            "price_limit",
+            "model_mismatch",
+        }
+
+
+@dataclass(frozen=True)
+class ExecContext:
+    route: "ResolvedRoute | None"
+    role: str
+    project_dir: Path | None = None
+    run_dir: Path | None = None
+    timeout_seconds: int = 1800
+    role_cap: int | None = None
+    governor_cap: int | None = None
+    opencode_binary: str | None = None
+    opencode_server: str | None = None
+    opencode_db: str | None = None
+    agent: str = "worker"
+    role_capabilities: Mapping[str, Any] = field(default_factory=dict)
+    installation_root: Path | None = None
+    workspace_root: Path | None = None
+    project_identity: str | None = None
+    python_executable: str | None = None
+    tools_port: int | None = None
+    setup: Mapping[str, Any] = field(default_factory=dict)
+    control_dir: Path | None = None
+    work_dir: Path | None = None
+    cancellation: Any = None
+    memory_service: Mapping[str, Any] = field(default_factory=dict)
+    required_capabilities: tuple[str, ...] = ()
+    capability_read_roots: tuple[Path, ...] = ()
+    shared_rule_files: tuple[Path, ...] = ()
+    shared_skill_files: tuple[Path, ...] = ()
+    invocation_id: str | None = None
+    launch_argv: tuple[str, ...] = ()
+    environment: Mapping[str, str] | None = None
+    renderer_env: Mapping[str, str] = field(default_factory=dict)
+    resume_from: Path | None = None
+    resume_artifact: "ResumeArtifact | None" = None
+    prompt: str | None = None
+    governance: Any = None
+
+
+@dataclass(frozen=True)
+class SessionIdentity:
+    client: str
+    model: str | None
+    session_id: str
+    project_digest: str
+    role: str
+    policy_digest: str
+
+    @property
+    def hook_harness(self) -> str:
+        return "claude" if self.client == "claude-code" else self.client
+
+    def transcript_ref(self) -> "SessionRef":
+        """Return the stable transcript identity for this client session."""
+        from compchem_memory.hook.state import safe_component
+        from compchem_memory.transcript_source import SessionRef
+
+        harness = self.hook_harness
+        key = (
+            self.session_id
+            if harness == "opencode"
+            else f"{harness}-{safe_component(self.session_id)}"
+        )
+        return SessionRef(harness, self.session_id, key, None, None, False)
+
+    def permits_resume(self, other: "SessionIdentity") -> bool:
+        return (
+            self.client,
+            self.model,
+            self.session_id,
+            self.project_digest,
+            self.role,
+            self.policy_digest,
+        ) == (
+            other.client,
+            other.model,
+            other.session_id,
+            other.project_digest,
+            other.role,
+            other.policy_digest,
+        )
+
+
+@dataclass(frozen=True)
+class ResumeArtifact:
+    """Typed locator for a session whose identical binding must already exist."""
+
+    client: str
+    session_id: str
+    configuration_identity_digest: str
+    role: str
+    project_identity: str
+
+    def __post_init__(self) -> None:
+        if not all(
+            (
+                self.client,
+                self.session_id,
+                self.configuration_identity_digest,
+                self.role,
+                self.project_identity,
+            )
+        ):
+            raise ValueError("resume artifact fields must be non-empty")
+
+
+def binding_identity_matches(
+    stored: Mapping[str, Any], expected: Mapping[str, str]
+) -> bool:
+    """Match current bindings and pre-3250939 bindings lacking only ``client``.
+
+    A legacy record is attributed to the executor reading its private binding
+    store only when every other recorded field matches that executor's identity.
+    """
+    if dict(stored) == dict(expected):
+        return True
+    legacy_expected = dict(expected)
+    legacy_expected.pop("client", None)
+    return "client" not in stored and dict(stored) == legacy_expected
+
+
+def _number(value: Any) -> float | int | None:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+@dataclass
+class UsageRecord:
+    schema_version: str = "magnolia-usage-v1"
+    invocation_id: str | None = None
+    parent_run_id: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    client: str | None = None
+    resolved_model: str | None = None
+    reported_model: str | None = None
+    subscription_key: str | None = None
+    run_kind: str | None = None
+    project_digest: str | None = None
+    session_identity: SessionIdentity | None = None
+    turns: int | None = None
+    input_tokens: float | int | None = None
+    uncached_input_tokens: float | int | None = None
+    output_tokens: float | int | None = None
+    reasoning_tokens: float | int | None = None
+    cached_tokens: float | int | None = None
+    cache_write_tokens: float | int | None = None
+    cost: float | int | None = None
+    duration_seconds: float | int | None = None
+    outcome: RunOutcome | None = None
+    source: str = "unknown"
+    completeness: str = "unknown"
+    raw: Mapping[str, Any] | None = field(default=None, repr=False)
+
+    @classmethod
+    def from_raw(
+        cls,
+        raw: Mapping[str, Any],
+        *,
+        baseline: "UsageRecord | None" = None,
+        session_identity: SessionIdentity | None = None,
+        **metadata: Any,
+    ) -> "UsageRecord":
+        """Normalize raw counters and derive chargeable input per client shape."""
+        tokens = raw.get("tokens") if isinstance(raw.get("tokens"), Mapping) else raw
+        cache = tokens.get("cache") if isinstance(tokens.get("cache"), Mapping) else {}
+        counters = {
+            "input_tokens": _number(tokens.get("input", tokens.get("input_tokens"))),
+            "uncached_input_tokens": _number(tokens.get("uncached_input_tokens")),
+            "output_tokens": _number(tokens.get("output", tokens.get("output_tokens"))),
+            "reasoning_tokens": _number(tokens.get("reasoning", tokens.get("reasoning_tokens"))),
+            "cached_tokens": _number(
+                cache.get(
+                    "read",
+                    tokens.get("cached_tokens", tokens.get("cache_read_tokens")),
+                )
+            ),
+            "cache_write_tokens": _number(cache.get("write", tokens.get("cache_write_tokens"))),
+            "cost": _number(raw.get("cost", raw.get("cost_usd"))),
+        }
+        if baseline is not None:
+            for key, value in tuple(counters.items()):
+                previous = getattr(baseline, key)
+                delta = value - previous if value is not None and previous is not None else None
+                counters[key] = delta if delta is not None and delta >= 0 else None
+        if counters["uncached_input_tokens"] is None:
+            input_tokens = counters["input_tokens"]
+            cached_tokens = counters["cached_tokens"]
+            schema = str(raw.get("schema_version", "unknown"))
+            cache_is_included = schema in {"codex-exec-json", "vibe-export-json"}
+            if input_tokens is None or (cache_is_included and cached_tokens is None):
+                uncached_input = None
+            elif cache_is_included:
+                uncached_input = max(0, input_tokens - cached_tokens)
+            else:
+                uncached_input = input_tokens
+            counters["uncached_input_tokens"] = uncached_input
+        known = [key for key in counters if key != "cost"]
+        completeness = "complete" if all(counters[key] is not None for key in known) else "partial"
+        values = {
+            key: item.default
+            for key, item in ((item.name, item) for item in fields(cls))
+            if key in metadata
+        }
+        values.update({key: value for key, value in metadata.items() if key in values})
+        values.update(counters)
+        values["source"] = str(raw.get("schema_version", "unknown"))
+        values["completeness"] = completeness
+        values["raw"] = raw
+        if session_identity is not None:
+            values.update(
+                client=session_identity.client,
+                resolved_model=session_identity.model,
+                project_digest=session_identity.project_digest,
+                session_identity=session_identity,
+            )
+        return cls(**values)
+
+    @property
+    def charged_tokens(self) -> float:
+        """Return tokens charged to campaign budgets; cache reads are excluded."""
+        return sum(
+            float(value or 0)
+            for value in (
+                self.uncached_input_tokens,
+                self.cache_write_tokens,
+                self.output_tokens,
+                self.reasoning_tokens,
+            )
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        values = {
+            item.name: getattr(self, item.name)
+            for item in fields(self)
+            if item.name != "raw"
+        }
+        values["started_at"] = self.started_at.isoformat() if self.started_at else None
+        values["ended_at"] = self.ended_at.isoformat() if self.ended_at else None
+        if self.session_identity:
+            values["session_identity"] = {
+                item.name: getattr(self.session_identity, item.name)
+                for item in fields(SessionIdentity)
+            }
+        if self.outcome:
+            values["outcome"] = {
+                "kind": self.outcome.kind,
+                "limit": (
+                    {
+                        "reason": self.outcome.limit.reason,
+                        "reset_at": self.outcome.limit.reset_at.isoformat()
+                        if self.outcome.limit.reset_at
+                        else None,
+                        "evidence_source": self.outcome.limit.evidence_source,
+                        "hold_id": self.outcome.limit.hold_id,
+                    }
+                    if self.outcome.limit
+                    else None
+                ),
+            }
+        return values

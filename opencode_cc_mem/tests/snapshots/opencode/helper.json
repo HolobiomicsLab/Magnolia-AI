@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "@@TMP@@/opencode",
+    "run",
+    "--model",
+    "provider/model",
+    "--format",
+    "json",
+    "PROMPT"
+  ],
+  "environment_keys": [
+    "BASE_ENV"
+  ],
+  "step_cap_config": null,
+  "timeout_seconds": 60,
+  "agent_file_bytes": null
+}

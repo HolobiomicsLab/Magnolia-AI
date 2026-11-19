@@ -1,0 +1,135 @@
+{
+  "api_error_status": null,
+  "duration_api_ms": 8029,
+  "duration_ms": 8354,
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "fast_mode_state": "off",
+  "first_content_frame_ms": 553,
+  "is_error": false,
+  "modelUsage": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 9199,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 9199,
+      "cacheReadInputTokens": 99460,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0036114000000000007,
+      "inputTokens": 10,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1552,
+      "provider": "firstParty",
+      "thinkingTokens": 651,
+      "webSearchRequests": 0
+    }
+  },
+  "model_usage_since_last_result": {
+    "claude-haiku-5-5": {
+      "cacheCreationEphemeral1hInputTokens": 9199,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationInputTokens": 9199,
+      "cacheReadInputTokens": 99460,
+      "canonicalModel": "claude-haiku-5-5",
+      "contextWindow": 1000000,
+      "costBasis": "list",
+      "costUSD": 0.0036114000000000007,
+      "inputTokens": 10,
+      "maxOutputTokens": 128000,
+      "outputTokens": 1552,
+      "provider": "firstParty",
+      "thinkingTokens": 651,
+      "webSearchRequests": 0
+    }
+  },
+  "num_turns": 6,
+  "permission_denials": [
+    {
+      "tool_input": {
+        "content": "x",
+        "file_path": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/work/reviewer.txt"
+      },
+      "tool_name": "Write",
+      "tool_use_id": "toolu_01FQLtZxdZNHGZ7sSHtFhmA9"
+    },
+    {
+      "tool_input": {
+        "text": "reviewer"
+      },
+      "tool_name": "mcp__probe__echo",
+      "tool_use_id": "toolu_01WGtLv4JUAthzKQ3fwKMVoU"
+    }
+  ],
+  "queued_turn_count": 0,
+  "result": "1. Read README.md: OK. Contents: `Probe project. ALLOWED-README-213771c61078`\n2. Grep \"ALLOWED\" in docs: OK. Matched one file, `docs/notes.md`.\n3. Edit work/draft.txt, replace \"draft v0\" with \"draft reviewer\": BLOCKED. The tool reported `String to replace not found in file. String: draft v0`. The Edit call ran and returned this error. I did not retry it. The file may not contain that text.\n4. Write work/reviewer.txt with \"x\": BLOCKED. `PreToolUse:Write hook error: native write not allowed for this role`\n5. mcp__probe__echo with text \"reviewer\": BLOCKED. `PreToolUse:mcp__probe__echo hook error: mcp tool probe.echo not on the role allowlist`\n\nSteps 4 and 5 were issued in the same turn, so they did not run strictly after step 3. Both were rejected by hooks before executing. I did not load the deferred tool schema with ToolSearch, since that would have been a tool outside the list.",
+  "result_index": 0,
+  "safety_stops": 0,
+  "session_id": "ses-fixture-1",
+  "stop_reason": "end_turn",
+  "subagent_stats": {
+    "by_type": {},
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "system": 0,
+      "user": 0
+    },
+    "max_depth": 0,
+    "refused": {
+      "budget": 0,
+      "concurrency_limit": 0,
+      "depth_limit": 0
+    },
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "spawned": 0,
+    "spawned_by_subagents": 0,
+    "started_in_background": 0
+  },
+  "subtype": "success",
+  "terminal_reason": "completed",
+  "time_to_request_ms": 76,
+  "total_cost_usd": 0.0036114000000000007,
+  "ttft_ms": 3072,
+  "ttft_stream_ms": 552,
+  "type": "result",
+  "usage": {
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 9199,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 9199,
+    "cache_read_input_tokens": 99460,
+    "fallback_credit": null,
+    "inference_geo": "global",
+    "input_tokens": 10,
+    "iterations": [
+      {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 333,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 333,
+        "cache_read_input_tokens": 21996,
+        "input_tokens": 2,
+        "output_tokens": 454,
+        "type": "message"
+      }
+    ],
+    "output_tokens": 1552,
+    "output_tokens_details": {
+      "thinking_tokens": 651
+    },
+    "server_tool_use": {
+      "web_fetch_requests": 0,
+      "web_search_requests": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "uuid": "ed3dadb6-7769-4194-ace5-b157e55c6148"
+}

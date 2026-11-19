@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "client": "vibe",
+  "implementation": "opencode_cc_mem/campaign_runner/executors/vibe.py",
+  "registered_roles": ["worker", "reviewer", "helper", "evaluator"],
+  "enabled_contract": "reviewer/helper/evaluator behind accepted evidence; worker D4-refused",
+  "parser_evidence": [
+    "opencode_cc_mem/tests/fixtures/executors/vibe/live-p3/v1/16-stream-export.json",
+    "opencode_cc_mem/tests/fixtures/executors/vibe/live-p3/v2/11-stream-export.json",
+    "opencode_cc_mem/tests/fixtures/executors/vibe/live-p3/v3/12-stream-export.json"
+  ]
+}

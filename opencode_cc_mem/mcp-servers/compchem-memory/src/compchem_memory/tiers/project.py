@@ -12,6 +12,7 @@ import yaml
 from compchem_memory.atomic_io import atomic_write_text
 from compchem_memory.contradictions import ConflictCandidatesError
 from compchem_memory.storage import backup_file
+from compchem_memory.writer_lease import leased_project_method
 
 
 def _keyword_score(haystack_lower: str, keyword: str) -> int:
@@ -122,6 +123,7 @@ class ProjectManager:
     def _runs_index_path(self, project_dir: str) -> Path:
         return self._runs_dir(project_dir) / "INDEX.yaml"
 
+    @leased_project_method
     def create_entry(
         self,
         project_dir: str,
@@ -137,7 +139,10 @@ class ProjectManager:
         references: list[str] | None = None,
         notebook_section: str | None = None,
         run_ids: list[str] | None = None,
+        origins: list[dict[str, str]] | None = None,
     ) -> str:
+        from compchem_memory.staging_io import normalize_origins
+
         if entry_type not in ENTRY_TYPES:
             entry_type = "note"
         if staging:
@@ -165,6 +170,7 @@ class ProjectManager:
             "source": source,
             "observation_count": 1,
             "confidence": confidence,
+            "origins": normalize_origins(origins or []),
         }
         if related_entries:
             frontmatter["related_entries"] = related_entries
@@ -210,6 +216,7 @@ class ProjectManager:
                     "confidence": meta.get("confidence", 0.5),
                     "observation_count": meta.get("observation_count", 0),
                     "source": meta.get("source", ""),
+                    "origins": meta.get("origins", []),
                     "path": str(f),
                 }
             )
@@ -274,6 +281,7 @@ class ProjectManager:
                 "confidence": meta.get("confidence", 0.5),
                 "observation_count": meta.get("observation_count", 0),
                 "source": meta.get("source", ""),
+                "origins": meta.get("origins", []),
                 "path": str(f),
                 "tier": "staging",
                 "score": score,
@@ -337,6 +345,7 @@ class ProjectManager:
             entry.pop("_sort_date", None)
         return result[:limit]
 
+    @leased_project_method
     def confirm_staging(
         self,
         project_dir: str,
@@ -424,6 +433,7 @@ class ProjectManager:
                 return False
         return True
 
+    @leased_project_method
     def auto_promote_staging(self, project_dir: str) -> list[str]:
         """Auto-promote staging entries with observation_count >= 2, confidence >= 0.85,
         AND observed_in_sessions containing >= 2 distinct session_ids.
@@ -470,6 +480,7 @@ class ProjectManager:
                     self._notice_held_promotion(project_dir, f, e)
         return promoted
 
+    @leased_project_method
     def auto_confirm_staging(self, project_dir: str) -> dict[str, list[str]]:
         """R7 auto-confirm (2026-10-06): promote staging entries corroborated in
         >=3 distinct sessions (observation_count >= 3). Cross-session
@@ -544,12 +555,14 @@ class ProjectManager:
             ),
         )
 
+    @leased_project_method
     def bump_observation_count(
         self,
         project_dir: str,
         entry_name: str,
         session_id: str | None = None,
         content: str | None = None,
+        origins: list[dict[str, str]] | None = None,
     ) -> bool:
         """Increment observation_count on a staging entry; record session_id if
         provided. If `content` is given and not already present, append it as a
@@ -561,19 +574,31 @@ class ProjectManager:
                 text = f.read_text()
                 meta = self._parse_frontmatter(text)
                 new_count = meta.get("observation_count", 0) + 1
+                from compchem_memory.staging_io import (
+                    observed_session_ids,
+                    union_origins,
+                )
+
                 sessions = list(meta.get("observed_in_sessions", []) or [])
-                if session_id and session_id not in sessions:
-                    sessions.append(session_id)
+                for observed_session in observed_session_ids(session_id, origins):
+                    if observed_session not in sessions:
+                        sessions.append(observed_session)
                 # Enrich, don't discard: append the new content if it adds info.
                 if content and content.strip() and content.strip() not in text:
                     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                     block = f"\n\n## Observation {new_count} ({date})\n\n{content.strip()}\n"
                     atomic_write_text(f, text.rstrip() + block)
                 self._update_entry_frontmatter(f, "observation_count", new_count)
-                self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
+                if sessions:
+                    self._update_entry_frontmatter(f, "observed_in_sessions", sessions)
+
+                merged = union_origins(meta.get("origins", []), origins or [])
+                if merged:
+                    self._update_entry_frontmatter(f, "origins", merged)
                 return True
         return False
 
+    @leased_project_method
     def set_parked(
         self, project_dir: str, entry_name: str, parked: bool = True
     ) -> str | None:
@@ -686,6 +711,7 @@ class ProjectManager:
             return None
         return best_match
 
+    @leased_project_method
     def record_run(
         self,
         project_dir: str,
@@ -728,6 +754,7 @@ class ProjectManager:
         self._update_runs_index(project_dir)
         return str(fpath)
 
+    @leased_project_method
     def update_run(
         self,
         project_dir: str,
@@ -752,6 +779,7 @@ class ProjectManager:
         self._update_runs_index(project_dir)
         return str(fpath)
 
+    @leased_project_method
     def upsert_run(
         self,
         project_dir: str,
@@ -814,6 +842,7 @@ class ProjectManager:
         except Exception:
             return None
 
+    @leased_project_method
     def begin_restart(
         self, project_dir: str, run_id: str, remote: dict[str, Any],
         resources: dict[str, Any] | None = None,
@@ -1107,6 +1136,7 @@ class ProjectManager:
 
     # ── Goal management ──────────────────────────────────────────────────
 
+    @leased_project_method
     def decrement_confidence_for_tool(
         self, project_dir: str, tool: str, delta: float = 0.05
     ) -> int:
@@ -1152,6 +1182,7 @@ class ProjectManager:
             return goal_path.read_text()
         return None
 
+    @leased_project_method
     def set_goal(self, project_dir: str, content: str) -> str:
         """Write or update the project goal. Returns path."""
         goal_path = self._project_store(project_dir) / "GOAL.md"

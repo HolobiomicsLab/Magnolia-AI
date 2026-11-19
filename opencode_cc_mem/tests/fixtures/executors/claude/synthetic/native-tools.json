@@ -1,0 +1,45 @@
+{
+  "synthetic": true,
+  "source": "constructed from the Claude native tool schema; not observed in P0",
+  "path_field": "file_path",
+  "read": {
+    "session_id": "synthetic-claude",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_use_id": "synthetic-read",
+    "tool_input": {"file_path": "__PATH__"}
+  },
+  "glob": {
+    "session_id": "synthetic-claude",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Glob",
+    "tool_use_id": "synthetic-glob",
+    "tool_input": {"path": "__CWD__", "pattern": "**/*.py"}
+  },
+  "grep": {
+    "session_id": "synthetic-claude",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Grep",
+    "tool_use_id": "synthetic-grep",
+    "tool_input": {"path": "__CWD__", "pattern": "needle", "glob": "**/*.py"}
+  },
+  "edit": {
+    "session_id": "synthetic-claude",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_use_id": "synthetic-edit",
+    "tool_input": {"file_path": "__PATH__", "old_string": "old", "new_string": "new"}
+  },
+  "write": {
+    "session_id": "synthetic-claude",
+    "cwd": "__CWD__",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_use_id": "synthetic-write",
+    "tool_input": {"file_path": "__PATH__", "content": "new"}
+  }
+}

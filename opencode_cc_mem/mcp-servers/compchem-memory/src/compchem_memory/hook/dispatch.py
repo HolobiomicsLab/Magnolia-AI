@@ -111,6 +111,7 @@ def _record_session(paths: ProjectPaths, event: HookEvent) -> None:
 
     record_session(
         paths.store, event.harness, event.session_id, event.cwd, event.transcript_ref,
+        model=event.model, role=event.role,
     )
 
 
@@ -659,8 +660,9 @@ def _schedule_background_batch(
     job_path = folder / f"session-worker-{time.time_ns()}.json"
     atomic_write_text(job_path, json.dumps(_worker_payload(paths, event), ensure_ascii=False))
     try:
+        runner = Path(__file__).with_name("runner.py")
         subprocess.Popen(
-            [sys.executable, "-m", "compchem_memory.hook.background", str(job_path)],
+            [sys.executable, "-I", str(runner), "--background", str(job_path)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
@@ -882,11 +884,26 @@ def _last_prompt_turn(paths: ProjectPaths, event: HookEvent) -> str | None:
 
 
 def handle(event: HookEvent, env: Mapping[str, str], deadline: float) -> Handled:
-    """Bind and record an event, then return its neutral hook response."""
-    catchup_deadline = min(deadline, time.monotonic() + _CATCHUP_HOOK_LIMIT_SECONDS)
+    """Bind and record an event, then return its neutral hook response.
+
+    No hook event takes the project writer lease, so none can wait on a long
+    holder and a required pre-tool hook never denies because of it. A hook
+    writes only its own self-locked streams (session map, transcript, session
+    state, notice reservations, surfacing and doorbell appends); writes to the
+    leased store happen in the detached background worker, which leases each
+    short write itself.
+    """
     paths = bind_project(event.harness, event.session_id, Path(event.cwd), env)
     if paths is None:
         return Handled(HookResponse(), None)
+    return _handle_bound(paths, event, env, deadline)
+
+
+def _handle_bound(
+    paths: ProjectPaths, event: HookEvent, env: Mapping[str, str], deadline: float
+) -> Handled:
+    """Handle one already-bound event."""
+    catchup_deadline = min(deadline, time.monotonic() + _CATCHUP_HOOK_LIMIT_SECONDS)
     guard = _Guard(paths, event, env)
     completion_event = event.event in {"turn-end", "agent-end"}
     closing_session_end = event.event == "session-end" and event.harness in {"vibe", "claude"}

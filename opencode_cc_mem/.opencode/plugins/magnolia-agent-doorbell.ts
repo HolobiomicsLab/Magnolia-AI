@@ -32,6 +32,13 @@ import { join, dirname, basename } from "node:path"
 
 const DISABLED = String(process.env.MAGNOLIA_DOORBELL ?? "").toLowerCase() === "0"
 const DEFAULT_AGENTS = ["literature", "xiulian"]
+const PY_WHITESPACE = "\\t\\n\\v\\f\\r \\x1c-\\x1f\\x85\\u00a0\\u1680" +
+  "\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000"
+const PY_STRIP_RE = new RegExp(`^[${PY_WHITESPACE}]+|[${PY_WHITESPACE}]+$`, "g")
+
+function pyStrip(text: string): string {
+  return text.replace(PY_STRIP_RE, "")
+}
 
 function isProjectRoot(directory: string): boolean {
   return (
@@ -74,7 +81,7 @@ function registryAgents(directory: string): string[] {
 function buildMentionRes(agents: string[]): { mention: RegExp; check: RegExp } {
   const esc = agents.map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
   return {
-    mention: new RegExp(`@(${esc.join("|")})\\b[,:]?\\s*([^\\n]*)`, "gi"),
+    mention: new RegExp(`@(${esc.join("|")})\\b[,:]?[${PY_WHITESPACE}]*([^\\n]*)`, "gi"),
     check: new RegExp(`@(${esc.join("|")})\\b`, "i"),
   }
 }
@@ -102,8 +109,10 @@ function deliver(directory: string, sourceProject: string, agent: string, reques
   const taskDir = join(workspaceRoot(directory), "projects", agent, "inbox", `from-${sourceProject}`)
   mkdirSync(taskDir, { recursive: true })
   const file = join(taskDir, `${slug(request)}.task.md`)
+  // Same single safe line as the hook core's _title: control characters become spaces.
+  const title = pyStrip(request.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, " "))
   const letter = [
-    `# Task: ${request.slice(0, 80)}`,
+    `# Task: ${Array.from(title).slice(0, 80).join("")}`,
     ``,
     `- from: ${sourceProject}`,
     `- date: ${new Date().toISOString()}`,
@@ -111,7 +120,7 @@ function deliver(directory: string, sourceProject: string, agent: string, reques
     ``,
     `## Request`,
     ``,
-    request.trim() || "(see attached session context; ask the sender if unclear)",
+    pyStrip(request) || "(see attached session context; ask the sender if unclear)",
     ``,
   ].join("\n")
   mkdirSync(dirname(file), { recursive: true })
@@ -124,22 +133,30 @@ function processText(
   directory: string, sourceProject: string, text: string,
   mentionRe: RegExp, checkRe: RegExp,
 ): { text: string; sent: string[] } {
+  if (!checkRe.test(text)) return { text, sent: [] }
+  const requests = new Map<string, string[]>()
+  const labels = new Map<string, string>()
+  for (const match of text.matchAll(new RegExp(mentionRe.source, mentionRe.flags))) {
+    const agent = match[1]
+    const request = pyStrip(match[2] || "")
+    if (!request) continue
+    const target = agent.toLowerCase()
+    requests.set(target, [...(requests.get(target) ?? []), request])
+    if (!labels.has(target)) labels.set(target, agent)
+  }
+  const delivered = new Set<string>()
   const sent: string[] = []
-  if (!checkRe.test(text)) return { text, sent }
-  const newText = text.replace(
-    mentionRe,
-    (match: string, agent: string, request: string, _offset: number) => {
-      const req = (request || "").trim()
-      if (!req) return match // a bare @mention with no ask: leave it
-      try {
-        deliver(directory, sourceProject, agent.toLowerCase(), req)
-        sent.push(`@${agent}`)
-        return `[→ sent to @${agent}; the agents daemon will run it]`
-      } catch {
-        return match // delivery failed: leave the text untouched
-      }
-    },
-  )
+  for (const [target, targetRequests] of requests) {
+    try {
+      deliver(directory, sourceProject, target, targetRequests.join("\n\n"))
+      delivered.add(target)
+      sent.push(`@${labels.get(target)}`)
+    } catch { /* leave this target's mentions untouched */ }
+  }
+  const newText = text.replace(mentionRe, (match: string, agent: string, request: string) => {
+    if (!pyStrip(request || "") || !delivered.has(agent.toLowerCase())) return match
+    return `[→ sent to @${agent}; the agents daemon will run it]`
+  })
   return { text: sent.length > 0 ? newText : text, sent }
 }
 

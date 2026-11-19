@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import json
 
-from compchem_memory.hook.events import HookEvent, HookResponse, normalise_output
+from compchem_memory.hook.events import (
+    HookEvent,
+    HookResponse,
+    ToolTarget,
+    canonical_tool,
+    normalise_output,
+)
 
 from . import Rendered
 
@@ -22,7 +28,7 @@ def parse(raw: dict, event: str) -> HookEvent | None:
         return None
     child = raw.get("session_id") if raw.get("parent_session_id") else None
     agent = {"id": child, "type": raw.get("agent_name")} if child else None
-    return HookEvent.from_json({
+    parsed = HookEvent.from_json({
         "harness": "vibe",
         "event": event,
         "session_id": raw.get("parent_session_id") or raw.get("session_id"),
@@ -33,6 +39,8 @@ def parse(raw: dict, event: str) -> HookEvent | None:
         "agent": agent,
         "tool": _tool(raw),
     })
+    _decode_policy_targets(parsed)
+    return parsed
 
 
 def render(resp: HookResponse, event: HookEvent) -> Rendered:
@@ -80,3 +88,32 @@ def _is_mcp_post_tool(event: HookEvent) -> bool:
         return False
     raw_name = event.tool.raw_name
     return raw_name.startswith("mcp_") and "." in raw_name.removeprefix("mcp_")
+
+
+def _decode_policy_targets(event: HookEvent) -> None:
+    """Decode Vibe 3.1.2 native file and grep target shapes."""
+    tool = event.tool
+    if tool is None:
+        return
+    server, name = canonical_tool(tool.raw_name)
+    if server is not None:
+        tool.policy_action = "mcp"
+        return
+    shape = {
+        "read_file": ("native_read", "read"),
+        "write": ("native_edit", "edit"),
+        "edit": ("native_edit", "edit"),
+    }.get(name)
+    if shape is None:
+        if name == "grep":
+            root = tool.input.get("path", event.cwd)
+            if isinstance(root, str) and root:
+                tool.policy_action = "native_grep"
+                tool.targets = (ToolTarget(root, "search", broad=True),)
+        return
+    path = tool.input.get("file_path")
+    alternate = tool.input.get("path")
+    ambiguous = alternate is not None and alternate != path
+    if isinstance(path, str) and path and not ambiguous:
+        tool.policy_action = shape[0]
+        tool.targets = (ToolTarget(path, shape[1]),)

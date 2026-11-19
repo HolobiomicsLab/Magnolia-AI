@@ -1,0 +1,18 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "Stop",
+    "last_assistant_message": "get_goal \u2014 BLOCKED \u2014 Tool call blocked by PreToolUse hook: unknown tool get_goal denied by role policy. Tool: get_goal  \nlist_mcp_resources \u2014 BLOCKED \u2014 Tool call blocked by PreToolUse hook: unknown tool list_mcp_resources denied by role policy. Tool: list_mcp_resources  \nexec \u2014 OK \u2014 code-mode-outer-ran",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-37-55-ses-fixture-1.jsonl",
+    "turn_id": "01a1e313-9dea-7e62-8185-230af9459f54"
+  }
+}

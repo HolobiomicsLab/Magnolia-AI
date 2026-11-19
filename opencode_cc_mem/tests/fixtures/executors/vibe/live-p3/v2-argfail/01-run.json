@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "vibe",
+    "-p",
+    "<prompt:vibe-v2.txt>",
+    "--output",
+    "json",
+    "--workdir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "--max-turns",
+    "24",
+    "--max-price",
+    "0.05",
+    "--output-dir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/logs/v2.out",
+    "--auto-approve",
+    "--disabled-tools bash --disabled-tools git_bash --disabled-tools powershell"
+  ],
+  "client": "vibe",
+  "exit_status": "1",
+  "stderr_lines": [
+    "error: unexpected argument '--disabled-tools bash --disabled-tools git_bash --disabled-tools powershell' found"
+  ],
+  "synthetic": false,
+  "tag": "v2-argfail"
+}

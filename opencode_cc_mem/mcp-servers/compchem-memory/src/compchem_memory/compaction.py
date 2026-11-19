@@ -1,11 +1,18 @@
 """Session compaction: three-tier strategy for managing conversation context."""
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from compchem_memory.llm import is_llm_available, call_llm
+from compchem_memory.tiers.session import session_writer_lock
+from compchem_memory.writer_lease import (
+    file_fingerprint,
+    fingerprint_unchanged,
+    project_writer_lease,
+)
 
 
 AUTOCOMPACT_BUFFER = 2000
@@ -54,6 +61,7 @@ def maybe_compact_session(
     if not session_path.exists():
         return None
 
+    read_set = file_fingerprint([session_path])
     events = _read_session_events(session_path)
     if not events:
         return None
@@ -66,30 +74,37 @@ def maybe_compact_session(
 
     result = _try_session_memory_compact(events, threshold)
     if result is not None:
-        _write_compacted_session(session_path, result)
-        # Replace original with compacted version
-        compacted_path = session_path.with_suffix(".compacted.jsonl")
-        try:
-            session_path.rename(session_path.with_suffix(".backup.jsonl"))
-            compacted_path.rename(session_path)
-        except OSError:
-            pass
-        return result
+        return _replace_if_unchanged(session_path, read_set, result)
 
     # Heuristic didn't compact enough — try agent-based compaction
     if is_llm_available() and len(events) < MIN_MESSAGES_TO_KEEP:
         result = compact_with_agent(events, max_tokens=threshold)
         if result is not None:
+            return _replace_if_unchanged(session_path, read_set, result)
+
+    return None
+
+
+def _replace_if_unchanged(
+    session_path: Path, read_set: dict, result: CompactionResult,
+) -> CompactionResult | None:
+    """Swap in the compacted log under the project writer lease, unless the log
+    changed while it was being compacted (the summary may call an LLM)."""
+    with project_writer_lease(session_path):
+        with session_writer_lock(session_path):
+            if not fingerprint_unchanged(read_set):
+                print(f"[compaction] {session_path.name} changed during compaction; "
+                      "not replaced", file=sys.stderr)
+                return None
             _write_compacted_session(session_path, result)
+            # Replace original with compacted version
             compacted_path = session_path.with_suffix(".compacted.jsonl")
             try:
                 session_path.rename(session_path.with_suffix(".backup.jsonl"))
                 compacted_path.rename(session_path)
             except OSError:
                 pass
-            return result
-
-    return None
+    return result
 
 
 def compact_with_agent(

@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:Write hook error: native write not allowed for this role",
+        "is_error": true,
+        "tool_use_id": "toolu_01FQLtZxdZNHGZ7sSHtFhmA9",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:03.113Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01FQLtZxdZNHGZ7sSHtFhmA9",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:Write hook error: native write not allowed for this role",
+  "type": "user",
+  "uuid": "2cf47f08-31b9-4016-a467-d10a44824aa1"
+}

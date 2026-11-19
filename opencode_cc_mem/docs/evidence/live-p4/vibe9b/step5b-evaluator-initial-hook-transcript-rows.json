@@ -1,0 +1,56 @@
+{
+  "rows": [
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:09:56.087Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:09:56.089Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:09:56.107Z"
+    },
+    {
+      "call_id": "LqG9PrYSY",
+      "input": {
+        "file_path": "secret/.env"
+      },
+      "is_error": null,
+      "name": "read_file",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:10:03.467Z"
+    },
+    {
+      "call_id": "UKlqiv0VL",
+      "input": {
+        "content": "E",
+        "file_path": "docs/eval-note.txt"
+      },
+      "is_error": null,
+      "name": "write",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:10:03.469Z"
+    },
+    {
+      "call_id": "LiKc99lwA",
+      "input": {
+        "command": "ls",
+        "timeout": 120
+      },
+      "is_error": null,
+      "name": "bash",
+      "output_excerpt": "Magnolia required role policy denied this operation.",
+      "phase": "denied",
+      "ts": "2026-11-18T06:10:03.475Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:10:03.601Z"
+    }
+  ],
+  "transcript_present": true
+}

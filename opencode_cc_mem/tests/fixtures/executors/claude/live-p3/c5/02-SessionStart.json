@@ -1,0 +1,14 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "crash",
+  "policy_sha256": "7afda8921be27b4b78ba04a5d2fb8b1d7e6565a753f40818a806780926d4eeb8",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "SessionStart",
+    "session_id": "ses-fixture-1",
+    "source": "startup",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

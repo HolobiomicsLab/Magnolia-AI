@@ -1,0 +1,72 @@
+{
+  "claude_reviewer_dry": {
+    "result": "refused before spawn: capability launch identity mismatch: client_version",
+    "route": [
+      "claude-code",
+      "haiku"
+    ],
+    "row_bound_client": {
+      "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+      "client_version": "2.1.326"
+    },
+    "row_projection": {
+      "accepted": true,
+      "blocking_cells": [],
+      "stale": false
+    }
+  },
+  "cmp_after_restore": "identical (cmp exit 0); backup deleted",
+  "owner_state": {
+    ".codexcfg": {
+      "identical": true,
+      "value": "7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159"
+    },
+    ".pid61561": {
+      "identical": true,
+      "value": "absent"
+    },
+    ".ports": {
+      "identical": true,
+      "value": "25 listening sockets"
+    },
+    "diskfree_kb": {
+      "after": "29396464",
+      "before": "30417968"
+    },
+    "full_listing_identical": true,
+    "listing_sha16": {
+      "identical": true,
+      "value": "81176ed65acb33b8"
+    },
+    "paths": [
+      "~/.local/state/magnolia",
+      "~/.config/magnolia",
+      "~/.magnolia",
+      "~/.magnolia/services",
+      "~/.local/share/opencode"
+    ]
+  },
+  "vibe_session_data": "Vibe wrote its own session data under ~/.vibe; not read, listed or cleaned by the gate",
+  "vibe_trusted_folders_toml": {
+    "before": {
+      "mode": "0o600",
+      "mtime": 1794811114.62612,
+      "sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "size": 28
+    },
+    "gate_written": {
+      "appended": "gate project resolved path (1 entry)",
+      "mode": "0o600",
+      "mtime": 1794982191.9855895,
+      "sha256": "a5aff4eae60c6069dc89fad5b1c5931abd6a51d2385af5eb230c964ccdb811ed",
+      "size": 167
+    },
+    "restore": {
+      "bytes_equal_backup": true,
+      "mode": "0o600",
+      "mtime": 1794811114.62612,
+      "sha256": "c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980",
+      "size": 28
+    }
+  }
+}

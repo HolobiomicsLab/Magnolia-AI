@@ -12,6 +12,7 @@ import functools
 import json
 import os
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from itertools import combinations
 from pathlib import Path
@@ -22,6 +23,14 @@ import yaml
 from compchem_memory.reflex_common import (
     parse_frontmatter_file as _parse_entry,
     pending_indices as _pending_indices,
+)
+from compchem_memory.staging_io import union_origins
+from compchem_memory.writer_lease import (
+    file_fingerprint,
+    fingerprint_unchanged,
+    leased_source_writer,
+    leased_store_writer,
+    project_writer_lease,
 )
 
 # Natural-language learning types that need semantic (not lexical) matching.
@@ -134,6 +143,9 @@ def merge_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     merged_meta["tags"] = sorted(tags)
     merged_meta["tools"] = sorted(tools)
     merged_meta["confidence"] = confidence
+    origins = union_origins(*(entry["meta"].get("origins") for entry in entries))
+    if origins:
+        merged_meta["origins"] = origins
 
     body = canonical["body"]
     others = [e for e in entries if e is not canonical]
@@ -357,11 +369,18 @@ def consolidate_project_findings(
     MAGNOLIA_CONSOLIDATION_FLOOR override) never reach the queue; they are
     appended to reflex/suppressed-proposals.jsonl so strictness stays measurable.
     Returns {"clusters": int, "suppressed": int, "artifact": str,
-    "auto_applied": int}."""
+    "auto_applied": int}, plus "skipped" when a finding or the artifact changed
+    while the clusterer ran (nothing is written then)."""
     clusterer = clusterer or _default_clusterer
     store = Path(store_dir)
-    entries = _load_findings(store / "staging", types)
+    staging = store / "staging"
     artifact = store / "reflex" / "consolidation-proposal.json"
+    # Clustering calls an LLM, so it runs outside the project writer lease; the
+    # write below re-validates every file read here under the lease. Fingerprint
+    # before loading so a write between the read and fingerprint is detectable.
+    finding_paths = [p for p in sorted(staging.glob("*.md")) if p.name != "INDEX.md"]
+    read_set = file_fingerprint([*finding_paths, artifact])
+    entries = _load_findings(staging, types)
     # Read prior rejections BEFORE clustering: they both seed the judge (below,
     # MAGNOLIA_CONSOLIDATION_SEED) and durably auto-reject re-proposals (below).
     prior_rejected_keys = _prior_rejected_keys(artifact)
@@ -384,17 +403,32 @@ def consolidate_project_findings(
                 "title": preview["meta"].get("title", ""),
                 "observation_count": preview["meta"]["observation_count"],
                 "observed_in_sessions": preview["meta"]["observed_in_sessions"],
+                "origins": preview["meta"].get("origins", []),
                 "body": preview["body"],
             },
         })
 
+    with project_writer_lease(store):
+        if not fingerprint_unchanged(read_set):
+            print("[consolidation] store changed during clustering; proposals not "
+                  "written, the next sweep recomputes them", file=sys.stderr)
+            return {"clusters": 0, "suppressed": 0, "artifact": str(artifact),
+                    "auto_applied": 0, "skipped": "store changed during clustering"}
+        return _write_consolidation_proposals(store, artifact, proposals,
+                                              prior_rejected_keys)
+
+
+def _write_consolidation_proposals(
+    store: Path, artifact: Path, proposals: list[dict[str, Any]],
+    prior_rejected_keys: set[tuple[str, ...]],
+) -> dict[str, Any]:
+    """Write validated proposals; the caller holds the project writer lease."""
     # Volume-tuning floor: sub-floor clusters go to the side log, not the queue.
     floor = _proposal_floor()
     suppressed = [p for p in proposals if p["confidence"] < floor]
     _log_suppressed(store, suppressed, floor)
     proposals = [p for p in proposals if p["confidence"] >= floor]
 
-    artifact = store / "reflex" / "consolidation-proposal.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
     # Carry forward prior REJECTIONS durably: rejection is non-destructive (the
     # sources stay in staging), so a rejected cluster would otherwise re-cluster
@@ -414,7 +448,7 @@ def consolidate_project_findings(
     # high-confidence band right here so the human review only ever sees the
     # proposals that actually need judgment. Off by default — without the
     # variable this function stays proposal-only (Increment A contract).
-    auto_applied = auto_apply_band(store_dir).get("applied", 0)
+    auto_applied = auto_apply_band(str(store)).get("applied", 0)
     return {"clusters": len(proposals), "suppressed": len(suppressed),
             "artifact": str(artifact), "auto_applied": auto_applied}
 
@@ -492,6 +526,7 @@ def _append_labels(store: Path, rows: list[dict[str, Any]]) -> None:
         print(f"[consolidation] label-log skipped: {e}")
 
 
+@leased_store_writer
 def apply_proposals(
     store_dir: str, accepted: list[int], reject: list[int] | None = None,
     via: str = "human", evidence: str = "",
@@ -596,6 +631,7 @@ def apply_proposals(
             "dismissed": dismissed, "rejected": rejected_count, "failed": failed}
 
 
+@leased_store_writer
 def backfill_labels(store_dir: str) -> dict[str, Any]:
     """One-time import of proposals handled BEFORE the label store existed into
     reflex/labels.jsonl. Reads the artifact's applied/rejected/dismissed marks;
@@ -685,6 +721,7 @@ def _auto_band_ready(proposal: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
+@leased_store_writer
 def auto_apply_band(store_dir: str) -> dict[str, Any]:
     """Apply pending proposals in the auto band (see AUTO_BAND_MIN_CONFIDENCE).
 
@@ -784,6 +821,7 @@ def auto_apply_band(store_dir: str) -> dict[str, Any]:
                 "error": str(e)}
 
 
+@leased_source_writer
 def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     """Apply one consolidation: re-read the still-present sources, merge them, write
     the merged entry OVER the canonical file, and remove the other sources. Re-reads
@@ -813,6 +851,7 @@ def apply_merge(source_paths: list[str]) -> dict[str, Any]:
     return {"merged": canonical, "removed": removed, "skipped": False}
 
 
+@leased_store_writer
 def dismiss_stale_proposals(
     store_dir: str, *, via: str = "auto", evidence: str = ""
 ) -> list[int]:

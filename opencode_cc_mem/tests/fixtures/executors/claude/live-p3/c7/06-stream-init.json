@@ -1,0 +1,22 @@
+{
+  "claude_code_version": "2.1.325",
+  "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+  "mcp_servers": [
+    {
+      "name": "probe",
+      "source": "dynamic",
+      "status": "connected"
+    }
+  ],
+  "model": "claude-haiku-5-5",
+  "output_style": "default",
+  "permissionMode": "default",
+  "session_id": "ses-fixture-1",
+  "subtype": "init",
+  "tools": [
+    "mcp__probe__echo",
+    "mcp__probe__shell",
+    "mcp__probe__unlisted"
+  ],
+  "type": "system"
+}

@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "codex",
+    "app-server",
+    "-c",
+    "notify=[]"
+  ],
+  "client": "codex",
+  "request": {
+    "method": "hooks/list",
+    "params": {
+      "cwds": [
+        "<project>"
+      ]
+    }
+  },
+  "synthetic": false,
+  "tag": "x0b-hooks-list"
+}

@@ -131,6 +131,29 @@ def test_router_chat_repl(tmp_path, monkeypatch, capsys):
     assert '"project": "proj_a"' in out
 
 
+def test_resume_eval_cli(monkeypatch, capsys):
+    from router_runner import router as router_module
+    from router_runner.router import RouteReply
+
+    calls = []
+
+    class FakeRouter:
+        def resume_evaluation(self, waiter_id, manual=False):
+            calls.append((waiter_id, manual))
+            return RouteReply("ignored", waiter_id=waiter_id)
+
+    monkeypatch.setattr(router_module, "router_from_db", lambda db, registry=None: FakeRouter())
+    monkeypatch.setattr(router_module, "load_registry", lambda: {"proj_a": {}})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["agentd", "resume-eval", "eval_123", "--db", "/tmp/router.db"],
+    )
+    assert agentd.main() == 0
+    assert calls == [("eval_123", True)]
+    assert '"waiter_id": "eval_123"' in capsys.readouterr().out
+
+
 def test_registry_discovery_from_agent_json(tmp_path, monkeypatch):
     from router_runner.router import load_registry
     root = tmp_path / "projects"

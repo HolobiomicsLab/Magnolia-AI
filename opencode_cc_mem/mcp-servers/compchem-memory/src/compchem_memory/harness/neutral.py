@@ -29,6 +29,29 @@ class NeutralConfig:
     deny_tools: frozenset[str]
 
 
+def bind_memory_service(
+    neutral: NeutralConfig, route: dict[str, str]
+) -> NeutralConfig:
+    """Replace only compchem-memory with its project-bound HTTP route."""
+    servers = []
+    for server in neutral.servers:
+        if server.name != "compchem-memory":
+            servers.append(server)
+            continue
+        servers.append(
+            McpServer(
+                name=server.name,
+                kind="remote",
+                command=None,
+                url=route["url"],
+                env={},
+                timeout_ms=server.timeout_ms,
+                enabled=server.enabled,
+            )
+        )
+    return NeutralConfig(servers, neutral.deny_tools)
+
+
 def load(template: Path, subs: dict[str, str], setup: dict) -> NeutralConfig:
     """Load a JSON template after applying the launcher's substitutions."""
     text = template.read_text(encoding="utf-8")
@@ -86,6 +109,14 @@ def _server(name: str, value: dict, setup: dict, memory_enabled: bool) -> McpSer
             env["MAGNOLIA_MEMORY_MODEL"] = setup["memory_model"]
             if setup.get("memory_provider"):
                 env["MAGNOLIA_MEMORY_PROVIDER"] = setup["memory_provider"]
+            if setup.get("critic_provider"):
+                env["MAGNOLIA_CRITIC_PROVIDER"] = setup["critic_provider"]
+            if setup.get("critic_model"):
+                env["MAGNOLIA_CRITIC_MODEL"] = setup["critic_model"]
+            if setup.get("direct_fallback_provider"):
+                env["MAGNOLIA_DIRECT_FALLBACK_PROVIDER"] = setup["direct_fallback_provider"]
+            if setup.get("direct_fallback_model"):
+                env["MAGNOLIA_DIRECT_FALLBACK_MODEL"] = setup["direct_fallback_model"]
     return McpServer(
         name=name,
         kind=value["type"],

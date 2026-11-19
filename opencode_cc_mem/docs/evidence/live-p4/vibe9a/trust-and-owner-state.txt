@@ -1,0 +1,6 @@
+vibe trusted_folders.toml (values never printed; key names: trusted, untrusted)
+  before:            c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980  28 bytes mode 0600
+  gate-written:      41b198fe6534b73baf34ca3594708f732cce0bd1766411cb73513b49d4c5de97  (checked equal before restore)
+  restored:          c1be9b448d9da5ef13e31061dbc36be756fd48c474c885eba5d209a07f272980  28 bytes mode 0600, mtime equal to the backup; cmp vs backup: IDENTICAL; backup deleted
+owner state (~/.local/state/magnolia, ~/.config/magnolia, ~/.magnolia, ~/.local/share/opencode): listing hash 480659a9bba4f219 before and after; cmp of full listings IDENTICAL; listening ports identical
+vibe binary sha256 c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9 (dist-info 3.1.2)

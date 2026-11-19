@@ -1,0 +1,17 @@
+{
+  "claude": 1,
+  "codex": 1,
+  "codex_appserver": 5,
+  "corrections": [
+    "11:14 codex 0->1: c2-run reviewer 'codex -C .. exec' was classified codex-other by the guard (exec not in argv[1:3]); counted from the ledger; classifier fixed"
+  ],
+  "nonmodel": [
+    "11:09:46 hooks-x1 codex-appserver",
+    "11:09:47 hooks-x2 codex-appserver",
+    "11:09:59 d2 codex-appserver",
+    "11:10:35 c2-run codex-appserver",
+    "11:10:36 c2-run codex-appserver",
+    "11:10:37 c2-run codex-other -C <text len=134> -s"
+  ],
+  "opencode": 0
+}

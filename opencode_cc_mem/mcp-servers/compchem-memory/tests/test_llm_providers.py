@@ -23,11 +23,13 @@ def _clean_env(monkeypatch):
         "DEEPSEEK_API_KEY",
         "DEEPSEEK_BASE_URL",
         "OPENAI_API_KEY",
+        "MAGNOLIA_OPENAI_API_KEY",
         "OPENAI_BASE_URL",
         "KIMI_PLAN_MAGNOLIA_API_KEY",
         "KIMI_API_KEY",
         "KIMI_BASE_URL",
         "MISTRAL_API_KEY",
+        "MAGNOLIA_MISTRAL_API_KEY",
         "MISTRAL_BASE_URL",
         "ZHIPU_API_KEY",
         "ZAI_API_KEY",
@@ -36,6 +38,10 @@ def _clean_env(monkeypatch):
         "OPENROUTER_BASE_URL",
         "MAGNOLIA_OPENROUTER_PROVIDER",
         "OPENROUTER_CODING_API_KEY",
+        "MAGNOLIA_CRITIC_API_KEY",
+        "MAGNOLIA_CRITIC_PROVIDER",
+        "MAGNOLIA_CRITIC_MODEL",
+        "MAGNOLIA_CRITIC_BASE_URL",
     ]:
         monkeypatch.delenv(k, raising=False)
 
@@ -205,6 +211,87 @@ def test_get_api_key_deepseek(monkeypatch):
 def test_get_api_key_openai(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "op")
     assert llm._get_api_key("openai") == "op"
+
+
+@pytest.mark.parametrize(
+    ("provider", "alias", "generic"),
+    [
+        ("openai", "MAGNOLIA_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        ("mistral", "MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
+    ],
+)
+def test_memory_route_prefers_magnolia_provider_key(
+    monkeypatch, provider, alias, generic
+):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", provider)
+    monkeypatch.setenv(alias, "magnolia-key")
+    monkeypatch.setenv(generic, "client-key")
+
+    route = llm.resolve_route("memory")
+
+    assert route is not None
+    assert route.key == "magnolia-key"
+
+
+@pytest.mark.parametrize(
+    ("provider", "alias", "generic"),
+    [
+        ("openai", "MAGNOLIA_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        ("mistral", "MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
+    ],
+)
+def test_critic_route_prefers_magnolia_provider_key(
+    monkeypatch, provider, alias, generic
+):
+    monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", provider)
+    monkeypatch.setenv(alias, "magnolia-key")
+    monkeypatch.setenv(generic, "client-key")
+
+    route = llm.resolve_route("critic")
+
+    assert route is not None
+    assert route.key == "magnolia-key"
+
+
+@pytest.mark.parametrize(
+    ("provider", "alias", "generic"),
+    [
+        ("openai", "MAGNOLIA_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        ("mistral", "MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
+    ],
+)
+def test_memory_and_critic_routes_fall_back_to_generic_provider_key(
+    monkeypatch, provider, alias, generic
+):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_PROVIDER", provider)
+    monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", provider)
+    monkeypatch.delenv(alias, raising=False)
+    monkeypatch.setenv(generic, "client-key")
+
+    memory = llm.resolve_route("memory")
+    critic = llm.resolve_route("critic")
+
+    assert memory is not None and memory.key == "client-key"
+    assert critic is not None and critic.key == "client-key"
+
+
+@pytest.mark.parametrize(
+    ("provider", "alias"),
+    [
+        ("openai", "MAGNOLIA_OPENAI_API_KEY"),
+        ("mistral", "MAGNOLIA_MISTRAL_API_KEY"),
+    ],
+)
+def test_memory_and_critic_routes_autodetect_magnolia_provider_key(
+    monkeypatch, provider, alias
+):
+    monkeypatch.setenv(alias, "magnolia-key")
+
+    memory = llm.resolve_route("memory")
+    critic = llm.resolve_route("critic")
+
+    assert memory is not None and memory.provider == provider
+    assert critic is not None and critic.provider == provider
 
 
 # ============ _get_model =============

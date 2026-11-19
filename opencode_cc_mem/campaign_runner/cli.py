@@ -3,24 +3,76 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
 import sys
+import uuid
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from .distill import drain_queue
+from .executors.contracts import ExecContext
+from .executors.capabilities import load_role_capabilities
+from .executors.opencode import OpenCodeServiceExecutor
+from .executors.registry import executor_for
 from .jobs import CompchemJobBackend, FakeJobBackend, JobController
-from .models import CampaignError, Protocol, load_protocol, protocol_sha256
-from .reviewers import Reviewer
+from .launch import resolve_python
+from .governor import Governor
+from .models import CampaignError, Protocol, ProtocolError, load_protocol, protocol_sha256
+from .reviewers import ReviewError, Reviewer, choose_reviewer_model
+from .routing import ResolvedRoute, RouteError, resolve_route
 from .runner import CampaignRunner, RunnerConfig
 from .service import ensure_service, merge_agent_steps, service_status, stop_service
 from .state import CampaignState, CampaignStore
-from .workers import OpenCodeExecutor
+from .workers import InvocationGovernance, WorkerExecutor
+from compchem_memory.tool_catalog import (
+    MEMORY_TOOL_ALLOWLIST_ENV,
+    MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+)
 
 
 _ROOT = Path(__file__).resolve().parents[1]
+
+
+def _memory_setup(root: Path = _ROOT) -> dict[str, Any]:
+    """Load the installation's memory provider selection for managed Vibe HTTP."""
+    path = root / ".magnolia" / "llm-setup.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _memory_route(
+    route: ResolvedRoute,
+    python_executable: str | None = None,
+    installation_root: Path | None = None,
+    *,
+    managed: bool = False,
+) -> dict[str, Any]:
+    """Keep memory/provider credentials in Magnolia's managed server process."""
+    if managed or route.client == "vibe":
+        return {"transport": "managed"}
+    root = installation_root or _ROOT
+    runner = (
+        root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
+    return {
+        "transport": "stdio",
+        "command": python_executable or resolve_python(root),
+        "args": ["-I", str(runner.resolve()), "--memory-server"],
+        "env_vars": [
+            "MAGNOLIA_ROOT", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_RULES_DIR",
+            "MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "MAGNOLIA_DISTILL_INTERVAL_MIN",
+            "MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER",
+            MEMORY_TOOL_ALLOWLIST_ENV, MEMORY_TOOL_ALLOWLIST_REQUIRED_ENV,
+        ],
+    }
 
 
 def _print_state(state: CampaignState) -> None:
@@ -47,6 +99,15 @@ def _build_parser() -> argparse.ArgumentParser:
     approve.add_argument("--approver", required=True)
     approve.add_argument("--reason", required=True)
     approve.add_argument("--minutes", type=float, default=0)
+
+    decline = subparsers.add_parser(
+        "decline-followups",
+        help="decline proposed follow-ups and accept an otherwise passing stage",
+    )
+    _add_runtime_arguments(decline)
+    decline.add_argument("--approver", required=True)
+    decline.add_argument("--reason", required=True)
+    decline.add_argument("--minutes", type=float, default=0)
 
     approve_start = subparsers.add_parser(
         "approve-start", help="approve the initial campaign start"
@@ -168,15 +229,101 @@ _WORKER_AGENT = "campaign-worker"
 _REVIEWER_AGENT = "campaign-reviewer"
 
 
-def _service_settings(protocol: Protocol) -> tuple[str, list[str]]:
+@dataclass(frozen=True)
+class CampaignRoutes:
+    """Resolved executable routes for every selectable campaign role."""
+
+    worker: Mapping[str, ResolvedRoute]
+    reviewer: Mapping[str, ResolvedRoute]
+
+
+def resolve_campaign_routes(
+    protocol: Protocol,
+    *,
+    setup: Mapping[str, Any] | None = None,
+    require_reviewers: bool = False,
+) -> CampaignRoutes:
+    """Resolve stage and reviewer routes before any service or client launch."""
+    workers: dict[str, ResolvedRoute] = {}
+    reviewers: dict[str, ResolvedRoute] = {}
+    defaults = dict(setup or {})
+    worker_config = {
+        "model": protocol.worker.model,
+        "hard_stage_model": protocol.worker.hard_stage_model,
+    }
+    for stage in protocol.stages:
+        if stage.type != "opencode":
+            continue
+        try:
+            worker_route = resolve_route(
+                "worker",
+                {
+                    **defaults,
+                    "worker": worker_config,
+                    "stage": {"model": stage.model, "hard": stage.hard},
+                    "hard": stage.hard,
+                },
+            )
+        except RouteError as exc:
+            raise ProtocolError(f"stage {stage.id} worker route: {exc}") from exc
+        workers[stage.id] = worker_route
+        if not stage.review or not protocol.reviewer.enabled:
+            continue
+        try:
+            primary = resolve_route(
+                "reviewer",
+                {
+                    **defaults,
+                    "reviewer": {"model": protocol.reviewer.model},
+                },
+            )
+            primary_id = (
+                f"{primary.client}/{primary.model}"
+                if primary.client != "opencode"
+                else primary.model or ""
+            )
+            selected = choose_reviewer_model(
+                worker_route.model or "",
+                primary_id,
+                protocol.reviewer.alternate_model,
+            )
+            reviewers[stage.id] = resolve_route(
+                "reviewer",
+                {**defaults, "reviewer": {"model": selected}},
+            )
+        except (ReviewError, RouteError) as exc:
+            if require_reviewers:
+                raise ProtocolError(f"stage {stage.id} reviewer route: {exc}") from exc
+    return CampaignRoutes(workers, reviewers)
+
+
+def opencode_service_roles(routes: CampaignRoutes) -> set[str]:
+    """Return campaign roles that can actually select the OpenCode service."""
+    roles: set[str] = set()
+    if any(route.client == "opencode" for route in routes.worker.values()):
+        roles.add("worker")
+    if any(route.client == "opencode" for route in routes.reviewer.values()):
+        roles.add("reviewer")
+    return roles
+
+
+def _service_settings(
+    protocol: Protocol,
+    governor_cap: int | None = None,
+    roles: set[str] | None = None,
+) -> tuple[str, list[str]]:
     """OPENCODE_CONFIG_CONTENT and required agents for the dedicated service.
 
     Observed on OpenCode 2.3.0: the step limit in OPENCODE_CONFIG_CONTENT
     reaches a dedicated service only from the service's own environment at
     start, so the limits of both agents are given to the service."""
-    steps = {_WORKER_AGENT: protocol.worker.max_steps}
-    if protocol.reviewer.enabled:
-        steps[_REVIEWER_AGENT] = protocol.reviewer.max_steps
+    selected_roles = roles if roles is not None else {"worker", "reviewer"}
+    clamp = lambda value: min(value, governor_cap) if governor_cap else value
+    steps = {}
+    if "worker" in selected_roles:
+        steps[_WORKER_AGENT] = clamp(protocol.worker.max_steps)
+    if protocol.reviewer.enabled and "reviewer" in selected_roles:
+        steps[_REVIEWER_AGENT] = clamp(protocol.reviewer.max_steps)
     config = merge_agent_steps(os.environ.get("OPENCODE_CONFIG_CONTENT"), steps)
     return config, list(steps)
 
@@ -185,9 +332,9 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
     store = CampaignStore(args.run_dir)
     protocol = store.verify_protocol()
     project_dir = (
-        Path(args.project_dir).resolve()
+        Path(os.path.realpath(args.project_dir))
         if getattr(args, "project_dir", None)
-        else _derive_project_dir(store.run_dir)
+        else Path(os.path.realpath(_derive_project_dir(store.run_dir)))
     )
     if not project_dir.is_dir():
         raise CampaignError(f"project directory does not exist: {project_dir}")
@@ -211,21 +358,101 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
     server = getattr(args, "server", None) or os.environ.get("MAGNOLIA_OPENCODE_SERVER")
     database = getattr(args, "db", None) or _default_db()
     environment = {
+        **os.environ,
         "MAGNOLIA_PROJECT_DIR": str(project_dir),
         "MAGNOLIA_ROOT": str(project_dir.parents[1]),
     }
-    uses_models = any(stage.type == "opencode" for stage in protocol.stages)
+    memory_setup = _memory_setup()
+    routes = resolve_campaign_routes(
+        protocol, setup=memory_setup, require_reviewers=True
+    )
+    service_roles = opencode_service_roles(routes)
+    governor = Governor()
+    governor_cap = governor.policy.max_turns_per_run
+    role_capabilities = load_role_capabilities()
+    project_digest = hashlib.sha256(str(project_dir).encode("utf-8")).hexdigest()
+    parent_run_id = f"campaign:{protocol.id}:{store.run_dir.name}"
+
+    def governance(route: ResolvedRoute, role_cap: int) -> InvocationGovernance:
+        return InvocationGovernance(
+            governor,
+            route,
+            parent_run_id,
+            project_digest,
+            role_cap=role_cap,
+        )
+
+    def execution_context(
+        route: ResolvedRoute,
+        role: str,
+        timeout: int,
+        role_cap: int,
+        agent: str,
+    ) -> ExecContext:
+        python_executable = resolve_python(_ROOT, environment)
+        client_binary = {
+            "claude-code": os.environ.get("MAGNOLIA_CLAUDE_BIN", "claude"),
+            "codex": os.environ.get("MAGNOLIA_CODEX_BIN", "codex"),
+            "vibe": os.environ.get("MAGNOLIA_VIBE_BIN", "vibe"),
+        }.get(route.client, binary)
+        return ExecContext(
+            route=route,
+            role=role,
+            project_dir=project_dir,
+            run_dir=store.run_dir,
+            control_dir=store.control_dir,
+            work_dir=store.run_dir / "work",
+            timeout_seconds=timeout,
+            role_cap=role_cap,
+            governor_cap=governor_cap,
+            opencode_binary=binary,
+            opencode_server=server,
+            opencode_db=database,
+            agent=agent,
+            role_capabilities=role_capabilities,
+            installation_root=_ROOT,
+            workspace_root=project_dir.parent,
+            project_identity=project_digest,
+            python_executable=python_executable,
+            tools_port=int(os.environ.get("MAGNOLIA_TOOLS_PORT", "8766")),
+            setup=memory_setup,
+            memory_service=_memory_route(
+                route, python_executable, _ROOT, managed=True
+            ),
+            invocation_id=uuid.uuid4().hex,
+            launch_argv=(client_binary,),
+            environment=environment,
+            governance=governance(route, role_cap),
+        )
+
     if (
-        uses_models
+        service_roles
         and not server
         and getattr(args, "command", None) in {"run", "daemon"}
     ):
-        config_content, required_agents = _service_settings(protocol)
+        config_content, required_agents = _service_settings(
+            protocol, governor_cap, service_roles
+        )
         try:
-            record = ensure_service(
-                project_dir,
-                binary,
-                database,
+            service_route = next(
+                route
+                for route in (*routes.worker.values(), *routes.reviewer.values())
+                if route.client == "opencode"
+            )
+            service_executor = executor_for(
+                service_route,
+                "service",
+                ExecContext(
+                    route=service_route,
+                    role="service",
+                    project_dir=project_dir,
+                    opencode_binary=binary,
+                    opencode_db=database,
+                    governor_cap=governor_cap,
+                ),
+            )
+            assert isinstance(service_executor, OpenCodeServiceExecutor)
+            record = service_executor.ensure(
                 config_content=config_content,
                 required_agents=required_agents,
             )
@@ -235,17 +462,29 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
         environment["OPENCODE_SERVER_PASSWORD"] = str(record["password"])
         environment["OPENCODE_SERVER_USERNAME"] = "opencode"
 
-    def worker_factory(model: str, timeout: int) -> OpenCodeExecutor:
-        return OpenCodeExecutor(
-            binary=binary,
-            model=model,
-            agent=_WORKER_AGENT,
-            server_url=server,
-            db_path=database,
-            environment=environment,
-            timeout_seconds=timeout,
-            max_steps=protocol.worker.max_steps,
+    def worker_factory(
+        model: str,
+        timeout: int,
+        resume_from: Path | None = None,
+        resume_artifact: Any = None,
+    ) -> WorkerExecutor:
+        route = resolve_route("worker", {"worker": {"model": model}})
+        executor = executor_for(
+            route,
+            "worker",
+            replace(
+                execution_context(
+                    route,
+                    "worker",
+                    timeout,
+                    protocol.worker.max_steps,
+                    _WORKER_AGENT,
+                ),
+                resume_from=resume_from,
+                resume_artifact=resume_artifact,
+            ),
         )
+        return executor
 
     reviewer = None
     if protocol.reviewer.enabled:
@@ -257,6 +496,13 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             timeout_seconds=protocol.reviewer.timeout_seconds,
             max_retries=protocol.reviewer.repair_attempts,
             max_steps=protocol.reviewer.max_steps,
+            context_factory=lambda route, cwd, attempt_dir: execution_context(
+                route,
+                "reviewer",
+                protocol.reviewer.timeout_seconds,
+                protocol.reviewer.max_steps,
+                _REVIEWER_AGENT,
+            ),
         )
     backend = (
         FakeJobBackend()
@@ -279,6 +525,9 @@ def _build_runner(args: argparse.Namespace) -> CampaignRunner:
             usage_db=database,
             distill_on_complete=getattr(args, "distill_on_complete", False),
             distill_db=database,
+            quota_governor=governor,
+            worker_routes=routes.worker,
+            reviewer_routes=routes.reviewer,
         ),
     )
 
@@ -355,6 +604,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 store.approve(args.approver, args.reason, minutes=args.minutes)
             )
             return 0
+        if args.command == "decline-followups":
+            runner = _build_runner(args)
+            _print_state(
+                runner.decline_followups(
+                    args.approver,
+                    args.reason,
+                    minutes=args.minutes,
+                )
+            )
+            return 0
         if args.command == "approve-start":
             _print_state(
                 store.approve_start(
@@ -374,7 +633,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "resume":
             (store.run_dir / "PAUSE").unlink(missing_ok=True)
-            _print_state(store.resume(args.reason))
+            state = store.load()
+            if state.state == "waiting_quota":
+                _print_state(_build_runner(args).resume_quota(manual=True))
+            else:
+                _print_state(store.resume(args.reason))
             return 0
         if args.command == "halt":
             try:

@@ -1,0 +1,339 @@
+{
+ "children": [
+  {
+   "context_breakdown": {
+    "conversation": 781,
+    "skills": 0,
+    "system": 63268,
+    "tools": 13766
+   },
+   "dir": "child-5499f343763cfa54ad3ab408",
+   "hook_results": [
+    {
+     "hook": "post_tool_call",
+     "result": "{\"action_id\": \"a061ecf7-4459-57b1-8292-6f8be6ba6f0a\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"PERIWINKLE\\n\", \"file_size_bytes\": 11, \"lines_read\": 1, \"next_offset\": null, \"offset\": 0, \"path\": \"<G>/probe/1c/word.txt\", \"returned_bytes\": 11, \"tot\u2026",
+     "seq": 25,
+     "state": "succeeded"
+    },
+    {
+     "hook": "post_agent_turn",
+     "result": "{\"action_id\": \"1b08faed-f8e2-541a-8266-e4922a1ea600\", \"result\": {\"hook\": \"post_agent_turn\", \"output\": {\"acceptance\": {\"type\": \"candidate\"}, \"type\": \"accept\"}}, \"type\": \"hook_completed\"}",
+     "seq": 35,
+     "state": "succeeded"
+    }
+   ],
+   "hooks": [
+    {
+     "action_id": "a061ecf7-4459-57b1-8292-6f8be6ba6f0a",
+     "bindings": [
+      "builtin:agents_md"
+     ],
+     "call_id": "c649R16qr",
+     "hook": "post_tool_call",
+     "input_keys": [
+      "duration_ms",
+      "tool_call",
+      "tool_result"
+     ],
+     "seq": 24,
+     "tool": "file_system.read_file"
+    },
+    {
+     "action_id": "1b08faed-f8e2-541a-8266-e4922a1ea600",
+     "bindings": [
+      "<G>/probe/1c:probe-post-agent"
+     ],
+     "call_id": null,
+     "hook": "post_agent_turn",
+     "input_keys": [
+      "candidate"
+     ],
+     "seq": 32,
+     "tool": null
+    }
+   ],
+   "llm_calls": [
+    {
+     "iteration": 0,
+     "seq": 15,
+     "tool_catalog": {
+      "revision": 9007199254740991,
+      "type": "keep"
+     },
+     "turn_id": "child-5499f343763cfa54ad3ab408:turn:1"
+    },
+    {
+     "iteration": 1,
+     "seq": 28,
+     "tool_catalog": {
+      "revision": 9007199254740991,
+      "type": "keep"
+     },
+     "turn_id": "child-5499f343763cfa54ad3ab408:turn:1"
+    }
+   ],
+   "runtime": {
+    "active_model": null,
+    "agent_name": null,
+    "children": [],
+    "hook_bindings": [
+     {
+      "id": "<G>/probe/1c:probe-pre-agent",
+      "order": 0,
+      "point": "pre_agent_turn",
+      "selector": {
+       "type": "always"
+      }
+     },
+     {
+      "id": "<G>/probe/1c:probe-post-agent",
+      "order": 1,
+      "point": "post_agent_turn",
+      "selector": {
+       "type": "always"
+      }
+     },
+     {
+      "id": "builtin:agents_md",
+      "order": 2,
+      "point": "post_tool_call",
+      "selector": {
+       "type": "always"
+      }
+     }
+    ],
+    "identity": {
+     "depth": 1,
+     "kind": "subagent",
+     "parent_session_id": "97971684-bdf3-07e4-3494-83fe10f98029",
+     "root_session_id": "97971684-bdf3-07e4-3494-83fe10f98029",
+     "session_id": "child-5499f343763cfa54ad3ab408"
+    },
+    "tool_modes": {
+     "background_processes": "disabled",
+     "bash_timeout": null,
+     "command_environment": "unix",
+     "file_system": "enabled",
+     "large_output": "filesystem",
+     "max_wait_ms": 3600000,
+     "model_wait": "enabled",
+     "programmatic": null,
+     "subagents": "disabled"
+    }
+   },
+   "secret_in_session": false,
+   "segments": [
+    {
+     "file": "0000000000000011.jsonl",
+     "records": 27,
+     "seq": [
+      11,
+      37
+     ]
+    },
+    {
+     "file": "0000000000000038.jsonl",
+     "records": 0,
+     "seq": null
+    }
+   ],
+   "tools": [
+    {
+     "approval": {
+      "approvalSource": "bypass",
+      "approvalType": "always",
+      "decision": "execute"
+     },
+     "arguments": "{\"path\": \"<G>/probe/1c/word.txt\"}",
+     "call_id": "c649R16qr",
+     "call_type": "runtime_builtin",
+     "error": null,
+     "name": "file_system.read_file",
+     "parent_call_id": null,
+     "result_excerpt": "{\"content\": \"PERIWINKLE\\n\", \"file_size_bytes\": 11, \"lines_read\": 1, \"next_offset\": null, \"offset\": 0, \"path\": \"<G>/pro\u2026",
+     "result_type": "tool_succeeded",
+     "seq": 19,
+     "state": "succeeded"
+    }
+   ]
+  }
+ ],
+ "export": {
+  "config": {
+   "active_model": "",
+   "bypass_tool_permissions": true,
+   "disabled_tools": [
+    "ask_user_question",
+    "cron"
+   ],
+   "enable_background_processes": false,
+   "enable_subagents": true,
+   "enable_telemetry": false,
+   "enabled_tools": []
+  },
+  "cost_usd": 0.03729642,
+  "ended_at": "2026-11-18T12:48:10.323237Z",
+  "error": null,
+  "exit_code": 0,
+  "limits": {
+   "max_price": null,
+   "max_tokens": null,
+   "max_turns": 6,
+   "time_limit_s": null
+  },
+  "outcome": "finished",
+  "session_id": "97971684-bdf3-07e4-3494-83fe10f98029",
+  "started_at": "2026-11-18T12:47:36.293918Z",
+  "steps": 5,
+  "stop_reason": null,
+  "usage": {
+   "cached_input_tokens": 68096,
+   "input_tokens": 112263,
+   "output_tokens": 768,
+   "total_tokens": 113031
+  },
+  "vibe_version": "3.1.3",
+  "warnings": [
+   {
+    "message": "Model 'zai-glm-5-3-flash' is not available \u2014 running 'Mistral Large 4'. Pick another model to stop this notice.",
+    "source": null
+   }
+  ]
+ },
+ "root": {
+  "context_breakdown": {
+   "conversation": 7630,
+   "skills": 0,
+   "system": 75067,
+   "tools": 13766
+  },
+  "dir": "session",
+  "hook_results": [
+   {
+    "hook": "post_tool_call",
+    "result": "{\"action_id\": \"a7480c54-3176-531b-a9a6-ced9f6f22a49\", \"result\": {\"hook\": \"post_tool_call\", \"output\": {\"tool_result\": {\"content\": [], \"structured_content\": {\"reason\": \"input_available\"}, \"type\": \"success\"}}}, \"type\": \"hook_completed\"}",
+    "seq": 43,
+    "state": "succeeded"
+   },
+   {
+    "hook": "post_agent_turn",
+    "result": "{\"action_id\": \"cd94ee95-a3fe-509b-93a3-5e5204174cd9\", \"result\": {\"hook\": \"post_agent_turn\", \"output\": {\"acceptance\": {\"type\": \"candidate\"}, \"type\": \"accept\"}}, \"type\": \"hook_completed\"}",
+    "seq": 53,
+    "state": "succeeded"
+   }
+  ],
+  "hooks": [
+   {
+    "action_id": "a7480c54-3176-531b-a9a6-ced9f6f22a49",
+    "bindings": [
+     "builtin:agents_md"
+    ],
+    "call_id": "7cwlxytnh",
+    "hook": "post_tool_call",
+    "input_keys": [
+     "duration_ms",
+     "tool_call",
+     "tool_result"
+    ],
+    "seq": 42,
+    "tool": "self.wait"
+   },
+   {
+    "action_id": "cd94ee95-a3fe-509b-93a3-5e5204174cd9",
+    "bindings": [
+     "<G>/probe/1c:probe-post-agent"
+    ],
+    "call_id": null,
+    "hook": "post_agent_turn",
+    "input_keys": [
+     "candidate"
+    ],
+    "seq": 50,
+    "tool": null
+   }
+  ],
+  "llm_calls": [
+   {
+    "iteration": 4,
+    "seq": 46,
+    "tool_catalog": {
+     "revision": 9007199254740991,
+     "type": "keep"
+    },
+    "turn_id": "turn-20f388b9327aaa0a111ce1e8d3febbe0"
+   }
+  ],
+  "runtime": {
+   "active_model": "mistral-large-4-0",
+   "agent_name": "auto-approve",
+   "children": [
+    {
+     "session_id": "a3e3e6cc-4b35-5aa7-a66b-3138e5fa8284",
+     "state": "completed",
+     "stateful": true
+    }
+   ],
+   "hook_bindings": [
+    {
+     "id": "<G>/probe/1c:probe-pre-agent",
+     "order": 0,
+     "point": "pre_agent_turn",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "<G>/probe/1c:probe-post-agent",
+     "order": 1,
+     "point": "post_agent_turn",
+     "selector": {
+      "type": "always"
+     }
+    },
+    {
+     "id": "builtin:agents_md",
+     "order": 2,
+     "point": "post_tool_call",
+     "selector": {
+      "type": "always"
+     }
+    }
+   ],
+   "identity": {
+    "depth": 0,
+    "kind": "root",
+    "parent_session_id": null,
+    "root_session_id": "97971684-bdf3-07e4-3494-83fe10f98029",
+    "session_id": "97971684-bdf3-07e4-3494-83fe10f98029"
+   },
+   "tool_modes": {
+    "background_processes": "disabled",
+    "bash_timeout": null,
+    "command_environment": "unix",
+    "file_system": "enabled",
+    "large_output": "filesystem",
+    "max_wait_ms": 3600000,
+    "model_wait": "enabled",
+    "programmatic": null,
+    "subagents": "enabled"
+   }
+  },
+  "secret_in_session": false,
+  "segments": [
+   {
+    "file": "0000000000000039.jsonl",
+    "records": 18,
+    "seq": [
+     39,
+     56
+    ]
+   },
+   {
+    "file": "0000000000000057.jsonl",
+    "records": 0,
+    "seq": null
+   }
+  ],
+  "tools": []
+ }
+}

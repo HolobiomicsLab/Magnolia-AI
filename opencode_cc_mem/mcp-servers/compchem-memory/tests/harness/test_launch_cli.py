@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -56,6 +57,7 @@ def _args(root: Path) -> list[str]:
     return [
         "launch", "--harness", "claude", "--root", str(root),
         "--project", "demo", "--python", "/venv/bin/python", "--tools-port", "8123",
+        "--holder-pid", str(os.getpid()),
     ]
 
 
@@ -188,6 +190,14 @@ def test_launch_help_accepts_all_named_clients():
     assert exit_info.value.code == 0
 
 
+@pytest.mark.parametrize("command", ("route", "validate-route"))
+def test_harness_cli_has_no_duplicate_route_subcommands(command, capsysbinary):
+    assert launch_cli.main([command]) == 1
+    captured = capsysbinary.readouterr()
+    assert captured.out == b""
+    assert captured.err == b"invalid command line\n"
+
+
 def test_launch_escapes_real_template_substitutions(tmp_path, monkeypatch, capsysbinary):
     root = _root(tmp_path)
     renderer = FakeRenderer()
@@ -317,7 +327,7 @@ def test_argparse_error_is_one_stderr_line_and_exit_one(capsysbinary):
     captured = capsysbinary.readouterr()
 
     assert captured.out == b""
-    assert captured.err.startswith(b"argument command: invalid choice: 'unknown'")
+    assert captured.err == b"invalid command line\n"
     assert captured.err.endswith(b"\n")
     assert captured.err.count(b"\n") == 1
 
@@ -349,6 +359,31 @@ def test_launch_prints_one_warning_per_merge_conflict_and_exits_zero(
     )
 
 
+def test_write_failure_after_conflict_prints_only_the_error(
+    tmp_path, monkeypatch, capsysbinary
+):
+    root = _root(tmp_path)
+    class Renderer(FakeRenderer):
+        def __call__(self, _neutral, context):
+            return Launch(
+                argv=["fake-client"], env={},
+                files={context.project_dir / "broken": b"content"},
+                conflicts=["configuration conflict: hooks.old (member entry preserved)"],
+            )
+
+    monkeypatch.setitem(RENDERERS, "claude", Renderer())
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    monkeypatch.setattr(
+        launch_cli, "atomic_write",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("write failed")),
+    )
+
+    assert launch_cli.main(_args(root)) == 1
+    captured = capsysbinary.readouterr()
+    assert captured.out == b""
+    assert captured.err == b"write failed\n"
+
+
 def test_launch_without_client_model_passes_none(tmp_path, monkeypatch, capsysbinary):
     root = _root(tmp_path)
     (root / ".magnolia").mkdir()
@@ -361,6 +396,33 @@ def test_launch_without_client_model_passes_none(tmp_path, monkeypatch, capsysbi
     args = _args(root)
     args[args.index("claude")] = "codex"
 
+    assert launch_cli.main(args) == 0
+    capsysbinary.readouterr()
+
+    assert renderer.context.model is None
+
+
+def test_interactive_native_default_and_import_from_unrelated_cwd(
+    tmp_path, monkeypatch, capsysbinary
+):
+    root = _root(tmp_path)
+    campaign = root / "campaign_runner"
+    campaign.mkdir()
+    source = Path(__file__).parents[4] / "campaign_runner"
+    shutil.copy2(source / "__init__.py", campaign / "__init__.py")
+    shutil.copy2(source / "routing.py", campaign / "routing.py")
+    shutil.copy2(source / "reviewers.py", campaign / "reviewers.py")
+    (root / ".magnolia").mkdir()
+    (root / ".magnolia" / "llm-setup.json").write_text(
+        json.dumps({"harness": "codex", "models": {}}), encoding="utf-8"
+    )
+    renderer = FakeRenderer()
+    monkeypatch.setitem(RENDERERS, "codex", renderer)
+    monkeypatch.setattr(launch_cli.shutil, "which", lambda binary: f"/bin/{binary}")
+    monkeypatch.chdir(tmp_path)
+
+    args = _args(root)
+    args[args.index("claude")] = "codex"
     assert launch_cli.main(args) == 0
     capsysbinary.readouterr()
 

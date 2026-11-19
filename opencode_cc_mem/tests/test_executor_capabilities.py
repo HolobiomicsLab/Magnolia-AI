@@ -1,0 +1,586 @@
+import copy
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from campaign_runner.executors.capabilities import (
+    CapabilityTableError,
+    PREREQUISITE_CELLS,
+    load_capability_table,
+    project_role_capabilities,
+    validate_capability_table,
+)
+
+
+ROOT = Path(__file__).parents[1]
+REPOSITORY_ROOT = ROOT.parent
+TABLE = ROOT / "campaign_runner" / "executors" / "capabilities-p3.json"
+FIXTURES = ROOT / "tests" / "fixtures" / "executors"
+RECORDED_METADATA = {"synthetic", "recorded_from", "dropped_keys"}
+
+
+def _all_observed_table(tmp_path):
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    evidence = tmp_path / "observed.json"
+    evidence.write_text('{"synthetic": false}\n', encoding="utf-8")
+    values = {
+        "argv": ["client", "run"],
+        "model_delivery": {"accepted": True, "model": "model", "identity": "model"},
+        "discovery_dir": {"scope": "launch-project"},
+        "trust": True,
+        "hook_policy_digest": "sha256:policy",
+        "native_schemas": {"read": "file_path"},
+        "allowed_actions": ["native_read"],
+        "denied_actions": ["native_shell"],
+        "resume": {"same_session": True},
+        "caps": {"max_turns": 8},
+        "usage_semantics": {"scope": "invocation"},
+    }
+    for row in table["rows"]:
+        for name in PREREQUISITE_CELLS:
+            cell = row["cells"][name]
+            cell.update(status="observed", artifact=evidence.name)
+            if name != "identity":
+                cell["value"] = copy.deepcopy(values[name])
+        row["cells"]["quota_evidence"] = {"status": "unknown", "artifact": None}
+        if "http_api_key_env" in row["cells"]:
+            row["cells"]["http_api_key_env"] = {
+                "status": "unknown",
+                "artifact": None,
+            }
+        if "vibe_memory" in row["cells"]:
+            row["cells"]["vibe_memory"] = {
+                "status": "unknown",
+                "artifact": None,
+            }
+        row["gate"] = {
+            "status": "observed",
+            "artifact": evidence.name,
+            "value": "accepted",
+            "reason": "All prerequisites observed.",
+        }
+        row["stale"] = False
+    return table
+
+
+def _join_path(parent, child):
+    return f"{parent}.{child}" if parent else str(child)
+
+
+def _assert_recorded_subset(recorded, source, path=""):
+    if isinstance(recorded, dict):
+        assert isinstance(source, dict), path
+        omitted = [_join_path(path, key) for key in source.keys() - recorded.keys()]
+        for key in recorded.keys() - source.keys():
+            pytest.fail(f"{_join_path(path, key)} is absent from recorded_from source")
+        for key in recorded.keys() & source.keys():
+            omitted.extend(
+                _assert_recorded_subset(recorded[key], source[key], _join_path(path, key))
+            )
+        return omitted
+    if isinstance(recorded, list):
+        assert isinstance(source, list) and len(recorded) <= len(source), path
+        omitted = [f"{path}[{index}]" for index in range(len(recorded), len(source))]
+        for index, value in enumerate(recorded):
+            omitted.extend(_assert_recorded_subset(value, source[index], f"{path}[{index}]"))
+        return omitted
+    assert recorded == source, path
+    return []
+
+
+def test_capability_record_requires_identity_and_evidence(tmp_path):
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+
+    missing_identity = copy.deepcopy(table)
+    del missing_identity["rows"][0]["cells"]["identity"]["value"]["executable"]
+    with pytest.raises(CapabilityTableError, match="executable"):
+        validate_capability_table(missing_identity, repository_root=REPOSITORY_ROOT)
+
+    synthetic_observation = copy.deepcopy(table)
+    identity = synthetic_observation["rows"][0]["cells"]["identity"]
+    identity["artifact"] = (
+        "opencode_cc_mem/tests/fixtures/executors/claude/synthetic/quota.json"
+    )
+    with pytest.raises(CapabilityTableError, match="synthetic"):
+        validate_capability_table(synthetic_observation, repository_root=REPOSITORY_ROOT)
+
+    marked_synthetic = copy.deepcopy(table)
+    marker = tmp_path / "marked.json"
+    marker.write_text('{"synthetic": true}\n', encoding="utf-8")
+    marked_synthetic["rows"][0]["cells"]["identity"]["artifact"] = marker.name
+    with pytest.raises(CapabilityTableError, match="synthetic"):
+        validate_capability_table(marked_synthetic, repository_root=tmp_path)
+
+    missing_artifact = copy.deepcopy(table)
+    missing_artifact["rows"][0]["cells"]["identity"]["artifact"] = (
+        "opencode_cc_mem/tests/fixtures/executors/claude/recorded/missing.json"
+    )
+    with pytest.raises(CapabilityTableError, match="does not exist"):
+        validate_capability_table(missing_artifact, repository_root=REPOSITORY_ROOT)
+
+
+def test_current_capability_citations_are_repository_tracked_safe():
+    table = json.loads(TABLE.read_text(encoding="utf-8"))
+    citations = list(table["generated_from"]["sources"])
+    for row in table["rows"]:
+        citations.append(row["gate"].get("artifact"))
+        citations.extend(cell.get("artifact") for cell in row["cells"].values())
+
+    for citation in (value for value in citations if value is not None):
+        relative = Path(citation)
+        assert not relative.is_absolute(), citation
+        assert relative.parts and relative.parts[0] != ".superpowers", citation
+        assert (REPOSITORY_ROOT / relative).exists(), citation
+
+
+def test_capability_record_rejects_unknown_status():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    table["rows"][0]["cells"]["argv"]["status"] = "assumed"
+
+    with pytest.raises(CapabilityTableError, match="unknown status"):
+        validate_capability_table(table, repository_root=REPOSITORY_ROOT)
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_vibe_worker_reviewer_projection_has_no_glob_grep(role):
+    projected = project_role_capabilities(load_capability_table())
+
+    capabilities = projected["vibe"][role]["capabilities"]
+    assert "native_read" in capabilities
+    assert not {"native_glob", "native_grep"} & set(capabilities)
+
+
+def test_capability_record_requires_boolean_stale_and_observed_value(tmp_path):
+    table = _all_observed_table(tmp_path)
+    del table["rows"][0]["stale"]
+    with pytest.raises(CapabilityTableError, match="stale"):
+        validate_capability_table(table, repository_root=tmp_path)
+
+    table = _all_observed_table(tmp_path)
+    del table["rows"][0]["cells"]["argv"]["value"]
+    with pytest.raises(CapabilityTableError, match="non-empty value"):
+        validate_capability_table(table, repository_root=tmp_path)
+
+
+@pytest.mark.parametrize("suffix,contents", [(".json", "{"), (".jsonl", "{}\n{")])
+def test_observed_json_artifact_must_parse(tmp_path, suffix, contents):
+    table = _all_observed_table(tmp_path)
+    artifact = tmp_path / f"broken{suffix}"
+    artifact.write_text(contents, encoding="utf-8")
+    table["rows"][0]["cells"]["argv"]["artifact"] = artifact.name
+
+    with pytest.raises(CapabilityTableError, match="parse"):
+        validate_capability_table(table, repository_root=tmp_path)
+
+
+def test_observed_jsonl_artifact_detects_synthetic_lines(tmp_path):
+    table = _all_observed_table(tmp_path)
+    artifact = tmp_path / "stream.jsonl"
+    artifact.write_text('{}\n{"synthetic": true}\n', encoding="utf-8")
+    table["rows"][0]["cells"]["argv"]["artifact"] = artifact.name
+
+    with pytest.raises(CapabilityTableError, match="synthetic"):
+        validate_capability_table(table, repository_root=tmp_path)
+
+
+def test_d2_d4_refusal_reason_requires_refused_gate(tmp_path):
+    table = _all_observed_table(tmp_path)
+    table["rows"][0]["gate"]["reason"] = "D2: campaign roles remain refused."
+
+    with pytest.raises(CapabilityTableError, match="D2/D4 refusal"):
+        validate_capability_table(table, repository_root=tmp_path)
+
+
+def test_recorded_usage_shapes_survive_scrubbing(tmp_path):
+    source = tmp_path / "usage.json"
+    output = tmp_path / "scrubbed.json"
+    source.write_text(
+        json.dumps(
+            {
+                "usage": {
+                    "input_tokens": 101,
+                    "output_tokens": 17,
+                    "cached_input_tokens": 83,
+                    "cache_creation_input_tokens": 19,
+                },
+                "modelUsage": {
+                    "cacheReadInputTokens": 83,
+                    "cacheCreationInputTokens": 19,
+                },
+                "session_id": "private-session-id",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "probes" / "make_fixtures.py"),
+            "--scrub-json",
+            str(source),
+            str(output),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    scrubbed = json.loads(output.read_text(encoding="utf-8"))
+    assert scrubbed["usage"] == {
+        "input_tokens": 101,
+        "output_tokens": 17,
+        "cached_input_tokens": 83,
+        "cache_creation_input_tokens": 19,
+    }
+    assert scrubbed["modelUsage"] == {
+        "cacheReadInputTokens": 83,
+        "cacheCreationInputTokens": 19,
+    }
+    assert scrubbed["session_id"] == "ses-fixture-1"
+
+    recorded = json.loads(
+        (FIXTURES / "vibe" / "recorded" / "export.json").read_text(encoding="utf-8")
+    )
+    assert isinstance(recorded["usage"]["input_tokens"], int)
+    assert isinstance(recorded["usage"]["cached_input_tokens"], int)
+
+
+def test_recorded_fixtures_match_their_sources():
+    for fixture in sorted(FIXTURES.glob("*/recorded/*.json")):
+        recorded = json.loads(fixture.read_text(encoding="utf-8"))
+        source = json.loads(
+            (REPOSITORY_ROOT / recorded["recorded_from"]).read_text(encoding="utf-8")
+        )
+        payload = {key: value for key, value in recorded.items() if key not in RECORDED_METADATA}
+        omitted = _assert_recorded_subset(payload, source)
+        assert sorted(recorded["dropped_keys"]) == sorted(omitted), fixture
+
+
+def test_all_observed_prerequisites_project_to_accepted_launch_fields(tmp_path):
+    table = _all_observed_table(tmp_path)
+    validate_capability_table(table, repository_root=tmp_path)
+
+    role = project_role_capabilities(table)["claude-code"]["worker"]
+
+    assert role == {
+        "accepted": True,
+        "gate_accepted": True,
+        "stale": False,
+        "trusted": True,
+        "identity": "sha256:policy",
+        "discovery_dir": {"scope": "launch-project"},
+        "capabilities": ["native_read"],
+        "model_isolation": {"accepted": True, "model": "model", "identity": "model"},
+        "blocking_cells": [],
+        "reasons": ["All prerequisites observed."],
+    }
+
+
+@pytest.mark.parametrize("cell_name", PREREQUISITE_CELLS)
+def test_each_unknown_prerequisite_blocks_and_names_it(tmp_path, cell_name):
+    table = _all_observed_table(tmp_path)
+    table["rows"][0]["cells"][cell_name] = {"status": "unknown", "artifact": None}
+
+    role = project_role_capabilities(table)["claude-code"]["worker"]
+
+    assert role["accepted"] is False
+    assert role["blocking_cells"] == [cell_name]
+
+
+@pytest.mark.parametrize("quota_status", ["unknown", "synthetic-only"])
+def test_quota_evidence_never_blocks_projection(tmp_path, quota_status):
+    table = _all_observed_table(tmp_path)
+    quota = table["rows"][0]["cells"]["quota_evidence"]
+    quota["status"] = quota_status
+    quota["artifact"] = None if quota_status == "unknown" else "observed.json"
+
+    role = project_role_capabilities(table)["claude-code"]["worker"]
+
+    assert role["accepted"] is True
+    assert role["blocking_cells"] == []
+
+
+@pytest.mark.parametrize(
+    "client,role,decision",
+    [("codex", "worker", "D2"), ("codex", "reviewer", "D2")],
+)
+def test_d2_d4_rows_remain_refused_with_observed_cells(tmp_path, client, role, decision):
+    table = _all_observed_table(tmp_path)
+    row = next(item for item in table["rows"] if (item["client"], item["role"]) == (client, role))
+    row["gate"].update(status="refused", reason=f"{decision}: role remains refused.")
+
+    projected = project_role_capabilities(table)[client][role]
+
+    assert projected["accepted"] is False
+    assert projected["blocking_cells"] == []
+    assert decision in projected["reasons"][0]
+
+
+def test_projection_treats_missing_or_non_false_stale_as_stale(tmp_path):
+    table = _all_observed_table(tmp_path)
+    del table["rows"][0]["stale"]
+    table["rows"][1]["stale"] = "false"
+
+    projected = project_role_capabilities(table)["claude-code"]
+
+    assert projected["worker"]["stale"] is True
+    assert projected["reviewer"]["stale"] is True
+
+
+def test_final_fold_accepts_claude_codex_and_vibe_campaign_roles():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)
+    changed_rows = [
+        row for row in table["rows"] if row["client"] in {"claude-code", "codex"}
+    ]
+
+    assert set(projected) == {"claude-code", "codex", "vibe"}
+    assert len(changed_rows) == 8
+    # Plan 4 Task 4 changed the hook adapter: the six accepted rows were rebound to the
+    # new hook_source and re-observed live in Plan 4 Tasks 6 and 6b; the PR2/PR3 restack on
+    # the PR1 follow-up moved hook_source again (Plan 4 Task 13a re-observation), and the v3
+    # rebase on always-on + PR #26 moved it once more (Plan 4 Task 17). Codex helper
+    # and evaluator stay refused (and stale).
+    stale_rows = {(row["client"], row["role"]) for row in changed_rows if row["stale"]}
+    assert stale_rows == {("codex", "helper"), ("codex", "evaluator")}
+    assert {
+        row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
+        for row in changed_rows
+        if row["client"] == "codex" and row["role"] in {"helper", "evaluator"}
+    } == {"8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff"}
+    assert {
+        row["gate"]["value"]["configuration_binding"]["components"]["hook_source"]
+        for row in changed_rows
+        if not (row["client"] == "codex" and row["role"] in {"helper", "evaluator"})
+    } == {"90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55"}
+    for client in projected.values():
+        assert set(client) == {"worker", "reviewer", "helper", "evaluator"}
+
+    assert all(role["gate_accepted"] for role in projected["claude-code"].values())
+    assert {
+        name: (role["accepted"], role["stale"])
+        for name, role in projected["claude-code"].items()
+    } == {
+        "worker": (True, False),
+        "reviewer": (True, False),
+        "helper": (True, False),
+        "evaluator": (True, False),
+    }
+    assert all("launch_identity" in role for role in projected["claude-code"].values())
+    assert all("launch_identity" in role for role in projected["codex"].values())
+    assert all(
+        role["launch_identity"]["components"]["model"] == "gpt-5.6-luna"
+        for role in projected["codex"].values()
+    )
+    for role in ("worker", "reviewer"):
+        assert projected["codex"][role]["gate_accepted"] is True
+        # Re-observed live on the rebound hook_source in Plan 4 Task 6.
+        assert projected["codex"][role]["accepted"] is True
+        assert projected["codex"][role]["stale"] is False
+        assert projected["codex"][role]["blocking_cells"] == []
+    for role in ("helper", "evaluator"):
+        assert projected["codex"][role]["accepted"] is False
+        assert projected["codex"][role]["blocking_cells"]
+    for name, role in projected["vibe"].items():
+        assert role["accepted"] is True
+        assert role["stale"] is False
+        assert role["blocking_cells"] == []
+        assert "launch_identity" in role
+        assert role["vibe_memory"] is (name == "worker")
+
+
+def test_live_candidate_can_clear_stale_rows_without_changing_recorded_values():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    candidate = copy.deepcopy(table)
+    for row in candidate["rows"]:
+        if row["client"] in {"claude-code", "codex"}:
+            row["stale"] = False
+
+    projected = project_role_capabilities(candidate)
+
+    assert all(role["accepted"] for role in projected["claude-code"].values())
+    assert projected["codex"]["worker"]["accepted"] is True
+    assert projected["codex"]["reviewer"]["accepted"] is True
+
+
+def test_claude_rows_accepted_from_live2a_gate():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)["claude-code"]
+    rows = [row for row in table["rows"] if row["client"] == "claude-code"]
+
+    assert {row["role"] for row in rows} == {
+        "worker",
+        "reviewer",
+        "helper",
+        "evaluator",
+    }
+    assert all(row["gate"]["status"] == "observed" for row in rows)
+    assert all(not item["blocking_cells"] for item in projected.values())
+    assert all(item["gate_accepted"] is True for item in projected.values())
+    # Re-observed live on the rebound hook_source in Plan 4 Tasks 6 and 6b, then
+    # rebound to Claude Code 2.1.327 in Plan 4 Task 11.
+    assert all(item["stale"] is False for item in projected.values())
+    assert all(item["accepted"] is True for item in projected.values())
+    assert {
+        row["role"]: row["gate"]["artifact"] for row in rows
+    } == {
+        role: f"opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-{role}-run.json"
+        for role in ("worker", "reviewer", "helper", "evaluator")
+    }
+    assert {row["gate"]["value"]["client_identity"]["version"] for row in rows} == {"2.1.327"}
+    assert {row["cells"]["identity"]["value"]["version"] for row in rows} == {"2.1.327"}
+    reviewer = next(row for row in rows if row["role"] == "reviewer")
+    assert any("evidence-path rule fixed by F-L3" in note for note in reviewer["notes"])
+    assert any("Plan 4 Task 6 live re-observation" in note for note in reviewer["notes"])
+    assert all(any("Plan 4 Task 11 live" in note for note in row["notes"]) for row in rows)
+    # Re-observed again after the PR2/PR3 restack on the PR1 follow-up (Plan 4 Task 13a)
+    # and after the v3 rebase (Plan 4 Task 17).
+    assert all(any("Plan 4 Task 13a live" in note for note in row["notes"]) for row in rows)
+    assert all("Plan 4 Task 17 live" in row["notes"][-1] for row in rows)
+    worker = next(row for row in rows if row["role"] == "worker")
+    assert "MCP allowlist" in worker["gate"]["reason"]
+    assert {"hook_interpreter", "hook_runner", "hook_source"} <= set(
+        worker["gate"]["value"]["configuration_binding"]["components"]
+    )
+
+
+def test_claude_row_stale_on_identity_change():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    worker = next(
+        row
+        for row in table["rows"]
+        if (row["client"], row["role"]) == ("claude-code", "worker")
+    )
+    worker["stale"] = False
+
+    fresh = project_role_capabilities(table)["claude-code"]["worker"]
+    assert fresh["stale"] is False
+    assert fresh["accepted"] is True
+
+    worker["cells"]["identity"]["value"]["sha256"] = "changed-client-binary"
+    changed = project_role_capabilities(table)["claude-code"]["worker"]
+    assert changed["stale"] is True
+    assert changed["accepted"] is False
+
+
+def test_codex_campaign_rows_accepted_from_live_gate():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)
+    rows = {
+        row["role"]: row
+        for row in table["rows"]
+        if row["client"] == "codex" and row["role"] in {"worker", "reviewer"}
+    }
+
+    assert set(rows) == {"worker", "reviewer"}
+    assert all(row["gate"]["status"] == "observed" for row in rows.values())
+    assert all(projected["codex"][role]["gate_accepted"] for role in rows)
+    # Re-observed live on the rebound hook_source in Plan 4 Task 6, and again after the
+    # PR2/PR3 restack in Plan 4 Task 13a and the v3 rebase in Plan 4 Task 17.
+    assert all(projected["codex"][role]["accepted"] for role in rows)
+    assert not any(projected["codex"][role]["stale"] for role in rows)
+    assert rows["worker"]["gate"]["artifact"].endswith(
+        "docs/evidence/live-p4/reobserve3/codex-worker-run.json"
+    )
+    assert rows["reviewer"]["gate"]["artifact"].endswith(
+        "docs/evidence/live-p4/reobserve3/codex-reviewer-run.json"
+    )
+    assert rows["worker"]["gate"]["value"]["configuration_binding"][
+        "configuration_identity_sha256"
+    ] == "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d"
+    assert rows["reviewer"]["gate"]["value"]["configuration_binding"][
+        "configuration_identity_sha256"
+    ] == "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c"
+    for row in rows.values():
+        host = row["cells"]["identity"]["value"]["code_mode_host"]
+        assert host == {
+            "version": "0.169.0",
+            "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+        }
+        assert row["gate"]["value"]["configuration_binding"]["components"][
+            "code_mode_host"
+        ] == host
+        package = row["cells"]["identity"]["value"]["codex_package"]
+        assert package == {
+            "layout_version": 1,
+            "version": "0.169.0",
+            "target": "aarch64-apple-darwin",
+            "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+            "executables": {
+                "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+                },
+                "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+                },
+                "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918",
+                },
+                "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf",
+                },
+            },
+        }
+        assert row["gate"]["value"]["configuration_binding"]["components"][
+            "codex_package"
+        ] == package
+        assert (
+            "identity extended after gate 4 (host binary bound); behaviour unchanged"
+            in row["cells"]["identity"]["note"]
+        )
+
+
+def test_codex_helper_evaluator_stay_refused_and_vibe_memory_is_worker_only():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)
+
+    assert projected["codex"]["helper"]["accepted"] is False
+    assert projected["codex"]["evaluator"]["accepted"] is False
+    assert projected["vibe"]["worker"]["vibe_memory"] is True
+    assert all(
+        projected["vibe"][role]["vibe_memory"] is False
+        for role in ("reviewer", "helper", "evaluator")
+    )
+
+
+def test_accepted_vibe_rows_name_the_accepted_limitation_and_known_issues():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    projected = project_role_capabilities(table)["vibe"]
+
+    for row in table["rows"]:
+        if row["client"] != "vibe":
+            continue
+        assert projected[row["role"]]["accepted"] is True
+        notes = "\n".join(row["notes"])
+        assert "Accepted limitation:" in notes
+        assert "strict deny-unknown pre_tool" in notes
+        assert "opencode_cc_mem/docs/vibe-known-issues.md" in notes
+
+
+def test_codex_rows_share_their_reaudited_client_version_and_hash():
+    table = load_capability_table(TABLE, repository_root=REPOSITORY_ROOT)
+    rows = [row for row in table["rows"] if row["client"] == "codex"]
+    identities = [row["gate"]["value"]["client_identity"] for row in rows]
+
+    assert len(rows) == 4
+    assert all(
+        identity["version"] == identities[0]["version"] for identity in identities
+    )
+    assert all(
+        identity["sha256"] == identities[0]["sha256"] for identity in identities
+    )
+    assert all(
+        row["cells"]["identity"]["value"] == identity
+        for row, identity in zip(rows, identities, strict=True)
+    )
+    assert all(identity["version"] in identity["executable"] for identity in identities)
+    assert len(identities[0]["sha256"]) == 64

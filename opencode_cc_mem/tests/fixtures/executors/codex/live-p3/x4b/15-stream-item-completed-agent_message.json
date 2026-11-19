@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_2",
+    "text": "I\u2019ll execute the four probe steps in order and report exact outcomes.",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

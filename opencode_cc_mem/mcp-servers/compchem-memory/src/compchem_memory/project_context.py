@@ -5,10 +5,11 @@ server start). With opencode v2's shared background service, that process can
 outlive the session that started it, so an old pin can silently serve writes
 into the wrong project store. Resolve per REQUEST instead:
 
-1. explicit project_dir argument (honored, after allow-list validation);
-2. a request-scoped hint if the transport supplies one (X-Project-Dir header
+1. bound role servers always use their startup project and ignore tool arguments;
+2. explicit project_dir argument for unbound interactive servers;
+3. a request-scoped hint if the transport supplies one (X-Project-Dir header
    or a Context attribute carrying a directory);
-3. .active-project-dir (absolute workspace path) or .active-project (project
+4. .active-project-dir (absolute workspace path) or .active-project (project
    name) ONLY when it is newer than the server start AND differs from the
    startup env pin — i.e. the server is provably stale. Otherwise
    the startup env pin (correct for a per-session server).
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -28,6 +30,20 @@ log = logging.getLogger(__name__)
 _STARTUP_ENV = os.environ.get("MAGNOLIA_PROJECT_DIR", ".")
 _ACTIVE_REL = ".magnolia/.active-project"
 _ACTIVE_DIR_REL = ".magnolia/.active-project-dir"
+_BOUND_PROJECT_OVERRIDE_LOGGED = False
+
+
+def _is_project_bound() -> bool:
+    """Return whether this process serves one role-bound project."""
+    return (
+        os.environ.get("MAGNOLIA_PROJECT_BOUND") == "1"
+        or "--tool-allowlist-json" in sys.argv[1:]
+    )
+
+
+def _bound_project_dir() -> str:
+    """Return the immutable launch pin for a bound role server."""
+    return os.environ.get("MAGNOLIA_PROJECT_DIR", _STARTUP_ENV)
 
 
 def _startup_project_dir() -> str:
@@ -114,6 +130,15 @@ def _active_project_hint(startup_env: str) -> str | None:
 
 def effective_project_dir(explicit: str | None = None) -> str:
     """Resolve the project directory for THIS call."""
+    global _BOUND_PROJECT_OVERRIDE_LOGGED
+    if _is_project_bound():
+        bound = _bound_project_dir()
+        if explicit and explicit != bound and not _BOUND_PROJECT_OVERRIDE_LOGGED:
+            log.warning(
+                "ignored model-supplied project_dir for bound memory server"
+            )
+            _BOUND_PROJECT_OVERRIDE_LOGGED = True
+        return bound
     if explicit:
         return explicit
     hint = _request_hint()

@@ -1,0 +1,23 @@
+{
+  "is_error": null,
+  "result_head": "The file /TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt has been updated successfully. (file state is current in your context \u2014 no need to Read it back)",
+  "tool_result_meta": [
+    {
+      "id": "toolu_0117FSvobJXQ5iMCtPst8K6g",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "file_path": "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work/draft.txt",
+      "new_string": "draft-v2",
+      "old_string": "draft-v1",
+      "replace_all": false
+    },
+    "name": "Edit"
+  }
+}

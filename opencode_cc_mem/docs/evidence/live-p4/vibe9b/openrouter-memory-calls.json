@@ -1,0 +1,139 @@
+{
+  "calls": [
+    {
+      "cost_usd": 0.00046805,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3-worker",
+      "status": 200,
+      "t": "07:01:31",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000216926,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3-worker",
+      "status": 200,
+      "t": "07:01:34",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.00059483,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3b-worker",
+      "status": 200,
+      "t": "07:04:05",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.00055387,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3b-worker",
+      "status": 200,
+      "t": "07:04:09",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000465716,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3b-worker",
+      "status": 200,
+      "t": "07:04:12",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 3.9746e-05,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "step3b-worker",
+      "status": 200,
+      "t": "07:04:15",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000410782,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:06:52",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000464419,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:06:55",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 2.0425e-05,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:06:59",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000419572,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:06:59",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000521829,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:07:01",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 0.000614165,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:07:04",
+      "upstream_provider": "InferenceNet"
+    },
+    {
+      "cost_usd": 3.9746e-05,
+      "memory_call": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "run": "c-render",
+      "status": 200,
+      "t": "07:07:07",
+      "upstream_provider": "InferenceNet"
+    }
+  ],
+  "state": {
+    "calls": 13,
+    "cost_usd": 0.00483009,
+    "refused": 0
+  }
+}

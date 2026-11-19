@@ -1,0 +1,51 @@
+{
+  "createdAt": 1794810913056,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "Searching for relevant tools",
+      "settledMessage": "for relevant tools",
+      "settledVerb": "Searched",
+      "statusText": "Searching for relevant tools",
+      "suffix": "",
+      "summary": "Searching for relevant tools",
+      "verb": "Searching"
+    },
+    "input": {
+      "mode": "best_match"
+    },
+    "kind": "tool",
+    "mcpApp": null,
+    "toolName": "search_tool_functions"
+  },
+  "generationStatus": "completed",
+  "id": "effect-tool-discovery-chatcmpl-tool-9f3a4a7843644980",
+  "inputEntryId": "user-turn-6bf8c5709f3f97086d7a1b781f817608-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "for relevant tools",
+      "success": true,
+      "suffix": "",
+      "verb": "Searched",
+      "warnings": []
+    },
+    "durationMs": 0.0,
+    "output": {
+      "connectorNoticeCount": 0,
+      "mode": "best_match",
+      "toolCount": 5
+    },
+    "outputText": "",
+    "status": "completed"
+  },
+  "title": "Searching for relevant tools",
+  "turnId": "turn-6bf8c5709f3f97086d7a1b781f817608",
+  "type": "effect",
+  "updatedAt": 1794810913056
+}

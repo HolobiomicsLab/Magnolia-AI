@@ -20,9 +20,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+from compchem_memory.writer_lease import project_writer_lease
 
 
 # Conservative secret shapes. Do not use broad long-hex or long-base64 rules:
@@ -48,6 +51,13 @@ _SECRET_PATTERNS = [
         r"\s*[:=]\s*['\"]?[^\s'\",;]{8,}"
     ),
 ]
+
+
+def is_llm_available() -> bool:
+    """Resolve LLM availability without creating an import cycle."""
+    from compchem_memory.llm import is_llm_available as route_is_available
+
+    return route_is_available()
 
 
 def _redact_json_field(match: re.Match[str]) -> str:
@@ -295,7 +305,7 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
             con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             try:
                 rows = con.execute(
-                    "SELECT id, type, data FROM session_message "
+                    "SELECT id, type, seq, data FROM session_message "
                     "WHERE session_id=? ORDER BY seq", (ses_id,)).fetchall()
             finally:
                 con.close()
@@ -304,7 +314,16 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
         if not rows:
             return None
         msgs = []
-        for mid, typ, data in rows:
+        current_turn = None
+        turn_boundaries = {}
+        turn_sequences = {}
+        user_sequences = []
+        for mid, typ, seq, data in rows:
+            if typ == "idle":
+                if current_turn:
+                    turn_boundaries[str(mid)] = current_turn
+                    turn_sequences[str(seq)] = current_turn
+                continue
             if typ in _V2_NON_DIALOGUE_TYPES:
                 continue
             try:
@@ -322,8 +341,34 @@ def v2_db_exporter(db_path: str) -> Callable[[str], Optional[dict]]:
                     parts = [{"type": "text", "text": text}] if text else []
             except Exception:  # noqa: BLE001 - malformed part, skip the row
                 continue
+            if typ == "user":
+                current_turn = str(mid)
+                user_sequences.append({"seq": seq, "turn_id": current_turn})
+            if current_turn is not None:
+                turn_sequences[str(seq)] = current_turn
             msgs.append({"info": {"role": typ, "id": mid}, "parts": parts})
-        return {"messages": msgs} if msgs else None
+        return {
+            "messages": msgs,
+            "turn_boundaries": turn_boundaries,
+            "turn_sequences": turn_sequences,
+            "user_sequences": user_sequences,
+        } if msgs else None
+    return exporter
+
+
+def live_session_exporter() -> Callable[[str], Optional[dict]]:
+    """Export the live OpenCode source without consulting a worker-written dump."""
+    def exporter(ses_id: str) -> Optional[dict]:
+        from compchem_memory import opencode_cli
+
+        db = os.environ.get("OPENCODE_DB")
+        if db and Path(db).exists():
+            # Never point an unqualified CLI fallback at the live v2 database.
+            return v2_db_exporter(db)(ses_id)
+        if v2_mode() and not opencode_cli.is_v2():
+            return None
+        return export_session(ses_id)
+
     return exporter
 
 
@@ -333,7 +378,9 @@ def v2_mode() -> bool:
     The v1 export CLI is not just useless in this mode — it opens the v2 DB,
     fails with "has no session table", and has taken down the stdio MCP
     connection when spawned from the boot handover (2026-11-16)."""
-    return bool(os.environ.get("OPENCODE_DB")) or os.environ.get("MAGNOLIA_OPENCODE_V2") == "1"
+    from compchem_memory import opencode_cli
+
+    return bool(os.environ.get("OPENCODE_DB")) or opencode_cli.is_v2()
 
 
 def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
@@ -350,15 +397,18 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
     When the environment looks like v2 (OPENCODE_DB set) but the v2 runtime is
     not declared (MAGNOLIA_OPENCODE_V2 unset), the CLI fallback is skipped: the
     bare `opencode` from PATH can be the v1 binary, which cannot read the v2 DB,
-    and invoking it from the stdio MCP server can kill the connection."""
+    and invoking it from the stdio MCP server can kill the connection. A v2 DB
+    that exists but cannot serve the session also skips the CLI."""
     store = Path(store_dir)
 
     def exporter(ses_id: str) -> Optional[dict]:
         db = os.environ.get("OPENCODE_DB")
+        database_failed = False
         if db and Path(db).exists():
             out = v2_db_exporter(db)(ses_id)
             if out is not None:
                 return out
+            database_failed = True
         dump = store / "opencode-transcripts" / f"{ses_id}.json"
         if dump.exists():
             try:
@@ -369,7 +419,7 @@ def plugin_dump_exporter(store_dir: str) -> Callable[[str], Optional[dict]]:
                 pass  # corrupt dump — fall through
         from compchem_memory import opencode_cli
 
-        if v2_mode() and not opencode_cli.is_v2():
+        if database_failed or (v2_mode() and not opencode_cli.is_v2()):
             # v2 mode without the declared v2 runtime: the bare `opencode`
             # from PATH may be the v1 CLI, which cannot read the v2 DB, and
             # spawning it from the stdio MCP server has taken down the MCP
@@ -409,6 +459,47 @@ def _save_candidate(store: Path, candidate: dict, session_key: str) -> str:
 
     return save_candidate(store, candidate, source="opencode_distill",
                           opencode_session_id=session_key)
+
+
+def _attach_transcript_origins(
+    candidates: list[dict[str, Any]], messages: list[dict], ref: Any,
+) -> list[dict[str, Any]]:
+    """Attach only message origins that can be tied to each candidate."""
+    from compchem_memory.staging_io import normalize_origins
+
+    base = _session_origin(ref)
+    for candidate in candidates:
+        tools = {
+            str(tool).lower() for tool in candidate.get("tools", [])
+            if isinstance(tool, str) and tool
+        }
+        matched: list[dict[str, str]] = []
+        for message in messages:
+            info = message.get("info") if isinstance(message, dict) else None
+            message_origin = dict(info.get("origin", {})) if isinstance(info, dict) else {}
+            for part in message.get("parts", []) if isinstance(message, dict) else []:
+                if not isinstance(part, dict) or part.get("type") != "tool":
+                    continue
+                name = part.get("tool") or part.get("name")
+                if not isinstance(name, str) or name.lower() not in tools:
+                    continue
+                origin = {**base, **message_origin, "tool": name}
+                server = part.get("server")
+                if isinstance(server, str) and server:
+                    origin["mcp_server"] = server
+                matched.append(origin)
+        candidate["origins"] = normalize_origins(matched or [base])
+    return candidates
+
+
+def _session_origin(ref: Any) -> dict[str, str]:
+    """Return the client/session identity and optional bound model/role."""
+    origin = {"client": ref.harness, "session_id": ref.session_id}
+    if getattr(ref, "model", None):
+        origin["model"] = ref.model
+    if getattr(ref, "role", None):
+        origin["role"] = ref.role
+    return origin
 
 
 def _default_distiller(transcript: str) -> list[dict[str, Any]]:
@@ -473,6 +564,7 @@ def _write_progress(
     *,
     fingerprint: dict[str, int] | None = None,
     closed: bool | None = None,
+    retry: dict[str, Any] | None = None,
 ) -> None:
     from compchem_memory.transcript_source import (
         SESSION_CLOSED_KEY,
@@ -489,7 +581,97 @@ def _write_progress(
         payload[SESSION_FINGERPRINT_KEY] = fingerprint
     if closed is not None:
         payload[SESSION_CLOSED_KEY] = closed
+    if retry is not None:
+        payload["retry"] = retry
     rec_path.write_text(json.dumps(payload) + "\n")
+
+
+def _retry_blocked(
+    rec: dict | None, fingerprint: dict[str, Any] | None = None,
+) -> bool:
+    """Return whether persisted extraction backoff blocks this sweep."""
+    from compchem_memory.extraction_retry import retry_for_activity, retry_is_due
+
+    retry = rec.get("retry") if isinstance(rec, dict) else None
+    retry = retry_for_activity(retry, fingerprint)
+    return isinstance(retry, dict) and not retry_is_due(retry)
+
+
+def _clear_failed_retry(store: Path, rec_path: Path, rec: dict | None) -> dict | None:
+    """Remove one retry series without changing transcript progress."""
+    if not rec or "retry" not in rec:
+        return rec
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            return _read_progress(rec_path)
+        updated = dict(rec)
+        updated.pop("retry", None)
+        updated["updated"] = datetime.now(timezone.utc).isoformat()
+        rec_path.write_text(json.dumps(updated) + "\n")
+        return updated
+
+
+def _record_failed_retry(
+    store: Path,
+    rec_path: Path,
+    rec: dict | None,
+    *,
+    fingerprint: dict[str, Any] | None,
+    closed: bool | None,
+) -> dict[str, Any] | None:
+    """Persist one failed attempt if this session's progress is unchanged."""
+    from compchem_memory.extraction_retry import next_retry, retry_for_activity
+
+    prior_retry = rec.get("retry") if rec else None
+    prior_retry = retry_for_activity(prior_retry, fingerprint)
+    retry = next_retry(prior_retry, fingerprint=fingerprint)
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            return None
+        rec_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_progress(
+            rec_path,
+            rec.get("cursor") if rec else None,
+            rec.get("candidates", 0) if rec else 0,
+            done=False,
+            fingerprint=None,
+            closed=closed,
+            retry=retry,
+        )
+    return retry
+
+
+def _dialogue_activity_fingerprint(export: dict) -> dict[str, Any]:
+    """Describe native dialogue growth without retaining transcript content."""
+    messages = export.get("messages") or []
+    fingerprint: dict[str, Any] = {"message_count": len(messages)}
+    export_info = export.get("info") if isinstance(export.get("info"), dict) else {}
+    session_time = export_info.get("time")
+    if isinstance(session_time, dict):
+        last_update = session_time.get("updated")
+    else:
+        last_update = export_info.get("updated")
+    if not messages:
+        if last_update is not None:
+            fingerprint["last_update"] = str(last_update)
+        return fingerprint
+    last = messages[-1] if isinstance(messages[-1], dict) else {}
+    last_info = last.get("info") if isinstance(last.get("info"), dict) else {}
+    last_id = last_info.get("id") or last.get("id")
+    if last_id is not None:
+        fingerprint["last_message_id"] = str(last_id)
+    message_time = last.get("time") or last_info.get("time")
+    if last_update is None and isinstance(message_time, dict):
+        last_update = (
+            message_time.get("updated")
+            or message_time.get("completed")
+            or message_time.get("created")
+        )
+    elif last_update is None:
+        last_update = last.get("updated") or last_info.get("updated") or message_time
+    if last_update is not None:
+        fingerprint["last_update"] = str(last_update)
+    return fingerprint
 
 
 def _session_exporter(
@@ -522,7 +704,7 @@ def _session_ref(store_dir: str, session: Any) -> Any:
     if isinstance(session, SessionRef):
         return session
     for ref in list_sessions(store_dir):
-        if ref.key == session:
+        if ref.key == session or ref.session_id == session:
             return ref
     return SessionRef("opencode", str(session), str(session), None, None, True)
 
@@ -534,8 +716,12 @@ def distill_session_transcript(
     commit: bool,
     exporter: Callable[[str], Optional[dict]] | None = None,
     distiller: Callable[[str], list[dict[str, Any]]] | None = None,
+    force_retry: bool = False,
+    llm_available: bool | None = None,
 ) -> dict[str, Any] | None:
     """Distil ONE session's new (post-cursor) dialogue, for the manual tool.
+
+    Call this when: ingesting a selected OpenCode session into project memory.
 
     ``commit=False`` previews: returns the candidates, saves nothing, leaves the
     cursor untouched. ``commit=True`` saves to staging and advances the cursor
@@ -553,6 +739,22 @@ def distill_session_transcript(
     rec_path = store / "opencode-distilled" / f"{ref.key}.json"
     rec = _read_progress(rec_path)
     cursor = rec.get("cursor") if rec else None
+    retry = rec.get("retry") if isinstance(rec, dict) else None
+    route_available = (
+        is_llm_available() if llm_available is None else llm_available
+    )
+    if (
+        commit
+        and force_retry
+        and isinstance(retry, dict)
+        and not route_available
+    ):
+        return {
+            "status": "skipped",
+            "reason": "configured memory LLM is unavailable",
+            "retry": False,
+            "saved": [],
+        }
 
     from compchem_memory.transcript_source import (
         fingerprint_matches,
@@ -561,12 +763,48 @@ def distill_session_transcript(
     )
 
     fingerprint = hook_transcript_fingerprint(store, ref)
+    export = None
+    if (
+        ref.sealable
+        and isinstance(retry, dict)
+        and retry.get("exhausted") is True
+    ):
+        export = export_session_ref(ref)
+        if export is not None:
+            fingerprint = _dialogue_activity_fingerprint(export)
+    if (
+        commit
+        and force_retry
+        and isinstance(retry, dict)
+        and retry.get("exhausted") is True
+    ):
+        rec = _clear_failed_retry(store, rec_path, rec)
+    if commit and _retry_blocked(rec, fingerprint):
+        retry = rec.get("retry", {})
+        scheduled_at = retry.get("next_retry_at")
+        forced_backoff = force_retry and not retry.get("exhausted", False)
+        return {
+            "status": "skipped",
+            "reason": (
+                f"extraction retry scheduled at {scheduled_at}"
+                if forced_backoff
+                else "extraction retry backoff"
+                if not retry.get("exhausted")
+                else "extraction retry cap reached"
+            ),
+            "retry": False if forced_backoff else not retry.get("exhausted", False),
+            "exhausted": retry.get("exhausted", False),
+            **({"next_retry_at": scheduled_at} if forced_backoff else {}),
+            "saved": [],
+        }
     if commit and fingerprint_matches(rec, fingerprint):
         return {"status": "committed", "saved": []}
 
-    export = export_session_ref(ref)
+    export = export if export is not None else export_session_ref(ref)
     if export is None:
         return None  # unavailable — let caller fall back
+    if ref.sealable:
+        fingerprint = _dialogue_activity_fingerprint(export)
 
     new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
     if new_msgs:
@@ -579,28 +817,55 @@ def distill_session_transcript(
         candidates = []
     distillation_failed = candidates is None
     if distillation_failed:
-        candidates = []
+        from compchem_memory import distill_log
+
+        retry = _record_failed_retry(
+            store,
+            rec_path,
+            rec,
+            fingerprint=fingerprint,
+            closed=hook_session_closed(store, ref, fingerprint=fingerprint),
+        )
+        distill_log.push_extraction_failure_notice(str(store.parent))
+        if retry and retry["exhausted"]:
+            distill_log.push_extraction_retry_exhausted_notice(
+                str(store.parent), ref.key
+            )
+        return None
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
+    _attach_transcript_origins(kept, new_msgs, ref)
 
     if not commit:
         return {"status": "preview", "candidates": kept}
 
-    rec_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = [_save_candidate(store, c, ref.key) for c in kept]
-    new_cursor = _last_message_id(new_msgs) or cursor
-    prior = rec.get("candidates", 0) if rec else 0
-    closed = (
-        hook_session_closed(store, ref, fingerprint=fingerprint)
-        if not ref.sealable and not distillation_failed else None
-    )
-    _write_progress(
-        rec_path,
-        new_cursor,
-        prior + len(kept),
-        done=False,
-        fingerprint=None if distillation_failed else fingerprint,
-        closed=closed,
-    )
+    # The export and the distiller ran outside the project writer lease; the
+    # commit re-validates the progress record it started from.
+    with project_writer_lease(store):
+        if _read_progress(rec_path) != rec:
+            print(f"[opencode_ingest] {ref.key}: progress changed during distillation; "
+                  "nothing saved, the next sweep retries", file=sys.stderr)
+            return {
+                "status": "skipped",
+                "reason": "concurrent write",
+                "retry": True,
+                "saved": [],
+            }
+        rec_path.parent.mkdir(parents=True, exist_ok=True)
+        saved = [_save_candidate(store, c, ref.key) for c in kept]
+        new_cursor = _last_message_id(new_msgs) or cursor
+        prior = rec.get("candidates", 0) if rec else 0
+        closed = (
+            hook_session_closed(store, ref, fingerprint=fingerprint)
+            if not ref.sealable else None
+        )
+        _write_progress(
+            rec_path,
+            new_cursor,
+            prior + len(kept),
+            done=False,
+            fingerprint=fingerprint if not ref.sealable else None,
+            closed=closed,
+        )
     return {"status": "committed", "saved": saved}
 
 
@@ -635,6 +900,9 @@ def ingest_opencode_sessions(
     )
 
     store = Path(store_dir)
+    from compchem_memory.hook.background import drain_opencode_payloads
+
+    drain_opencode_payloads(store)
     legacy_exporter = exporter or plugin_dump_exporter(store_dir)
     export_session_ref = _session_exporter(store_dir, legacy_exporter)
     markers = store / "opencode-distilled"
@@ -664,31 +932,48 @@ def ingest_opencode_sessions(
         is_active = ref.harness == "opencode" and ref.session_id == active_sid
         can_seal = ref.sealable and not is_active
         fingerprint = hook_transcript_fingerprint(store, ref)
+        export = None
+        retry = rec.get("retry") if isinstance(rec, dict) else None
+        if (
+            ref.sealable
+            and isinstance(retry, dict)
+            and retry.get("exhausted") is True
+        ):
+            export = export_session_ref(ref)
+            if export is not None:
+                fingerprint = _dialogue_activity_fingerprint(export)
+        if _retry_blocked(rec, fingerprint):
+            continue
         if fingerprint_matches(rec, fingerprint):
             continue
 
-        export = export_session_ref(ref)
+        export = export if export is not None else export_session_ref(ref)
         if export is None:
             continue  # export failed — don't advance; retry on a later sweep
+        if ref.sealable:
+            fingerprint = _dialogue_activity_fingerprint(export)
 
         new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
         if not new_msgs:
             # Nothing new since the cursor. Seal it if it is no longer the active
             # session, so we stop re-exporting a finished conversation; leave the
             # active one open for its next slice.
-            if can_seal:
-                _write_progress(rec_path, cursor, prior_count, done=True)
-            elif not ref.sealable:
-                _write_progress(
-                    rec_path,
-                    cursor,
-                    prior_count,
-                    done=False,
-                    fingerprint=fingerprint,
-                    closed=hook_session_closed(
-                        store, ref, fingerprint=fingerprint,
-                    ),
-                )
+            with project_writer_lease(store):
+                if _read_progress(rec_path) != rec:
+                    continue
+                if can_seal:
+                    _write_progress(rec_path, cursor, prior_count, done=True)
+                elif not ref.sealable:
+                    _write_progress(
+                        rec_path,
+                        cursor,
+                        prior_count,
+                        done=False,
+                        fingerprint=fingerprint,
+                        closed=hook_session_closed(
+                            store, ref, fingerprint=fingerprint,
+                        ),
+                    )
             continue
 
         transcript = scrub_secrets(reconstruct_transcript({
@@ -699,9 +984,24 @@ def ingest_opencode_sessions(
         if candidates is None:
             # Distillation FAILED (LLM error / overflow), distinct from succeeding
             # with nothing ([]). Don't advance the cursor — retry next sweep.
+            from compchem_memory import distill_log
+
+            retry = _record_failed_retry(
+                store,
+                rec_path,
+                rec,
+                fingerprint=fingerprint,
+                closed=hook_session_closed(store, ref, fingerprint=fingerprint),
+            )
+            distill_log.push_extraction_failure_notice(str(store.parent))
+            if retry and retry["exhausted"]:
+                distill_log.push_extraction_retry_exhausted_notice(
+                    str(store.parent), ref.key
+                )
             continue
 
         kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
+        _attach_transcript_origins(kept, new_msgs, ref)
 
         # Admission gate (distill-admission plan R1-R4): when
         # MAGNOLIA_ADMISSION_GATE is enabled, candidates pass through the
@@ -722,21 +1022,29 @@ def ingest_opencode_sessions(
             except Exception as e:  # noqa: BLE001 - gate failure never blocks distillation
                 print(f"[admission] gate error (fail-open): {e}")
 
-        for c in kept:
-            saved.append(_save_candidate(store, c, ref.key))
+        # Export, distiller and admission judge ran outside the project writer
+        # lease; the write re-validates the progress record it started from.
+        with project_writer_lease(store):
+            if _read_progress(rec_path) != rec:
+                print(f"[opencode_ingest] {ref.key}: progress changed during "
+                      "distillation; nothing saved, the next sweep retries",
+                      file=sys.stderr)
+                continue
+            for c in kept:
+                saved.append(_save_candidate(store, c, ref.key))
 
-        new_cursor = _last_message_id(new_msgs) or cursor
-        closed = (
-            hook_session_closed(store, ref, fingerprint=fingerprint)
-            if not ref.sealable else None
-        )
-        _write_progress(
-            rec_path,
-            new_cursor,
-            prior_count + len(kept),
-            done=can_seal,
-            fingerprint=fingerprint,
-            closed=closed,
-        )
+            new_cursor = _last_message_id(new_msgs) or cursor
+            closed = (
+                hook_session_closed(store, ref, fingerprint=fingerprint)
+                if not ref.sealable else None
+            )
+            _write_progress(
+                rec_path,
+                new_cursor,
+                prior_count + len(kept),
+                done=can_seal,
+                fingerprint=fingerprint if not ref.sealable else None,
+                closed=closed,
+            )
 
     return saved

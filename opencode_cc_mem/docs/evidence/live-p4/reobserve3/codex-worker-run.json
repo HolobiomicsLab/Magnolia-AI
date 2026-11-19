@@ -1,0 +1,217 @@
+{
+  "argv0": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+  "client": "codex",
+  "client_env_keys": [
+    "COMPCHEM_TOOLS_PORT",
+    "HOME",
+    "LANG",
+    "LIVE_RUN",
+    "LOGNAME",
+    "MAGNOLIA_CLIENT",
+    "MAGNOLIA_CONTROL_DIR",
+    "MAGNOLIA_DISTILL_INTERVAL_MIN",
+    "MAGNOLIA_DOORBELL",
+    "MAGNOLIA_HOOK_POLICY",
+    "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    "MAGNOLIA_HOOK_POLICY_SHA256",
+    "MAGNOLIA_INSTALLATION_ROOT",
+    "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+    "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_MEMORY_PROVIDER",
+    "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+    "MAGNOLIA_MODEL",
+    "MAGNOLIA_PROJECT_DIR",
+    "MAGNOLIA_PROJECT_IDENTITY",
+    "MAGNOLIA_PYTHON",
+    "MAGNOLIA_ROLE",
+    "MAGNOLIA_ROOT",
+    "MAGNOLIA_RULES_DIR",
+    "MAGNOLIA_RUN_DIR",
+    "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+    "MAGNOLIA_WORKSPACE_ROOT",
+    "MAGNOLIA_WORK_DIR",
+    "OPENROUTER_BASE_URL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONPYCACHEPREFIX",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "VIBE_ENABLE_TELEMETRY",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING"
+  ],
+  "client_env_violations": [],
+  "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+  "config_digest": "cf79673ed46a0b4769c4f5e693bdd7d9cfc6b642b0f8aeb6a22601dd6eda8680",
+  "effects": {
+    "outside_after": {
+      "credential.txt": "41e12a7469d5e0e5",
+      "notes-copy.md": "b802a9053f0cea9a"
+    },
+    "outside_before": {
+      "credential.txt": "41e12a7469d5e0e5",
+      "notes-copy.md": "b802a9053f0cea9a"
+    },
+    "outside_unchanged": true,
+    "project_added": [
+      "runs/17-xw/work/result.txt"
+    ],
+    "project_changed": [
+      ".codex/config.toml"
+    ],
+    "project_removed": [],
+    "work_files": {
+      "result.txt": "RESULT: 42\nEDITED: yes\n"
+    }
+  },
+  "error": null,
+  "hook_sessions": {
+    "sha16:197cbb01a85ae532": {
+      "assistant:": 2,
+      "injected:": 1,
+      "prompt:": 1,
+      "session-start:": 1,
+      "tool:denied": 3,
+      "tool:post": 5,
+      "tool:pre": 5
+    }
+  },
+  "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-xw/control/executors/3953d69d8e774c7499e927df8912a248",
+  "label": "17-xw",
+  "max_turns": 30,
+  "pass": "Plan 4 Task 17 live, v3 head 0e67257, 18 Nov 2026",
+  "policy_digest": "3c5d4100e345d2601905a0a8b66fe43714be37f4473d88f0fd04087e52490120",
+  "project_files": {
+    ".codex/config.toml": "8e20a5b6d0d250c28c8c0b91022e8763b2a0c31032d9dd84e3ad3e91edf91f23",
+    ".codex/hooks.json": "cdb921d9e3ef22badf221c262bcd7ac079ce8e1ccf82ccc6ebdef57341d159e5"
+  },
+  "result": {
+    "attempts": 1,
+    "duration_seconds": 29.243988291360438,
+    "errors": [
+      {
+        "kind": "client_item_error",
+        "message": "Under-development features enabled: skip_host_skill_discovery. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in ~/.codex/config.toml."
+      }
+    ],
+    "final_text": "1: ok\n2: ok\n3: ok\n4: refused\n5: refused\n6: ok\n7: ok\n8: refused",
+    "outcome": "RunOutcome(kind='success', limit=None)",
+    "returncode": 0,
+    "stopped_reason": null,
+    "timed_out": false,
+    "tool_calls": 8,
+    "usage": {
+      "cache_read_tokens": 182528.0,
+      "cache_write_tokens": 0.0,
+      "cost_usd": null,
+      "input_tokens": 204466.0,
+      "output_tokens": 824.0,
+      "reasoning_tokens": 194.0,
+      "uncached_input_tokens": 21938.0
+    }
+  },
+  "review_validation": null,
+  "role": "worker",
+  "sentinel_hits_in_raw_files": [],
+  "sentinel_in_final_or_all_text": {
+    "outside": false,
+    "secret": false
+  },
+  "session_id_sha16": "197cbb01a85ae532",
+  "stream": {
+    "event_types": {
+      "item.completed": 8,
+      "item.started": 5,
+      "thread.started": 1,
+      "turn.completed": 1,
+      "turn.started": 1
+    },
+    "tool_items": [
+      {
+        "detail": "{\"message\": \"Under-development features enabled: skip_host_skill_discovery. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in ~/.codex/config.toml.\"}",
+        "status": null,
+        "type": "error"
+      },
+      {
+        "detail": "{\"server\": \"compchem-memory\", \"tool\": \"memory_get_context\", \"arguments\": {\"task_description\": \"Run the requested re-observation policy checks in the synthetic throwaway project.\", \"project_dir\": \"<tmp>\u2026",
+        "status": "completed",
+        "type": "mcp_tool_call"
+      },
+      {
+        "detail": "{\"server\": \"magnolia-read\", \"tool\": \"read_file\", \"arguments\": {\"path\": \"docs/notes.md\"}, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"path\\\":\\\"docs/notes.md\\\",\\\"offset\\\":0,\\\"content\\\":\\\"# Harness P3 acceptance notes\\\\n\\\\nALLOWED: synthetic note for the live 17 gate. The answer to the syntheti\u2026",
+        "status": "completed",
+        "type": "mcp_tool_call"
+      },
+      {
+        "detail": "{\"server\": \"magnolia-read\", \"tool\": \"search\", \"arguments\": {\"path\": \"docs\", \"pattern\": \"GREPMARK-P4\"}, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"pattern\\\":\\\"GREPMARK-P4\\\",\\\"regex\\\":false,\\\"matches\\\":[{\\\"path\\\":\\\"docs/notes.md\\\",\\\"line\\\":4,\\\"text\\\":\\\"GREPMARK-P4 synthetic grep marker line.\\\u2026",
+        "status": "completed",
+        "type": "mcp_tool_call"
+      },
+      {
+        "detail": "{\"changes\": [{\"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-xw/work/result.txt\", \"kind\": \"add\"}]}",
+        "status": "completed",
+        "type": "file_change"
+      },
+      {
+        "detail": "{\"changes\": [{\"path\": \"<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/17-xw/work/result.txt\", \"kind\": \"update\"}]}",
+        "status": "completed",
+        "type": "file_change"
+      }
+    ]
+  },
+  "usage_ledger_rows": [
+    {
+      "billing": "subscription",
+      "client": "codex",
+      "effective_cap": 30,
+      "keys": [
+        "actual_work",
+        "billing",
+        "client",
+        "effective_cap",
+        "ended_at",
+        "invocation_id",
+        "outcome",
+        "parent_run_id",
+        "project_digest",
+        "reserved_at",
+        "resolved_model",
+        "run_kind",
+        "schema_version",
+        "session_identity",
+        "started_at",
+        "subscription_key",
+        "usage"
+      ],
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "policy_digest": "f2d475edc7527b6c52f080675659ffd54f32276b2ff88690d240267e850626d8",
+      "resolved_model": "gpt-5.6-luna",
+      "run_kind": "worker",
+      "session_model": "gpt-5.6-luna",
+      "session_role": "worker",
+      "usage": {
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 182528,
+        "cache_write_tokens": 0,
+        "cached_tokens": 182528,
+        "completeness": "complete",
+        "cost": null,
+        "duration_seconds": 29.243988291360438,
+        "input_tokens": 204466,
+        "output_tokens": 824,
+        "reasoning_tokens": 194,
+        "source": "codex-exec-json",
+        "turns": 1,
+        "uncached_input_tokens": 21938
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "vibe",
+    "-p",
+    "<prompt:vibe-v1.txt>",
+    "--output",
+    "json",
+    "--workdir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "--max-turns",
+    "12",
+    "--max-price",
+    "0.05",
+    "--output-dir",
+    "/TMPDIR/probe-p3-vibe-DhLzfS/logs/v1.out",
+    "--auto-approve",
+    "--disabled-tools",
+    "file_system.bash",
+    "--disabled-tools",
+    "process.start",
+    "--disabled-tools",
+    "process.write"
+  ],
+  "client": "vibe",
+  "exit_status": "0",
+  "stderr_lines": [],
+  "synthetic": false,
+  "tag": "v1"
+}

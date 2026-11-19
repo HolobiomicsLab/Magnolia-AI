@@ -12,7 +12,13 @@ from compchem_memory.hook.transcript import _append_jsonl, _timestamp
 
 
 def record_session(
-    store: Path, harness: str, session_id: str, cwd: str, transcript_ref: str | None,
+    store: Path,
+    harness: str,
+    session_id: str,
+    cwd: str,
+    transcript_ref: str | None,
+    model: str | None = None,
+    role: str | None = None,
 ) -> bool:
     """Record a session once, using an exclusive marker before its locked append."""
     directory = Path(store) / "hook-state"
@@ -23,8 +29,14 @@ def record_session(
     except FileExistsError:
         return False
     os.close(descriptor)
+    origin = {"client": harness, "session_id": session_id}
+    if model:
+        origin["model"] = model
+    bound_role = role or os.environ.get("MAGNOLIA_ROLE")
+    if bound_role:
+        origin["role"] = bound_role
     row = {"ts": _timestamp(), "harness": harness, "session_id": session_id,
-           "directory": cwd, "transcript_ref": transcript_ref}
+           "directory": cwd, "transcript_ref": transcript_ref, "origin": origin}
     _append_jsonl(Path(store) / "agent-sessions.jsonl", row)
     return True
 

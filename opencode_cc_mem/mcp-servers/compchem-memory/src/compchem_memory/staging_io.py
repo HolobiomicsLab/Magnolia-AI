@@ -12,7 +12,57 @@ from typing import Any
 
 import yaml
 
+from compchem_memory.writer_lease import leased_store_writer
 
+ORIGIN_FIELDS = (
+    "client", "session_id", "agent_id", "agent_type", "tool", "mcp_server",
+    "model", "role",
+)
+
+
+def normalize_origins(value: object) -> list[dict[str, str]]:
+    """Return ordered, duplicate-free origins containing only observed fields."""
+    if not isinstance(value, list):
+        return []
+    origins: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        origin = {
+            field: item[field]
+            for field in ORIGIN_FIELDS
+            if isinstance(item.get(field), str) and item[field]
+        }
+        if origin and origin not in origins:
+            origins.append(origin)
+    return origins
+
+
+def union_origins(*groups: object) -> list[dict[str, str]]:
+    """Union origin groups in observation order without weakening records."""
+    combined: list[dict[str, str]] = []
+    for group in groups:
+        for origin in normalize_origins(group):
+            if origin not in combined:
+                combined.append(origin)
+    return combined
+
+
+def observed_session_ids(
+    session_id: str | None, origins: object,
+) -> list[str]:
+    """Return the canonical session, or origin sessions when it is unknown."""
+    if session_id:
+        return [session_id]
+    sessions: list[str] = []
+    for origin in normalize_origins(origins):
+        origin_session = origin.get("session_id")
+        if origin_session and origin_session not in sessions:
+            sessions.append(origin_session)
+    return sessions
+
+
+@leased_store_writer
 def save_candidate(
     store: Path,
     candidate: dict[str, Any],
@@ -31,6 +81,9 @@ def save_candidate(
     staging.mkdir(parents=True, exist_ok=True)
 
     title = candidate.get("title", "untitled")
+    origins = normalize_origins(candidate.get("origins"))
+    if opencode_session_id is not None and not origins:
+        origins = [{"session_id": opencode_session_id}]
 
     # Dedup: if a genuinely-similar staging entry already exists, bump it (append
     # this observation) instead of writing a near-duplicate. Re-distilling the
@@ -50,6 +103,7 @@ def save_candidate(
                 _project_dir, _similar,
                 session_id=opencode_session_id,
                 content=candidate.get("content", ""),
+                origins=origins,
             )
             return str(staging / _similar)
     except Exception:
@@ -76,10 +130,13 @@ def save_candidate(
         "source": source,
         "observation_count": 1,
         "confidence": candidate.get("confidence", 0.5),
+        "origins": origins,
     }
     if opencode_session_id is not None:
         fm["opencode_session_id"] = opencode_session_id
-        fm["observed_in_sessions"] = [opencode_session_id]
+    observed_sessions = observed_session_ids(opencode_session_id, origins)
+    if observed_sessions:
+        fm["observed_in_sessions"] = observed_sessions
     if candidate.get("run_ids"):
         fm["run_ids"] = list(candidate["run_ids"])
 

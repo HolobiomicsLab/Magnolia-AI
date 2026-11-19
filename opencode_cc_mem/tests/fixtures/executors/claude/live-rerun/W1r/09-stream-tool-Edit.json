@@ -1,0 +1,24 @@
+{
+  "is_error": false,
+  "result_head": "The file <G>/project/run/work/draft.txt has been updated successfully. (file state is current in your context \u2014 no need to Read it back)",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01Vv1mchMdDJnzaBymjeR5RQ",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_01Vv1mchMdDJnzaBymjeR5RQ",
+    "input": {
+      "file_path": "<G>/project/run/work/draft.txt",
+      "new_string": "draft-v2",
+      "old_string": "draft-v1",
+      "replace_all": false
+    },
+    "name": "Edit"
+  }
+}

@@ -1,8 +1,8 @@
 ---
 name: memory-setup
 description: How to set up Magnolia's memory model when a user asks to "set up memory" — model roles, the magnolia memory command, verification, and the restart requirement.
-version: 1.0
-last_verified: 2026-09-11
+version: 1.1
+last_verified: 2026-11-17
 tags: [setup, llm, memory-model, onboarding]
 ---
 
@@ -10,14 +10,17 @@ tags: [setup, llm, memory-model, onboarding]
 
 Magnolia uses **two LLM roles**, set in ONE place (`.magnolia/llm-setup.json`,
 injected into `opencode.json` as `MAGNOLIA_MEMORY_MODEL` / `MAGNOLIA_MEMORY_PROVIDER`
-by the `magnolia` launcher on every launch):
+and `MAGNOLIA_CRITIC_MODEL` / `MAGNOLIA_CRITIC_PROVIDER` by the `magnolia`
+launcher on every launch):
 
 | Role | What it does | Guidance |
 |---|---|---|
 | **Main model** | Drives the agent the user talks to | User's choice; configured by `magnolia setup` (step 1) |
-| **Memory model** | Background only: session distillation (~20 min timer + boot), rolling handover merge (boot), memory re-ranking, consolidation | **Cheap is right.** Default `deepseek-flash`. Runs unattended, volume scales with activity |
+| **Memory model** | Background only: session distillation (~20 min timer + boot), rolling handover merge (boot), memory re-ranking, consolidation | **Cheap is right.** New setup prefers OpenRouter `deepseek/deepseek-v4.1-flash` when `OPENROUTER_API_KEY` is available; otherwise it keeps direct `deepseek-flash`. |
 
 They can be the same model. They usually should not be.
+For a new setup the critic starts on the same explicit provider/model pair as
+memory. Existing memory or critic choices are preserved.
 
 ## The rule: never hand-edit opencode.json for LLM settings
 
@@ -26,11 +29,13 @@ side file — hand edits to it are wiped. The only durable controls are:
 
 ```bash
 magnolia memory set <model> [--provider P]   # verify → save → enable → re-render
+magnolia memory set <model> --provider openrouter \
+  --fallback-provider deepseek --fallback-model deepseek-flash
 magnolia memory status                       # show side file + rendered state
 magnolia setup                               # interactive both-steps (step 1 = main model)
 ```
 
-The **provider is derived from the model name** (`deepseek-*` → deepseek,
+The launcher persists both provider and model explicitly. The provider is derived from the selected model name (`vendor/model` → OpenRouter, `deepseek-*` → deepseek,
 `claude*` → anthropic, `gpt-*`/`o3-*`/`o4-*` → openai, `kimi-*`/`k3*` → kimi).
 `--provider` is only for proxy/OpenAI-compatible endpoints where the name
 doesn't identify the vendor. Do not ask the user for a provider.
@@ -46,16 +51,21 @@ Two triggers lead here — the flow below is the same for both:
 
 1. **Explain the roles** (table above) in one short paragraph — cheap model
    for memory, smart model for the agent — and state the default
-   (`deepseek-flash`).
+   (`deepseek/deepseek-v4.1-flash` through OpenRouter when its key is available,
+   otherwise direct `deepseek-flash`). Existing configurations are never rewritten.
 2. **Ask which memory model** they want, offering the default. Mention the
    quality alternative (`deepseek-v4-pro`) exists if their workload needs it.
 3. **Check the key**: the chosen provider's API key must be in the
-   environment (`DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-   `KIMI_API_KEY`). If the user pastes a key into chat, warn that chat
+   environment (`OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`,
+   `OPENAI_API_KEY`, `KIMI_API_KEY`, `MISTRAL_API_KEY`, `ZHIPU_API_KEY` or
+   `ZAI_API_KEY`). Setup names the key variable it used. If the user pastes a key into chat, warn that chat
    content lands in session logs — prefer having them export it / put it in
    their env file themselves.
 4. **Run the command**:
    ```bash
+   # With OPENROUTER_API_KEY:
+   magnolia memory set deepseek/deepseek-v4.1-flash
+   # Otherwise, with DEEPSEEK_API_KEY:
    magnolia memory set deepseek-flash
    ```
    It makes one REAL test call before saving. On failure it writes nothing —
@@ -78,6 +88,27 @@ floor of fp8, bf16, fp16, fp32 or unknown quantization. Two optional environment
 
 No project path is sent to OpenRouter: the session id contains only the LLM role and the first 16 hex
 characters of a SHA-256 digest of the resolved project directory.
+
+The OpenCode TypeScript claim-critic plugin only hands work off. The Python
+critic owns provider routing, sticky sessions, secret scrubbing and usage
+accounting. Critic prompts have no prefix reused across calls, so the critic
+does not set a cache prefix.
+
+An explicit OpenRouter route never silently borrows another provider's key.
+Missing keys, HTTP 429, outages and 5xx responses produce a typed error,
+telemetry and one visible notice per session, then memory uses its existing
+heuristic path and the critic is disabled for that attempt. A direct fallback
+is used only when both `direct_fallback_provider` and
+`direct_fallback_model` are set by the optional `magnolia memory set`
+fallback flags in `.magnolia/llm-setup.json`; the launcher
+passes them as `MAGNOLIA_DIRECT_FALLBACK_PROVIDER` and
+`MAGNOLIA_DIRECT_FALLBACK_MODEL`. The default is unset.
+
+The managed memory service admits API-key variables only for the selected
+memory provider, an explicitly configured critic provider and an explicitly
+configured direct-fallback provider. A critic failure on any configured
+provider queues one visible unavailable notice per session and writes its
+typed error row; this notice policy is not limited to OpenRouter.
 
 ## Why memory starts disabled
 

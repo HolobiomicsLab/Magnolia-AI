@@ -273,6 +273,11 @@ def _toml_bytes(value: dict) -> bytes:
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
+def toml_bytes(value: dict) -> bytes:
+    """Serialize a native TOML artifact with the harness's stable writer."""
+    return _toml_bytes(value)
+
+
 def _emit_table(table: dict, path: tuple[str, ...], lines: list[str]) -> None:
     scalars = {key: value for key, value in table.items() if not _is_container(value)}
     children = {key: value for key, value in table.items() if _is_container(value)}

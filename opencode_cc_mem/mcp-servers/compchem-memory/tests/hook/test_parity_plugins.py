@@ -185,13 +185,158 @@ def test_doorbell_matches_plugin(tmp_path, monkeypatch):
     )
 
 
+def test_doorbell_plugin_merges_repeated_target_into_one_letter(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAGNOLIA_DOORBELL", raising=False)
+    prompt_file = tmp_path / "prompt.txt"
+    prompt_file.write_text(
+        "@literature find three recent papers on A\n"
+        "@literature find three recent papers on B",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "plugin"
+    (workspace / ".magnolia").mkdir(parents=True)
+
+    result = json.loads(
+        run_plugin(
+            "magnolia-agent-doorbell.ts", DOORBELL_DRIVER, tmp_path, workspace, prompt_file,
+        )
+    )
+
+    assert len(result["letters"]) == 1
+    assert "find three recent papers on A\n\nfind three recent papers on B" in result["letters"][0]
+
+
+JOB_NOTICE_DRIVER = r"""
+const [pluginPath, directory, mode] = process.argv.slice(2)
+const { existsSync, readFileSync } = await import("node:fs")
+const mod = await import(pluginPath)
+let contextHook
+const ctx = {
+  location: { directory },
+  tool: { hook: async () => {} },
+}
+if (mode === "context") {
+  ctx.session = {
+    hook: async (name, callback) => { if (name === "context") contextHook = callback },
+  }
+}
+await mod.default.setup(ctx)
+const event = { sessionID: "s1", system: [] }
+if (contextHook) await contextHook(event)
+const queue = `${directory}/.magnolia/.job-notices.jsonl`
+process.stdout.write(JSON.stringify({
+  system: event.system.map((part) => part.text),
+  queued: existsSync(queue) ? readFileSync(queue, "utf8") : null,
+}))
+"""
+
+
+JOB_NOTICE_V1_DRIVER = r"""
+const [pluginPath, directory, mode] = process.argv.slice(2)
+const { existsSync, readFileSync } = await import("node:fs")
+const mod = await import(pluginPath)
+const toasts = []
+await mod.default.server({
+  directory,
+  client: { tui: { showToast: async (payload) => {
+    toasts.push(payload.body.message)
+    if (mode === "reject") throw new Error("TUI unavailable")
+  } } },
+})
+await new Promise((resolve) => setTimeout(resolve, 150))
+const queue = `${directory}/.magnolia/.job-notices.jsonl`
+process.stdout.write(JSON.stringify({
+  toasts,
+  queued: existsSync(queue) ? readFileSync(queue, "utf8") : null,
+}))
+"""
+
+
+def _push_plugin_notice(project_dir):
+    from compchem_memory.job_notices import push_job_notice
+
+    (project_dir / ".magnolia").mkdir(parents=True, exist_ok=True)
+    (project_dir / ".magnolia" / "GOAL.md").touch()
+    push_job_notice(
+        str(project_dir), run_id="run-headless", tool="dock", state="completed",
+        category="success",
+    )
+
+
+def test_job_notice_plugin_delivers_through_context_before_consuming(tmp_path):
+    project = tmp_path / "project"
+    _push_plugin_notice(project)
+
+    result = json.loads(
+        run_plugin("magnolia-job-notify.ts", JOB_NOTICE_DRIVER, tmp_path, project, "context")
+    )
+
+    assert result["system"] == [
+        "[Magnolia job notices]\n✅ dock finished (completed) — run …run-headless"
+    ]
+    assert result["queued"] is None
+
+
+def test_job_notice_plugin_without_delivery_channel_leaves_queue(tmp_path):
+    project = tmp_path / "project"
+    _push_plugin_notice(project)
+
+    result = json.loads(
+        run_plugin("magnolia-job-notify.ts", JOB_NOTICE_DRIVER, tmp_path, project, "no-channel")
+    )
+
+    assert result["system"] == []
+    assert result["queued"] is not None
+    assert "run-headless" in result["queued"]
+
+
+def test_job_notice_v1_consumes_only_after_toast_accepts(tmp_path):
+    accepted = tmp_path / "accepted"
+    _push_plugin_notice(accepted)
+    delivered = json.loads(
+        run_plugin(
+            "magnolia-job-notify.ts", JOB_NOTICE_V1_DRIVER, tmp_path, accepted, "accept",
+        )
+    )
+    assert len(delivered["toasts"]) == 1
+    assert delivered["queued"] is None
+
+    rejected = tmp_path / "rejected"
+    _push_plugin_notice(rejected)
+    undelivered = json.loads(
+        run_plugin(
+            "magnolia-job-notify.ts", JOB_NOTICE_V1_DRIVER, tmp_path, rejected, "reject",
+        )
+    )
+    assert len(undelivered["toasts"]) == 1
+    assert "run-headless" in undelivered["queued"]
+
+
+def test_job_notice_plugin_respects_hook_client_claim(tmp_path):
+    from compchem_memory.hook.notices import peek_notices, release_notices
+    from compchem_memory.hook.state import SessionState
+
+    paths = _workspace(tmp_path)
+    _push_plugin_notice(paths.project_dir)
+    with SessionState.open(paths.store, "claude", "claiming-session") as state:
+        claimed = peek_notices(paths, state)
+    assert claimed is not None
+
+    result = json.loads(
+        run_plugin(
+            "magnolia-job-notify.ts", JOB_NOTICE_DRIVER, tmp_path,
+            paths.project_dir, "context",
+        )
+    )
+
+    assert result["system"] == []
+    assert result["queued"] is not None
+    release_notices(claimed)
+
+
 ACTION_DRIVER = r"""
 const [pluginPath, directory] = process.argv.slice(2)
-const { readFile, writeFile } = await import("node:fs/promises")
-// Bun exposes import.meta.dir; Node exposes the equivalent import.meta.dirname.
-const nodePlugin = new URL("./magnolia-action-retrieval-node.ts", import.meta.url)
-await writeFile(nodePlugin, (await readFile(new URL(pluginPath), "utf8")).replaceAll("import.meta.dir", "import.meta.dirname"))
-const mod = await import(nodePlugin)
+const mod = await import(pluginPath)
 const hooks = {}
 await mod.default.setup({
   location: { directory },

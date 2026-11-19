@@ -12,7 +12,11 @@ if (
 ):
     os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]])
 
-sys.path.insert(0, str(root))
+sys.path[:0] = [
+    str(root),
+    str(root / "mcp-servers" / "compchem-memory" / "src"),
+    str(root / "mcp-servers" / "compchem-tools" / "src"),
+]
 
 from campaign_runner.cli import main
 

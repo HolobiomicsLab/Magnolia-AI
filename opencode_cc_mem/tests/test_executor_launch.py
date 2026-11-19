@@ -1,0 +1,3345 @@
+import copy
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
+from types import SimpleNamespace
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from campaign_runner.cli import _memory_route
+from campaign_runner.executors import ExecContext, ExecutorRefused, executor_for
+from campaign_runner.executors.capabilities import (
+    load_capability_table,
+    load_role_capabilities,
+    project_role_capabilities,
+)
+from campaign_runner.executors.codex import CodexExecutor
+from campaign_runner.executors.opencode import OpenCodeHelperExecutor
+from campaign_runner.launch import (
+    _effective_environment,
+    _hook_source_digest,
+    configuration_identity,
+    prepare_launch,
+)
+from campaign_runner.routing import ResolvedRoute
+from compchem_memory.harness import RENDERERS
+from compchem_memory.harness import memory_service
+from compchem_memory.harness.memory_service import PROVIDER_KEYS
+from compchem_memory.harness.neutral import NeutralConfig
+from compchem_memory.harness.protocol import LaunchContext
+from compchem_memory.hook.doorbell import process_prompt
+from compchem_memory.hook.policy import load_required_policy, read_target_allowed
+from compchem_memory.hook.project import ProjectPaths
+from compchem_memory.tool_catalog import resolve_memory_tool_allowlist
+
+
+STRIPPED_CLIENT_ENV = {
+    "CLAUDE_CONFIG_DIR": "CLAUDE-SENTINEL",
+    "CODEX_HOME": "CODEX-HOME-SENTINEL",
+    "VIBE_HOME": "VIBE-HOME-SENTINEL",
+    "CODEX_API_KEY": "CODEX-KEY-SENTINEL",
+    "ANTHROPIC_API_KEY": "ANTHROPIC-KEY-SENTINEL",
+    "ANTHROPIC_AUTH_TOKEN": "ANTHROPIC-AUTH-SENTINEL",
+    "OPENAI_API_KEY": "OPENAI-KEY-SENTINEL",
+    "MISTRAL_API_KEY": "MISTRAL-KEY-SENTINEL",
+}
+PASSTHROUGH_CLIENT_ENV = {
+    "MAGNOLIA_OPENAI_API_KEY": "MN-OAI-ALIAS-SENTINEL",
+    "MAGNOLIA_MISTRAL_API_KEY": "MN-MIS-ALIAS-SENTINEL",
+    "OPENROUTER_API_KEY": "OPENROUTER-KEY-SENTINEL",
+    "DEEPSEEK_API_KEY": "DEEPSEEK-KEY-SENTINEL",
+    "KIMI_PLAN_MAGNOLIA_API_KEY": "KIMI-PLAN-KEY-SENTINEL",
+    "KIMI_API_KEY": "KIMI-KEY-SENTINEL",
+    "ZHIPU_API_KEY": "ZHIPU-KEY-SENTINEL",
+    "ZAI_API_KEY": "ZAI-KEY-SENTINEL",
+    "MAGNOLIA_LLM_API_KEY": "MAGNOLIA-MEMORY-KEY-SENTINEL",
+    "MAGNOLIA_CRITIC_API_KEY": "MAGNOLIA-CRITIC-KEY-SENTINEL",
+}
+PARENT_CLIENT_ENV = {**STRIPPED_CLIENT_ENV, **PASSTHROUGH_CLIENT_ENV}
+ALL_PROVIDER_KEYS = {
+    name: f"{name}-SENTINEL"
+    for names in PROVIDER_KEYS.values()
+    for name in names
+}
+ALL_PROVIDER_KEYS.update(
+    {
+        "MAGNOLIA_CRITIC_API_KEY": "MAGNOLIA-CRITIC-SENTINEL",
+        "MAGNOLIA_EXPERIMENT_API_KEY": "MAGNOLIA-EXPERIMENT-SENTINEL",
+    }
+)
+ROOT = Path(__file__).parents[1]
+ISOLATED_MEMORY_ARGS = [
+    "-I",
+    str(
+        ROOT / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    ),
+    "--memory-server",
+]
+WORKER_CAPABILITIES = (
+    "native_read",
+    "native_glob",
+    "native_grep",
+    "native_edit",
+    "mcp:compchem-memory.memory_get_context",
+    "mcp:compchem-memory.memory_search",
+    "mcp:compchem-memory.memory_get_run_history",
+)
+
+
+def _candidate_role_capabilities():
+    """Enable stale rows only inside the offline live-candidate driver."""
+    table = load_capability_table()
+    for row in table["rows"]:
+        if row["client"] in {"claude-code", "codex"}:
+            row["stale"] = False
+    return project_role_capabilities(table)
+
+
+@pytest.mark.parametrize(
+    ("client", "role"),
+    (
+        *(
+            ("claude-code", role)
+            for role in ("worker", "reviewer", "helper", "evaluator")
+        ),
+        ("codex", "worker"),
+        ("codex", "reviewer"),
+    ),
+)
+def test_reobserved_rebound_rows_are_accepted_on_the_new_hook_source(client, role):
+    projected = project_role_capabilities(load_capability_table())
+    evidence = projected[client][role]
+
+    assert evidence["gate_accepted"] is True
+    assert evidence["accepted"] is True
+    assert evidence["stale"] is False
+    assert evidence["launch_identity"]["components"]["hook_source"] == (
+        "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55"
+    )
+
+
+def _fake_codex_client(tmp_path):
+    package = tmp_path / "codex-package"
+    binary = package / "bin" / "codex"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--version\" ]; then\n"
+        "  printf '%s\\n' 'codex-cli 0.154.0'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    host = binary.with_name("codex-code-mode-host")
+    host.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    host.chmod(0o755)
+    exec_server = binary.with_name("codex-exec-server")
+    exec_server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    exec_server.chmod(0o755)
+    path_dir = package / "codex-path"
+    path_dir.mkdir(exist_ok=True)
+    rg = path_dir / "rg"
+    rg.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    rg.chmod(0o755)
+    (package / "codex-package.json").write_text(
+        json.dumps({
+            "layoutVersion": 1,
+            "version": "0.154.0",
+            "target": "test-target",
+            "variant": "codex",
+            "entrypoint": "bin/codex",
+            "execServer": "bin/codex-exec-server",
+            "pathDir": "codex-path",
+        }),
+        encoding="utf-8",
+    )
+    return binary
+
+
+def _context(
+    tmp_path,
+    *,
+    client="claude-code",
+    role="helper",
+    invocation="one",
+    model="selected-model",
+    **changes,
+):
+    project = tmp_path / "project"
+    run = tmp_path / "run"
+    project.mkdir(exist_ok=True)
+    (run / "control").mkdir(parents=True, exist_ok=True)
+    (run / "work").mkdir(parents=True, exist_ok=True)
+    if client == "codex":
+        config_dir = project / ".codex"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.toml").write_text("model_provider = \"subscription\"\n")
+        (config_dir / "hooks.json").write_text('{"hooks": {}}\n')
+        codex_user_config = tmp_path / "codex-user.toml"
+        codex_user_config.write_text("", encoding="utf-8")
+    if client == "vibe":
+        config_dir = project / ".vibe"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.toml").write_text("disabled_tools = []\n")
+        (config_dir / "hooks.toml").write_text("[[hooks]]\nname = \"fixture\"\n")
+    route = ResolvedRoute(client, model, "family", client, role, "test")
+    capabilities = set(changes.pop("capabilities", ()))
+    vibe_memory = changes.pop("vibe_memory", False)
+    evidence = {
+        "accepted": True,
+        "trusted": True,
+        "stale": False,
+        "identity": "pending",
+        "discovery_dir": {
+            "scope": "launch-project",
+            "configuration": "run-owned settings",
+        },
+        "capabilities": sorted(capabilities),
+        "model_isolation": {
+            "accepted": True,
+            "model": model,
+            "identity": f"{client}-model-isolation-v1",
+        },
+    }
+    if client == "vibe":
+        evidence["vibe_memory"] = vibe_memory
+    values = {
+        "route": route,
+        "role": role,
+        "installation_root": Path(__file__).parents[1],
+        "workspace_root": tmp_path,
+        "project_identity": "project-fixture",
+        "project_dir": project,
+        "run_dir": run,
+        "control_dir": run / "control",
+        "work_dir": run / "work",
+        "python_executable": "/venv/bin/python",
+        "tools_port": 8123,
+        "setup": {
+            "memory_enabled": True,
+            **(
+                {"codex_user_config_path": str(codex_user_config)}
+                if client == "codex" else {}
+            ),
+        },
+        "memory_service": {
+            "transport": "stdio",
+            "command": "/venv/bin/python",
+            "args": ISOLATED_MEMORY_ARGS,
+            "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+        },
+        "invocation_id": invocation,
+        "launch_argv": (
+            (str(_fake_codex_client(tmp_path)),)
+            if client == "codex" else (f"stub-{client}", "--headless")
+        ),
+        "role_capabilities": {client: {role: evidence}},
+        "environment": (
+            {
+                "PATH": os.environ.get("PATH", ""),
+                "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            }
+            if client == "claude-code"
+            else {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
+        ),
+    }
+    values.update(changes)
+    context = ExecContext(**values)
+    evidence["identity"] = configuration_identity(context)
+    return context
+
+
+def _artifact_text(launch):
+    return "\n".join(path.read_text(encoding="utf-8") for path in launch.files)
+
+
+def _fake_claude_client(tmp_path):
+    package = tmp_path / "npm-global" / "@anthropic-ai" / "claude-code"
+    binary = package / "bin" / "claude.exe"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    (package / "package.json").write_text(
+        json.dumps({"name": "@anthropic-ai/claude-code", "version": "2.1.325"}),
+        encoding="utf-8",
+    )
+    return binary
+
+
+def _production_claude_context(tmp_path, *, role="helper", project_name="project", **changes):
+    project = tmp_path / project_name
+    run = tmp_path / f"run-{project_name}-{role}"
+    project.mkdir(exist_ok=True)
+    (run / "control").mkdir(parents=True, exist_ok=True)
+    (run / "work").mkdir(exist_ok=True)
+    binary = _fake_claude_client(tmp_path)
+    installation = tmp_path / "snapshot" / "opencode_cc_mem"
+    source = installation / "mcp-servers" / "compchem-memory" / "src"
+    source.mkdir(parents=True, exist_ok=True)
+    package = source / "compchem_memory"
+    if not package.exists():
+        shutil.copytree(
+            ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory",
+            package,
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+    repository_venv = installation.parent / ".venv"
+    python = repository_venv / "bin" / "python3"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    if not python.exists():
+        python.symlink_to(sys.executable)
+    (repository_venv / "pyvenv.cfg").write_text(
+        f"home = {Path(sys.executable).resolve().parent}\n",
+        encoding="utf-8",
+    )
+    capabilities = copy.deepcopy(_candidate_role_capabilities())
+    identity = capabilities["claude-code"][role]["launch_identity"]["components"]
+    identity["client_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
+    identity["client_version"] = "2.1.325"
+    route = ResolvedRoute(
+        "claude-code", "haiku", "claude-haiku", "claude-code", role, "test"
+    )
+    role_cap = {
+        "worker": 25,
+        "reviewer": 8,
+        "helper": 25,
+        "evaluator": 1,
+    }[role]
+    if role == "helper":
+        (project / "docs").mkdir(exist_ok=True)
+    values = {
+        "route": route,
+        "role": role,
+        "installation_root": installation,
+        "workspace_root": tmp_path,
+        "project_identity": f"identity-{project_name}",
+        "project_dir": project,
+        "run_dir": run,
+        "control_dir": run / "control",
+        "work_dir": run / "work",
+        "python_executable": str(python),
+        "tools_port": 8123,
+        "setup": {"memory_enabled": True},
+        "memory_service": (
+            {
+                "transport": "http",
+                "url": "http://127.0.0.1:0/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            }
+            if role == "worker"
+            else _memory_route(route, str(python), installation)
+        ),
+        "invocation_id": f"{role}-{project_name}",
+        "launch_argv": (str(binary),),
+        "role_capabilities": capabilities,
+        "environment": {"PATH": os.environ.get("PATH", "")},
+        "role_cap": 30 if role == "worker" else role_cap,
+        "governor_cap": 60,
+        "required_capabilities": ("native_read",) if role == "helper" else (),
+        "capability_read_roots": (project / "docs",) if role == "helper" else (),
+    }
+    values.update(changes)
+    return ExecContext(**values)
+
+
+def test_required_role_env_wins(tmp_path):
+    context = _context(
+        tmp_path,
+        renderer_env={
+            "MAGNOLIA_ROLE": "interactive",
+            "MAGNOLIA_MODEL": "wrong-model",
+            "MAGNOLIA_HOOK_POLICY": "relative.json",
+            "MAGNOLIA_HOOK_POLICY_REQUIRED": "0",
+            "MAGNOLIA_DOORBELL": "1",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_ROLE"] == "helper"
+    assert launch.env["MAGNOLIA_MODEL"] == "selected-model"
+    assert Path(launch.env["MAGNOLIA_HOOK_POLICY"]).is_absolute()
+    assert launch.env["MAGNOLIA_HOOK_POLICY_REQUIRED"] == "1"
+    assert launch.env["MAGNOLIA_HOOK_POLICY_SHA256"] == launch.policy_digest
+    assert launch.env["MAGNOLIA_DOORBELL"] == "0"
+
+
+def test_member_oauth_survives_but_client_api_key_is_filtered(tmp_path):
+    context = _context(
+        tmp_path,
+        environment={
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            "OPENAI_API_KEY": "task-zero-verification-key",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["CLAUDE_CODE_OAUTH_TOKEN"] == "member-subscription-token"
+    assert "OPENAI_API_KEY" not in launch.env
+
+
+def test_codex_stdio_memory_refuses_provider_key_in_client_environment(tmp_path):
+    with pytest.raises(ExecutorRefused, match="provider credential"):
+        prepare_launch(_context(
+            tmp_path,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            memory_service={
+                "transport": "stdio",
+                "command": "/venv/bin/python",
+                "args": ISOLATED_MEMORY_ARGS,
+                "env_vars": ["OPENROUTER_API_KEY"],
+            },
+        ))
+
+
+def test_bound_codex_package_is_not_replaced_by_second_read(tmp_path, monkeypatch):
+    from campaign_runner import launch as launch_module
+
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    context = replace(
+        context,
+        python_executable=sys.executable,
+        environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+    )
+    accepted_package = {}
+
+    def replace_after_gate(_evidence, actual):
+        accepted_package.update(actual["components"]["codex_package"])
+        target = Path(actual["executable"]).with_name("codex-exec-server")
+        target.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        target.chmod(0o755)
+
+    monkeypatch.setattr(launch_module, "_verify_bound_launch_identity", replace_after_gate)
+    binary = Path(context.launch_argv[0])
+    context.role_capabilities["codex"]["worker"]["launch_identity"] = {
+        "components": {"client_sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}
+    }
+    launch = prepare_launch(context)
+
+    assert dict(launch.codex_package_identity) == accepted_package
+
+
+def test_codex_identity_uses_version_command_and_rechecks_binary(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+    launch = prepare_launch(context)
+    host = binary.with_name("codex-code-mode-host").resolve()
+
+    assert launch.argv == (str(binary.resolve()),)
+    assert launch.client_sha256 == hashlib.sha256(binary.read_bytes()).hexdigest()
+    assert launch.code_mode_host_path == host
+    assert launch.code_mode_host_sha256 == hashlib.sha256(host.read_bytes()).hexdigest()
+    assert launch.code_mode_host_version == "0.154.0"
+    assert launch.codex_package_identity == {
+        "layout_version": 1,
+        "version": "0.154.0",
+        "target": "test-target",
+        "manifest_sha256": hashlib.sha256(
+            (binary.parent.parent / "codex-package.json").read_bytes()
+        ).hexdigest(),
+        "executables": {
+            "code_mode_host": {
+                "path": "bin/codex-code-mode-host",
+                "sha256": hashlib.sha256(host.read_bytes()).hexdigest(),
+            },
+            "entrypoint": {
+                "path": "bin/codex",
+                "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+            },
+            "execServer": {
+                "path": "bin/codex-exec-server",
+                "sha256": hashlib.sha256(
+                    binary.with_name("codex-exec-server").read_bytes()
+                ).hexdigest(),
+            },
+            "pathDir/rg": {
+                "path": "codex-path/rg",
+                "sha256": hashlib.sha256(
+                    (binary.parent.parent / "codex-path" / "rg").read_bytes()
+                ).hexdigest(),
+            },
+        },
+    }
+
+    for path, body in launch.files.items():
+        if path.name in {"config.toml", "hooks.json"}:
+            target = context.project_dir / path.relative_to(launch.invocation_dir)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    executor = CodexExecutor(
+        launch, "selected-model", "worker", 30,
+        user_config_path=Path(context.setup["codex_user_config_path"]),
+    )
+    binary.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    with pytest.raises(ExecutorRefused, match="changed before spawn"):
+        executor._verify_client_bytes()
+
+
+def test_codex_rechecks_code_mode_host_before_spawn(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+    launch = prepare_launch(context)
+    for path, body in launch.files.items():
+        if path.name in {"config.toml", "hooks.json"}:
+            target = context.project_dir / path.relative_to(launch.invocation_dir)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    executor = CodexExecutor(
+        launch, "selected-model", "worker", 30,
+        user_config_path=Path(context.setup["codex_user_config_path"]),
+    )
+    binary.with_name("codex-code-mode-host").write_text(
+        "#!/bin/sh\nexit 77\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ExecutorRefused, match="code-mode host changed before spawn"):
+        executor._verify_client_bytes()
+
+
+def test_codex_rechecks_every_package_executable_and_manifest_before_spawn(tmp_path):
+    for changed_relative in ("bin/codex-exec-server", "codex-path/rg", "codex-package.json"):
+        root = tmp_path / changed_relative.replace("/", "-")
+        root.mkdir()
+        binary = _fake_codex_client(root)
+        context = _context(
+            root,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            launch_argv=(str(binary),),
+        )
+        launch = prepare_launch(context)
+        for path, body in launch.files.items():
+            if path.name in {"config.toml", "hooks.json"}:
+                target = context.project_dir / path.relative_to(launch.invocation_dir)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(body)
+        executor = CodexExecutor(
+            launch, "selected-model", "worker", 30,
+            user_config_path=Path(context.setup["codex_user_config_path"]),
+        )
+        changed_path = binary.parent.parent / changed_relative
+        if changed_relative == "codex-package.json":
+            changed_manifest = json.loads(changed_path.read_text(encoding="utf-8"))
+            changed_manifest["target"] = "changed-target"
+            changed_path.write_text(json.dumps(changed_manifest), encoding="utf-8")
+        else:
+            changed_path.write_text("changed after identity binding", encoding="utf-8")
+
+        with pytest.raises(ExecutorRefused, match="package changed before spawn"):
+            executor._verify_client_bytes()
+
+
+def test_codex_refuses_package_executable_symlink_outside_package(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    outside = tmp_path / "outside-exec-server"
+    outside.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    outside.chmod(0o755)
+    exec_server = binary.with_name("codex-exec-server")
+    exec_server.unlink()
+    exec_server.symlink_to(outside)
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        launch_argv=(str(binary),),
+    )
+
+    with pytest.raises(ExecutorRefused, match="outside its package"):
+        prepare_launch(context)
+
+
+def test_codex_code_mode_host_selector_is_filtered_or_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODE_MODE_HOST", "grpc://127.0.0.1:9999")
+    monkeypatch.setenv("CODEX_EXEC_SERVER_URL", "ws://127.0.0.1:9998")
+    inherited = _context(tmp_path, client="codex", environment=None)
+
+    launch = prepare_launch(inherited)
+
+    assert "CODE_MODE_HOST" not in launch.env
+    assert "CODEX_EXEC_SERVER_URL" not in launch.env
+
+    explicit_root = tmp_path / "explicit"
+    explicit_root.mkdir()
+    for index, (name, value) in enumerate((
+        ("CODE_MODE_HOST", "grpc://127.0.0.1:9999"),
+        ("CODEX_EXEC_SERVER_URL", "ws://127.0.0.1:9998"),
+    )):
+        root = explicit_root / str(index)
+        root.mkdir()
+        explicit = _context(
+            root,
+            client="codex",
+            environment={"PATH": os.environ.get("PATH", ""), name: value},
+        )
+        with pytest.raises(ExecutorRefused, match="remote host/server selector"):
+            prepare_launch(explicit)
+
+
+def test_codex_without_bound_package_metadata_is_never_executed(tmp_path):
+    record = tmp_path / "version-environment.txt"
+    binary = tmp_path / "codex-version-probe"
+    binary.write_text(
+        "#!/bin/sh\n"
+        f'printf \'%s\\n%s\\n\' "$HOME" "$PATH" > "{record}"\n'
+        '/bin/mkdir -p "$HOME/.codex/tmp/arg0"\n'
+        "printf '%s\\n' 'codex-cli 0.154.0'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    context = _context(
+        tmp_path,
+        client="codex",
+        launch_argv=(str(binary),),
+        environment={"PATH": "/run-owned/bin"},
+    )
+
+    with pytest.raises(ExecutorRefused, match="version metadata"):
+        prepare_launch(context)
+
+    assert not record.exists()
+
+
+def test_codex_normalized_launch_identity_names_selected_model(tmp_path):
+    from campaign_runner import launch as module
+
+    context = _context(
+        tmp_path,
+        client="codex",
+        model="gpt-bound",
+        python_executable=sys.executable,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_PYTHON": sys.executable,
+        },
+    )
+    launch = prepare_launch(context)
+    native = {
+        str(path.relative_to(launch.invocation_dir)): body
+        for path, body in launch.files.items()
+        if str(path.relative_to(launch.invocation_dir)).startswith(".codex/")
+    }
+
+    normalized = module._normalized_launch_identity(
+        context,
+        launch.invocation_dir,
+        launch.env,
+        launch.files[launch.invocation_dir / "settings.json"],
+        launch.files[launch.invocation_dir / "mcp.json"],
+        native,
+        launch.files[launch.invocation_dir / "policy.json"],
+    )
+
+    assert normalized["components"]["model"] == "gpt-bound"
+    changed = copy.deepcopy(normalized)
+    changed["components"]["model"] = "gpt-other"
+    with pytest.raises(ExecutorRefused, match="identity mismatch: model"):
+        module._verify_bound_launch_identity(
+            {"launch_identity": normalized}, changed
+        )
+
+
+def test_codex_configuration_identity_ignores_owner_config(tmp_path):
+    binary = _fake_codex_client(tmp_path)
+    owner = tmp_path / "owner.toml"
+    owner.write_text('[mcp_servers.owner]\ncommand = "first"\n', encoding="utf-8")
+    context = _context(
+        tmp_path,
+        client="codex",
+        launch_argv=(str(binary),),
+        setup={"codex_user_config_path": str(owner)},
+    )
+    before = configuration_identity(context)
+    owner.write_text('[mcp_servers.owner]\ncommand = "second"\n', encoding="utf-8")
+
+    assert configuration_identity(context) == before
+
+
+def test_codex_identity_is_path_independent_across_checkouts(tmp_path):
+    from campaign_runner import launch as module
+
+    identities = []
+    for name in ("checkout-a", "checkout-b"):
+        root = tmp_path / name
+        root.mkdir()
+        installation = root / "opencode_cc_mem"
+        shutil.copytree(
+            ROOT,
+            installation,
+            ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
+        )
+        python = root / ".venv" / "bin" / "python3"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        (python.parents[1] / "pyvenv.cfg").write_text(
+            f"home = {Path(sys.executable).resolve().parent}\n",
+            encoding="utf-8",
+        )
+        binary = _fake_codex_client(root)
+        route = ResolvedRoute(
+            "codex", "selected-model", "family", "codex", "worker", "test"
+        )
+        context = _context(
+            root,
+            client="codex",
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            launch_argv=(str(binary),),
+            installation_root=installation,
+            python_executable=str(python),
+            memory_service=_memory_route(route, str(python), installation),
+        )
+        launch = prepare_launch(context)
+        native = {
+            str(path.relative_to(launch.invocation_dir)): body
+            for path, body in launch.files.items()
+            if str(path.relative_to(launch.invocation_dir)).startswith(".codex/")
+        }
+        normalized = module._normalized_launch_identity(
+            context,
+            launch.invocation_dir,
+            launch.env,
+            launch.files[launch.invocation_dir / "settings.json"],
+            launch.files[launch.invocation_dir / "mcp.json"],
+            native,
+            launch.files[launch.invocation_dir / "policy.json"],
+        )
+        identities.append((configuration_identity(context), normalized["components"]))
+
+    assert identities[0] == identities[1]
+
+
+def test_codex_read_server_identity_is_stable_across_invocations(tmp_path):
+    context = _context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        invocation="inv-a",
+    )
+    first = configuration_identity(context)
+    second = configuration_identity(replace(context, invocation_id="inv-b"))
+
+    assert first == second
+
+
+def test_codex_read_server_receives_policy_digest_by_name(tmp_path):
+    launch = prepare_launch(_context(
+        tmp_path,
+        client="codex",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    ))
+
+    config = _artifact_text(launch)
+    assert "MAGNOLIA_HOOK_POLICY_SHA256" in config
+    assert launch.env["MAGNOLIA_HOOK_POLICY_SHA256"] == launch.policy_digest
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer"))
+def test_codex_required_servers_block_startup_until_ready(tmp_path, role):
+    capabilities = (
+        WORKER_CAPABILITIES
+        if role == "worker"
+        else ("native_read", "native_glob", "native_grep")
+    )
+    launch = prepare_launch(_context(
+        tmp_path,
+        client="codex",
+        role=role,
+        capabilities=capabilities,
+    ))
+    config = tomllib.loads(
+        (launch.invocation_dir / ".codex" / "config.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    servers = config["mcp_servers"]
+    assert servers["magnolia-read"]["required"] is True
+    assert servers["magnolia-read"]["startup_timeout_sec"] == 30
+    if role == "worker":
+        assert servers["compchem-memory"]["required"] is True
+        assert servers["compchem-memory"]["startup_timeout_sec"] == 30
+
+
+def test_claude_vibe_opencode_launch_unchanged(tmp_path):
+    for client in ("claude-code", "vibe"):
+        client_root = tmp_path / client
+        client_root.mkdir()
+        launch = prepare_launch(
+            _context(client_root, client=client, invocation=client)
+        )
+        assert "magnolia-read" not in _artifact_text(launch)
+
+    launcher = (ROOT / "softwares" / "bin" / "magnolia").read_text(
+        encoding="utf-8"
+    )
+    assert "magnolia-read" not in launcher
+
+
+def test_parallel_roles_and_interactive_render_do_not_cross_contaminate(tmp_path):
+    first = prepare_launch(
+        _context(tmp_path, invocation="helper-1", model="helper-model")
+    )
+    second = prepare_launch(
+        _context(
+            tmp_path,
+            client="vibe",
+            role="evaluator",
+            invocation="evaluator-1",
+            model="evaluator-model",
+        )
+    )
+    interactive_project = tmp_path / "interactive"
+    interactive = RENDERERS["claude"](
+        NeutralConfig([], frozenset({"bash"})),
+        LaunchContext(
+            root=ROOT,
+            project="interactive",
+            project_dir=interactive_project,
+            python=sys.executable,
+            tools_port=8123,
+            model="interactive-model",
+            setup={},
+        ),
+    )
+
+    assert first.invocation_dir != second.invocation_dir
+    assert first.policy_digest != second.policy_digest
+    assert first.env["MAGNOLIA_MODEL"] == "helper-model"
+    assert second.env["MAGNOLIA_MODEL"] == "evaluator-model"
+    assert second.env["MAGNOLIA_ROLE"] == "evaluator"
+    assert "helper" not in _artifact_text(second)
+    assert interactive.argv[-2:] == ["--model", "interactive-model"]
+    assert "interactive-model" not in _artifact_text(first)
+    assert "interactive-model" not in _artifact_text(second)
+    assert (tmp_path / "project" / ".vibe" / "config.toml").read_text() == (
+        "disabled_tools = []\n"
+    )
+
+
+def test_resume_keeps_policy_identity(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+    resumed = prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+    assert resumed.invocation_dir == first.invocation_dir
+    assert resumed.policy_digest == first.policy_digest
+    assert resumed.config_digest == first.config_digest
+    assert resumed.required_capability_identity == first.required_capability_identity
+
+
+def test_resume_refuses_tampered_policy_even_with_rewritten_manifest(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+    policy_path = first.invocation_dir / "policy.json"
+    manifest_path = first.invocation_dir / "launch.json"
+    policy_path.chmod(0o644)
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    policy["deny_shell"] = False
+    policy_path.write_text(json.dumps(policy, sort_keys=True) + "\n", encoding="utf-8")
+    policy_path.chmod(0o444)
+    manifest_path.chmod(0o644)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    import hashlib
+
+    manifest["artifacts"]["policy.json"] = hashlib.sha256(
+        policy_path.read_bytes()
+    ).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_path.chmod(0o444)
+
+    with pytest.raises(ExecutorRefused, match="policy.json"):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
+def test_resume_refuses_copy_inside_work_tree(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+    copied = tmp_path / "run" / "work" / "copied-invocation"
+    shutil.copytree(first.invocation_dir, copied)
+
+    with pytest.raises(ExecutorRefused, match="control.*executors"):
+        prepare_launch(_context(tmp_path, resume_from=copied))
+
+
+def test_resume_refuses_other_project_identity(tmp_path):
+    first = prepare_launch(_context(tmp_path))
+
+    with pytest.raises(ExecutorRefused, match="project_identity"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                resume_from=first.invocation_dir,
+                project_identity="other-project",
+            )
+        )
+
+
+@pytest.mark.parametrize("replacement", ("symlink", "directory"))
+def test_resume_refuses_non_regular_artifact(tmp_path, replacement):
+    first = prepare_launch(_context(tmp_path))
+    policy = first.invocation_dir / "policy.json"
+    policy.chmod(0o644)
+    body = policy.read_bytes()
+    policy.unlink()
+    if replacement == "symlink":
+        target = tmp_path / "run" / "work" / "policy.json"
+        target.write_bytes(body)
+        target.chmod(0o444)
+        policy.symlink_to(target)
+    else:
+        policy.mkdir(mode=0o444)
+
+    with pytest.raises(ExecutorRefused, match="regular file"):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
+@pytest.mark.parametrize(
+    ("evidence_change", "message"),
+    (
+        ({}, "missing"),
+        ({"stale": True}, "stale"),
+        ({"stale": None}, "stale"),
+        ({"trusted": False}, "untrusted"),
+    ),
+)
+def test_missing_stale_or_untrusted_launch_refused(tmp_path, evidence_change, message):
+    context = _context(tmp_path)
+    evidence = context.role_capabilities["claude-code"]["helper"]
+    if evidence_change == {"stale": None}:
+        evidence.pop("stale")
+    elif evidence_change:
+        evidence.update(evidence_change)
+    else:
+        context = _context(tmp_path, role_capabilities={})
+
+    with pytest.raises(ExecutorRefused, match=message):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_effective_environment_strips_only_client_credentials(tmp_path, client):
+    environment = {"PATH": os.environ.get("PATH", ""), **PARENT_CLIENT_ENV}
+    if client == "claude-code":
+        environment = {
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            **PASSTHROUGH_CLIENT_ENV,
+        }
+    launch = prepare_launch(
+        _context(tmp_path, client=client, invocation=client, environment=environment)
+    )
+    resumed = prepare_launch(
+        _context(
+            tmp_path,
+            client=client,
+            invocation=client,
+            resume_from=launch.invocation_dir,
+            environment=environment,
+        )
+    )
+    combined = json.dumps(dict(launch.env), sort_keys=True) + _artifact_text(launch)
+
+    for name, sentinel in STRIPPED_CLIENT_ENV.items():
+        assert name not in launch.env
+        assert name not in resumed.env
+        assert sentinel not in combined
+    for name, sentinel in PASSTHROUGH_CLIENT_ENV.items():
+        assert name not in launch.env
+        assert name not in resumed.env
+        assert sentinel not in combined
+    assert all(path.stat().st_mode & 0o222 == 0 for path in launch.files)
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+@pytest.mark.parametrize("transport", ("none", "stdio", "http", "managed"))
+def test_subscription_client_never_receives_provider_api_keys(
+    tmp_path, client, role, transport
+):
+    service = {
+        "none": {},
+        "stdio": {"transport": "stdio"},
+        "http": {"transport": "http"},
+        "managed": {"transport": "managed"},
+    }[transport]
+    context = _context(tmp_path, client=client)
+    context = replace(
+        context,
+        role=role,
+        memory_service=service,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CODE_OAUTH_TOKEN": "member-subscription-token",
+            **ALL_PROVIDER_KEYS,
+        },
+    )
+
+    environment = _effective_environment(
+        context,
+        tmp_path / "policy.json",
+        "policy-digest",
+    )
+
+    assert not (set(ALL_PROVIDER_KEYS) & set(environment))
+
+
+def test_opencode_api_client_keeps_provider_api_keys():
+    executor = OpenCodeHelperExecutor("opencode", "provider/model")
+
+    environment = executor.environment_with_cap(ALL_PROVIDER_KEYS)
+
+    assert set(ALL_PROVIDER_KEYS) <= set(environment)
+
+
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
+def test_inherited_forbidden_value_cannot_survive_under_other_name(
+    tmp_path, monkeypatch, name
+):
+    sentinel = STRIPPED_CLIENT_ENV[name]
+    monkeypatch.setenv(name, sentinel)
+    context = _context(
+        tmp_path,
+        environment={"PATH": os.environ.get("PATH", ""), name: sentinel},
+        renderer_env={"COPIED_VALUE": sentinel},
+    )
+
+    if name == "ANTHROPIC_AUTH_TOKEN":
+        with pytest.raises(ExecutorRefused, match=name):
+            prepare_launch(context)
+    else:
+        launch = prepare_launch(context)
+        assert name not in launch.env
+        assert sentinel not in json.dumps(dict(launch.env)) + _artifact_text(launch)
+
+
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
+def test_forbidden_value_in_argv_is_refused(tmp_path, name):
+    message = (
+        name
+        if name in ALL_PROVIDER_KEYS or name.startswith("ANTHROPIC_")
+        else "forbidden client environment"
+    )
+    with pytest.raises(ExecutorRefused, match=message):
+        prepare_launch(
+            _context(
+                tmp_path,
+                launch_argv=("stub", "--credential", STRIPPED_CLIENT_ENV[name]),
+                environment={name: STRIPPED_CLIENT_ENV[name]},
+            )
+        )
+
+
+@pytest.mark.parametrize("name", tuple(STRIPPED_CLIENT_ENV))
+def test_forbidden_value_in_resumed_artifact_is_refused(tmp_path, name):
+    first = prepare_launch(_context(tmp_path))
+    settings = first.invocation_dir / "settings.json"
+    settings.chmod(0o644)
+    settings.write_text(
+        json.dumps({"copied_value": STRIPPED_CLIENT_ENV[name]}) + "\n",
+        encoding="utf-8",
+    )
+    settings.chmod(0o444)
+
+    with pytest.raises(ExecutorRefused):
+        prepare_launch(_context(tmp_path, resume_from=first.invocation_dir))
+
+
+def test_forbidden_path_value_is_not_matched_as_unrelated_path_prefix(tmp_path):
+    config_root = tmp_path / "project" / "config-root"
+    shared = config_root / "shared-skill.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("skill\n", encoding="utf-8")
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "CLAUDE_CONFIG_DIR": str(config_root),
+        },
+        shared_skill_files=(shared,),
+    )
+
+    launch = prepare_launch(context)
+
+    assert str(shared.resolve()) in _artifact_text(launch)
+
+
+def test_forbidden_path_value_is_not_matched_as_sibling_prefix(tmp_path):
+    config_root = tmp_path / "project" / "cfg"
+    config_root.mkdir(parents=True)
+    shared = tmp_path / "project" / "cfg-shared" / "skill.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("skill\n", encoding="utf-8")
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"CLAUDE_CONFIG_DIR": str(config_root)},
+        shared_skill_files=(shared,),
+    )
+
+    launch = prepare_launch(context)
+
+    assert str(shared.resolve()) in _artifact_text(launch)
+
+
+def test_short_provider_placeholder_does_not_match_inside_launch_text(tmp_path):
+    context = _context(
+        tmp_path,
+        launch_argv=("/opt/contest/bin/client",),
+        environment={"OLLAMA_API_KEY": "test"},
+    )
+
+    launch = prepare_launch(context)
+
+    assert "OLLAMA_API_KEY" not in launch.env
+
+
+@pytest.mark.parametrize(
+    "placeholder",
+    ("none", "null", "ollama", "changeme", "dummy", "test", "x" * 32),
+)
+def test_provider_placeholder_value_is_ignored(tmp_path, placeholder):
+    context = _context(
+        tmp_path,
+        launch_argv=(f"/client/{placeholder}/run",),
+        environment={"VENDOR_API_KEY": placeholder},
+    )
+
+    launch = prepare_launch(context)
+
+    assert "VENDOR_API_KEY" not in launch.env
+
+
+def test_short_redirect_value_is_still_refused(tmp_path):
+    redirect = "ws://h:9"
+    context = _context(
+        tmp_path,
+        launch_argv=("stub", "--endpoint", redirect),
+        environment={"CODEX_EXEC_SERVER_URL": redirect},
+    )
+
+    with pytest.raises(
+        ExecutorRefused, match="forbidden client environment value"
+    ):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
+def test_forbidden_secret_value_uses_key_alphabet_delimiters(tmp_path, delimiter):
+    secret = "sk-ant-SECRET_123"
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp{delimiter}{secret}",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("delimiter", ("/", "?", "&", "=", ":", "#", "\"", " "))
+def test_real_long_secret_value_still_uses_delimiters(tmp_path, delimiter):
+    secret = "sk-ant-" + "A" * 32
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp{delimiter}{secret}",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="ANTHROPIC_API_KEY"):
+        prepare_launch(context)
+
+
+def test_provider_value_prefix_inside_longer_value_is_not_refused(tmp_path):
+    secret = "sk-ant-SECRET_123"
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={"ANTHROPIC_API_KEY": secret},
+        memory_service={
+            "transport": "http",
+            "url": f"http://127.0.0.1:8765/mcp/{secret}X",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert "ANTHROPIC_API_KEY" not in launch.env
+
+
+def test_noninteractive_mention_writes_no_letter(tmp_path):
+    context = _context(tmp_path, prompt="Please ask @literature for a source")
+
+    launch = prepare_launch(context)
+    project = tmp_path / "project"
+    result = process_prompt(
+        context.prompt,
+        ProjectPaths(tmp_path, project, project / ".magnolia", "project", False),
+        launch.env,
+    )
+
+    assert result.text == context.prompt
+    assert result.letters == []
+    assert not list(tmp_path.rglob("*.letter.md"))
+    assert not list(tmp_path.rglob("*.task.md"))
+
+
+def test_api_memory_route_survives_client_env_filter(tmp_path):
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=(
+            "native_read",
+            "native_glob",
+            "native_grep",
+            "native_edit",
+            "mcp:compchem-memory.memory_get_context",
+            "mcp:compchem-memory.memory_search",
+            "mcp:compchem-memory.memory_get_run_history",
+        ),
+        memory_service={
+            "transport": "http",
+            "url": "http://127.0.0.1:9876/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        },
+        environment={"MAGNOLIA_MEMORY_SERVICE_TOKEN": "service-token"},
+    )
+
+    launch = prepare_launch(context)
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text(encoding="utf-8"))
+
+    assert mcp["memory_service"] == {
+        "transport": "http",
+        "url": "http://127.0.0.1:9876/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert mcp["memory_service"]["url"].startswith("http://127.0.0.1:")
+    assert "ANTHROPIC_API_KEY" not in launch.env
+    assert "ANTHROPIC-KEY-SENTINEL" not in _artifact_text(launch)
+
+
+def test_vibe_memory_url_and_bearer_are_run_owned(tmp_path):
+    token_file = tmp_path / "memory-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    route = {
+        "transport": "http",
+        "url": "http://127.0.0.1:9876/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "token_file": str(token_file),
+    }
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        memory_service=route,
+        vibe_memory=True,
+    )
+
+    launch = prepare_launch(context)
+    config = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )
+    rendered = config["mcp_servers"][0]
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+
+    assert rendered["transport"] == "http"
+    assert rendered["url"] == route["url"]
+    assert rendered["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert "headers" not in rendered
+    assert "${" not in repr(rendered)
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    memory_keys = set(PASSTHROUGH_CLIENT_ENV) - {"MAGNOLIA_CRITIC_API_KEY"}
+    assert not (memory_keys & set(launch.env))
+    assert "service-bearer-sentinel" not in _artifact_text(launch)
+    assert "token_file" not in mcp["memory_service"]
+    assert configuration_identity(context) != configuration_identity(
+        replace(
+            context,
+            memory_service={**route, "url": "http://127.0.0.1:9877/mcp"},
+        )
+    )
+
+
+def test_vibe_memory_token_is_only_secret_in_child_env(tmp_path):
+    token_file = tmp_path / "memory-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        memory_service={
+            "transport": "http",
+            "url": "http://127.0.0.1:9876/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        },
+        vibe_memory=True,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            **PARENT_CLIENT_ENV,
+            "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    assert not {name for name in launch.env if name.endswith("_API_KEY")}
+    assert not {name for name in launch.env if name.endswith(("_BASE_URL", "_API_BASE"))}
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_claude_and_codex_prepared_env_names_stay_byte_identical(tmp_path, client):
+    baseline = {
+        "claude-code": [
+            "CLAUDE_CODE_OAUTH_TOKEN", "COMPCHEM_TOOLS_PORT", "MAGNOLIA_CLIENT",
+            "MAGNOLIA_CONTROL_DIR", "MAGNOLIA_DISTILL_INTERVAL_MIN", "MAGNOLIA_DOORBELL",
+            "MAGNOLIA_HOOK_POLICY", "MAGNOLIA_HOOK_POLICY_REQUIRED", "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_INSTALLATION_ROOT", "MAGNOLIA_MEMORY_MODEL", "MAGNOLIA_MEMORY_PROVIDER",
+            "MAGNOLIA_MODEL", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_IDENTITY",
+            "MAGNOLIA_PYTHON", "MAGNOLIA_ROLE", "MAGNOLIA_ROOT", "MAGNOLIA_RULES_DIR",
+            "MAGNOLIA_RUN_DIR", "MAGNOLIA_TRANSCRIPT_TOOL_CHARS", "MAGNOLIA_WORKSPACE_ROOT",
+            "MAGNOLIA_WORK_DIR", "PATH", "PYTHONPYCACHEPREFIX",
+        ],
+        "codex": [
+            "COMPCHEM_TOOLS_PORT", "MAGNOLIA_CLIENT", "MAGNOLIA_CONTROL_DIR",
+            "MAGNOLIA_DISTILL_INTERVAL_MIN", "MAGNOLIA_DOORBELL", "MAGNOLIA_HOOK_POLICY",
+            "MAGNOLIA_HOOK_POLICY_REQUIRED", "MAGNOLIA_HOOK_POLICY_SHA256",
+            "MAGNOLIA_INSTALLATION_ROOT", "MAGNOLIA_MODEL", "MAGNOLIA_PROJECT_DIR",
+            "MAGNOLIA_PROJECT_IDENTITY", "MAGNOLIA_PYTHON", "MAGNOLIA_ROLE", "MAGNOLIA_ROOT",
+            "MAGNOLIA_RULES_DIR", "MAGNOLIA_RUN_DIR", "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+            "MAGNOLIA_WORKSPACE_ROOT", "MAGNOLIA_WORK_DIR", "PATH", "PYTHONPYCACHEPREFIX",
+        ],
+    }
+
+    launch = prepare_launch(_context(tmp_path, client=client))
+
+    assert sorted(launch.env) == baseline[client]
+
+
+def test_campaign_vibe_managed_route_acquires_project_service(
+    tmp_path, monkeypatch
+):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("managed-service-token\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": "http://127.0.0.1:43101/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, *, tool_allowlist: acquired.append(
+            (context, tool_allowlist)
+        ) or handle,
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", ""), "OPENAI_API_KEY": "provider"},
+        vibe_memory=True,
+    )
+
+    launch = prepare_launch(context)
+
+    assert len(acquired) == 1
+    assert acquired[0][0].project_dir == context.project_dir
+    assert acquired[0][1] == WORKER_CAPABILITIES[-3:]
+    assert launch.memory_service_handle is handle
+    rendered = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )["mcp_servers"][0]
+    assert rendered["url"] == "http://127.0.0.1:43101/mcp"
+    assert rendered["auth"]["api_key_env"] == "MAGNOLIA_MEMORY_SERVICE_TOKEN"
+
+
+def test_managed_memory_launch_identity_normalizes_ephemeral_port(
+    tmp_path, monkeypatch
+):
+    from campaign_runner import launch as launch_module
+
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("managed-service-token\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    ports = iter((43101, 43102))
+
+    def acquire(*_args, **_kwargs):
+        port = next(ports)
+        return SimpleNamespace(
+            route=lambda: {
+                "transport": "http",
+                "url": f"http://127.0.0.1:{port}/mcp",
+                "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                "token_file": str(token_file),
+            }
+        )
+
+    identities = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service", acquire
+    )
+    monkeypatch.setattr(
+        launch_module,
+        "_verify_bound_launch_identity",
+        lambda _evidence, identity: identities.append(identity["components"]),
+    )
+
+    for name in ("first", "second"):
+        root = tmp_path / name
+        root.mkdir()
+        context = _production_claude_context(
+            root,
+            role="worker",
+            memory_service={"transport": "managed"},
+        )
+        prepare_launch(context)
+
+    assert identities[0]["mcp"] == identities[1]["mcp"]
+    assert identities[0]["native_files"] == identities[1]["native_files"]
+
+
+def test_vibe_managed_memory_requires_explicit_accepted_capability_cell(
+    tmp_path, monkeypatch
+):
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: acquired.append((context, kwargs)),
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", ""), "OPENAI_API_KEY": "provider"},
+    )
+
+    launch = prepare_launch(context)
+
+    assert acquired == []
+    policy_payload = json.loads(Path(launch.env["MAGNOLIA_HOOK_POLICY"]).read_text())
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert policy_payload["mcp_tool_allowlist"] == []
+    assert mcp_payload["tool_allowlist"] == []
+    assert mcp_payload["memory_service"] is None
+    assert not any(
+        capability.startswith("mcp:compchem-memory.")
+        for capability in policy_payload["effective_capabilities"]
+    )
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_non_opencode_role_policy_denies_service_token_root(tmp_path, client):
+    context = _context(
+        tmp_path,
+        client=client,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    launch = prepare_launch(context)
+    policy_path = Path(launch.env["MAGNOLIA_HOOK_POLICY"])
+    policy = load_required_policy(
+        policy_path,
+        expected_sha256=launch.policy_digest,
+        control_dir=str(context.control_dir),
+    )
+    token_path = context.project_dir / ".magnolia" / "services" / "probe" / "bearer-token"
+    token_path.parent.mkdir(parents=True)
+    token_path.write_text("sentinel\n", encoding="utf-8")
+
+    assert "**/.magnolia/services/**" in policy.deny_patterns
+    assert read_target_allowed(str(token_path), context.project_dir, policy) is False
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_xdg_role_policy_still_denies_legacy_home_service_token(tmp_path, client):
+    project = tmp_path / "project"
+    state_home = tmp_path / "launcher-state"
+    context = _context(
+        tmp_path,
+        client=client,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        environment={
+            "HOME": str(project),
+            "PATH": os.environ.get("PATH", ""),
+            "XDG_STATE_HOME": str(state_home),
+        },
+    )
+    launch = prepare_launch(context)
+    policy_path = Path(launch.env["MAGNOLIA_HOOK_POLICY"])
+    policy = load_required_policy(
+        policy_path,
+        expected_sha256=launch.policy_digest,
+        control_dir=str(context.control_dir),
+    )
+    token_path = project / ".magnolia" / "services" / "probe" / "bearer-token"
+    token_path.parent.mkdir(parents=True)
+    token_path.write_text("sentinel\n", encoding="utf-8")
+
+    assert "**/.magnolia/services/**" in policy.deny_patterns
+    assert f"{state_home.resolve().as_posix()}/magnolia/services/**" in policy.deny_patterns
+    assert read_target_allowed(str(token_path), context.project_dir, policy) is False
+
+
+def test_vibe_reviewer_without_memory_tools_does_not_acquire_managed_service(
+    tmp_path, monkeypatch
+):
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: acquired.append((context, kwargs)),
+    )
+    context = _context(
+        tmp_path,
+        client="vibe",
+        role="reviewer",
+        capabilities=("native_read", "native_glob", "native_grep"),
+        setup={},
+        memory_service={"transport": "managed"},
+        environment={"PATH": os.environ.get("PATH", "")},
+    )
+
+    launch = prepare_launch(context)
+
+    assert acquired == []
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp["memory_service"] is None
+    assert "MAGNOLIA_MEMORY_SERVICE_TOKEN" not in launch.env
+
+
+def test_memory_role_without_route_is_refused(tmp_path):
+    with pytest.raises(ExecutorRefused, match="memory.*route"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={},
+            )
+        )
+
+
+def test_hook_catalog_and_server_allowlists_are_identical(tmp_path):
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+        )
+    )
+    policy = json.loads(Path(launch.env["MAGNOLIA_HOOK_POLICY"]).read_text())
+    mcp = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    server = resolve_memory_tool_allowlist(
+        json.loads(launch.env["MAGNOLIA_MEMORY_TOOL_ALLOWLIST"]),
+        required=True,
+    )
+
+    assert tuple(policy["mcp_tool_allowlist"]) == tuple(mcp["tool_allowlist"])
+    assert server.neutral_names == tuple(mcp["tool_allowlist"])
+    assert server.server_names == (
+        "memory_get_context",
+        "memory_search",
+        "memory_get_run_history",
+    )
+
+
+def test_memory_stdio_route_refuses_nonisolated_module_launch(tmp_path):
+    with pytest.raises(ExecutorRefused, match="isolated repository runner"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={
+                    "transport": "stdio",
+                    "command": "/venv/bin/python",
+                    "args": ["-m", "compchem_memory.server"],
+                    "env_vars": ["MAGNOLIA_PROJECT_DIR"],
+                },
+            )
+        )
+
+
+def test_memory_stdio_route_refuses_project_copy_of_runner(tmp_path):
+    context = _context(
+        tmp_path,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+    project_runner = (
+        context.project_dir
+        / "mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py"
+    )
+    context.memory_service["args"] = ["-I", str(project_runner), "--memory-server"]
+
+    with pytest.raises(ExecutorRefused, match="isolated repository runner"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize(
+    "api_key_name",
+    ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MISTRAL_API_KEY"),
+)
+def test_memory_route_depending_on_filtered_variable_is_refused(
+    tmp_path, api_key_name
+):
+    with pytest.raises(ExecutorRefused, match=rf"filtered.*{api_key_name}"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                memory_service={
+                    "transport": "stdio",
+                    "command": "/venv/bin/python",
+                    "env_vars": [api_key_name],
+                },
+            )
+        )
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_memory_stdio_allowlist_is_bound_in_server_argv(tmp_path, client):
+    context = _context(
+        tmp_path,
+        client=client,
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+    )
+
+    launch = prepare_launch(context)
+    rendered = _artifact_text(launch)
+
+    assert "--tool-allowlist-json" in rendered
+    for tool in WORKER_CAPABILITIES[-3:]:
+        assert tool in rendered
+
+
+def test_codex_rendered_config_refuses_stripped_key_value(tmp_path):
+    with pytest.raises(ExecutorRefused, match="forbidden client environment value"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                client="codex",
+                role="worker",
+                capabilities=(
+                    "native_read",
+                    "native_glob",
+                    "native_grep",
+                    "native_edit",
+                    "mcp:compchem-memory.memory_get_context",
+                    "mcp:compchem-memory.memory_search",
+                    "mcp:compchem-memory.memory_get_run_history",
+                ),
+                memory_service={
+                    "transport": "stdio",
+                    "command": "/venv/bin/OPENAI-KEY-SENTINEL",
+                    "args": ISOLATED_MEMORY_ARGS,
+                },
+            )
+        )
+
+
+def test_no_tools_helper_and_evaluator_contract(tmp_path):
+    helper = prepare_launch(_context(tmp_path, role="helper", invocation="helper"))
+    evaluator = prepare_launch(
+        _context(tmp_path, client="codex", role="evaluator", invocation="evaluator")
+    )
+
+    for launch in (helper, evaluator):
+        policy = json.loads((launch.invocation_dir / "policy.json").read_text(encoding="utf-8"))
+        assert policy["effective_capabilities"] == []
+        assert policy["mcp_tool_allowlist"] == []
+        assert policy["edit_roots"] == []
+        assert policy["delegation_policy"] == "deny"
+
+
+def test_helper_native_read_requires_proved_lane_root(tmp_path):
+    with pytest.raises(ExecutorRefused, match="lane read root"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                required_capabilities=("native_read",),
+                capabilities=("native_read",),
+            )
+        )
+
+    inbox = tmp_path / "lane" / "inbox"
+    inbox.mkdir(parents=True)
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            invocation="native-read",
+            required_capabilities=("native_read",),
+            capabilities=("native_read",),
+            capability_read_roots=(inbox,),
+        )
+    )
+    policy = json.loads((launch.invocation_dir / "policy.json").read_text(encoding="utf-8"))
+    assert policy["effective_capabilities"] == ["native_read"]
+    assert policy["canonical_read_roots"][-1] == str(inbox.resolve())
+
+
+@pytest.mark.parametrize(
+    ("path_changes", "message"),
+    (
+        ({"work_dir": "run"}, "canonical run/work"),
+        ({"control_dir": "work-control"}, "canonical run/control"),
+    ),
+)
+def test_run_control_and_work_paths_are_canonical(
+    tmp_path, path_changes, message
+):
+    run = tmp_path / "run"
+    changes = {
+        key: run if value == "run" else run / "work" / "control"
+        for key, value in path_changes.items()
+    }
+
+    with pytest.raises(ExecutorRefused, match=message):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                **changes,
+            )
+        )
+
+
+@pytest.mark.parametrize("kind", ("directory", "home", "config-root", "outside"))
+def test_shared_rule_and_skill_entries_are_bounded_files(tmp_path, kind):
+    project = tmp_path / "project"
+    if kind == "directory":
+        shared = project
+    elif kind == "home":
+        shared = Path.home()
+    elif kind == "config-root":
+        shared = Path.home() / ".config"
+    else:
+        shared = tmp_path / "outside.md"
+        shared.write_text("outside\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match="shared.*file"):
+        prepare_launch(
+            _context(
+                tmp_path,
+                role="worker",
+                capabilities=WORKER_CAPABILITIES,
+                shared_skill_files=(shared,),
+            )
+        )
+
+
+def test_shared_project_and_installation_files_are_allowed(tmp_path):
+    project_file = tmp_path / "project" / "rule.md"
+    project_file.parent.mkdir()
+    project_file.write_text("project rule\n", encoding="utf-8")
+    install_rule = ROOT / "rules" / "memory-setup.md"
+    install_skill = ROOT / ".opencode" / "skills" / "campaign-protocol" / "SKILL.md"
+
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            role="worker",
+            capabilities=WORKER_CAPABILITIES,
+            shared_rule_files=(project_file, install_rule),
+            shared_skill_files=(install_skill,),
+        )
+    )
+    policy = json.loads((launch.invocation_dir / "policy.json").read_text())
+
+    assert str(project_file.resolve()) in policy["canonical_read_roots"]
+    assert str(install_rule.resolve()) in policy["canonical_read_roots"]
+    assert str(install_skill.resolve()) in policy["canonical_read_roots"]
+
+
+def test_configured_cap_can_exceed_default_but_governor_clamps(tmp_path):
+    launch = prepare_launch(_context(tmp_path, role_cap=50, governor_cap=60))
+    clamped = prepare_launch(
+        _context(
+            tmp_path,
+            invocation="clamped",
+            role_cap=75,
+            governor_cap=60,
+        )
+    )
+
+    assert json.loads((launch.invocation_dir / "settings.json").read_text())[
+        "max_turns"
+    ] == 50
+    assert json.loads((clamped.invocation_dir / "settings.json").read_text())[
+        "max_turns"
+    ] == 60
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+def test_discovered_configuration_must_match_evidence_identity(tmp_path, client):
+    context = _context(tmp_path, client=client)
+    evidence = context.role_capabilities[client]["helper"]
+    evidence["identity"] = "wrong-configuration-digest"
+
+    with pytest.raises(ExecutorRefused, match="configuration identity"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_launch_accepts_claude_rows_in_any_project(tmp_path, role):
+    launches = [
+        prepare_launch(
+            _production_claude_context(tmp_path, role=role, project_name=name)
+        )
+        for name in ("alpha", "beta")
+    ]
+
+    assert all(launch.discovery_dir == launch.discovery_dir.resolve() for launch in launches)
+    assert launches[0].discovery_dir != launches[1].discovery_dir
+
+
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_production_memory_route_is_accepted_for_every_claude_role(tmp_path, role):
+    context = _production_claude_context(tmp_path, role=role)
+    route = _memory_route(
+        context.route,
+        context.python_executable,
+        context.installation_root,
+        managed=True,
+    )
+
+    assert route == {"transport": "managed"}
+    prepare_launch(context)
+
+
+@pytest.mark.parametrize(
+    ("role", "tag", "tools"),
+    (
+        ("worker", "W1", ("Read", "Glob", "Grep", "Edit", "Write")),
+        ("reviewer", "R1", ("Read", "Glob", "Grep")),
+        ("helper", "H1", ("Read",)),
+        ("evaluator", "E1", ()),
+    ),
+)
+def test_claude_bound_role_matches_live_tool_shape(tmp_path, role, tag, tools):
+    context = _production_claude_context(tmp_path, role=role)
+    executor = executor_for(context.route, role, context)
+    argv = executor._argv("offline shape check", None, executor.max_turns)
+    policy = json.loads((executor.prepared.invocation_dir / "policy.json").read_text())
+    expected = context.role_capabilities["claude-code"][role]["capabilities"]
+    assert policy["effective_capabilities"] == expected
+    if role in {"helper", "evaluator"}:
+        assert argv[argv.index("--tools") + 1] == ",".join(tools)
+        observed = json.loads(
+            (ROOT / "tests/fixtures/executors/claude/live-gate" / tag / "04-stream-init.json").read_text()
+        )
+        assert observed["tools"] == list(tools)
+        assert observed["mcp_servers"] == []
+    else:
+        assert "--tools" not in argv
+    if tools:
+        mcp = [name.replace("mcp:", "mcp__").replace(".", "__") for name in expected if name.startswith("mcp:")]
+        assert argv[argv.index("--allowedTools") + 1:] == [*tools, *mcp]
+    else:
+        assert "--allowedTools" not in argv
+        assert executor.max_turns == 1
+    read_roots = [] if role == "evaluator" else [str(context.project_dir)]
+    if role == "helper":
+        read_roots = [str(context.project_dir / "docs")]
+    assert policy["canonical_read_roots"] == read_roots
+    mcp_config = json.loads((executor.prepared.invocation_dir / "claude-mcp.json").read_text())
+    assert list(mcp_config["mcpServers"]) == (["compchem-memory"] if role == "worker" else [])
+
+
+def test_claude_no_tools_helper_refuses_observed_read_binding(tmp_path):
+    context = _production_claude_context(
+        tmp_path, required_capabilities=(), capability_read_roots=()
+    )
+
+    with pytest.raises(ExecutorRefused, match="identity mismatch: settings"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex", "vibe"))
+@pytest.mark.parametrize("role", ("worker", "reviewer", "helper", "evaluator"))
+def test_bound_identity_matches_two_independent_installations(
+    tmp_path, monkeypatch, client, role
+):
+    from campaign_runner import launch as module
+
+    actual = module._normalized_launch_identity
+    identities = []
+
+    def capture(context, invocation, env, settings, mcp, native, policy):
+        replacements = module._identity_replacements(context, invocation)
+        bodies = (settings, mcp, policy, *native.values())
+        for body in bodies:
+            normalized = module._normalize_identity_body(body, replacements).decode()
+            assert str(context.installation_root) not in normalized
+            assert str(ROOT) not in normalized
+            assert str(tmp_path) not in normalized
+        identity = actual(context, invocation, env, settings, mcp, native, policy)
+        identities.append(identity["components"])
+        return identity
+
+    monkeypatch.setattr(module, "_normalized_launch_identity", capture)
+    monkeypatch.setattr(module, "_verify_bound_launch_identity", lambda *_args: None)
+    projected = load_role_capabilities()
+    rows = {
+        (row["client"], row["role"]): row
+        for row in load_capability_table()["rows"]
+    }
+    expected = projected[client][role]["launch_identity"]["components"]
+    monkeypatch.setattr(module, "_installed_client_version", lambda *args, **kwargs: expected["client_version"])
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda _handle: True,
+    )
+
+    def expected_file_digest(path):
+        if client == "codex" and Path(path).name == "codex-code-mode-host":
+            return expected["code_mode_host"]["sha256"]
+        return expected["client_sha256"]
+
+    monkeypatch.setattr(module, "_file_digest", expected_file_digest)
+    if client == "codex" and "codex_package" in expected:
+        monkeypatch.setattr(
+            module,
+            "_resolved_codex_package",
+            lambda executable: (
+                Path(executable).parent.parent,
+                expected["codex_package"],
+            ),
+        )
+    launches = []
+    installation_names = (
+        ("first", "second")
+        if client == "vibe"
+        else ("first", "second installation")
+    )
+    for name in installation_names:
+        location = tmp_path / name
+        location.mkdir()
+        context = _production_claude_context(location, role=role)
+        capabilities = copy.deepcopy(context.role_capabilities)
+        context = replace(context, role_capabilities=capabilities)
+        if client == "codex":
+            evidence = capabilities[client][role]
+            if not evidence["accepted"]:
+                contract = rows[(client, role)]["gate"]["value"][
+                    "configuration_binding"
+                ]["recompute_contract"]
+                evidence.update(
+                    accepted=True,
+                    gate_accepted=True,
+                    stale=False,
+                    trusted=True,
+                    blocking_cells=[],
+                    identity=contract["identity"],
+                    discovery_dir=contract["discovery_dir"],
+                    capabilities=contract["capabilities"],
+                    model_isolation=contract["model_isolation"],
+                )
+            route = ResolvedRoute(
+                client, expected["model"], "codex", client, role, "bound identity test"
+            )
+            context = replace(
+                context,
+                route=route,
+                launch_argv=(str(_fake_codex_client(location)),),
+                role_capabilities=capabilities,
+            )
+        elif client == "vibe":
+            from test_executor_vibe_p4_candidate import _managed_handle
+
+            binary, _, _ = _fake_vibe_environment(location)
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            config_dir = context.project_dir / ".vibe"
+            config_dir.mkdir()
+            (config_dir / "config.toml").write_text("disabled_tools = []\n")
+            (config_dir / "hooks.toml").write_text("[[hooks]]\nname = \"fixture\"\n")
+            token_file = location / "memory-token"
+            token_file.write_text("offline-memory-bearer-sentinel\n", encoding="utf-8")
+            token_file.chmod(0o600)
+            handle = _managed_handle(token_file)
+            monkeypatch.setattr(
+                "compchem_memory.harness.memory_service.ensure_memory_service",
+                lambda _context, *, tool_allowlist, handle=handle: handle,
+            )
+            context = replace(
+                context,
+                route=ResolvedRoute(
+                    client,
+                    "mistral-medium-3.5",
+                    "mistral",
+                    client,
+                    role,
+                    "bound identity test",
+                ),
+                launch_argv=(str(binary),),
+                python_executable=sys.executable,
+                environment={
+                    "PATH": os.environ.get("PATH", ""),
+                    "MAGNOLIA_PYTHON": sys.executable,
+                },
+                role_capabilities=capabilities,
+                memory_service=(
+                    {
+                        "transport": "http",
+                        "url": "http://127.0.0.1:43101/mcp",
+                        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+                        "token_file": str(token_file),
+                    }
+                    if role == "worker"
+                    else context.memory_service
+                ),
+            )
+        assert not (context.installation_root / "mcp-servers/compchem-memory/src/compchem_memory").is_symlink()
+        launches.append(prepare_launch(context))
+        if rows[(client, role)]["gate"]["status"] == "observed":
+            assert identities[-1] == expected
+        else:
+            assert identities[-1] == identities[0]
+    assert identities[0] == identities[1]
+    assert launches[0].required_capability_identity != launches[1].required_capability_identity
+
+
+@pytest.mark.parametrize("selection", ("unset", "environment", "setup"))
+def test_worker_managed_memory_does_not_forward_provider_selection(tmp_path, selection):
+    environment = {"PATH": os.environ.get("PATH", "")}
+    setup = {"memory_enabled": True}
+    expected = {"MAGNOLIA_MEMORY_MODEL": "", "MAGNOLIA_MEMORY_PROVIDER": ""}
+    if selection != "unset":
+        expected = {"MAGNOLIA_MEMORY_MODEL": "memory-model", "MAGNOLIA_MEMORY_PROVIDER": "provider"}
+    if selection == "environment":
+        environment.update(expected)
+    elif selection == "setup":
+        setup.update(memory_model="memory-model", memory_provider="provider")
+    context = _production_claude_context(
+        tmp_path, role="worker", environment=environment, setup=setup
+    )
+    launch = prepare_launch(context)
+    mcp = json.loads((launch.invocation_dir / "claude-mcp.json").read_text())
+    rendered = mcp["mcpServers"]["compchem-memory"]
+    assert rendered["type"] == "http"
+    assert rendered["url"] == "http://127.0.0.1:0/mcp"
+    assert rendered["headers"] == {
+        "Authorization": "Bearer ${MAGNOLIA_MEMORY_SERVICE_TOKEN}"
+    }
+    credential_names = {
+        "MAGNOLIA_LLM_API_KEY",
+        "MAGNOLIA_CRITIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+    }
+    assert not credential_names & set(launch.env)
+
+
+@pytest.mark.parametrize("change", ("missing", "extra"))
+def test_claude_refuses_memory_route_with_one_environment_name_changed(
+    tmp_path, change
+):
+    context = _production_claude_context(tmp_path, role="worker")
+    route = _memory_route(
+        context.route, context.python_executable, context.installation_root
+    )
+    if change == "missing":
+        route["env_vars"] = route["env_vars"][:-1]
+    else:
+        route["env_vars"] = [*route["env_vars"], "MAGNOLIA_EXTRA"]
+
+    with pytest.raises(ExecutorRefused, match="mcp"):
+        prepare_launch(replace(context, memory_service=route))
+
+
+def test_launch_refuses_on_binary_drift(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "client_sha256"
+    ] = "0" * 64
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="client_sha256"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_on_rendered_shape_drift(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "settings"
+    ] = "0" * 64
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="settings"):
+        prepare_launch(context)
+
+
+def test_claude_worker_accepts_observed_stdio_and_refuses_static_http(tmp_path):
+    prepare_launch(_production_claude_context(tmp_path, role="worker"))
+    context = _production_claude_context(
+        tmp_path,
+        role="worker",
+        project_name="http",
+        memory_service={"transport": "http", "url": "http://127.0.0.1:8765/mcp"},
+    )
+
+    with pytest.raises(ExecutorRefused, match="authenticated"):
+        prepare_launch(context)
+
+
+def test_launch_binds_policy_env_names_from_effective_environment(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._effective_environment
+
+    def without_policy_digest(*args, **kwargs):
+        env = original(*args, **kwargs)
+        env.pop("MAGNOLIA_HOOK_POLICY_SHA256")
+        return env
+
+    monkeypatch.setattr(launch_module, "_effective_environment", without_policy_digest)
+    with pytest.raises(ExecutorRefused, match="required_env"):
+        prepare_launch(context)
+
+
+def test_explicit_child_environment_keys_are_protected_from_their_source(
+    tmp_path, monkeypatch
+):
+    context = _context(tmp_path, client="codex")
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._base_explicit_environment
+
+    def with_future_name(*args, **kwargs):
+        explicit = original(*args, **kwargs)
+        explicit["COMPCHEM_FUTURE_CONTRACT"] = "bound"
+        return explicit
+
+    monkeypatch.setattr(
+        launch_module, "_base_explicit_environment", with_future_name
+    )
+    launch = prepare_launch(context)
+
+    assert launch.env["COMPCHEM_FUTURE_CONTRACT"] == "bound"
+    assert "COMPCHEM_FUTURE_CONTRACT" in launch.protected_env_names
+
+
+def test_conditional_child_environment_keys_share_the_value_source(
+    tmp_path, monkeypatch
+):
+    context = _context(tmp_path, client="codex")
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._explicit_environment
+
+    def with_future_conditional(*args, **kwargs):
+        explicit = original(*args, **kwargs)
+        explicit["COMPCHEM_FUTURE_CONDITIONAL"] = "bound"
+        return explicit
+
+    monkeypatch.setattr(
+        launch_module, "_explicit_environment", with_future_conditional
+    )
+    launch = prepare_launch(context)
+
+    assert launch.env["COMPCHEM_FUTURE_CONDITIONAL"] == "bound"
+    assert "COMPCHEM_FUTURE_CONDITIONAL" in launch.protected_env_names
+
+
+def test_launch_refuses_renamed_policy_environment_name(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    from campaign_runner import launch as launch_module
+
+    original = launch_module._effective_environment
+
+    def renamed_policy_digest(*args, **kwargs):
+        env = original(*args, **kwargs)
+        env["MAGNOLIA_HOOK_POLICY_DIGEST"] = env.pop(
+            "MAGNOLIA_HOOK_POLICY_SHA256"
+        )
+        return env
+
+    monkeypatch.setattr(launch_module, "_effective_environment", renamed_policy_digest)
+    with pytest.raises(ExecutorRefused, match="required_env"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_unselected_hook_interpreter(tmp_path):
+    context = _production_claude_context(
+        tmp_path,
+        python_executable="/usr/bin/python3",
+        environment={"PATH": os.environ.get("PATH", ""), "MAGNOLIA_PYTHON": "/selected/bin/python3"},
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("selection", (None, "same-target-different-path"))
+@pytest.mark.parametrize("kind", ("base", "other-venv", "outside-symlink"))
+def test_hook_interpreter_refuses_unselected_paths(tmp_path, kind, selection):
+    if kind == "base":
+        interpreter = Path(sys.executable).resolve()
+    elif kind == "other-venv":
+        interpreter = tmp_path / "venvX" / "bin" / "python3"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.symlink_to(Path(sys.executable).resolve())
+        (interpreter.parent.parent / "pyvenv.cfg").write_text("home = /base\n")
+    else:
+        interpreter = tmp_path / "outside-python"
+        interpreter.symlink_to(sys.executable)
+    context = _production_claude_context(
+        tmp_path,
+        python_executable=str(interpreter),
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            **({"MAGNOLIA_PYTHON": sys.executable} if selection is not None else {}),
+        },
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize("selection", (None, "/selected/bin/python3"))
+def test_hook_interpreter_accepts_repository_venv_with_any_override(tmp_path, selection):
+    environment = {"MAGNOLIA_PYTHON": selection} if selection is not None else {}
+    context = _production_claude_context(tmp_path, role="worker", environment=environment)
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_PYTHON"] == context.python_executable
+
+
+@pytest.mark.parametrize("kind", ("venv", "base", "symlink"))
+def test_hook_interpreter_accepts_exact_explicit_override(tmp_path, kind):
+    interpreter = Path(sys.executable)
+    if kind == "base":
+        interpreter = interpreter.resolve()
+    elif kind == "symlink":
+        interpreter = tmp_path / "selected python"
+        interpreter.symlink_to(sys.executable)
+    context = _production_claude_context(
+        tmp_path, role="worker", python_executable=str(interpreter),
+        environment={"MAGNOLIA_PYTHON": str(interpreter)},
+    )
+
+    launch = prepare_launch(context)
+
+    assert launch.env["MAGNOLIA_PYTHON"] == str(interpreter)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    assert str(interpreter) in settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+
+
+@pytest.mark.parametrize("kind", ("relative", "missing", "not-executable", "directory"))
+def test_hook_interpreter_refuses_invalid_override(tmp_path, kind):
+    interpreter = tmp_path / "selected-python"
+    if kind == "relative":
+        interpreter = Path("relative/bin/python3")
+    elif kind == "not-executable":
+        interpreter.write_text("#!/bin/sh\nexit 0\n")
+        interpreter.chmod(0o644)
+    elif kind == "directory":
+        interpreter.mkdir()
+    context = _production_claude_context(
+        tmp_path, python_executable=str(interpreter),
+        environment={"MAGNOLIA_PYTHON": str(interpreter)},
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter"):
+        prepare_launch(context)
+
+
+def test_hook_interpreter_repository_venv_requires_config(tmp_path):
+    context = _production_claude_context(tmp_path)
+    (context.installation_root.parent / ".venv/pyvenv.cfg").unlink()
+
+    with pytest.raises(ExecutorRefused, match="hook interpreter.*pyvenv.cfg"):
+        prepare_launch(context)
+
+
+def test_launch_refuses_changed_hook_source(tmp_path, monkeypatch):
+    context = _production_claude_context(tmp_path)
+    monkeypatch.setattr(
+        "campaign_runner.launch._hook_source_digest", lambda _context: "0" * 64
+    )
+
+    with pytest.raises(ExecutorRefused, match="hook_source"):
+        prepare_launch(context)
+
+
+def test_hook_source_digest_covers_non_python_files_but_ignores_pycache(tmp_path):
+    installation = tmp_path / "repo" / "opencode_cc_mem"
+    source = (
+        installation
+        / "mcp-servers"
+        / "compchem-memory"
+        / "src"
+        / "compchem_memory"
+    )
+    repository_source = (
+        ROOT / "mcp-servers" / "compchem-memory" / "src" / "compchem_memory"
+    )
+    shutil.copytree(repository_source / "hook", source / "hook")
+    (source / "harness").mkdir()
+    shutil.copy2(
+        repository_source / "harness" / "render_common.py",
+        source / "harness" / "render_common.py",
+    )
+    for name in ("memory_http.py", "tool_catalog.py", "writer_lease.py"):
+        shutil.copy2(repository_source / name, source / name)
+    context = _production_claude_context(tmp_path)
+    context = replace(context, installation_root=installation)
+    baseline = _hook_source_digest(context)
+    pycache = source / "hook" / "__pycache__"
+    pycache.mkdir(exist_ok=True)
+    (pycache / "policy.cpython-312.pyc").write_bytes(b"forged")
+
+    assert _hook_source_digest(context) == baseline
+    (source / "hook" / "policy.cpython-312-darwin.so").write_bytes(b"extension")
+    assert _hook_source_digest(context) != baseline
+
+    baseline = _hook_source_digest(context)
+    (source / "tool_catalog.py").write_text("# changed server catalog\n", encoding="utf-8")
+    assert _hook_source_digest(context) != baseline
+
+
+def test_claude_hook_is_isolated_to_repository_source_and_private_pycache(tmp_path):
+    context = _production_claude_context(tmp_path)
+    launch = prepare_launch(context)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    runner = (
+        context.installation_root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
+
+    assert " -I " in command
+    assert str(runner.resolve()) in command
+    assert "PYTHONPYCACHEPREFIX" in launch.env
+    assert Path(launch.env["PYTHONPYCACHEPREFIX"]).parent == launch.invocation_dir
+    assert not Path(launch.env["PYTHONPYCACHEPREFIX"]).exists()
+
+
+def test_launch_refuses_symlinked_hook_runner(tmp_path):
+    context = _production_claude_context(tmp_path)
+    runner = (
+        context.installation_root / "mcp-servers" / "compchem-memory" / "src"
+        / "compchem_memory" / "hook" / "runner.py"
+    )
+    target = tmp_path / "runner-target.py"
+    target.write_bytes(runner.read_bytes())
+    runner.unlink()
+    runner.symlink_to(target)
+
+    with pytest.raises(ExecutorRefused, match="hook_runner"):
+        prepare_launch(context)
+
+
+@pytest.mark.parametrize(
+    ("role", "role_cap"),
+    (("worker", 30), ("worker", 20), ("reviewer", 12)),
+)
+def test_launch_binds_cap_rule_not_concrete_value(tmp_path, role, role_cap):
+    launch = prepare_launch(
+        _production_claude_context(tmp_path, role=role, role_cap=role_cap)
+    )
+    settings = json.loads((launch.invocation_dir / "settings.json").read_text())
+    assert settings["max_turns"] == min(role_cap, 60)
+
+
+def test_claude_rehashes_absolute_client_immediately_before_spawn(tmp_path):
+    context = _production_claude_context(tmp_path)
+    executor = executor_for(context.route, "helper", context)
+    executable = Path(executor.prepared.argv[0])
+    assert executable.is_absolute()
+    executable.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    with pytest.raises(ExecutorRefused, match="changed before spawn"):
+        executor.run("test", context.project_dir, tmp_path / "attempt", retries=0)
+
+
+def test_claude_environment_is_allowlisted_and_redirects_are_named(tmp_path):
+    allowed = {
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+        "CLAUDE_CODE_OAUTH_TOKEN": "subscription",
+        "HTTPS_PROXY": "http://proxy.example",
+        "SSL_CERT_FILE": "/certs/ca.pem",
+        "XDG_STATE_HOME": str(tmp_path / "state"),
+    }
+    dropped = {
+        "IGNORED": "x",
+        **{f"XDG_{name}_HOME": str(tmp_path / name.lower()) for name in ("CONFIG", "CACHE", "DATA")},
+    }
+    launch = prepare_launch(
+        _production_claude_context(tmp_path, environment={**allowed, **dropped})
+    )
+    assert all(launch.env[name] == value for name, value in allowed.items())
+    assert not set(dropped) & set(launch.env)
+
+
+    for name in ("ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "NODE_OPTIONS"):
+        context = _production_claude_context(
+            tmp_path,
+            project_name=name.lower(),
+            environment={**allowed, name: "redirect"},
+        )
+        with pytest.raises(ExecutorRefused, match=name):
+            prepare_launch(context)
+
+
+@pytest.mark.parametrize("source", ("environment", "renderer_env"))
+def test_claude_xdg_state_home_reaches_hook(tmp_path, source):
+    home = tmp_path / "home"
+    home.mkdir()
+    state = tmp_path / "xdg-state"
+    environment = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    renderer_env = {}
+    (environment if source == "environment" else renderer_env)["XDG_STATE_HOME"] = str(state)
+    context = _context(
+        tmp_path, python_executable=sys.executable,
+        environment=environment, renderer_env=renderer_env,
+    )
+    launch = prepare_launch(context)
+    settings = json.loads((launch.invocation_dir / "claude-settings.json").read_text())
+    command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps({"session_id": "xdg-check", "cwd": str(context.project_dir), "source": "startup"}),
+        text=True, capture_output=True, cwd=context.project_dir, env=dict(launch.env), timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    binding = state / "magnolia/bindings/claude-xdg-check.json"
+    assert binding.is_file(), (result.stdout, result.stderr)
+    assert not (home / ".local/state/magnolia/bindings").exists()
+
+
+@pytest.mark.parametrize("source", ("environment", "renderer_env"))
+def test_vibe_xdg_state_home_reaches_hook(tmp_path, source):
+    home = tmp_path / "home"
+    home.mkdir()
+    state = tmp_path / "xdg-state"
+    environment = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    renderer_env = {}
+    (environment if source == "environment" else renderer_env)["XDG_STATE_HOME"] = str(state)
+    context = _context(
+        tmp_path, client="vibe", python_executable=sys.executable,
+        environment=environment, renderer_env=renderer_env,
+    )
+    launch = prepare_launch(context)
+    hooks = tomllib.loads(
+        (launch.invocation_dir / ".vibe/hooks.toml").read_text()
+    )["hooks"]
+    command = next(hook["command"] for hook in hooks if hook["type"] == "session_start")
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps({"session_id": "xdg-check", "cwd": str(context.project_dir), "source": "startup"}),
+        text=True, capture_output=True, cwd=context.project_dir, env=dict(launch.env), timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    binding = state / "magnolia/bindings/vibe-xdg-check.json"
+    assert binding.is_file(), (result.stdout, result.stderr)
+    assert not (home / ".local/state/magnolia/bindings").exists()
+
+
+@pytest.mark.parametrize("name", ("settings.json", "settings.local.json"))
+def test_claude_refuses_project_settings_loaded_by_setting_sources(tmp_path, name):
+    context = _production_claude_context(tmp_path)
+    settings = context.run_dir / ".claude" / name
+    settings.parent.mkdir()
+    settings.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(ExecutorRefused, match=name):
+        prepare_launch(context)
+
+
+def test_client_version_reads_only_own_package_json(tmp_path):
+    context = _production_claude_context(tmp_path, project_name="wrong-package")
+    binary = Path(context.launch_argv[0])
+    (tmp_path / "package.json").write_text(
+        json.dumps({"name": "other", "version": "99.0.0"}), encoding="utf-8"
+    )
+    (binary.parent.parent / "package.json").write_text(
+        json.dumps({"name": "other", "version": "2.1.325"}), encoding="utf-8"
+    )
+    with pytest.raises(ExecutorRefused, match="version metadata"):
+        prepare_launch(context)
+
+
+def test_real_claude_identity_when_installed(tmp_path):
+    expected = load_role_capabilities()["claude-code"]["helper"]["launch_identity"]
+    version = expected["components"]["client_version"]
+    binary_name = shutil.which("claude")
+    if binary_name is None:
+        pytest.skip(f"Claude Code {version} is absent: executable not found")
+    binary = Path(binary_name).resolve()
+    package = binary.parent.parent / "package.json"
+    try:
+        metadata = json.loads(package.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pytest.skip(f"Claude Code {version} is absent: package metadata unavailable")
+    if metadata.get("name") != "@anthropic-ai/claude-code" or metadata.get("version") != version:
+        pytest.skip(f"Claude Code {version} is absent: installed version differs")
+    assert hashlib.sha256(binary.read_bytes()).hexdigest() == expected["components"][
+        "client_sha256"
+    ]
+
+
+def test_launch_refuses_non_launch_project_scope(tmp_path):
+    context = _production_claude_context(tmp_path)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["discovery_dir"] = {
+        "scope": "probe-project"
+    }
+    context = replace(context, role_capabilities=capabilities)
+
+    with pytest.raises(ExecutorRefused, match="launch-project"):
+        prepare_launch(context)
+
+
+def test_resume_rechecks_identity(tmp_path):
+    context = _production_claude_context(tmp_path)
+    first = prepare_launch(context)
+    capabilities = copy.deepcopy(context.role_capabilities)
+    capabilities["claude-code"]["helper"]["launch_identity"]["components"][
+        "client_version"
+    ] = "different-version"
+
+    with pytest.raises(ExecutorRefused, match="client_version"):
+        prepare_launch(
+            replace(
+                context,
+                role_capabilities=capabilities,
+                resume_from=first.invocation_dir,
+            )
+        )
+
+
+def test_codex_configuration_identity_uses_rendered_run_files_not_project_copy(tmp_path):
+    context = _context(tmp_path, client="codex")
+    identity = configuration_identity(context)
+    hooks = tmp_path / "project" / ".codex" / "hooks.json"
+    hooks.write_text('{"hooks": {"changed": true}}\n', encoding="utf-8")
+
+    assert configuration_identity(context) == identity
+
+
+def test_selected_model_requires_isolation_evidence(tmp_path):
+    context = _context(tmp_path)
+    evidence = context.role_capabilities["claude-code"]["helper"]
+    evidence.pop("model_isolation")
+
+    with pytest.raises(ExecutorRefused, match="model isolation"):
+        prepare_launch(context)
+
+
+def test_native_default_drops_inherited_model_binding(tmp_path):
+    launch = prepare_launch(
+        _context(
+            tmp_path,
+            model=None,
+            environment={"PATH": "/bin", "MAGNOLIA_MODEL": "interactive-model"},
+            renderer_env={"MAGNOLIA_MODEL": "renderer-model"},
+        )
+    )
+
+    assert "MAGNOLIA_MODEL" not in launch.env
+
+
+def test_explicit_empty_environment_remains_empty(tmp_path):
+    launch = prepare_launch(_context(tmp_path, model=None, environment={}))
+
+    assert "HOME" not in launch.env
+    assert "PATH" not in launch.env
+
+
+def test_invocation_mkdir_race_is_executor_refusal(tmp_path, monkeypatch):
+    original_mkdir = Path.mkdir
+
+    def racing_mkdir(path, *args, **kwargs):
+        if path.name == "race":
+            raise FileExistsError(path)
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+
+    with pytest.raises(ExecutorRefused, match="already exists"):
+        prepare_launch(_context(tmp_path, invocation="race"))
+
+
+@pytest.mark.parametrize("entrypoint", ("magnolia-campaign", "magnolia-agents-daemon"))
+def test_entrypoints_start_from_unrelated_cwd_without_pythonpath(tmp_path, entrypoint):
+    env = {
+        "HOME": os.environ["HOME"],
+        "PATH": os.environ.get("PATH", ""),
+        "MAGNOLIA_CAMPAIGN_NO_REEXEC": "1",
+    }
+
+    script = ROOT / "softwares" / "bin" / entrypoint
+    probe = (
+        "import runpy,sys; "
+        f"sys.argv=[{str(script)!r},'--help']; "
+        "\ntry: runpy.run_path(sys.argv[0], run_name='__main__')"
+        "\nexcept SystemExit as exc:\n assert exc.code in (0, None)"
+        "\nfrom campaign_runner import launch as module"
+        "\nprint('LAUNCH_MODULE=' + module.__file__)"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout.lower()
+    module_line = next(
+        line for line in result.stdout.splitlines() if line.startswith("LAUNCH_MODULE=")
+    )
+    assert Path(module_line.split("=", 1)[1]).is_relative_to(ROOT)
+
+
+def test_daemon_help_does_not_require_pyyaml(tmp_path):
+    script = ROOT / "softwares" / "bin" / "magnolia-agents-daemon"
+    probe = (
+        "import builtins,runpy,sys; "
+        "original_import=builtins.__import__; "
+        "\ndef import_without_yaml(name,*args,**kwargs):"
+        "\n if name == 'yaml' or name.startswith('yaml.'):"
+        "\n  raise ModuleNotFoundError(\"No module named 'yaml'\")"
+        "\n return original_import(name,*args,**kwargs)"
+        "\nbuiltins.__import__=import_without_yaml"
+        f"\nsys.argv=[{str(script)!r},'--help']"
+        "\nrunpy.run_path(sys.argv[0], run_name='__main__')"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=tmp_path,
+        env={"HOME": os.environ["HOME"], "PATH": os.environ.get("PATH", "")},
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout.lower()
+
+
+def test_claude_relative_xdg_state_home_is_refused(tmp_path):
+    context = _production_claude_context(
+        tmp_path,
+        environment={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "XDG_STATE_HOME": "work"},
+    )
+    with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
+        prepare_launch(context)
+
+
+def test_vibe_relative_xdg_state_home_is_refused(tmp_path):
+    context = _context(
+        tmp_path,
+        client="vibe",
+        environment={"HOME": str(tmp_path), "PATH": os.environ.get("PATH", ""), "XDG_STATE_HOME": "work"},
+    )
+    with pytest.raises(ExecutorRefused, match="relative XDG_STATE_HOME"):
+        prepare_launch(context)
+
+
+def _fake_vibe_environment(tmp_path, name="vibe-env", *, version="3.1.2", python="python3.12"):
+    """Build an inert uv-tool-shaped Vibe environment; the binary never runs."""
+    environment = tmp_path / name
+    binary = environment / "bin" / "vibe"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    sentinel = environment / "vibe-was-executed"
+    binary.write_text(
+        f"#!/bin/sh\ntouch '{sentinel}'\nexit 0\n", encoding="utf-8"
+    )
+    binary.chmod(0o755)
+    site_packages = environment / "lib" / python / "site-packages"
+    site_packages.mkdir(parents=True, exist_ok=True)
+    if version is not None:
+        dist_info = site_packages / f"mistral_vibe-{version}.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text(
+            "Metadata-Version: 2.4\n"
+            "Name: mistral-vibe\n"
+            f"Version: {version}\n",
+            encoding="utf-8",
+        )
+    return binary, sentinel, site_packages
+
+
+def _write_vibe_metadata(site_packages, body, *, directory="mistral_vibe-3.1.2.dist-info"):
+    dist_info = site_packages / directory
+    dist_info.mkdir(parents=True, exist_ok=True)
+    (dist_info / "METADATA").write_text(body, encoding="utf-8")
+    return dist_info
+
+
+def test_installed_vibe_version_reads_owning_dist_info(tmp_path):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        binary, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+    assert not sentinel.exists(), "version discovery must not execute Vibe"
+
+
+def test_installed_vibe_version_ignores_other_environment_metadata(tmp_path):
+    from campaign_runner import launch as module
+
+    first, _, _ = _fake_vibe_environment(tmp_path, "first-env", version="3.1.2")
+    second, _, _ = _fake_vibe_environment(tmp_path, "second-env", version="9.9.9")
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+    assert module._installed_client_version(
+        second, invocation_dir=run, launch_env={}
+    ) == "9.9.9"
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "3.1.2"
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "zero_directories",
+        "two_matching_distributions",
+        "wrong_name",
+        "missing_version",
+        "duplicate_version",
+        "empty_version",
+        "unreadable_metadata",
+        "release_double_dot",
+        "trailing_hyphen",
+        "epoch_without_release",
+        "whitespace_padded_version",
+    ),
+)
+def test_installed_vibe_version_refuses_missing_ambiguous_or_malformed_metadata(
+    tmp_path, case
+):
+    from campaign_runner import launch as module
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    if case == "two_matching_distributions":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n")
+        _write_vibe_metadata(
+            site_packages,
+            "Name: mistral-vibe\nVersion: 3.1.3\n",
+            directory="mistral_vibe-3.1.3.dist-info",
+        )
+    elif case == "wrong_name":
+        _write_vibe_metadata(site_packages, "Name: other-vibe\nVersion: 3.1.2\n")
+    elif case == "missing_version":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\n")
+    elif case == "duplicate_version":
+        _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\nVersion: 3.1.3\n"
+        )
+    elif case == "empty_version":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion:   \n")
+    elif case == "unreadable_metadata":
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        (dist_info / "METADATA").unlink()
+        (dist_info / "METADATA").mkdir()
+    elif case == "release_double_dot":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3..1\n")
+    elif case == "trailing_hyphen":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 3.1.2-\n")
+    elif case == "epoch_without_release":
+        _write_vibe_metadata(site_packages, "Name: mistral-vibe\nVersion: 1!\n")
+    elif case == "whitespace_padded_version":
+        _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2   \n"
+        )
+    run = tmp_path / "run"
+    run.mkdir()
+
+    with pytest.raises(
+        ExecutorRefused,
+        match=r"Vibe.*(metadata|dist-info).*(install|reinstall|repair)",
+    ):
+        module._installed_client_version(binary, invocation_dir=run, launch_env={})
+    assert not sentinel.exists()
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "escaping_metadata_symlink",
+        "broken_metadata_symlink",
+        "escaping_dist_info_symlink",
+    ),
+)
+def test_installed_vibe_version_refuses_escaping_or_broken_symlinks(tmp_path, case):
+    from campaign_runner import launch as module
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    if case == "escaping_metadata_symlink":
+        outside = tmp_path / "outside-metadata"
+        outside.write_text("Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8")
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        metadata = dist_info / "METADATA"
+        metadata.unlink()
+        metadata.symlink_to(outside)
+    elif case == "broken_metadata_symlink":
+        dist_info = _write_vibe_metadata(
+            site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+        )
+        metadata = dist_info / "METADATA"
+        metadata.unlink()
+        metadata.symlink_to(tmp_path / "missing-metadata")
+    else:
+        outside_dir = tmp_path / "outside.dist-info"
+        outside_dir.mkdir()
+        (outside_dir / "METADATA").write_text(
+            "Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8"
+        )
+        (site_packages / "mistral_vibe-3.1.2.dist-info").symlink_to(
+            outside_dir, target_is_directory=True
+        )
+    run = tmp_path / "run"
+    run.mkdir()
+
+    with pytest.raises(
+        ExecutorRefused,
+        match=r"Vibe.*(metadata|dist-info).*(install|reinstall|repair)",
+    ):
+        module._installed_client_version(binary, invocation_dir=run, launch_env={})
+    assert not sentinel.exists()
+
+
+@pytest.mark.parametrize(
+    "version", ("3.2.0rc1", "3.1.2.post1", "1!3.1.2", "3.1.2+local.1")
+)
+def test_installed_vibe_version_accepts_valid_pep440_forms(tmp_path, version):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path, version=version)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        binary, invocation_dir=run, launch_env={}
+    ) == version
+    assert not sentinel.exists()
+
+
+def test_installed_vibe_version_follows_vibe_symlink_into_other_environment(tmp_path):
+    from campaign_runner import launch as module
+
+    first, first_sentinel, _ = _fake_vibe_environment(
+        tmp_path, "first-env", version="3.1.2"
+    )
+    second, second_sentinel, _ = _fake_vibe_environment(
+        tmp_path, "second-env", version="9.9.9"
+    )
+    first.unlink()
+    first.symlink_to(second)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    assert module._installed_client_version(
+        first, invocation_dir=run, launch_env={}
+    ) == "9.9.9"
+    assert not first_sentinel.exists()
+    assert not second_sentinel.exists()
+
+
+def test_vibe_normalized_launch_identity_names_installed_version(tmp_path):
+    from campaign_runner import launch as module
+
+    binary, sentinel, _ = _fake_vibe_environment(tmp_path)
+    context = _context(
+        tmp_path,
+        client="vibe",
+        launch_argv=(str(binary),),
+        python_executable=sys.executable,
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            "MAGNOLIA_PYTHON": sys.executable,
+        },
+    )
+    launch = prepare_launch(context)
+    native = {
+        str(path.relative_to(launch.invocation_dir)): body
+        for path, body in launch.files.items()
+        if str(path.relative_to(launch.invocation_dir)).startswith(".vibe/")
+    }
+
+    normalized = module._normalized_launch_identity(
+        context,
+        launch.invocation_dir,
+        launch.env,
+        launch.files[launch.invocation_dir / "settings.json"],
+        launch.files[launch.invocation_dir / "mcp.json"],
+        native,
+        launch.files[launch.invocation_dir / "policy.json"],
+    )
+
+    assert normalized["components"]["client_version"] == "3.1.2"
+    assert normalized["components"]["client_sha256"] == hashlib.sha256(
+        binary.read_bytes()
+    ).hexdigest()
+    assert not sentinel.exists(), "identity binding must not execute Vibe"
+
+
+
+def test_installed_vibe_version_refuses_metadata_substituted_before_open(
+    tmp_path, monkeypatch
+):
+    """A METADATA swapped to an outside symlink after the checks must refuse."""
+    from campaign_runner import launch as module
+    from pathlib import Path as _Path
+    import os as _os
+
+    binary, sentinel, site_packages = _fake_vibe_environment(tmp_path, version=None)
+    dist_info = _write_vibe_metadata(
+        site_packages, "Name: mistral-vibe\nVersion: 3.1.2\n"
+    )
+    metadata = dist_info / "METADATA"
+    outside = tmp_path / "outside-metadata"
+    outside.write_text("Name: mistral-vibe\nVersion: 9.9.9\n", encoding="utf-8")
+    substituted = []
+
+    def substitute():
+        substituted.append(True)
+        metadata.unlink()
+        metadata.symlink_to(outside)
+
+    real_open = _os.open
+
+    def racing_open(path, flags, *args, **kwargs):
+        if not substituted and _os.fspath(path) == _os.fspath(metadata):
+            substitute()
+        return real_open(path, flags, *args, **kwargs)
+
+    real_read_bytes = _Path.read_bytes
+
+    def racing_read_bytes(self):
+        if not substituted and _os.fspath(self) == _os.fspath(metadata):
+            substitute()
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(module.os, "open", racing_open)
+    monkeypatch.setattr(_Path, "read_bytes", racing_read_bytes)
+    run = tmp_path / "run"
+    run.mkdir()
+
+    try:
+        version = module._installed_client_version(
+            binary, invocation_dir=run, launch_env={}
+        )
+    except ExecutorRefused as exc:
+        assert "Vibe distribution metadata is unreadable" in str(exc)
+    else:
+        assert version == "3.1.2", version
+    assert substituted, "the substitution point was never exercised"
+    assert not sentinel.exists()
+
+
+def _managed_vibe_handle(token_file, port=43101):
+    return SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": f"http://127.0.0.1:{port}/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+
+
+def _managed_vibe_context(tmp_path, *, vibe_memory=True, **changes):
+    return _context(
+        tmp_path,
+        client="vibe",
+        role="worker",
+        capabilities=WORKER_CAPABILITIES,
+        setup={"memory_provider": "openai", "memory_model": "test"},
+        memory_service={"transport": "managed"},
+        environment={
+            "PATH": os.environ.get("PATH", ""),
+            **PARENT_CLIENT_ENV,
+            "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+        },
+        vibe_memory=vibe_memory,
+        **changes,
+    )
+
+
+def test_vibe_memory_candidate_worker_dry_run_end_to_end(tmp_path, monkeypatch):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = _managed_vibe_handle(token_file)
+    acquired = []
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, *, tool_allowlist: acquired.append(
+            (context, tool_allowlist)
+        ) or handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    launch = prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert len(acquired) == 1
+    assert acquired[0][0].project_dir == tmp_path / "project"
+    assert acquired[0][1] == WORKER_CAPABILITIES[-3:]
+    assert launch.memory_service_handle is handle
+    assert released == []
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp_payload["memory_service"] == {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert mcp_payload["tool_allowlist"] == list(WORKER_CAPABILITIES[-3:])
+    assert "token_file" not in (launch.invocation_dir / "mcp.json").read_text()
+    server = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )["mcp_servers"][0]
+    assert server["name"] == "compchem-memory"
+    assert server["transport"] == "http"
+    assert server["url"].startswith("http://127.0.0.1:")
+    assert server["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "service-bearer-sentinel"
+    assert "service-bearer-sentinel" not in _artifact_text(launch)
+    assert str(token_file) not in _artifact_text(launch)
+
+
+def test_vibe_memory_unaccepted_cell_never_acquires_or_reads_token(
+    tmp_path, monkeypatch
+):
+    missing_token = tmp_path / "never-read-token"
+    acquired = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: acquired.append((context, kwargs)),
+    )
+    context = _managed_vibe_context(tmp_path, vibe_memory=False)
+    context = replace(
+        context,
+        memory_service={
+            "transport": "http",
+            "url": "http://127.0.0.1:43101/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(missing_token),
+        },
+    )
+
+    launch = prepare_launch(context)
+
+    assert acquired == []
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert mcp_payload["memory_service"] is None
+    assert mcp_payload["tool_allowlist"] == []
+    assert "MAGNOLIA_MEMORY_SERVICE_TOKEN" not in launch.env
+    server_config = tomllib.loads(
+        (launch.invocation_dir / ".vibe/config.toml").read_text(encoding="utf-8")
+    )
+    assert server_config["mcp_servers"] == []
+
+
+@pytest.mark.parametrize("client", ("claude-code", "codex"))
+def test_non_vibe_reviewer_still_validates_and_injects_memory_bearer(
+    tmp_path, client
+):
+    root = tmp_path / client
+    root.mkdir()
+    token_file = root / "managed-token"
+    token_file.write_text("legacy-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    route = {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+        "token_file": str(token_file),
+    }
+
+    def reviewer(service):
+        return _context(
+            root,
+            client=client,
+            role="reviewer",
+            capabilities=("native_read", "native_glob", "native_grep"),
+            memory_service=service,
+            environment={
+                "PATH": os.environ.get("PATH", ""),
+                "MAGNOLIA_MEMORY_SERVICE_TOKEN": "untrusted-parent-token",
+            },
+        )
+
+    launch = prepare_launch(reviewer(route))
+
+    mcp_payload = json.loads((launch.invocation_dir / "mcp.json").read_text())
+    assert not [
+        name
+        for name in mcp_payload["tool_allowlist"]
+        if name.startswith("mcp:compchem-memory.")
+    ]
+    assert launch.env["MAGNOLIA_MEMORY_SERVICE_TOKEN"] == "legacy-bearer-sentinel"
+    assert "legacy-bearer-sentinel" not in _artifact_text(launch)
+
+    with pytest.raises(ExecutorRefused, match="unavailable"):
+        prepare_launch(reviewer({**route, "token_file": str(root / "absent")}))
+
+    token_file.chmod(0o644)
+    with pytest.raises(ExecutorRefused, match="0600"):
+        prepare_launch(reviewer(route))
+
+
+def test_vibe_memory_candidate_rejects_nonloopback_url(tmp_path, monkeypatch):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    handle = SimpleNamespace(
+        route=lambda: {
+            "transport": "http",
+            "url": "http://10.0.0.5:9000/mcp",
+            "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "token_file": str(token_file),
+        }
+    )
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    with pytest.raises(ExecutorRefused, match="loopback"):
+        prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert released == [handle]
+
+
+def test_vibe_memory_candidate_token_requires_0600_and_never_enters_artifacts(
+    tmp_path, monkeypatch
+):
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o644)
+    handle = _managed_vibe_handle(token_file)
+    released = []
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: released.append(value) or True,
+    )
+
+    with pytest.raises(ExecutorRefused, match="0600"):
+        prepare_launch(_managed_vibe_context(tmp_path))
+
+    assert released == [handle]
+
+    token_file.chmod(0o600)
+    launch = prepare_launch(_managed_vibe_context(tmp_path))
+    rendered = _artifact_text(launch)
+    assert "service-bearer-sentinel" not in rendered
+    assert str(token_file) not in rendered
+    assert "token_file" not in (launch.invocation_dir / "mcp.json").read_text()
+
+
+def test_vibe_memory_identity_normalizes_ephemeral_url_but_binds_enabled_route(
+    tmp_path, monkeypatch
+):
+    from campaign_runner import launch as launch_module
+
+    token_file = tmp_path / "managed-token"
+    token_file.write_text("service-bearer-sentinel\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    ports = iter((43101, 43102))
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.ensure_memory_service",
+        lambda context, **kwargs: _managed_vibe_handle(token_file, next(ports)),
+    )
+    identities = []
+    monkeypatch.setattr(
+        launch_module,
+        "_verify_bound_launch_identity",
+        lambda _evidence, identity: identities.append(identity["components"]),
+    )
+    monkeypatch.setattr(
+        "compchem_memory.harness.memory_service.release_memory_service",
+        lambda value: True,
+    )
+
+    def prepare(root, *, vibe_memory):
+        root.mkdir()
+        binary, _, _ = _fake_vibe_environment(root)
+        context = _managed_vibe_context(
+            root,
+            vibe_memory=vibe_memory,
+            launch_argv=(str(binary),),
+            python_executable=sys.executable,
+        )
+        context = replace(
+            context,
+            environment={**context.environment, "MAGNOLIA_PYTHON": sys.executable},
+        )
+        context.role_capabilities["vibe"]["worker"]["launch_identity"] = {
+            "schema_version": "magnolia-normalized-launch-identity-v1",
+            "components": {},
+        }
+        prepare_launch(context)
+
+    prepare(tmp_path / "first", vibe_memory=True)
+    prepare(tmp_path / "second", vibe_memory=True)
+    prepare(tmp_path / "unaccepted", vibe_memory=False)
+
+    assert identities[0]["mcp"] == identities[1]["mcp"]
+    assert identities[0]["native_files"] == identities[1]["native_files"]
+    assert identities[0]["mcp"] != identities[2]["mcp"]
+    assert identities[0]["native_files"] != identities[2]["native_files"]
+
+
+def test_vibe_memory_candidate_table_serialization_stays_unobserved(tmp_path):
+    from campaign_runner.executors.capabilities import validate_capability_table
+
+    candidate = copy.deepcopy(load_capability_table())
+    for row in candidate["rows"]:
+        if row["client"] != "vibe":
+            continue
+        for name in (
+            "argv", "model_delivery", "discovery_dir", "trust",
+            "hook_policy_digest", "native_schemas", "allowed_actions",
+            "denied_actions", "resume", "caps", "usage_semantics",
+        ):
+            row["cells"][name]["status"] = "observed"
+            row["cells"][name]["value"] = "CANDIDATE-UNOBSERVED"
+        row["cells"]["model_delivery"]["value"] = {
+            "accepted": True,
+            "model": "CANDIDATE-UNOBSERVED",
+            "identity": "CANDIDATE-UNOBSERVED",
+        }
+        row["cells"]["allowed_actions"]["value"] = ["CANDIDATE-UNOBSERVED"]
+        row["cells"]["trust"]["value"] = True
+        row["cells"]["discovery_dir"]["value"] = {
+            "scope": "launch-project",
+            "configuration": "CANDIDATE-UNOBSERVED",
+        }
+        row["cells"]["vibe_memory"]["status"] = "observed"
+        row["cells"]["vibe_memory"]["value"] = {
+            "accepted": True,
+            "marker": "CANDIDATE-UNOBSERVED",
+        }
+        for cell in row["cells"].values():
+            if cell.get("status") == "observed":
+                cell["artifact"] = "opencode_cc_mem/docs/harness-probes-2026-11.md"
+        row["gate"]["status"] = "observed"
+        row["gate"]["reason"] = "CANDIDATE-UNOBSERVED"
+        row["gate"]["value"] = {"marker": "CANDIDATE-UNOBSERVED"}
+        row["gate"]["artifact"] = "opencode_cc_mem/docs/harness-probes-2026-11.md"
+
+    serialized = json.loads(json.dumps(candidate))
+    validate_capability_table(serialized)
+    projected = project_role_capabilities(serialized)
+    for role in ("worker", "reviewer", "helper", "evaluator"):
+        assert projected["vibe"][role]["accepted"] is True
+        assert projected["vibe"][role]["vibe_memory"] is True
+
+    real = project_role_capabilities(load_capability_table())
+    for role in ("worker", "reviewer", "helper", "evaluator"):
+        assert real["vibe"][role]["accepted"] is True
+        assert real["vibe"][role]["vibe_memory"] is (role == "worker")

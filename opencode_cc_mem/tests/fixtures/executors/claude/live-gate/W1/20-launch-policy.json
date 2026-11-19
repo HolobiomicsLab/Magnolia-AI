@@ -1,0 +1,46 @@
+{
+  "canonical_read_roots": [
+    "/TMPDIR/claude-gate.8E1oyJOLrn/project"
+  ],
+  "delegation_policy": "deny",
+  "deny_path_forms": [
+    "requested",
+    "resolved"
+  ],
+  "deny_shell": true,
+  "deny_tools": [
+    "bash",
+    "code",
+    "delegate",
+    "shell"
+  ],
+  "deny_unconfined_code_execution": true,
+  "deny_unknown_tools": true,
+  "edit_roots": [
+    "/TMPDIR/claude-gate.8E1oyJOLrn/project/run/work"
+  ],
+  "effective_capabilities": [
+    "native_read",
+    "native_glob",
+    "native_grep",
+    "native_edit",
+    "mcp:compchem-memory.memory_get_context",
+    "mcp:compchem-memory.memory_search",
+    "mcp:compchem-memory.memory_get_run_history"
+  ],
+  "mcp_tool_allowlist": [
+    "mcp:compchem-memory.memory_get_context",
+    "mcp:compchem-memory.memory_search",
+    "mcp:compchem-memory.memory_get_run_history"
+  ],
+  "policy_role": "campaign-worker",
+  "read_deny_patterns": [
+    "**/*.env*",
+    "**/*.env*/**",
+    "**/.magnolia/campaign-service.json",
+    "**/.magnolia/campaign-service.log"
+  ],
+  "required_capability_identity": "dd72275cdef103f958c505ef1d399294890c10add4c3b53285c921dd1f631084",
+  "role": "worker",
+  "schema_version": "magnolia-role-v1"
+}

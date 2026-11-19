@@ -1,0 +1,101 @@
+[
+ {
+  "ts": "2026-11-18T05:42:00.524Z",
+  "kind": "session-start"
+ },
+ {
+  "ts": "2026-11-18T05:42:00.527Z",
+  "kind": "prompt"
+ },
+ {
+  "ts": "2026-11-18T05:42:00.528Z",
+  "kind": "injected"
+ },
+ {
+  "ts": "2026-11-18T05:42:26.400Z",
+  "phase": "pre",
+  "name": "read_file",
+  "call_id": "typescript:3:we6wC0gNR:0:tool:0",
+  "input": {
+   "file_path": "nested-read-ok.txt"
+  },
+  "is_error": null
+ },
+ {
+  "ts": "2026-11-18T05:42:26.474Z",
+  "phase": "post",
+  "name": "read_file",
+  "call_id": "typescript:3:we6wC0gNR:0:tool:0",
+  "input": {
+   "file_path": "nested-read-ok.txt"
+  },
+  "is_error": false,
+  "output_excerpt": "content: P4_NESTED_READ_OK (read succeeded; path elided)"
+ },
+ {
+  "ts": "2026-11-18T05:42:26.568Z",
+  "phase": "pre",
+  "name": "write",
+  "call_id": "typescript:3:we6wC0gNR:1:tool:1",
+  "input": {
+   "file_path": "work/nested-in.txt",
+   "content": "IN"
+  },
+  "is_error": null
+ },
+ {
+  "ts": "2026-11-18T05:42:26.643Z",
+  "phase": "post",
+  "name": "write",
+  "call_id": "typescript:3:we6wC0gNR:1:tool:1",
+  "input": {
+   "file_path": "work/nested-in.txt",
+   "content": "IN"
+  },
+  "is_error": false,
+  "output_excerpt": "bytes_written: 2\nfile_existed: False\npath: <G>/project/work/nested-in.txt"
+ },
+ {
+  "ts": "2026-11-18T05:42:26.730Z",
+  "phase": "denied",
+  "name": "write",
+  "call_id": "typescript:3:we6wC0gNR:2:tool:2",
+  "input": {
+   "file_path": "<OUTSIDE>/nested-out.txt",
+   "content": "OUT"
+  },
+  "is_error": null,
+  "output_excerpt": "Magnolia required role policy denied this operation."
+ },
+ {
+  "ts": "2026-11-18T05:42:26.809Z",
+  "phase": "denied",
+  "name": "read_file",
+  "call_id": "typescript:3:we6wC0gNR:3:tool:3",
+  "input": {
+   "file_path": "secret/.env"
+  },
+  "is_error": null,
+  "output_excerpt": "Magnolia required role policy denied this operation."
+ },
+ {
+  "ts": "2026-11-18T05:42:26.888Z",
+  "phase": "denied",
+  "name": "bash",
+  "call_id": "typescript:3:we6wC0gNR:4:tool:4",
+  "input": {
+   "timeout": 120,
+   "command": "printf BASH_RAN > work/nested-bash.txt"
+  },
+  "is_error": null,
+  "output_excerpt": "Magnolia required role policy denied this operation."
+ },
+ {
+  "ts": "2026-11-18T05:42:32.591Z",
+  "kind": "assistant"
+ },
+ {
+  "ts": "2026-11-18T05:42:32.594Z",
+  "kind": "session-end"
+ }
+]

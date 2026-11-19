@@ -1,0 +1,22 @@
+{
+  "createdAt": 1794811014337,
+  "detail": {
+    "content": "Denied tool 'echo'",
+    "hookName": "probe-pre_tool",
+    "kind": "hook_completed",
+    "scope": "pre_tool",
+    "status": "error",
+    "toolCallId": "typescript:9:AgQ3GOuG4:0:tool:0",
+    "toolName": null
+  },
+  "generationStatus": "completed",
+  "id": "hook-notice-fec1d84a10012c2e",
+  "inputEntryId": null,
+  "level": "error",
+  "message": "Denied tool 'echo'",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "turnId": null,
+  "type": "notice",
+  "updatedAt": 1794811014337
+}

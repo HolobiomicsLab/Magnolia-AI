@@ -1,0 +1,15 @@
+{
+  "production/evaluator": "refused: vibe lacks accepted evaluator role capability",
+  "production/helper": "refused: vibe lacks accepted helper role capability",
+  "production/reviewer": "refused: vibe lacks accepted reviewer role capability",
+  "production/worker": "refused: vibe lacks accepted worker role capability",
+  "require_vibe_trust": {
+    "nearest_trusted_is_project": true,
+    "result": "trusted"
+  },
+  "synthetic_untrusted_path": "refused: Vibe project is not persistently trusted; trust it interactively without --trust",
+  "vibe/evaluator": "refused: Vibe trusted project config is missing or invalid",
+  "vibe/helper": "refused: Vibe trusted project config is missing or invalid",
+  "vibe/reviewer": "refused: Vibe trusted project config is missing or invalid",
+  "vibe/worker": "refused: Vibe trusted project config is missing or invalid"
+}

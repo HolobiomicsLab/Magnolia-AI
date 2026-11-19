@@ -161,6 +161,30 @@ def test_stale_verdict_stamps_frontmatter(tmp_path):
     assert all(summary["acceptance"].values())
 
 
+def test_version_commit_runs_after_dreaming_releases_writer_lease(
+    tmp_path, monkeypatch,
+):
+    from compchem_memory import versioning
+    from compchem_memory.writer_lease import holds_any_project_writer_lease
+
+    make_store(tmp_path)
+    anchored(tmp_path / ".magnolia")
+    observed = []
+    monkeypatch.setattr(
+        versioning,
+        "commit_all",
+        lambda *_args, **_kwargs: observed.append(holds_any_project_writer_lease()),
+    )
+
+    dreaming.run_dreaming(
+        tmp_path,
+        config=DreamingConfig(commit=True),
+        judge=judge_returning("stale"),
+    )
+
+    assert observed == [False]
+
+
 def test_recheck_days_skips_recently_checked_entries(tmp_path):
     store = make_store(tmp_path)
     anchored(store)

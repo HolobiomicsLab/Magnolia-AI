@@ -1,0 +1,39 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "Updated cell c0 with print(5)",
+        "tool_use_id": "toolu_01Xy7rzSaBZHykZxKkhf5gqM",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:54.234Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01Xy7rzSaBZHykZxKkhf5gqM",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use_result": {
+    "cell_id": "c0",
+    "cell_type": "code",
+    "edit_mode": "replace",
+    "error": "",
+    "language": "python",
+    "new_source": "print(5)",
+    "notebook_path": "/TMPDIR/probe-p3-claude-Pe5W5B/proj/work/nb.ipynb",
+    "old_source": "print(1)",
+    "original_file": "{\"cells\":[{\"cell_type\":\"code\",\"execution_count\":null,\"id\":\"c0\",\"metadata\":{},\"outputs\":[],\"source\":[\"print(1)\"]}],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}\n",
+    "updated_file": "{\n \"cells\": [\n  {\n   \"cell_type\": \"code\",\n   \"execution_count\": null,\n   \"id\": \"c0\",\n   \"metadata\": {},\n   \"outputs\": [],\n   \"source\": \"print(5)\"\n  }\n ],\n \"metadata\": {},\n \"nbformat\": 4,\n \"nbformat_minor\": 5\n}"
+  },
+  "type": "user",
+  "uuid": "a8310f6d-96ad-42d2-bdb2-e8545f1a3cfb"
+}

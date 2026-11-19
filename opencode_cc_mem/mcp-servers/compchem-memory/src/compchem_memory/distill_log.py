@@ -62,6 +62,27 @@ def push_distill_notice(project_dir: str, quote: str, summary: str) -> None:
         pass
 
 
+def push_extraction_failure_notice(project_dir: str) -> None:
+    """Surface one latched notice while failed extraction remains retryable."""
+    push_distill_notice(
+        project_dir,
+        "The configured memory provider could not complete extraction.",
+        "Memory extraction failed; the session remains queued for retry",
+    )
+
+
+def push_extraction_retry_exhausted_notice(
+    project_dir: str, session_id: str,
+) -> None:
+    """Surface one latched notice when automatic extraction retries stop."""
+    push_distill_notice(
+        project_dir,
+        "The failed session remains unsealed so its transcript is preserved.",
+        "Memory extraction reached its retry cap; run "
+        f"magnolia memory retry {session_id} after repairing the provider",
+    )
+
+
 def drain_distill_notices(project_dir: str) -> list[str]:
     """Read and clear the .distill-notices queue. Returns a list of formatted
     notice strings (most-recent-last). Never raises — returns [] on any error."""

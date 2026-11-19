@@ -1,16 +1,19 @@
 """Render a Vibe launch: project ``.vibe`` config and hooks, merged with the member's.
 
-``disabled_tools`` is append-only: Magnolia adds the tools its deny set names (the
-shell, fixed) when the member's list lacks them, and never removes one, so a stale
-``file_system.bash`` is not cleaned up and cannot be told from a member's own entry.
+``disabled_tools`` is append-only: Magnolia adds Vibe's Python catalogue names for
+its neutral deny set when the member's list lacks them, and never removes one, so a
+stale ``file_system.bash`` from an older render is kept beside the added ``bash``.
 """
 
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from functools import partial
+from collections.abc import Mapping
+from typing import Any
 
-from compchem_memory.harness.files import merged_toml, validate_project_paths
+from compchem_memory.harness.files import merged_toml, toml_bytes, validate_project_paths
 from compchem_memory.harness.neutral import NeutralConfig
 from compchem_memory.harness.ownership import owned
 from compchem_memory.harness.protocol import Launch, LaunchContext
@@ -25,6 +28,7 @@ from compchem_memory.harness.render_common import (
 )
 
 HARNESS = "vibe"
+_owns_entry = partial(owned, client=HARNESS)
 # (hook type, neutral event); the hook name is ``magnolia-<neutral event>``.
 EVENTS = (
     ("session_start", "session-start"),
@@ -34,7 +38,26 @@ EVENTS = (
     ("post_agent", "turn-end"),
     ("session_end", "session-end"),
 )
-_TOOL_NAMES = {"bash": "file_system.bash"}
+_TOOL_NAMES = {
+    "bash": "bash",
+    "write": "write_file",
+    "write_file": "write_file",
+    "edit": "edit",
+}
+READ_ONLY_DISABLED_TOOLS = (
+    "bash",
+    "edit",
+    "write_file",
+)
+
+
+def disabled_tools_for_role(role: str) -> tuple[str, ...]:
+    """Return the native tools disabled for one capability-admitted role."""
+    if role == "worker":
+        return ("bash",)
+    if role in {"reviewer", "helper", "evaluator"}:
+        return READ_ONLY_DISABLED_TOOLS
+    raise ValueError(f"unknown Vibe role: {role}")
 
 
 def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
@@ -43,15 +66,18 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     conflicts: list[str] = []
     config_path = folder / "config.toml"
     hooks_path = folder / "hooks.toml"
+    hook_owner = partial(
+        owned, client=HARNESS, python_executable=context.python
+    )
     validate_project_paths((config_path, hooks_path), context.project_dir)
     content, found, original = merged_toml(
-        config_path, owned, _config(neutral, context, config_path)
+        config_path, _owns_entry, _config(neutral, context, config_path)
     )
     files[config_path] = content
     conflicts += found
     _keep_backup(files, config_path, original)
     content, found, original = merged_toml(
-        hooks_path, owned, {"hooks": _hooks(context)}
+        hooks_path, hook_owner, {"hooks": _hooks(context)}
     )
     files[hooks_path] = content
     conflicts += found
@@ -68,6 +94,25 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
 render.binary = "vibe"
 
 
+def native_artifacts(
+    context: LaunchContext,
+    mcp_servers: list[Mapping[str, Any]],
+) -> dict[str, bytes]:
+    """Render immutable Vibe project files for one governed invocation."""
+    disabled_tools = disabled_tools_for_role(context.role)
+    config: dict[str, Any] = {
+        "active_model": context.model or "",
+        "disabled_tools": list(disabled_tools),
+        "enable_subagents": False,
+        "enable_background_processes": False,
+        "mcp_servers": [dict(server) for server in mcp_servers],
+    }
+    return {
+        ".vibe/config.toml": toml_bytes(config),
+        ".vibe/hooks.toml": toml_bytes({"hooks": _hooks(context)}),
+    }
+
+
 def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -> None:
     backup = path.with_name(path.name + ".magnolia-backup")
     if original is not None and not backup.exists():
@@ -75,16 +120,13 @@ def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -
 
 
 def _config(neutral: NeutralConfig, context: LaunchContext, path: Path) -> dict:
-    config: dict = {"mcp_servers": _servers(neutral)}
+    config: dict = {"mcp_servers": _servers(neutral, context)}
     if context.model:
         config["active_model"] = context.model
     # Lists merge by appending, so only add the names the member's file lacks.
     present = _existing_disabled_tools(path)
-    disabled = [
-        _TOOL_NAMES.get(name, name)
-        for name in sorted(neutral.deny_tools)
-        if _TOOL_NAMES.get(name, name) not in present
-    ]
+    native_names = {_TOOL_NAMES.get(name, name) for name in neutral.deny_tools}
+    disabled = sorted(native_names - set(present))
     if disabled:
         config["disabled_tools"] = disabled
     return config
@@ -98,11 +140,18 @@ def _existing_disabled_tools(path: Path) -> list[str]:
     return value if isinstance(value, list) else []
 
 
-def _servers(neutral: NeutralConfig) -> list[dict]:
+def _servers(neutral: NeutralConfig, context: LaunchContext) -> list[dict]:
     servers = []
     for server in active_servers(neutral):
         if server.kind == "remote":
             entry = {"name": server.name, "transport": "http", "url": server.url}
+            route = context.memory_service or {}
+            authorization = route.get("authorization_env")
+            if server.name == "compchem-memory" and isinstance(authorization, str):
+                entry["auth"] = {
+                    "type": "static",
+                    "api_key_env": authorization,
+                }
         else:
             command, args = split_command(server)
             entry = {"name": server.name, "transport": "stdio", "command": command}

@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "No matching deferred tools found",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01QyNxPzfohs3XM62Jz9ZfCJ",
+      "permission_decision": {
+        "decision": "accept",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "max_results": 5,
+      "query": "select:mcp__magnolia__memory_get_context"
+    },
+    "name": "ToolSearch"
+  }
+}

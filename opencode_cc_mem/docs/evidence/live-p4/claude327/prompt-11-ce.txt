@@ -1,0 +1,4 @@
+Re-observation evaluator check in a synthetic throwaway project (no real data). Answer in this single turn without
+using any tool. Reply with exactly two lines:
+EVAL-OK <the number of tools available to you in this session>
+TOOLS: <their exact names, comma-separated, or NONE>

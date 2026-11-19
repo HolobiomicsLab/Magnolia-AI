@@ -407,6 +407,8 @@ def main() -> int:
     p_daily.set_defaults(func=cmd_generate_daily_note)
 
     args = parser.parse_args()
+    # No command-wide lease: run records, entries and the store commit lease
+    # their own short writes, so a command never holds it across slow work.
     return args.func(args)
 
 

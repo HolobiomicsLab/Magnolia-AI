@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "compchem-memory": {
+      "args": [
+        "-m",
+        "compchem_memory.server"
+      ],
+      "command": "/private/tmp/magnolia-claude-rerun2/snap/.venv/bin/python3",
+      "env": {
+        "MAGNOLIA_DISTILL_INTERVAL_MIN": "${MAGNOLIA_DISTILL_INTERVAL_MIN}",
+        "MAGNOLIA_MEMORY_MODEL": "${MAGNOLIA_MEMORY_MODEL}",
+        "MAGNOLIA_MEMORY_PROVIDER": "${MAGNOLIA_MEMORY_PROVIDER}",
+        "MAGNOLIA_PROJECT_DIR": "${MAGNOLIA_PROJECT_DIR}",
+        "MAGNOLIA_ROOT": "${MAGNOLIA_ROOT}",
+        "MAGNOLIA_RULES_DIR": "${MAGNOLIA_RULES_DIR}",
+        "MAGNOLIA_TRANSCRIPT_TOOL_CHARS": "${MAGNOLIA_TRANSCRIPT_TOOL_CHARS}"
+      }
+    }
+  }
+}

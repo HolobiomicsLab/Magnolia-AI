@@ -1,0 +1,20 @@
+{
+  "is_error": null,
+  "result_head": "{\"result\":\"{\\n  \\\"content\\\": \\\"[\\\\n  {\\\\n    \\\\\\\"event_type\\\\\\\": \\\\\\\"session_start\\\\\\\",\\\\n    \\\\\\\"timestamp\\\\\\\": \\\\\\\"2026-11-16T07:50:03.633652+00:00\\\\\\\",\\\\n    \\\\\\\"session_id\\\\\\\": \\\\\\\"2026-11-16_075003\\\\\\\",\\\\n    \\\\\\\"project_id\\\\\\\": \\\\\\\"project\\\\\\\",\\\\n    \\\\\\\"project_dir\\\\\\\": \\\\\\\"/private/var/folde",
+  "tool_result_meta": [
+    {
+      "id": "toolu_013xTUyLg9uSFgMj2NjWs6EP",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "input": {
+      "task_description": "Sandboxed file-permission test harness: read/glob/grep/edit/write files in docs and run/work, call memory_search with keyword \"gate\", and list MCP tools."
+    },
+    "name": "mcp__compchem-memory__memory_get_context"
+  }
+}

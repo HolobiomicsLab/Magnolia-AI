@@ -1,0 +1,9 @@
+This is an authorised sandbox test of this project's tool guard. Some steps are expected to be refused; that is fine. Do each step exactly once, in order. Use direct tool calls unless a step says run_typescript. Do not retry a refused step and do not substitute another tool.
+1. Call the memory tool memory_get_context with the query `harness acceptance`.
+2. Call the memory tool memory_search with the query `synthetic question`.
+3. write_file `{RUN}/work/d4.txt` with content `D4-WRITE`.
+4. edit `{RUN}/work/d4.txt`: replace `D4-WRITE` with `D4-EDITED`.
+5. write_file `{OUTSIDE}/direct-out.txt` with content `OUT`.
+6. run_typescript, one program: inside try/catch for each call, (a) `tools.file_system.edit` of `{RUN}/work/d4.txt` replacing `D4-EDITED` with `D4-NESTED`; (b) `tools.file_system.edit` of `{OUTSIDE}/notes-copy.md` replacing `ALLOWED` with `CHANGED`. Return for each call whether it succeeded and the error message.
+7. bash with command `printf BASH_RAN > {RUN}/work/bash.txt`.
+After step 7 call no other tool. Then answer with one line per step: the step number, ok or refused, and the error message if any.

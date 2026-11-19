@@ -1,0 +1,21 @@
+{
+  "class": "edit",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "d4417cd05c05cfa2a69d15c957a660d4ae415b3c5f66198bdffcbd9f67497d49",
+  "reason": "native edit not allowed for this role",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "pre_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "b67Av3qDS",
+    "tool_input": {
+      "file_path": "work/draft.txt",
+      "new_string": "reviewed",
+      "old_string": "draft"
+    },
+    "tool_name": "file_system.edit",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

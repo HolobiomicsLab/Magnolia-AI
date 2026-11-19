@@ -1,0 +1,45 @@
+{
+  "rows": [
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:05:47.282Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:05:47.285Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:05:47.302Z"
+    },
+    {
+      "kind": "assistant",
+      "ts": "2026-11-18T06:05:53.683Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:05:53.686Z"
+    },
+    {
+      "kind": "session-start",
+      "ts": "2026-11-18T06:06:17.323Z"
+    },
+    {
+      "kind": "prompt",
+      "ts": "2026-11-18T06:06:17.327Z"
+    },
+    {
+      "kind": "injected",
+      "ts": "2026-11-18T06:06:17.344Z"
+    },
+    {
+      "kind": "assistant",
+      "ts": "2026-11-18T06:06:27.594Z"
+    },
+    {
+      "kind": "session-end",
+      "ts": "2026-11-18T06:06:27.597Z"
+    }
+  ],
+  "transcript_present": true
+}

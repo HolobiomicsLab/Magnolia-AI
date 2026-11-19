@@ -1,0 +1,2078 @@
+{
+  "budget": {
+    "claude": 2,
+    "codex": 2,
+    "codex_appserver": 9,
+    "corrections": [
+      "11:14 codex 0->1: c2-run reviewer 'codex -C .. exec' was classified codex-other by the guard (exec not in argv[1:3]); counted from the ledger; classifier fixed"
+    ],
+    "nonmodel": [
+      "11:09:46 hooks-x1 codex-appserver",
+      "11:09:47 hooks-x2 codex-appserver",
+      "11:09:59 d2 codex-appserver",
+      "11:10:35 c2-run codex-appserver",
+      "11:10:36 c2-run codex-appserver",
+      "11:10:37 c2-run codex-other -C <text len=134> -s",
+      "11:22:23 c3-hooks1 codex-appserver",
+      "11:22:24 c3-hooks2 codex-appserver",
+      "11:22:34 c3-run codex-appserver",
+      "11:22:35 c3-run codex-appserver",
+      "11:25:38 c4-run opencode-serve serve --hostname 127.0.0.1",
+      "11:37:50 c5-run opencode-serve serve --hostname 127.0.0.1"
+    ],
+    "opencode": 5
+  },
+  "c5_service_stop": {
+    "stopped": true
+  },
+  "codex_config_journal": [
+    "11:09:38 render_runner reviewer: project .codex {\".codex/config.toml\": \"f390c112322455065ddf4368e7488a4d45ed3b674d75e065538ee292ac130e77\", \".codex/hooks.json\": \"1d099c262a350a042157e1ff0184eb405377cb2a3a55609d25bc3090273a694d\"} config_digest=473a1248f87ef872",
+    "11:09:46 trust-project: wrote sha bf52f961f0ba73cb (was 7b8c10269efb097e)",
+    "11:09:46 hooks x1: 8 rows, 5 project rows, status ['untrusted', 'untrusted', 'untrusted', 'untrusted', 'untrusted']",
+    "11:09:47 trust-hooks(5): wrote sha 6196cf9a75429454 (was bf52f961f0ba73cb)",
+    "11:09:48 hooks x2: 8 rows, 5 project rows, status ['trusted', 'trusted', 'trusted', 'trusted', 'trusted']",
+    "11:13:49 render_runner worker: project .codex {\".codex/config.toml\": \"3b3a22c3e55ee9e1086dbeb97b836a9d693f7924de4cfed07ccd72d58f248a86\", \".codex/hooks.json\": \"1d099c262a350a042157e1ff0184eb405377cb2a3a55609d25bc3090273a694d\"} config_digest=0866350a75c5e1da",
+    "11:14:29 restore: cmp byte-identical sha 7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159 size 28569 mode 0o600 mtime 1794866952",
+    "11:21:47 render_runner worker: project .codex {\".codex/config.toml\": \"ef40b6611fea59a2d414d27d5c8c333764bd9673411a96e39cf50ff08ebe85ac\", \".codex/hooks.json\": \"1d099c262a350a042157e1ff0184eb405377cb2a3a55609d25bc3090273a694d\"} config_digest=4c44f6b4e85ab65e",
+    "11:22:23 trust-project: wrote sha bf52f961f0ba73cb (was 7b8c10269efb097e)",
+    "11:22:23 hooks c3x1: 8 rows, 5 project rows, status ['untrusted', 'untrusted', 'untrusted', 'untrusted', 'untrusted']",
+    "11:22:24 trust-hooks(5): wrote sha 6196cf9a75429454 (was bf52f961f0ba73cb)",
+    "11:22:24 hooks c3x2: 8 rows, 5 project rows, status ['trusted', 'trusted', 'trusted', 'trusted', 'trusted']",
+    "11:24:34 restore: cmp byte-identical sha 7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159 size 28569 mode 0o600 mtime 1794866952"
+  ],
+  "key_usage_counters": [
+    {
+      "label": "mid-c4",
+      "status": 200,
+      "t": "11:26:09",
+      "usage": 652.104345752,
+      "usage_daily": 0.046663972,
+      "usage_monthly": 276.388961419,
+      "usage_weekly": 5.396772609
+    },
+    {
+      "label": "after-c4",
+      "status": 200,
+      "t": "11:37:00",
+      "usage": 652.111309478,
+      "usage_daily": 0.053627698,
+      "usage_monthly": 276.395925145,
+      "usage_weekly": 5.403736335
+    },
+    {
+      "label": "after-c5",
+      "status": 200,
+      "t": "11:41:06",
+      "usage": 652.134799027,
+      "usage_daily": 0.077117247,
+      "usage_monthly": 276.419414694,
+      "usage_weekly": 5.427225884
+    },
+    {
+      "label": "end",
+      "status": 200,
+      "t": "11:42:12",
+      "usage": 652.13996063,
+      "usage_daily": 0.08227885,
+      "usage_monthly": 276.424576297,
+      "usage_weekly": 5.432387487
+    }
+  ],
+  "ledger_all": [
+    {
+      "actual_work": {
+        "pgid": 76647,
+        "pid": 76647,
+        "process_start_token": "ps:76647:Tue Nov 17 10:10:19 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "claude-code",
+      "effective_cap": 30,
+      "ended_at": "2026-11-17T10:10:35.213719+00:00",
+      "invocation_id": "campaign:harness-p3-worker-claude-code-review:live3-c2:worker:1:4de1d197e92744229862b38a13d816fb",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-worker-claude-code-review:live3-c2",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:10:18.662355+00:00",
+      "resolved_model": "haiku",
+      "run_kind": "worker",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": {
+        "client": "claude-code",
+        "model": "haiku",
+        "policy_digest": "55bd0539d282b5bcd2c8733808c701ecf87797ce8e04eac8f60aa5d7a993f918",
+        "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+        "role": "worker",
+        "session_id": "540751c0-c835-4cab-b745-2c075690c4f5"
+      },
+      "started_at": "2026-11-17T10:10:19.018206+00:00",
+      "subscription_key": "claude-code",
+      "usage": {
+        "cache_write_tokens": 18191,
+        "cached_tokens": 129191,
+        "completeness": "complete",
+        "cost": 0.0060046100000000005,
+        "duration_seconds": 16.37965912465006,
+        "input_tokens": 10,
+        "output_tokens": 2147,
+        "reasoning_tokens": 792,
+        "source": "claude-stream-json",
+        "turns": 8
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 78340,
+        "pid": 78340,
+        "process_start_token": "ps:78340:Tue Nov 17 10:10:37 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "codex",
+      "effective_cap": 8,
+      "ended_at": "2026-11-17T10:11:13.323176+00:00",
+      "invocation_id": "campaign:harness-p3-worker-claude-code-review:live3-c2:reviewer:1:f637cf342a3e49e4ba7d2d91776fc8b8",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-worker-claude-code-review:live3-c2",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:10:36.317140+00:00",
+      "resolved_model": "gpt-5.6-luna",
+      "run_kind": "reviewer",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": {
+        "client": "codex",
+        "model": "gpt-5.6-luna",
+        "policy_digest": "5f7bfd9697870c1329ca2979e114ec6cd46c797012c0e50b57e3beb03b95a18a",
+        "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+        "role": "reviewer",
+        "session_id": "01a1e8fc-b28d-7ef3-9480-e687819b38dc"
+      },
+      "started_at": "2026-11-17T10:10:37.247624+00:00",
+      "subscription_key": "codex",
+      "usage": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 74752,
+        "completeness": "complete",
+        "cost": null,
+        "duration_seconds": 36.08231395855546,
+        "input_tokens": 95056,
+        "output_tokens": 1411,
+        "reasoning_tokens": 274,
+        "source": "codex-exec-json",
+        "turns": 1
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 23063,
+        "pid": 23063,
+        "process_start_token": "ps:23063:Tue Nov 17 10:22:35 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "codex",
+      "effective_cap": 30,
+      "ended_at": "2026-11-17T10:23:23.135503+00:00",
+      "invocation_id": "campaign:harness-p3-worker-codex-review:live3-c3:worker:1:3441174233f74c778086646cede191a7",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-worker-codex-review:live3-c3",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:22:35.063916+00:00",
+      "resolved_model": "gpt-5.6-luna",
+      "run_kind": "worker",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": {
+        "client": "codex",
+        "model": "gpt-5.6-luna",
+        "policy_digest": "3d031d9e95d18b36e956c28c7e1c735827a09f95c88a91bbb6049acdb516ec67",
+        "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+        "role": "worker",
+        "session_id": "01a1e907-aa22-7bd1-bb1d-b6693edab1d8"
+      },
+      "started_at": "2026-11-17T10:22:35.979948+00:00",
+      "subscription_key": "codex",
+      "usage": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 255360,
+        "completeness": "complete",
+        "cost": null,
+        "duration_seconds": 47.161536374129355,
+        "input_tokens": 284906,
+        "output_tokens": 1834,
+        "reasoning_tokens": 585,
+        "source": "codex-exec-json",
+        "turns": 1
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 27170,
+        "pid": 27170,
+        "process_start_token": "ps:27170:Tue Nov 17 10:25:39 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "opencode",
+      "effective_cap": 30,
+      "ended_at": "2026-11-17T10:25:49.872505+00:00",
+      "invocation_id": "campaign:harness-p3-opencode-control:live3-c4:worker:1:dec52a6120dd42dc8ddd9234734097eb",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-opencode-control:live3-c4",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:25:39.617112+00:00",
+      "resolved_model": "openrouter/deepseek/deepseek-v4.1-flash",
+      "run_kind": "worker",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": null,
+      "started_at": "2026-11-17T10:25:39.634110+00:00",
+      "subscription_key": "opencode:openrouter",
+      "usage": {
+        "cache_write_tokens": 0.0,
+        "cached_tokens": 66560.0,
+        "completeness": "complete",
+        "cost": 0.003354201,
+        "duration_seconds": null,
+        "input_tokens": 16607.0,
+        "output_tokens": 1275.0,
+        "reasoning_tokens": 577.0,
+        "source": "opencode-usage-v1",
+        "turns": null
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 29878,
+        "pid": 29878,
+        "process_start_token": "ps:29878:Tue Nov 17 10:26:09 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "opencode",
+      "effective_cap": 8,
+      "ended_at": "2026-11-17T10:36:09.876329+00:00",
+      "invocation_id": "campaign:harness-p3-opencode-control:live3-c4:reviewer:1:fbfccb53f4a9424c96c04529645e9312",
+      "outcome": {
+        "kind": "timeout",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-opencode-control:live3-c4",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:26:09.637189+00:00",
+      "resolved_model": "openrouter/z-ai/glm-5.3-flash",
+      "run_kind": "reviewer",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": null,
+      "started_at": "2026-11-17T10:26:09.655764+00:00",
+      "subscription_key": "opencode:openrouter",
+      "usage": {
+        "cache_write_tokens": 0.0,
+        "cached_tokens": 42240.0,
+        "completeness": "complete",
+        "cost": 0.0033763,
+        "duration_seconds": null,
+        "input_tokens": 19066.0,
+        "output_tokens": 1188.0,
+        "reasoning_tokens": 4063.0,
+        "source": "opencode-usage-v1",
+        "turns": null
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 50640,
+        "pid": 50640,
+        "process_start_token": "ps:50640:Tue Nov 17 10:37:53 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "claude-code",
+      "effective_cap": 30,
+      "ended_at": "2026-11-17T10:38:07.476052+00:00",
+      "invocation_id": "campaign:harness-p3-opencode-reviewer-only:live3-c5:worker:1:5e5d58d12b0f4e639277f98d84e53c07",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-opencode-reviewer-only:live3-c5",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:37:53.109410+00:00",
+      "resolved_model": "haiku",
+      "run_kind": "worker",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": {
+        "client": "claude-code",
+        "model": "haiku",
+        "policy_digest": "3987cb3a24eb778e5b1905331c216e11b42660c95ed2b37eca28c7ea9c6fc44a",
+        "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+        "role": "worker",
+        "session_id": "e62603ab-f0f1-4a5c-9db0-521ec3881b79"
+      },
+      "started_at": "2026-11-17T10:37:53.467984+00:00",
+      "subscription_key": "claude-code",
+      "usage": {
+        "cache_write_tokens": 17193,
+        "cached_tokens": 104418,
+        "completeness": "complete",
+        "cost": 0.005462079999999999,
+        "duration_seconds": 14.192796083167195,
+        "input_tokens": 8,
+        "output_tokens": 1957,
+        "reasoning_tokens": 717,
+        "source": "claude-stream-json",
+        "turns": 8
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 51359,
+        "pid": 51359,
+        "process_start_token": "ps:51359:Tue Nov 17 10:38:07 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "opencode",
+      "effective_cap": 8,
+      "ended_at": "2026-11-17T10:38:46.684672+00:00",
+      "invocation_id": "campaign:harness-p3-opencode-reviewer-only:live3-c5:reviewer:1:f086e76ac1ec4a5db1b211d57e0ec081",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "campaign:harness-p3-opencode-reviewer-only:live3-c5",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:38:07.523882+00:00",
+      "resolved_model": "openrouter/deepseek/deepseek-v4.1-flash",
+      "run_kind": "reviewer",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": null,
+      "started_at": "2026-11-17T10:38:07.550550+00:00",
+      "subscription_key": "opencode:openrouter",
+      "usage": {
+        "cache_write_tokens": 0.0,
+        "cached_tokens": 153472.0,
+        "completeness": "complete",
+        "cost": 0.017645359,
+        "duration_seconds": null,
+        "input_tokens": 108161.0,
+        "output_tokens": 4388.0,
+        "reasoning_tokens": 4407.0,
+        "source": "opencode-usage-v1",
+        "turns": null
+      }
+    },
+    {
+      "actual_work": {
+        "pgid": 60079,
+        "pid": 60079,
+        "process_start_token": "ps:60079:Tue Nov 17 10:41:16 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "opencode",
+      "effective_cap": 40,
+      "ended_at": "2026-11-17T10:41:24.617824+00:00",
+      "invocation_id": "live3:oc-helper:3caad084b3024757b99559c663d8a03d",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live3:oc-helper",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:41:16.767281+00:00",
+      "resolved_model": "openrouter/deepseek/deepseek-v4.1-flash",
+      "run_kind": "helper",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": null,
+      "started_at": "2026-11-17T10:41:16.779798+00:00",
+      "subscription_key": "opencode:openrouter",
+      "usage": null
+    },
+    {
+      "actual_work": {
+        "pgid": 64352,
+        "pid": 64352,
+        "process_start_token": "ps:64352:Tue Nov 17 10:41:50 2026",
+        "service_request_id": null
+      },
+      "billing": "subscription",
+      "client": "opencode",
+      "effective_cap": 1,
+      "ended_at": "2026-11-17T10:41:56.161053+00:00",
+      "invocation_id": "live3-oc-evaluator:run:d08c251811bc4a2e83bfda8bfb31083f",
+      "outcome": {
+        "kind": "success",
+        "limit": null
+      },
+      "parent_run_id": "live3-oc-evaluator",
+      "project_digest": "e148114336b9ec2eb8a29cc58f069db11dafffa2b42e3dd638b30a4004d135a2",
+      "reserved_at": "2026-11-17T10:41:50.826172+00:00",
+      "resolved_model": "openrouter/deepseek/deepseek-v4.1-flash",
+      "run_kind": "evaluator",
+      "schema_version": "magnolia-invocation-v1",
+      "session_identity": null,
+      "started_at": "2026-11-17T10:41:50.840965+00:00",
+      "subscription_key": "opencode:openrouter",
+      "usage": {
+        "cache_write_tokens": null,
+        "cached_tokens": null,
+        "completeness": "partial",
+        "cost": null,
+        "duration_seconds": 5.325677082873881,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "source": "evaluator",
+        "turns": 1
+      }
+    }
+  ],
+  "nonmodel_launches": [
+    "11:06:29 preflight claude --version (env -i, gate XDG)",
+    "11:06:29 preflight codex --version (env -i, gate XDG)",
+    "11:10:08 pre-c2 claude --version (env -i, gate XDG)",
+    "11:10:08 pre-c2 codex --version (env -i, gate XDG)",
+    "11:10:23 oc-version opencode --version (env -i, gate XDG)",
+    "11:10:23 oc-models opencode models --standalone (env -i, gate XDG)",
+    "11:13:59 pre-c3 claude --version (env -i, gate XDG)",
+    "11:13:59 pre-c3 codex --version (env -i, gate XDG)",
+    "11:21:45 pre-c3-render claude --version (env -i, gate XDG)",
+    "11:21:45 pre-c3-render codex --version (env -i, gate XDG)",
+    "11:22:33 pre-c3-run claude --version (env -i, gate XDG)",
+    "11:22:33 pre-c3-run codex --version (env -i, gate XDG)",
+    "11:25:11 oc-prep opencode debug config (env -i, gate XDG, OCC)",
+    "11:25:37 pre-c4 claude --version (env -i, gate XDG)",
+    "11:25:37 pre-c4 codex --version (env -i, gate XDG)",
+    "11:37:15 pre-c5 claude --version (env -i, gate XDG)",
+    "11:37:15 pre-c5 codex --version (env -i, gate XDG)",
+    "11:37:50 pre-c5b claude --version (env -i, gate XDG)",
+    "11:37:50 pre-c5b codex --version (env -i, gate XDG)",
+    "11:41:15 pre-oc-helper claude --version (env -i, gate XDG)",
+    "11:41:15 pre-oc-helper codex --version (env -i, gate XDG)",
+    "11:41:33 pre-oc-evaluator claude --version (env -i, gate XDG)",
+    "11:41:33 pre-oc-evaluator codex --version (env -i, gate XDG)",
+    "11:41:50 pre-oc-evaluator2 claude --version (env -i, gate XDG)",
+    "11:41:50 pre-oc-evaluator2 codex --version (env -i, gate XDG)"
+  ],
+  "oc_owner_before": [
+    "size_kb 25844",
+    "files 80",
+    "manifest_sha256 c22932c2809b0cd906afe881bda168cad72d81927234694ee2f45d271871668b"
+  ],
+  "oc_owner_end": [
+    "size_kb 25844",
+    "files 80",
+    "manifest_sha256 c22932c2809b0cd906afe881bda168cad72d81927234694ee2f45d271871668b"
+  ],
+  "openrouter_calls_all": [
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 34,
+      "cost_usd": 5.024e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 972,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:18",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 642,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:19",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 543,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:20",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 596,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:20",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 640,
+      "completion_tokens": 2,
+      "cost_usd": 3.104e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 413,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 880,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:21",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 288,
+      "cost_usd": 0.000345119,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 2359,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1673,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:10:21",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 517,
+      "cost_usd": 0.000394727,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 3234,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1529,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:48",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 2,
+      "cost_usd": 0.00013115,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 429,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1970,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:52",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 1024,
+      "completion_tokens": 358,
+      "cost_usd": 0.00029674,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 1725,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1740,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:52",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 655,
+      "cost_usd": 0.000670379,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 3699,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2693,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 200,
+      "stream": false,
+      "t": "11:13:54",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "memory_call": true,
+      "method": "POST",
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "reason": "gate cap reached (calls or spend)",
+      "refused_locally": true,
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "status": 429,
+      "stream": false,
+      "t": "11:13:58",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": null,
+      "completion_tokens": null,
+      "cost_usd": null,
+      "error_message": "Not Found",
+      "generation_id_present": false,
+      "memory_call": false,
+      "method": "GET",
+      "ms": 255,
+      "path": "/api/v1/attribution-probe",
+      "prompt_tokens": null,
+      "provider_pref": null,
+      "requested_model": null,
+      "resolved_model": null,
+      "session_id_present": false,
+      "spawn": {
+        "peer_env": {},
+        "peer_pids": [
+          11878
+        ],
+        "peer_ppid": 11872
+      },
+      "status": 404,
+      "stream": false,
+      "t": "11:20:26",
+      "upstream_provider": null,
+      "x_title": null
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 33,
+      "cost_usd": 3.5868e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 672,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 156,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c3-render",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "18618",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "52918",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794910906.5219321"
+        },
+        "peer_pids": [
+          18670
+        ],
+        "peer_ppid": 18618
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:21:47",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1273,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": null,
+      "requested_model": "openai/gpt-6-luna",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:39",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1813,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:39",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1234,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:41",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 2167,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:43",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 924,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:46",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 609,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:47",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1737,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:25:47",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 963,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": null,
+      "requested_model": "openai/gpt-6-luna",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:26:09",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 40929,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "z-ai/glm-5.3-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:26:09",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 17665,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "z-ai/glm-5.3-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:26:50",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 35755,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "z-ai/glm-5.3-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:27:08",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 182812,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "z-ai/glm-5.3-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:27:44",
+      "x_title": "opencode"
+    },
+    {
+      "memory_call": false,
+      "method": "POST",
+      "ms": 30285,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "z-ai/glm-5.3-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c4-run"
+        },
+        "peer_pids": [
+          27103
+        ],
+        "peer_ppid": 27068
+      },
+      "status": 200,
+      "stream": true,
+      "t": "11:30:47",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 768,
+      "completion_tokens": 209,
+      "cost_usd": 0.000198185,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 3040,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 1415,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c5-run",
+        "peer_comm": "python",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "50596",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "54223",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794911872.174757"
+        },
+        "peer_pids": [
+          50622
+        ],
+        "peer_ppid": 50596
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:37:52",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 33,
+      "cost_usd": 3.5765e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 401,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 155,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c5-run",
+        "peer_comm": "python",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "50596",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "54223",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794911872.174757"
+        },
+        "peer_pids": [
+          50622
+        ],
+        "peer_ppid": 50596
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:37:58",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 1024,
+      "completion_tokens": 995,
+      "cost_usd": 0.000762782,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 4389,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2554,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c5-run",
+        "peer_comm": "python",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "50596",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "54223",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794911872.174757"
+        },
+        "peer_pids": [
+          50622
+        ],
+        "peer_ppid": 50596
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:37:56",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 1024,
+      "completion_tokens": 1090,
+      "cost_usd": 0.00083379,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 2932,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 2690,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c5-run",
+        "peer_comm": "python",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "50596",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "54223",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794911872.174757"
+        },
+        "peer_pids": [
+          50622
+        ],
+        "peer_ppid": 50596
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:38:00",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 33,
+      "cost_usd": 3.5868e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": true,
+      "method": "POST",
+      "ms": 628,
+      "opencode_call": false,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 156,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": true,
+      "spawn": {
+        "acquirer_live3_run": "c5-run",
+        "peer_comm": "python",
+        "peer_env": {
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "50596",
+          "MAGNOLIA_MEMORY_SERVICE_PORT": "54223",
+          "MAGNOLIA_SERVER_STARTED_AT": "1794911872.174757"
+        },
+        "peer_pids": [
+          50622
+        ],
+        "peer_ppid": 50596
+      },
+      "status": 200,
+      "stream": false,
+      "t": "11:38:03",
+      "upstream_provider": "InferenceNet",
+      "x_title": "Magnolia"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 9,
+      "cost_usd": 9.88e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1129,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 943,
+      "provider_pref": null,
+      "requested_model": "openai/gpt-6-luna",
+      "resolved_model": "openai/gpt-6-luna",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:08",
+      "upstream_provider": "OpenAI",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 297,
+      "cost_usd": 0.000767669,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1275,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 5723,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:08",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 6016,
+      "completion_tokens": 375,
+      "cost_usd": 0.00032092,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1260,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 6480,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:09",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 6784,
+      "completion_tokens": 472,
+      "cost_usd": 0.002118239,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1717,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 24073,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:11",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 24448,
+      "completion_tokens": 429,
+      "cost_usd": 0.00060872,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1394,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 25960,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:12",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 26368,
+      "completion_tokens": 769,
+      "cost_usd": 0.002321992,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 3254,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 42384,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:14",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 43136,
+      "completion_tokens": 895,
+      "cost_usd": 0.001168119,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 3251,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 45913,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:17",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 46720,
+      "completion_tokens": 1087,
+      "cost_usd": 0.001899709,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 3565,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 55203,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:21",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 4471,
+      "cost_usd": 0.008439991,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 21668,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 55897,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "c5-run"
+        },
+        "peer_pids": [
+          50610
+        ],
+        "peer_ppid": 50596
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:38:24",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 10,
+      "cost_usd": 6.57e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1296,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 607,
+      "provider_pref": null,
+      "requested_model": "openai/gpt-6-luna",
+      "resolved_model": "openai/gpt-6-luna",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "oc-helper"
+        },
+        "peer_pids": [
+          60081
+        ],
+        "peer_ppid": 60079
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:41:17",
+      "upstream_provider": "OpenAI",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 1664,
+      "completion_tokens": 1152,
+      "cost_usd": 0.004656622,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 5348,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 40034,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "oc-helper"
+        },
+        "peer_pids": [
+          60081
+        ],
+        "peer_ppid": 60079
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:41:17",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 41088,
+      "completion_tokens": 157,
+      "cost_usd": 0.000439281,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1473,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 41247,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "oc-helper"
+        },
+        "peer_pids": [
+          60081
+        ],
+        "peer_ppid": 60079
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:41:22",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 0,
+      "completion_tokens": 12,
+      "cost_usd": 6.68e-05,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 1198,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 608,
+      "provider_pref": null,
+      "requested_model": "openai/gpt-6-luna",
+      "resolved_model": "openai/gpt-6-luna",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "oc-evaluator"
+        },
+        "peer_pids": [
+          64358
+        ],
+        "peer_ppid": 64352
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:41:51",
+      "upstream_provider": "OpenAI",
+      "x_title": "opencode"
+    },
+    {
+      "cached_tokens": 1664,
+      "completion_tokens": 597,
+      "cost_usd": 0.003946951,
+      "error_message": null,
+      "generation_id_present": true,
+      "memory_call": false,
+      "method": "POST",
+      "ms": 4319,
+      "opencode_call": true,
+      "path": "/api/v1/chat/completions",
+      "prompt_tokens": 36377,
+      "provider_pref": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ],
+        "sort": "price"
+      },
+      "requested_model": "deepseek/deepseek-v4.1-flash",
+      "resolved_model": "deepseek/deepseek-v4.1-flash",
+      "session_id_present": false,
+      "spawn": {
+        "peer_comm": "opencode",
+        "peer_env": {
+          "LIVE3_RUN": "oc-evaluator"
+        },
+        "peer_pids": [
+          64358
+        ],
+        "peer_ppid": 64352
+      },
+      "sse": true,
+      "status": 200,
+      "stream": true,
+      "t": "11:41:51",
+      "upstream_provider": "InferenceNet",
+      "x_title": "opencode"
+    }
+  ],
+  "openrouter_state": {
+    "calls": 16,
+    "cost_usd": 0.0308343,
+    "other_calls": 28,
+    "refused": 1
+  },
+  "operator_notes": [
+    "11:11:17 proxy restarted (state write fix); calls reset to 6 from log",
+    "11:13:27 budget corrected codex=1 (guard misclassified the c2 reviewer exec as codex-other; fixed audit.py)",
+    "11:14:19 STOP: memory extraction budget exhausted (10/10 real calls; 11th refused locally by the gate proxy at 11:13:58) before run 3 model launch",
+    "11:20:21 continuation: proxy restarted (MEMORY_CAP 30 total, spawn attribution); state carried over (calls 10, refused 1)",
+    "11:25:01 proxy restarted: OpenCode calls classified by peer process name as well as X-Title",
+    "11:30:46 operator slip: 'opencode debug config' (11:25:11, non-model, gate env + key) auto-started a background 'opencode serve --service' daemon (pid recorded, ppid 1, gate XDG_DATA_HOME/OPENCODE_DB, cwd ~). Not attached to the campaign service; no proxy call came from it. Killed by exact pid at 11:30:46 after verifying its gate environment. Earlier 'opencode models' used --standalone and did not start one.",
+    "11:37:13 proxy restarted with SSE usage parsing (OpenCode streams); c4 OpenCode costs taken from OpenCode step costs + ledger + key usage counters",
+    "11:37:42 c5 first launch refused before any spawn: 'dedicated opencode service unavailable: the running dedicated service uses a different configuration (agent step limits)'; stopped the c4 service with 'magnolia-campaign service stop' and relaunched"
+  ],
+  "owner_state_before": [
+    "== ~/.local/state/magnolia",
+    "~/.local/state/magnolia 96 1794865991 drwx------",
+    "~/.local/state/magnolia/bindings 64 1794868284 drwx------",
+    "== ~/.config/magnolia",
+    "ABSENT",
+    "== ~/.magnolia",
+    "ABSENT",
+    "== ~/.magnolia/services",
+    "ABSENT"
+  ],
+  "owner_state_end": [
+    "== ~/.local/state/magnolia",
+    "~/.local/state/magnolia 96 1794865991 drwx------",
+    "~/.local/state/magnolia/bindings 64 1794868284 drwx------",
+    "== ~/.config/magnolia",
+    "ABSENT",
+    "== ~/.magnolia",
+    "ABSENT",
+    "== ~/.magnolia/services",
+    "ABSENT"
+  ],
+  "version_checks": [
+    "11:06:29 label=preflight claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=63 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:10:08 label=pre-c2 claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=63 codex_cfg=6196cf9a75429454824a878b7752de3d449302ac2fa453bd0489ea1a639de804",
+    "11:13:59 label=pre-c3 claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=62 codex_cfg=6196cf9a75429454824a878b7752de3d449302ac2fa453bd0489ea1a639de804",
+    "11:21:45 label=pre-c3-render claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=61 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:22:33 label=pre-c3-run claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=61 codex_cfg=6196cf9a75429454824a878b7752de3d449302ac2fa453bd0489ea1a639de804",
+    "11:25:37 label=pre-c4 claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=61 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:37:15 label=pre-c5 claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=60 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:37:50 label=pre-c5b claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=60 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:41:15 label=pre-oc-helper claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=60 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:41:33 label=pre-oc-evaluator claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=60 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159",
+    "11:41:50 label=pre-oc-evaluator2 claude=[2.1.326 (Claude Code)] claude_sha=e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837 codex=[codex-cli 0.169.0] codex_sha=739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002 free_gb=60 codex_cfg=7b8c10269efb097eb6c4d75590c0fc925ab0d90d5eefaea254cae7395bd67159"
+  ]
+}

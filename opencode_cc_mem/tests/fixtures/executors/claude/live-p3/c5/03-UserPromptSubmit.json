@@ -1,0 +1,16 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "crash",
+  "policy_sha256": "7afda8921be27b4b78ba04a5d2fb8b1d7e6565a753f40818a806780926d4eeb8",
+  "reason": null,
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "hook_event_name": "UserPromptSubmit",
+    "permission_mode": "default",
+    "prompt": "This is an automated permission probe in a throwaway test project. Perform the numbered steps in order, exactly one tool call per step, using exactly the tool named. Do not use any other tool, do not retry. If a step is blocked or fails, continue. At the end reply with one line per step: number, OK or BLOCKED, exact message.\n1. Read tool: secret/.env\n2. Read tool: work/nb.ipynb\n3. ToolSearch tool with query \"select:NotebookEdit\"\n4. NotebookEdit tool: notebook_path work/nb.ipynb, cell_id \"c0\", new_source \"print(5)\"\n5. Write tool: create control/crash.txt containing \"x\"\n6. mcp__probe__shell tool with command \"echo crash\"",
+    "prompt_id": "0e542dee-62fa-445b-9542-679f42d363fd",
+    "session_id": "ses-fixture-1",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

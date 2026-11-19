@@ -1,6 +1,9 @@
 import tomllib
+import json
+from pathlib import Path
 
 from compchem_memory.harness import RENDERERS
+from compchem_memory.harness.ownership import is_magnolia_hook_command
 from compchem_memory.harness.render_vibe import render
 
 
@@ -43,7 +46,44 @@ def test_vibe_mcp_timeout_is_660(make_render):
     assert memory["command"] == "/venv/bin/python"
     assert memory["args"] == ["-m", "compchem_memory.server"]
     assert config["active_model"] == "devstral"
-    assert config["disabled_tools"] == ["file_system.bash"]
+    assert config["disabled_tools"] == ["bash"]
+
+
+def test_vibe_http_memory_uses_native_api_key_env_auth(make_render, monkeypatch):
+    neutral, context = make_render(model="devstral")
+    context.memory_service = {
+        "transport": "http",
+        "url": "http://127.0.0.1:43101/mcp",
+        "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    for server in neutral.servers:
+        if server.name == "compchem-memory":
+            server.kind = "remote"
+            server.command = None
+            server.url = context.memory_service["url"]
+    rendered = _config(render(neutral, context), context)["mcp_servers"]
+    memory = next(server for server in rendered if server["name"] == "compchem-memory")
+
+    assert memory["auth"] == {
+        "type": "static",
+        "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+    }
+    assert "headers" not in memory
+    assert "${" not in repr(memory)
+
+    monkeypatch.setenv("MAGNOLIA_MEMORY_SERVICE_TOKEN", "recorded-token")
+    try:
+        from vibe.core.config.models import MCPHttp
+    except ImportError:
+        fixture = Path(__file__).parents[1] / "fixtures" / "vibe_http_auth.json"
+        assert json.loads(fixture.read_text(encoding="utf-8")) == {
+            "input": memory["auth"],
+            "expected_headers": {"Authorization": "Bearer recorded-token"},
+        }
+    else:
+        assert MCPHttp.model_validate(memory).http_headers() == {
+            "Authorization": "Bearer recorded-token"
+        }
 
 
 def test_vibe_without_model_does_not_pin_active_model(make_render):
@@ -66,9 +106,9 @@ def test_vibe_pre_tool_hook_is_strict(make_render):
         "magnolia-pre-tool": "pre_tool", "magnolia-post-tool": "post_tool",
         "magnolia-turn-end": "post_agent", "magnolia-session-end": "session_end",
     }
-    assert hooks["magnolia-pre-tool"]["command"] == (
-        "/venv/bin/python -m compchem_memory.hook vibe pre-tool"
-    )
+    pre_tool = hooks["magnolia-pre-tool"]["command"]
+    assert is_magnolia_hook_command(pre_tool)
+    assert pre_tool.endswith(" vibe pre-tool")
     assert hooks["magnolia-post-tool"]["timeout"] == 10
     assert hooks["magnolia-prompt"]["timeout"] == 30
     assert hooks["magnolia-prompt"]["match"] == "main"
@@ -110,11 +150,11 @@ def test_vibe_preserves_member_entries_and_is_idempotent(make_render):
     apply(render(neutral, context))
     config = tomllib.loads((folder / "config.toml").read_text())
     hooks = tomllib.loads((folder / "hooks.toml").read_text())["hooks"]
-    assert config["disabled_tools"] == ["mine.tool", "file_system.bash"]
+    assert config["disabled_tools"] == ["mine.tool", "bash"]
     assert config["mcp_servers"][0]["name"] == "mine"
     assert [h["name"] for h in hooks][0] == "member"
-    assert "magnolia-old" not in [h["name"] for h in hooks]
-    assert len(hooks) == 7
+    assert hooks[1] == {"name": "magnolia-old", "type": "pre_tool", "command": "x"}
+    assert len(hooks) == 8
 
     before = {p: p.read_bytes() for p in (folder / "config.toml", folder / "hooks.toml")}
     apply(render(neutral, context))
@@ -137,7 +177,16 @@ def test_vibe_disabled_tools_is_append_only_and_never_duplicates(make_render):
     _apply(render(neutral, context))
     _apply(render(neutral, context))
     config = tomllib.loads((folder / "config.toml").read_text())
-    assert config["disabled_tools"] == ["file_system.bash", "extra.tool"]
+    assert config["disabled_tools"] == ["file_system.bash", "extra.tool", "bash"]
+
+
+def test_vibe_member_render_maps_all_neutral_names(make_render):
+    neutral, context = make_render()
+    neutral.deny_tools = frozenset({"bash", "write", "edit", "write_file", "custom"})
+
+    config = _config(render(neutral, context), context)
+
+    assert config["disabled_tools"] == ["bash", "custom", "edit", "write_file"]
 
 
 def test_vibe_explicit_model_overwrites_member_active_model(make_render):

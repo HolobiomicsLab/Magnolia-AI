@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from compchem_memory.capture import captured, get_session_manager, reset_registry
 
@@ -47,6 +48,61 @@ def test_decorator_emits_tool_call_and_success(project_dir):
     assert events[2]["event_type"] == "tool_success"
     assert events[2]["tool"] == "memory_dummy"
     assert "duration_ms" in events[2]
+
+
+def test_decorator_records_tool_origin_for_extraction(project_dir):
+    @captured(source="member-analysis")
+    def score_pose(project_dir: str | None = None) -> str:
+        return "score=-82.4"
+
+    score_pose(project_dir=str(project_dir))
+
+    events = _read_events(project_dir)
+    assert events[1]["origin"] == {
+        "tool": "score_pose",
+        "mcp_server": "member-analysis",
+    }
+    assert events[2]["origin"] == events[1]["origin"]
+
+
+def test_captured_tool_reaches_staging_with_origin(project_dir, monkeypatch):
+    from compchem_memory import extraction
+
+    monkeypatch.setenv("MAGNOLIA_CLIENT", "codex")
+    monkeypatch.setenv("MAGNOLIA_ROLE", "worker")
+    monkeypatch.setattr(extraction, "is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        extraction.AutomaticMemoryExtractor,
+        "should_extract",
+        lambda self, session_path: True,
+    )
+    monkeypatch.setattr(
+        extraction.AutomaticMemoryExtractor,
+        "_llm_distill",
+        lambda self, events: [{
+            "title": "Captured score",
+            "content": "score=-82.4",
+            "type": "scientific_finding",
+            "tools": ["score_pose"],
+        }],
+    )
+
+    @captured(source="member-analysis")
+    def score_pose(project_dir: str | None = None) -> str:
+        return "score=-82.4"
+
+    score_pose(project_dir=str(project_dir))
+
+    staged = list((project_dir / ".magnolia" / "staging").glob("*.md"))
+    assert len(staged) == 1
+    meta = yaml.safe_load(staged[0].read_text().split("---", 2)[1])
+    assert meta["origins"] == [{
+        "client": "codex",
+        "session_id": _read_events(project_dir)[0]["session_id"],
+        "tool": "score_pose",
+        "mcp_server": "member-analysis",
+        "role": "worker",
+    }]
 
 
 def test_decorator_emits_tool_error_and_reraises(project_dir):

@@ -41,7 +41,12 @@ EVENTS = (
 
 # Servers whose OpenCode tool names are ``<server>_<tool>``. A bare underscore
 # is not enough evidence of a server: an unknown prefix stays a built-in name.
-_KNOWN_SERVERS = ("compchem-tools", "compchem-memory", "perspicacite")
+_KNOWN_SERVERS = (
+    "compchem-tools",
+    "compchem-memory",
+    "magnolia-read",
+    "perspicacite",
+)
 _MCP_PREFIX = "mcp__"
 _VIBE_MCP_PREFIX = "mcp_"
 
@@ -148,6 +153,17 @@ def _block_text(block: object) -> str | None:
 
 
 @dataclass
+class ToolTarget:
+    """One adapter-decoded path target for required role enforcement."""
+
+    path: str
+    access: str
+    broad: bool = False
+    inclusions: tuple[str, ...] = ()
+    exclusions: tuple[str, ...] = ()
+
+
+@dataclass
 class ToolCall:
     """One tool invocation, with ``output`` already reduced to text."""
 
@@ -158,6 +174,8 @@ class ToolCall:
     input: dict
     output: str | None = None
     is_error: bool = False
+    policy_action: str | None = None
+    targets: tuple[ToolTarget, ...] = ()
 
 
 @dataclass
@@ -183,6 +201,8 @@ class HookEvent:
     agent: AgentRef | None = None
     assistant_text: str | None = None
     transcript_ref: str | None = None
+    model: str | None = None
+    role: str | None = None
 
     EVENTS = EVENTS
 
@@ -214,6 +234,8 @@ class HookEvent:
             agent=_agent_ref(d.get("agent")),
             assistant_text=d.get("assistant_text"),
             transcript_ref=d.get("transcript_ref"),
+            model=_optional_text(d.get("model")),
+            role=_optional_text(d.get("role")),
         )
 
 
@@ -228,6 +250,11 @@ def _required_text(d: dict, key: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"hook payload is missing a non-empty {key!r}")
     return value
+
+
+def _optional_text(value: object) -> str | None:
+    """Keep an observed non-empty string; represent everything else as unknown."""
+    return value if isinstance(value, str) and value else None
 
 
 def _tool_call(value: object) -> ToolCall | None:

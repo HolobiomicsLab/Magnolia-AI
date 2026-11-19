@@ -1,0 +1,1989 @@
+{
+  "schema_version": 1,
+  "generated_from": {
+    "revision": "03333f9ced9e117aeae36b5dcfbafefd6e95b38f",
+    "sources": [
+      "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
+      "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
+      "opencode_cc_mem/docs/harness-probes-2026-11.md",
+      "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+      "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
+      "opencode_cc_mem/docs/evidence/codex/task-codex-livefix-report.md",
+      "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/README.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/runtime-surface.json",
+      "opencode_cc_mem/docs/evidence/live1/README.md",
+      "opencode_cc_mem/docs/evidence/live1/campaign-runner.json",
+      "opencode_cc_mem/docs/evidence/live1/claude-production-refusal.json",
+      "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+      "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+      "opencode_cc_mem/docs/evidence/live1b/README.md",
+      "opencode_cc_mem/docs/evidence/live1b/capabilities-p3.candidate.json",
+      "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/live1b/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R.json",
+      "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R2.json",
+      "opencode_cc_mem/docs/evidence/live1b/helper-policy.json",
+      "opencode_cc_mem/docs/evidence/live1b/evaluator.json",
+      "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json"
+    ]
+  },
+  "note": "Final-code live pass 1 accepts the Codex worker/reviewer roles on their unchanged 0.169.0 identities, and pass 1b accepts the Claude worker/reviewer/helper (native_read over docs/) and evaluator roles on Claude Code 2.1.326. The no-tools Claude helper remains refused; Codex helper/evaluator and all Vibe roles remain refused, while mixed-client campaign, continuity-drain and extraction/critic evidence remain pending.",
+  "rows": [
+    {
+      "client": "claude-code",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
+              "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+              "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
+              "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted on the owner-recorded hook-only enforcement ruling: the required fail-closed hook enforces the worker MCP allowlist; the gate is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/worker-policy.json",
+          "value": {
+            "role": "worker",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/worker-policy.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/worker-policy.json",
+          "value": {
+            "actions": [
+              "secret and recursive reads",
+              "edits outside run/work",
+              "symlink escapes",
+              "shell",
+              "delegation",
+              "non-allowlisted MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/W1/16-ledger-row.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R2.json",
+          "value": {
+            "role": "reviewer",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R2.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R2.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/R1/15-ledger-row.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_argv": true
+          },
+          "note": "Cap 8 is enforced but tight because SessionStart boot context consumed turns."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
+        "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live H1 gate passed for native_read over docs/ (--tools Read --allowedTools Read), with no MCP; bound to the real Claude binary plus that normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "H1/01-run.json records --tools Read --allowedTools Read; H1/04-stream-init.json confirms exactly [Read] and no MCP servers."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/helper-policy.json",
+          "value": {
+            "role": "helper",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/helper-policy.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "H1/08-hook-transcript.json observes docs/notes.md allowed and README.md denied; the bound policy grants native_read only over docs/."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/helper-policy.json",
+          "value": {
+            "actions": [
+              "reads outside the named root",
+              "edits",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/H1/09-ledger-row.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1b/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.326",
+            "sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837"
+          },
+          "note": "Executable version and SHA-256 were re-observed in live pass 1b."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.325:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/evaluator.json",
+          "value": {
+            "role": "evaluator",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/evaluator.json",
+          "value": {
+            "capabilities": []
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/evaluator.json",
+          "value": {
+            "actions": [
+              "all tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/E1/07-ledger-row.json",
+          "value": {
+            "effective_max_turns": 1,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": true,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
+            "components": {
+              "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
+              },
+              "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
+              "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
+              "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
+              "policy": "211e05cc288c85203d119123ff0623aad960a05a5519e6e6293a816354bc3d65",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted by the lead after gate 4 met the complete worker role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "workspace-write",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production worker argv was captured before the one-attempt live launch."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
+          "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+          "value": {
+            "role": "worker",
+            "source": "live pass 1 code-mode catalog and routed calls"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed reads/searches and one worker-owned edit completed under the production hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+          "value": {
+            "actions": [
+              "secret and symlink-alias reads",
+              "edits outside the worker-owned work tree",
+              "control edits",
+              "shell",
+              "non-allowlisted memory writes"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "effective_max_turns": 30,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective worker cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "One subscription ledger receipt retained the native token/cache counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "Live pass 1 re-observed the final role identity, tool catalog and policy boundary on the production prepare_launch path.",
+        "Accepted limitation: the code-mode catalog is wider than the worker allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
+        "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": true,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live1/README.md",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+            "components": {
+              "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
+              },
+              "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
+              "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+              "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
+              "policy": "be6df35b2c5c99d8a969c66fbe65eb5d4aa17b4d7255097ca0e2d50e0475d46c",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted by the lead after gate 4 met the complete reviewer role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "read-only",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production reviewer argv was captured before the one-attempt live launch."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+          "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+          "value": {
+            "role": "reviewer",
+            "source": "live pass 1 code-mode catalog and routed calls"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "Allowed documentation and worker-result reads completed under the production hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP-resource tools",
+              "delegation"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect; write_stdin failed before a hook because no session existed."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective reviewer cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "One subscription ledger receipt per reviewer invocation retained the native token/cache counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "Live pass 1 re-observed the final role identity, tool catalog and policy boundary on the production prepare_launch path.",
+        "Accepted limitation: the code-mode catalog is wider than the reviewer allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": true,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "fb2f62b49f767c2d2f6c8a4aa883290ebdde32b160b308868cf5b3404c258c6f",
+            "recompute_contract": {
+              "identity": "codex-refused-role-unobserved",
+              "discovery_dir": {
+                "scope": "launch-project",
+                "configuration": "run-owned-refused-role-fixture"
+              },
+              "capabilities": [
+                "native_read"
+              ],
+              "model_isolation": {
+                "accepted": true,
+                "model": "gpt-5.6-luna",
+                "identity": "bound-identity-recompute-v1"
+              }
+            },
+            "components": {
+              "model": "gpt-5.6-luna",
+              "settings": "32300abaf02d6aa0744eedf2a701867f4054523cc185e5020afc4071068a4498",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": true,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "20a96c8e7dc2d057fe35ae7c5fdbb90d444f32f722eb3eb3d2badcdf90129e14",
+            "recompute_contract": {
+              "identity": "codex-refused-role-unobserved",
+              "discovery_dir": {
+                "scope": "launch-project",
+                "configuration": "run-owned-refused-role-fixture"
+              },
+              "capabilities": [],
+              "model_isolation": {
+                "accepted": true,
+                "model": "gpt-5.6-luna",
+                "identity": "bound-identity-recompute-v1"
+              }
+            },
+            "components": {
+              "model": "gpt-5.6-luna",
+              "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "vibe",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "D4: Vibe worker edits are refused until D4 and the complete safety gate pass."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
+        },
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
+        },
+        "vibe_memory": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
+        },
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
+        },
+        "vibe_memory": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
+        },
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
+        },
+        "vibe_memory": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    },
+    {
+      "client": "vibe",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/harness-neutral-agents-plan-p3.md",
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/harness-probes-2026-11.md",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.2",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "counter shape is retained at opencode_cc_mem/tests/fixtures/executors/vibe/recorded/export.json; parent/subagent inclusion, resume deltas, and paid cost semantics await live Task 0"
+        },
+        "http_api_key_env": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "Vibe 3.1.2 source and its offline config model verify auth.api_key_env; an authenticated live Vibe call remains unobserved"
+        },
+        "vibe_memory": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/vibe_http_auth.json",
+          "note": "TM-5 offline safety is represented separately; Task 15 live acceptance remains unobserved"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      }
+    }
+  ]
+}

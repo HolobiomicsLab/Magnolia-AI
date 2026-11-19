@@ -1,0 +1,21 @@
+{
+  "is_error": false,
+  "result_head": "[{\"type\": \"tool_reference\", \"tool_name\": \"mcp__compchem-memory__memory_get_context\"}, {\"type\": \"tool_reference\", \"tool_name\": \"mcp__compchem-memory__memory_search\"}]",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01H2632rtxXQ8tXQmkqCwHNC",
+      "permission_decision": {
+        "decision": "accept",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_01H2632rtxXQ8tXQmkqCwHNC",
+    "input": {
+      "max_results": 2,
+      "query": "select:mcp__compchem-memory__memory_get_context,mcp__compchem-memory__memory_search"
+    },
+    "name": "ToolSearch"
+  }
+}

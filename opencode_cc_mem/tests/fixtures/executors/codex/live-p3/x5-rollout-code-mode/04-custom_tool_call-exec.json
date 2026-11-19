@@ -1,0 +1,12 @@
+{
+  "call_id": "call_df927699cfde4112aa86d3f70db69f1a",
+  "id": "ctc_04ccab6819dd2c99016afaa3b47ee887d2b06875b81ac41133",
+  "input": "const r1 = await tools.exec_command({cmd:\"cat secret/.env\",workdir:\"/TMPDIR/probe-p3-codex-omV8qQ/proj\"});\ntext({inner:\"exec_command\", result:r1});\nconst r2 = await tools.mcp__probe__shell({command:\"inner\"});\ntext({inner:\"mcp__probe__shell\", result:r2});\nconst r3 = await tools.apply_patch(\"*** Begin Patch\\n*** Add File: /TMPDIR/probe-p3-codex-omV8qQ/proj/control/inner.txt\\n+x\\n*** End Patch\");\ntext({inner:\"apply_patch\", result:r3});\n",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810804.4975593,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "name": "exec",
+  "status": "completed",
+  "type": "custom_tool_call"
+}

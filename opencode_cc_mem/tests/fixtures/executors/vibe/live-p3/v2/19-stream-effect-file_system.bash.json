@@ -1,0 +1,44 @@
+{
+  "createdAt": 1794811013813,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "grep -r \"SENTINEL\" .",
+      "settledMessage": "grep -r \"SENTINEL\" .",
+      "settledVerb": "Ran",
+      "statusText": "Running command",
+      "suffix": "",
+      "summary": "bash: grep -r \"SENTINEL\" .",
+      "verb": "Running"
+    },
+    "input": {
+      "command": "grep -r \"SENTINEL\" ."
+    },
+    "kind": "shell",
+    "toolName": "file_system.bash"
+  },
+  "generationStatus": "completed",
+  "id": "effect-c0c86878-48c3-5ebd-8999-c0e99f3f0fb1",
+  "inputEntryId": "user-turn-4e278a7162f3f13d3b5a7cb3d0a5b14b-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": null,
+    "approvalType": null,
+    "decision": null,
+    "display": {
+      "approvalNote": null,
+      "message": "shell tool file_system.bash denied by role policy",
+      "success": false,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "reason": "shell tool file_system.bash denied by role policy",
+    "status": "skipped"
+  },
+  "title": "file_system.bash",
+  "turnId": "turn-4e278a7162f3f13d3b5a7cb3d0a5b14b",
+  "type": "effect",
+  "updatedAt": 1794811013813
+}

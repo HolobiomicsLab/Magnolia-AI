@@ -1,0 +1,37 @@
+version: magnolia-role-v1
+role: campaign-worker
+canonical_read_roots:
+  - "{project_dir}"
+  - "{shared_rule_files}"
+  - "{shared_skill_files}"
+read_deny_patterns:
+  - "**/*.env*"
+  - "**/*.env*/**"
+  - "**/.magnolia/campaign-service.json"
+  - "**/.magnolia/campaign-service.log"
+  - "**/.magnolia/services/**"
+edit_roots:
+  - "{work_dir}"
+allowed_native_capabilities:
+  - native_read
+  - native_glob
+  - native_grep
+  - native_edit
+mcp_tool_allowlist:
+  - mcp:compchem-memory.memory_get_context
+  - mcp:compchem-memory.memory_search
+  - mcp:compchem-memory.memory_get_run_history
+delegation_policy: deny
+default_cap: 30
+opencode_description: Executes one bounded Magnolia campaign stage
+opencode_mode: primary
+opencode_prose: |
+  You are a Magnolia campaign worker.
+
+  Execute only the assigned stage. Read the brief and inputs first.
+
+  Write only inside the stage work directory. Do not edit control files, gates,
+  budgets, protocols, approvals, or shared rules.
+
+  Do not claim success beyond the measured evidence. Your final message must
+  contain the complete stage result.

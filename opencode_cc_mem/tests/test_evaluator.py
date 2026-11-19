@@ -6,12 +6,17 @@ Run from opencode_cc_mem/:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from campaign_runner.routing import resolve_route
 from router_runner import agentd
 from router_runner.evaluator import (
     EVALUATOR_SYSTEM_PROMPT,
@@ -21,6 +26,40 @@ from router_runner.evaluator import (
     make_evaluator,
 )
 from router_runner.router import Router
+
+
+def _accepted_evaluator_capabilities():
+    return {
+        client: {"evaluator": {"accepted": True}}
+        for client in ("claude-code", "codex", "vibe")
+    }
+
+
+class _ClientExecutor:
+    def __init__(self, response=None):
+        self.response = response or {
+            "action": "ignore",
+            "project": None,
+            "confidence": 0.9,
+            "reason": "not routed work",
+        }
+        self.calls = []
+
+    def run(self, prompt, **kwargs):
+        from campaign_runner.executors.contracts import RunOutcome
+
+        self.calls.append((prompt, kwargs))
+        control = kwargs.get("control")
+        if control is not None and control.on_start is not None:
+            control.on_start(os.getpid(), os.getpgid(0))
+        return SimpleNamespace(
+            final_text=__import__("json").dumps(self.response),
+            outcome=RunOutcome("success"),
+            usage={},
+            attempts=1,
+            duration_seconds=0.01,
+            session_identity=None,
+        )
 
 
 def make_router(tmp_path, evaluator=None):
@@ -185,7 +224,234 @@ def test_make_evaluator_prefers_jev_when_configured(monkeypatch):
     assert type(make_evaluator()).__name__ == "GenerativeEvaluator"
 
 
+def test_evaluator_each_client_route_without_api_key(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
+    monkeypatch.setattr(
+        evaluator_module.llm,
+        "is_llm_available",
+        lambda: (_ for _ in ()).throw(AssertionError("API availability is unrelated")),
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("availability must not construct an executor")
+        ),
+    )
+    checked = []
+    for model in (
+        "claude-code/claude-haiku-5-5",
+        "codex/gpt-5.6-luna",
+        "vibe/devstral-2",
+    ):
+        evaluator = GenerativeEvaluator(
+            model,
+            project_dir=tmp_path,
+            role_capabilities=_accepted_evaluator_capabilities(),
+            executable_available=lambda path: checked.append(path) or True,
+        )
+        assert evaluator.available() is True
+    assert len(checked) == 3
+    assert not (tmp_path / ".magnolia").exists()
+
+
+def test_evaluator_availability_is_pure_and_checked_once(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    executor = _ClientExecutor()
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args: (_ for _ in ()).throw(
+            AssertionError("availability must not prepare a launch")
+        ),
+    )
+    checks = []
+    pure = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        governor_factory=lambda: (_ for _ in ()).throw(
+            AssertionError("availability must not acquire a governor or memory service")
+        ),
+        project_dir=tmp_path,
+        role_capabilities=_accepted_evaluator_capabilities(),
+        executable_available=lambda _path: True,
+    )
+    assert pure.available() is True
+    assert not (tmp_path / ".magnolia").exists()
+
+    monkeypatch.setattr(evaluator_module, "executor_for", lambda *args: executor)
+    evaluator = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        project_dir=tmp_path,
+        role_capabilities=_accepted_evaluator_capabilities(),
+        executable_available=lambda path: checks.append(path) or True,
+    )
+    router = make_router(tmp_path, evaluator=evaluator)
+
+    assert router.say("triage this").kind == "ignored"
+    assert len(checks) == 1
+    assert executor.calls
+
+
+def test_evaluator_refused_capability_is_unavailable(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("refused capability must not fall back to OpenCode")
+        ),
+    )
+    evaluator = GenerativeEvaluator(
+        "codex/gpt-5.6-luna",
+        project_dir=tmp_path,
+        role_capabilities={"codex": {"evaluator": {"accepted": False}}},
+        executable_available=lambda _path: True,
+    )
+
+    assert evaluator.available() is False
+    assert evaluator.evaluate("triage this", {"projects": ["proj_a"]}) is None
+
+
+def test_evaluator_selected_model_and_no_tools_one_turn(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    executor = _ClientExecutor()
+    captured = {}
+
+    def fake_executor(route, role, context):
+        captured.update(route=route, role=role, context=context)
+        return executor
+
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
+    monkeypatch.setattr(evaluator_module, "executor_for", fake_executor)
+    monkeypatch.delenv("PYTHON", raising=False)
+    evaluator = GenerativeEvaluator(
+        "claude-code/claude-haiku-5-5",
+        project_dir=tmp_path,
+        role_capabilities=_accepted_evaluator_capabilities(),
+    )
+    assert evaluator.evaluate("triage this", {"projects": ["proj_a"]}).action == "ignore"
+    assert captured["route"].model == "claude-haiku-5-5"
+    assert captured["role"] == "evaluator"
+    assert captured["context"].role_cap == 1
+    assert captured["context"].required_capabilities == ()
+    assert captured["context"].python_executable.endswith("/.venv/bin/python3")
+    assert executor.calls[0][1]["retries"] == 0
+
+
+def test_executable_probe_uses_injected_lookup(monkeypatch):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(evaluator_module.subprocess, "run", lambda *args, **kwargs: None)
+
+    assert evaluator_module._executable_available(
+        "missing-client", which=lambda _name: None
+    ) is False
+    assert evaluator_module._executable_available(
+        "fixture-client", which=lambda name: f"/bin/{name}"
+    ) is True
+
+
+def test_evaluator_api_fallback_unchanged(monkeypatch):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        evaluator_module.llm,
+        "call_llm_json",
+        lambda *args, **kwargs: {
+            "action": "accept",
+            "project": "proj_a",
+            "confidence": 0.91,
+            "reason": "API decision",
+        },
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("registry not used")),
+    )
+    decision = GenerativeEvaluator("openai/gpt-api-model").evaluate(
+        "triage this", {"projects": ["proj_a"]}
+    )
+    assert decision is not None and decision.action == "accept"
+    assert decision.project == "proj_a"
+
+
+@pytest.mark.parametrize(
+    "model", ["openrouter/deepseek/deepseek-v4.1", "opencode/provider/model"]
+)
+def test_evaluator_openrouter_and_opencode_prefixes_keep_direct_api_path(
+    monkeypatch, model
+):
+    from router_runner import evaluator as evaluator_module
+
+    calls = []
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    monkeypatch.setattr(
+        evaluator_module.llm,
+        "call_llm_json",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or {
+            "action": "ignore",
+            "project": None,
+            "confidence": 0.9,
+            "reason": "API decision",
+        },
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "executor_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("direct API prefixes must not construct a client executor")
+        ),
+    )
+
+    decision = GenerativeEvaluator(model).evaluate("triage", {})
+
+    assert decision is not None and decision.action == "ignore"
+    assert calls and calls[0][1] == {"max_tokens": 400, "disable_thinking": True}
+
+
+def test_opencode_go_availability_retains_base_api_probe_when_binary_missing(
+    monkeypatch, tmp_path
+):
+    from router_runner import evaluator as evaluator_module
+
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    evaluator = GenerativeEvaluator(
+        "opencode-go/deepseek-v4.1-flash",
+        project_dir=tmp_path,
+        executable_available=lambda _path: False,
+    )
+
+    assert evaluator.available() is True
+
+
+def test_configured_openrouter_route_keeps_direct_api_path():
+    route = resolve_route(
+        "evaluator",
+        {"routes": {"evaluator": "openrouter/deepseek/deepseek-v4.1"}},
+    )
+
+    assert GenerativeEvaluator()._uses_client(route) is False
+
+
+def test_jev_evaluator_unchanged(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_EVAL_JEV_MODEL", "jev-1.13-free")
+    evaluator = make_evaluator()
+    assert isinstance(evaluator, JevEvaluator)
+    assert evaluator.model == "jev-1.13-free"
+
+
 def test_go_generative_path_parses_json_with_preamble(monkeypatch):
+    from router_runner import evaluator as evaluator_module
+
     class Out:
         returncode = 0
         stdout = '> build · deepseek-v4.1-flash\n{"action":"accept","project":"proj_a","confidence":0.92,"reason":"dock"}'
@@ -193,6 +459,7 @@ def test_go_generative_path_parses_json_with_preamble(monkeypatch):
 
     monkeypatch.setattr("router_runner.evaluator.subprocess.run",
                         lambda *a, **k: Out())
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     ev = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash")
     d = ev.evaluate("dock the peptide", {"projects": ["proj_a"]})
     assert d is not None
@@ -203,6 +470,8 @@ def test_go_generative_path_parses_json_with_preamble(monkeypatch):
 
 
 def test_go_generative_path_returns_none_on_bad_json(monkeypatch):
+    from router_runner import evaluator as evaluator_module
+
     class Out:
         returncode = 0
         stdout = "no json here"
@@ -210,6 +479,7 @@ def test_go_generative_path_returns_none_on_bad_json(monkeypatch):
 
     monkeypatch.setattr("router_runner.evaluator.subprocess.run",
                         lambda *a, **k: Out())
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     ev = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash")
     assert ev.evaluate("dock", {}) is None
 
@@ -227,7 +497,10 @@ def test_go_generative_path_receives_system_prompt_and_closed_stdin(monkeypatch)
         seen["stdin"] = kwargs.get("stdin")
         return Out()
 
+    from router_runner import evaluator as evaluator_module
+
     monkeypatch.setattr("router_runner.evaluator.subprocess.run", fake_run)
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     decision = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {})
 
     assert decision is not None
@@ -257,7 +530,10 @@ def test_go_generative_path_rejects_invalid_action(monkeypatch):
         stdout = '{"action":"launch","confidence":0.9,"reason":"x"}'
         stderr = ""
 
+    from router_runner import evaluator as evaluator_module
+
     monkeypatch.setattr("router_runner.evaluator.subprocess.run", lambda *a, **k: Out())
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     assert GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate("dock", {}) is None
 
 
@@ -274,6 +550,8 @@ def _ingest(tmp_path):
 # set OPENCODE_DB, so they pass --standalone (a private server per call).
 
 def _capture_run(monkeypatch, stdout="{}"):
+    from router_runner import evaluator as evaluator_module
+
     seen = []
 
     class Out:
@@ -287,6 +565,7 @@ def _capture_run(monkeypatch, stdout="{}"):
         return Out()
 
     monkeypatch.setattr("router_runner.evaluator.subprocess.run", fake_run)
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
     return seen
 
 
@@ -307,3 +586,56 @@ def test_catalog_check_is_standalone(monkeypatch):
     assert _catalog_has_model("jev-1.13-free") is True
     cmd, _env = seen[0]
     assert cmd == ["/opt/oc/bin/opencode", "--standalone", "api", "get", "/api/model"]
+
+
+def test_evaluator_standalone_db_and_plain_stdout(monkeypatch, tmp_path):
+    from router_runner import evaluator as evaluator_module
+
+    calls = []
+
+    class Out:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if "/api/model" in argv:
+            return Out('{"data":[{"id":"jev-1.13-free"}]}')
+        return Out(
+            '> build · model\nnoise\n'
+            '{"action":"accept","project":"proj_a","confidence":0.92,'
+            '"reason":"dock","meta":{"nested":true}}\ntrailer'
+        )
+
+    monkeypatch.setattr(evaluator_module.os, "environ", {"BASE_ENV": "ignored"})
+    monkeypatch.setenv("MAGNOLIA_OPENCODE_V2_BIN", str(tmp_path / "opencode"))
+    monkeypatch.setattr(evaluator_module, "_executable_available", lambda _path: True)
+    monkeypatch.setattr(evaluator_module.llm, "is_llm_available", lambda: True)
+    monkeypatch.setattr(evaluator_module.subprocess, "run", fake_run)
+    decision = GenerativeEvaluator("opencode-go/deepseek-v4.1-flash").evaluate(
+        "dock", {"projects": ["proj_a"]}
+    )
+    assert decision is not None and decision.action == "accept"
+    assert evaluator_module._catalog_has_model("jev-1.13-free") is True
+    snapshot = __import__("json").loads(
+        (Path(__file__).parent / "snapshots" / "opencode" / "evaluator.json").read_text()
+    )
+    observed = {
+        "run_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[0][0]],
+        "catalog_argv": [item.replace(str(tmp_path), "@@TMP@@") for item in calls[1][0]],
+        "environment_keys": sorted(calls[0][1]["env"]),
+        "step_cap_config": calls[0][1]["env"].get("OPENCODE_CONFIG_CONTENT"),
+        "run_timeout_seconds": calls[0][1]["timeout"],
+        "catalog_timeout_seconds": calls[1][1]["timeout"],
+        "agent_file_bytes": None,
+    }
+    assert "MAGNOLIA_DOORBELL" in observed["environment_keys"]
+    observed["environment_keys"].remove("MAGNOLIA_DOORBELL")
+    assert observed == snapshot
+    assert calls[0][0][-1] == (
+        EVALUATOR_SYSTEM_PROMPT
+        + '\n\n{"message": "dock", "context": {"projects": ["proj_a"]}}'
+    )

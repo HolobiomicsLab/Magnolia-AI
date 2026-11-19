@@ -1,0 +1,7 @@
+{
+  "synthetic": false,
+  "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/codex/parent-events/18-turn-completed.json",
+  "dropped_keys": [],
+  "type": "turn.completed",
+  "usage": "<dropped>"
+}

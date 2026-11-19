@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -13,9 +14,14 @@ sys.path.insert(0, str(ROOT))
 from campaign_runner.jobs import FakeJobBackend, JobController, JobStatus  # noqa: E402
 from campaign_runner.lease import AttemptLease  # noqa: E402
 from campaign_runner.reviewers import ReviewResult  # noqa: E402
-from campaign_runner.runner import CampaignRunner, RunnerConfig  # noqa: E402
-from campaign_runner.state import CampaignStore  # noqa: E402
+from campaign_runner.runner import CampaignRunner, RunnerConfig, RunnerError  # noqa: E402
+from campaign_runner.state import (  # noqa: E402
+    CampaignBusyError,
+    CampaignStateChangedError,
+    CampaignStore,
+)
 from campaign_runner.workers import WorkerResult, empty_usage  # noqa: E402
+from campaign_runner.executors.contracts import SessionIdentity  # noqa: E402
 
 
 def protocol_payload(
@@ -24,6 +30,7 @@ def protocol_payload(
     prepare_gate="raise SystemExit(0)",
     hard_analyze=False,
     max_cost_usd=None,
+    analyze_gate="raise SystemExit(0)",
 ):
     payload = {
         "schema": 1,
@@ -68,7 +75,7 @@ def protocol_payload(
                 "model": "kimi-code-plan-cn/k3.1-pro#high",
                 "prompt": "prompts/analyze.md",
                 "outputs": ["work/analysis.md"],
-                "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+                "gate": [sys.executable, "-c", analyze_gate],
                 "review": True,
                 "retry": retry,
                 "on_gate_fail": "repair" if retry == "repair_once" else "human",
@@ -101,6 +108,7 @@ def initialize(
     prepare_gate="raise SystemExit(0)",
     hard_analyze=False,
     max_cost_usd=None,
+    analyze_gate="raise SystemExit(0)",
 ):
     source = tmp_path / "campaign"
     source.mkdir()
@@ -113,6 +121,7 @@ def initialize(
                 prepare_gate,
                 hard_analyze,
                 max_cost_usd,
+                analyze_gate,
             )
         )
     )
@@ -253,7 +262,8 @@ def make_runner(store, fake_worker, fake_reviewer, statuses=None):
         store,
         project,
         RunnerConfig(
-            worker_factory=lambda model, timeout: fake_worker,
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: fake_worker,
             jobs=jobs,
             reviewer=fake_reviewer,
         ),
@@ -273,7 +283,8 @@ def test_hard_stage_uses_hard_model(tmp_path):
         store,
         project,
         RunnerConfig(
-            worker_factory=lambda model, timeout: (
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: (
                 models.append(model) or fake_worker
             ),
             jobs=JobController(store, project, FakeJobBackend()),
@@ -285,6 +296,171 @@ def test_hard_stage_uses_hard_model(tmp_path):
     runner.run_once()
     assert models == ["kimi-code-plan-cn/k3.1-pro#high"]
     assert fake_reviewer.calls[0][0] == "opencode-go/deepseek-v4.1-flash"
+
+
+def test_agent_alias_executes_complete_stage(tmp_path):
+    source = tmp_path / "campaign"
+    source.mkdir()
+    payload = protocol_payload()
+    payload["stages"] = [
+        {
+            "id": "analyze",
+            "type": "agent",
+            "prompt": "prompts/analyze.md",
+            "outputs": ["work/analysis.md"],
+            "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+    ]
+    payload["reviewer"] = {"enabled": False}
+    protocol = source / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = source / "brief.md"
+    brief.write_text("brief")
+    (source / "prompts").mkdir()
+    (source / "prompts" / "analyze.md").write_text("Analyze")
+    store = CampaignStore(tmp_path / "project" / "runs" / "runner")
+    store.initialize(protocol, brief)
+    store.approve_start("tao", "start")
+    worker = FakeWorker(store.run_dir)
+    result = make_runner(store, worker, None).run_once()
+    assert result["state"]["state"] == "completed"
+    assert len(worker.calls) == 1
+
+
+def test_daemon_worker_invocations_close_before_next_route(tmp_path):
+    source = tmp_path / "campaign"
+    source.mkdir()
+    payload = protocol_payload()
+    payload["stages"] = [
+        {
+            "id": f"stage-{index}",
+            "type": "agent",
+            "model": model,
+            "prompt": "prompts/analyze.md",
+            "outputs": ["work/analysis.md"],
+            "gate": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+        for index, model in enumerate(
+            ("claude-code/sonnet", "codex/gpt-5.6-sol", "claude-code/sonnet"),
+            start=1,
+        )
+    ]
+    payload["reviewer"] = {"enabled": False}
+    protocol = source / "protocol.json"
+    protocol.write_text(json.dumps(payload))
+    brief = source / "brief.md"
+    brief.write_text("brief")
+    (source / "prompts").mkdir()
+    (source / "prompts" / "analyze.md").write_text("Analyze")
+    store = CampaignStore(tmp_path / "project" / "runs" / "runner")
+    store.initialize(protocol, brief)
+    store.approve_start("tao", "start")
+    active_holders = []
+    closed_routes = []
+
+    class RouteWorker(FakeWorker):
+        def __init__(self, run_dir, model):
+            if active_holders:
+                raise RuntimeError("different route refused while old holder remains")
+            super().__init__(run_dir)
+            self.model = model
+            active_holders.append(model)
+
+        def close(self):
+            closed_routes.append(self.model)
+            active_holders.remove(self.model)
+
+    project = store.run_dir.parent.parent
+    runner = CampaignRunner(
+        store,
+        project,
+        RunnerConfig(
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: RouteWorker(store.run_dir, model),
+            jobs=JobController(store, project, FakeJobBackend()),
+            reviewer=None,
+        ),
+    )
+
+    for _ in range(3):
+        runner.run_once()
+
+    assert store.load().state == "completed"
+    assert active_holders == []
+    assert len(closed_routes) == 3
+
+
+def test_worker_executor_closes_when_run_crashes(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    closed = []
+
+    class CrashingWorker:
+        def run(self, *args, **kwargs):
+            raise RuntimeError("crash")
+
+        def close(self):
+            closed.append(True)
+
+    runner = make_runner(store, CrashingWorker(), FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+
+    assert closed == [True, True]
+
+
+def test_receipt_and_queue_keep_returned_session_identity(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    worker = FakeWorker(store.run_dir)
+    original = worker.run
+
+    def identified(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result.session_identity = SessionIdentity(
+            "claude-code", "sonnet", "same", "project", "worker", "policy"
+        )
+        return result
+
+    worker.run = identified
+    runner = make_runner(store, worker, FakeReviewer())
+    runner.run_once()
+    store.approve("tao", "start")
+    runner.run_once()
+    receipt = json.loads(
+        (store.attempts_dir / "analyze" / "001" / "worker_result.json").read_text()
+    )
+    assert receipt["session_identity"]["client"] == "claude-code"
+
+
+def test_distill_queue_does_not_use_nonblocking_campaign_lock(tmp_path, monkeypatch):
+    store = initialize(tmp_path)
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+    stage = next(stage for stage in runner.protocol.stages if stage.id == "analyze")
+    attempt_dir = runner._attempt_dir(stage, 1)
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "worker_result.json").write_text(json.dumps({
+        "session_id": "session-1",
+        "session_identity": {
+            "client": "claude-code",
+            "model": "sonnet",
+            "project_digest": "project",
+            "role": "worker",
+            "policy_digest": "policy",
+        },
+    }))
+
+    @contextmanager
+    def busy_campaign_lock():
+        raise CampaignBusyError("campaign lock is busy")
+        yield
+
+    monkeypatch.setattr(store, "lock", busy_campaign_lock)
+
+    runner._queue_distillation(stage, 1, None)
+
+    assert store.distill_queue_path.is_file()
 
 
 def test_startup_approval_is_required_before_any_stage(tmp_path):
@@ -306,11 +482,30 @@ def test_project_mismatch_is_rejected(tmp_path):
             store,
             wrong_project,
             RunnerConfig(
-                worker_factory=lambda model, timeout: FakeWorker(store.run_dir),
+                worker_factory=lambda model, timeout, resume_from=None,
+                resume_artifact=None: FakeWorker(store.run_dir),
                 jobs=JobController(store, wrong_project, FakeJobBackend()),
                 reviewer=FakeReviewer(),
             ),
         )
+
+
+def test_project_directory_is_realpath_before_launch(tmp_path):
+    store = initialize(tmp_path)
+    project = store.run_dir.parent.parent
+    alias = tmp_path / "project-alias"
+    alias.symlink_to(project, target_is_directory=True)
+    runner = CampaignRunner(
+        store,
+        alias,
+        RunnerConfig(
+            worker_factory=lambda model, timeout, resume_from=None,
+            resume_artifact=None: FakeWorker(store.run_dir),
+            jobs=JobController(store, project, FakeJobBackend()),
+            reviewer=FakeReviewer(),
+        ),
+    )
+    assert runner.project_dir == project.resolve()
 
 
 def test_full_campaign_with_human_gates(tmp_path):
@@ -417,10 +612,183 @@ def test_reviewer_followup_limit_is_enforced(tmp_path):
     store.approve("tao", "start")
     result = runner.run_once()
     assert result["state"]["state"] == "waiting_human"
-    receipt = json.loads(
-        (store.attempts_dir / "analyze" / "001" / "receipt.json").read_text()
-    )
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    receipt = json.loads(receipt_path.read_text())
     assert any("followups" in error for error in receipt["errors"])
+
+
+def test_decline_followups_passes_stage_and_queues_distillation(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    state = runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert state.state == "queued"
+    assert state.stage == "dock"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["status"] == "passed"
+    assert receipt["human_decision"]["decision"] == "decline_followups"
+    decision_event = store.read_events()[-1]
+    assert decision_event["human_decision"]["stage"] == "analyze"
+    assert decision_event["human_decision"]["attempt"] == receipt["attempt"]
+    queued = [
+        json.loads(line) for line in store.distill_queue_path.read_text().splitlines()
+    ]
+    assert queued[-1]["session_ids"] == ["ses_fake", "ses_review"]
+
+
+def test_decline_followups_retry_repairs_crash_after_transition(
+    tmp_path, monkeypatch
+):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+    from campaign_runner import runner as runner_module
+
+    real_write_receipt = runner_module.write_receipt
+    calls = 0
+
+    def crash_once(path, payload):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("simulated crash after transition")
+        return real_write_receipt(path, payload)
+
+    monkeypatch.setattr(runner_module, "write_receipt", crash_once)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert store.load().state == "queued"
+    state = runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert state.state == "queued"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    assert json.loads(receipt_path.read_text())["status"] == "passed"
+    queued = store.distill_queue_path.read_text().splitlines()
+    assert len(queued) == 1
+
+
+def test_decline_followups_concurrent_state_change_has_no_side_effects(
+    tmp_path, monkeypatch
+):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+    receipt_path = sorted((store.attempts_dir / "analyze").glob("*/receipt.json"))[-1]
+    original_receipt = receipt_path.read_bytes()
+    real_transition = store.transition_if_current
+
+    def concurrent_approval(*args, **kwargs):
+        store.approve("other", "concurrent decision")
+        return real_transition(*args, **kwargs)
+
+    monkeypatch.setattr(store, "transition_if_current", concurrent_approval)
+
+    with pytest.raises(CampaignStateChangedError):
+        runner.decline_followups("tao", "stage evidence is sufficient")
+
+    assert store.load().state == "queued"
+    assert receipt_path.read_bytes() == original_receipt
+    assert not store.distill_queue_path.exists()
+
+
+def test_decline_followups_refuses_blocking_review(tmp_path):
+    store = initialize(tmp_path)
+    store.approve_start("tao", "start")
+    evidence = store.run_dir / "work" / "analysis.md"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text("analysis")
+    blocker = {
+        "severity": "blocker",
+        "claim": "unsupported",
+        "evidence": ["work/analysis.md"],
+        "suggested_action": "fix",
+    }
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(issues=[blocker], followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    with pytest.raises(RunnerError, match="blocker"):
+        runner.decline_followups("tao", "accept as is")
+
+    assert store.load().state == "waiting_human"
+
+
+def test_decline_followups_refuses_failed_stage_gate(tmp_path):
+    store = initialize(tmp_path, analyze_gate="raise SystemExit(4)")
+    store.approve_start("tao", "start")
+    followup = {
+        "observation": "needs a control",
+        "proposed_test": "run the control",
+        "estimated_core_hours": 1,
+        "reason": "disambiguate",
+    }
+    runner = make_runner(
+        store,
+        FakeWorker(store.run_dir),
+        FakeReviewer(followups=[followup]),
+    )
+    runner.run_once()
+    store.approve("tao", "start")
+    assert runner.run_once()["state"]["state"] == "waiting_human"
+
+    with pytest.raises(RunnerError, match="stage gate failed"):
+        runner.decline_followups("tao", "accept as is")
+
+    assert store.load().state == "waiting_human"
 
 
 def test_gate_failure_repairs_once_then_waits(tmp_path):
@@ -440,10 +808,33 @@ def test_gate_failure_repairs_once_then_waits(tmp_path):
 def test_budget_exceeded_halts(tmp_path):
     store = initialize(tmp_path, max_tokens=1)
     store.approve_start("tao", "start")
-    store.update_usage({"input_tokens": 2}, "test usage")
+    store.update_usage(
+        {"input_tokens": 2, "uncached_input_tokens": 2}, "test usage"
+    )
     runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
     result = runner.run_once()
     assert result["state"]["state"] == "halted"
+
+
+def test_cached_codex_input_does_not_exhaust_token_budget(tmp_path):
+    store = initialize(tmp_path, max_tokens=100_000)
+    store.approve_start("tao", "start")
+    store.update_usage(
+        {
+            "input_tokens": 284_906,
+            "uncached_input_tokens": 29_546,
+            "cache_read_tokens": 255_360,
+            "output_tokens": 2_000,
+            "reasoning_tokens": 3_000,
+        },
+        "recorded Codex usage",
+    )
+    runner = make_runner(store, FakeWorker(store.run_dir), FakeReviewer())
+
+    result = runner.run_once()
+
+    assert result["state"]["state"] == "waiting_human"
+    assert store.load().usage["cache_read_tokens"] == 255_360
 
 
 def test_cost_budget_exceeded_halts(tmp_path):

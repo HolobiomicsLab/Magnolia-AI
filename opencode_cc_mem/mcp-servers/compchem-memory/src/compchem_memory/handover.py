@@ -38,6 +38,11 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from compchem_memory.atomic_io import atomic_write_text
+from compchem_memory.writer_lease import (
+    file_fingerprint,
+    fingerprint_unchanged,
+    project_writer_lease,
+)
 
 HANDOVER_STATE_FILE = ".handover-state.md"
 HANDOVER_CURSOR_FILE = ".handover-cursor.json"       # legacy single-cursor file (migrated away)
@@ -561,6 +566,19 @@ def _write_session_cursor(
     atomic_write_text(d / f"{sid}.json", json.dumps(payload) + "\n")
 
 
+def _write_cursor_if_unchanged(
+    store: Path, sid: str, record: dict | None, cursor: str | None, **fields
+) -> bool:
+    """Seal or refresh a cursor only if no other writer moved it meanwhile."""
+    with project_writer_lease(store):
+        if _read_cursor_record(store, sid) != record:
+            print(f"[handover] cursor for {sid} changed during the sweep; not sealed",
+                  file=sys.stderr)
+            return False
+        _write_session_cursor(store, sid, cursor, **fields)
+        return True
+
+
 def _should_skip_export(sid: str, record: dict | None,
                         updates: dict[str, int] | None,
                         latest_sid: str) -> bool:
@@ -978,7 +996,6 @@ def generate_handover(
         session_activity,
     )
     from compchem_memory.llm import call_llm
-
     from compchem_memory import opencode_cli
 
     llm = llm or call_llm
@@ -1005,10 +1022,11 @@ def generate_handover(
 
     # Prefer the v2 DB / plugin transcript dump over the export CLI. The CLI
     # resolved from PATH is v1.18.35 in the memory-server process, so
-    # `opencode export` cannot read v2 sessions. In v2 mode the exporter never
-    # falls back to that v1 CLI (2026-11-16: it could take down the MCP
-    # connection); under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with
-    # --standalone; v1-only setups still use the CLI as before.
+    # `opencode export` cannot read v2 sessions and the handover silently
+    # merged nothing after the v2 switch. In v2 mode the exporter never falls
+    # back to that v1 CLI (2026-11-16: it could take down the MCP connection);
+    # under MAGNOLIA_OPENCODE_V2 it uses the v2 binary with --standalone;
+    # v1-only setups still use the CLI as before.
     legacy_exporter = exporter or plugin_dump_exporter(str(store))
     export_session_ref = _session_exporter(str(store), legacy_exporter)
 
@@ -1038,12 +1056,17 @@ def generate_handover(
               f"all {len(refs)} sessions", file=sys.stderr)
 
     state_path = store / HANDOVER_STATE_FILE
+    # Fingerprint before reading so a concurrent state write cannot be mistaken
+    # for the view on which this merge was based.
+    state_read = file_fingerprint([state_path])
     base = ""
     if state_path.exists():
         try:
             base = state_path.read_text()
         except OSError:
             base = ""
+    # Exports and merges call subprocesses and an LLM outside the project writer
+    # lease; each write below re-validates the state and cursor it was based on.
 
     # Schema v2 (2026-10-08): merge-time hold-back. Items unchanged across
     # HOLD_BACK_MIN_UNCHANGED_MERGES merges with ≥ HOLD_BACK_MIN_SESSIONS_SINCE
@@ -1091,11 +1114,13 @@ def generate_handover(
             new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
             if not new_msgs:
                 if can_seal:
-                    _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+                    _write_cursor_if_unchanged(
+                        store, sid, record, cursor, sealed_at_ms=t0_ms)
                 elif not ref.sealable:
-                    _write_session_cursor(
+                    _write_cursor_if_unchanged(
                         store,
                         sid,
+                        record,
                         cursor,
                         fingerprint=fingerprint,
                         closed=hook_session_closed(
@@ -1110,11 +1135,12 @@ def generate_handover(
             continue
         if not transcript.strip():
             if can_seal:
-                _write_session_cursor(store, sid, cursor, sealed_at_ms=t0_ms)
+                _write_cursor_if_unchanged(store, sid, record, cursor, sealed_at_ms=t0_ms)
             elif not ref.sealable:
-                _write_session_cursor(
+                _write_cursor_if_unchanged(
                     store,
                     sid,
+                    record,
                     cursor,
                     fingerprint=fingerprint,
                     closed=hook_session_closed(
@@ -1166,22 +1192,30 @@ def generate_handover(
         if merged is None:
             break        # LLM failed or returned non-handover output — stop; state + cursors for prior sessions stay consistent
 
-        merged = _post_merge_validate(merged, base, store, project_dir)
-        base = merged.strip()
-        merged_infos.append((sid, _session_ref_date(ref), _topic_from_transcript(transcript)))
-        header = _handover_header(merged_infos, len(merged_infos))
-        atomic_write_text(state_path, header + "\n\n" + base + "\n")
-        _write_session_cursor(
-            store,
-            sid,
-            _last_message_id(new_msgs) or cursor,
-            sealed_at_ms=(t0_ms if can_seal else None),
-            fingerprint=fingerprint,
-            closed=(
-                hook_session_closed(store, ref, fingerprint=fingerprint)
-                if not ref.sealable else None
-            ),
-        )
+        with project_writer_lease(project_dir):
+            if (not fingerprint_unchanged(state_read)
+                    or _read_cursor_record(store, sid) != record):
+                print(f"[handover] state or cursor changed during the merge of {sid}; "
+                      "merge not written, the next sweep retries", file=sys.stderr)
+                break
+            merged = _post_merge_validate(merged, base, store, project_dir)
+            base = merged.strip()
+            merged_infos.append(
+                (sid, _session_ref_date(ref), _topic_from_transcript(transcript)))
+            header = _handover_header(merged_infos, len(merged_infos))
+            atomic_write_text(state_path, header + "\n\n" + base + "\n")
+            state_read = file_fingerprint([state_path])
+            _write_session_cursor(
+                store,
+                sid,
+                _last_message_id(new_msgs) or cursor,
+                sealed_at_ms=(t0_ms if can_seal else None),
+                fingerprint=fingerprint,
+                closed=(
+                    hook_session_closed(store, ref, fingerprint=fingerprint)
+                    if not ref.sealable else None
+                ),
+            )
         wrote = True
 
     if skipped:

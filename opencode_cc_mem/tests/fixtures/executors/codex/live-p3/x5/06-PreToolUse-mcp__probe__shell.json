@@ -1,0 +1,21 @@
+{
+  "class": "no-policy",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": null,
+  "reason": "probe policy missing or unreadable",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "command": "inner"
+    },
+    "tool_name": "mcp__probe__shell",
+    "tool_use_id": "exec-497d7468-36ba-4123-9808-e2743fc28c3f",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-33-16-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  }
+}

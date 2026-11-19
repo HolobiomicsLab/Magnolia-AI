@@ -33,31 +33,33 @@ def _queue_records(run_dir: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _done_sessions(control_dir: Path) -> set[str]:
+def _done_sessions(control_dir: Path) -> set[tuple[str, str]]:
     path = control_dir / "distill-done.jsonl"
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         return set()
-    done: set[str] = set()
+    done: set[tuple[str, str]] = set()
     for line in lines:
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
             continue
         if isinstance(value, dict) and value.get("session_id"):
-            done.add(str(value["session_id"]))
+            done.add((str(value.get("harness") or "opencode"), str(value["session_id"])))
     return done
 
 
-def _append_done(control_dir: Path, session_id: str, result: Mapping[str, Any]) -> None:
+def _append_done(control_dir: Path, session: Any, result: Mapping[str, Any]) -> None:
     path = control_dir / "distill-done.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "ts": utc_now(),
-        "session_id": session_id,
+        "harness": session.harness,
+        "session_id": session.session_id,
+        "session_key": session.key,
         "status": result.get("status", "committed"),
-        "saved": result.get("saved", []),
+        "saved": [str(item) for item in result.get("saved", [])],
     }
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
@@ -96,37 +98,72 @@ def drain_queue(
         raise DistillError(f"project directory does not exist: {project}")
     records = _queue_records(run)
     done = _done_sessions(run / "control")
-    sessions: list[str] = []
+    from compchem_memory.transcript_source import SessionRef
+
+    sessions: list[tuple[SessionRef, str | dict[str, str]]] = []
+    recorded_unavailable: list[Any] = []
     for record in records:
-        values = record.get("session_ids", [])
-        if not isinstance(values, list):
-            raise DistillError("distill queue session_ids must be an array")
-        for session_id in values:
-            if isinstance(session_id, str) and session_id not in done:
-                sessions.append(session_id)
-    sessions = list(dict.fromkeys(sessions))
+        neutral_values = record.get("sessions", [])
+        legacy_values = record.get("session_ids", [])
+        unavailable_values = record.get("unavailable", [])
+        if not all(
+            isinstance(values, list)
+            for values in (neutral_values, legacy_values, unavailable_values)
+        ):
+            raise DistillError("distill queue sessions must be arrays")
+        recorded_unavailable.extend(unavailable_values)
+        for value in neutral_values:
+            if not isinstance(value, Mapping):
+                raise DistillError("distill queue session must be an object")
+            harness = value.get("harness")
+            session_id = value.get("session_id")
+            key = value.get("key")
+            if not all(isinstance(item, str) and item for item in (harness, session_id, key)):
+                raise DistillError("distill queue session identity is incomplete")
+            ref = SessionRef(harness, session_id, key, None, None, False)
+            display = {"harness": harness, "session_id": session_id, "key": key}
+            if (harness, session_id) not in done:
+                sessions.append((ref, display))
+        for session_id in legacy_values:
+            if not isinstance(session_id, str):
+                continue
+            ref = SessionRef("opencode", session_id, session_id, None, None, True)
+            if (ref.harness, ref.session_id) not in done:
+                sessions.append((ref, session_id))
+    unique: dict[tuple[str, str], tuple[SessionRef, str | dict[str, str]]] = {}
+    for ref, display in sessions:
+        unique.setdefault((ref.harness, ref.session_id), (ref, display))
+    sessions = list(unique.values())
     if limit is not None:
         sessions = sessions[:limit]
-    completed: list[str] = []
-    unavailable: list[str] = []
-    for session_id in sessions:
+    completed: list[Any] = []
+    unavailable: list[Any] = list(recorded_unavailable)
+    retryable: list[Any] = []
+    for session, display in sessions:
         result = distill_session_transcript(
             str(project / ".magnolia"),
-            session_id,
+            display if isinstance(display, str) else session,
             commit=commit,
             exporter=exporter,
             distiller=distiller,
         )
         if result is None:
-            unavailable.append(session_id)
+            unavailable.append(display)
+            continue
+        if result.get("status") == "skipped":
+            if result.get("retry") is True:
+                retryable.append(display)
+            else:
+                unavailable.append(display)
             continue
         if commit:
-            _append_done(run / "control", session_id, result)
-        completed.append(session_id)
+            _append_done(run / "control", session, result)
+        completed.append(display)
     return {
         "queued": len(records),
         "sessions": len(sessions),
         "completed": completed,
         "unavailable": unavailable,
+        "retryable": retryable,
         "commit": commit,
     }

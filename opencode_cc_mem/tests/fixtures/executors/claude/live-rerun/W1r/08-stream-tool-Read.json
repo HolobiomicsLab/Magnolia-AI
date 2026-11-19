@@ -1,0 +1,21 @@
+{
+  "is_error": false,
+  "result_head": "1\tdraft-v1\n2\t",
+  "tool_result_meta": [
+    {
+      "id": "toolu_018TFm6Ae5WrXkQUfZL8pbLs",
+      "permission_decision": {
+        "decision": "accept",
+        "reason_type": "rule",
+        "source": "config"
+      }
+    }
+  ],
+  "tool_use": {
+    "id": "toolu_018TFm6Ae5WrXkQUfZL8pbLs",
+    "input": {
+      "file_path": "<G>/project/run/work/draft.txt"
+    },
+    "name": "Read"
+  }
+}

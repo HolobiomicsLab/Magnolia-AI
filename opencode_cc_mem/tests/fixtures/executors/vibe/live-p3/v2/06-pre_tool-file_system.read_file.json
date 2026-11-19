@@ -1,0 +1,19 @@
+{
+  "class": "read",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "15c6689ab4433cee46bc64669d367927e6f009273174b3b85249fcb4e0a3353e",
+  "reason": "read: resolved path matches a deny pattern",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "pre_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "QNnTrRctq",
+    "tool_input": {
+      "file_path": "alias-env"
+    },
+    "tool_name": "file_system.read_file",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "arguments": "{\"code\":\"return require(\\\"fs\\\").readFileSync(\\\"secret/.env\\\", \\\"utf8\\\")\"}",
+  "call_id": "call_5e8cb9728d9f4020b292ea694547b15a",
+  "id": "fc_04ccab6819dd2c99016afaa3bfa30887d2a9dc3ca7f1c2ff92",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794810815.6387885,
+    "turn_id": "01a1e30f-5966-72e0-928d-ac5bfd5f07bc"
+  },
+  "name": "js",
+  "namespace": "mcp__cua_repl",
+  "type": "function_call"
+}

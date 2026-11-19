@@ -1,0 +1,41 @@
+```json
+{
+  "steps": [
+    {
+      "tool": "tools.file_system.read_file",
+      "success": true,
+      "error": { "name": null, "code": null, "message": null }
+    },
+    {
+      "tool": "tools.file_system.write_file",
+      "success": true,
+      "error": { "name": null, "code": null, "message": null }
+    },
+    {
+      "tool": "tools.file_system.write_file",
+      "success": false,
+      "error": { "name": "ToolError", "code": "tool_skipped", "message": "Magnolia required role policy denied this operation." }
+    },
+    {
+      "tool": "tools.file_system.read_file",
+      "success": false,
+      "error": { "name": "ToolError", "code": "tool_skipped", "message": "Magnolia required role policy denied this operation." }
+    },
+    {
+      "tool": "tools.file_system.bash",
+      "success": false,
+      "error": { "name": "ToolError", "code": "tool_skipped", "message": "Magnolia required role policy denied this operation." }
+    }
+  ],
+  "step6": {
+    "typeof": {
+      "fetch": "function",
+      "process": "undefined",
+      "Deno": "undefined",
+      "require": "undefined",
+      "Buffer": "undefined"
+    },
+    "importNodeFs": { "name": "Error", "message": "Not supported" }
+  }
+}
+```

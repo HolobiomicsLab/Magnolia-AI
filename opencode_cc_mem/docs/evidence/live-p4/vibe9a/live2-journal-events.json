@@ -1,0 +1,52 @@
+[
+ {
+  "seq": 4,
+  "kind": "hook",
+  "hook": "pre_agent_turn",
+  "bindings": [
+   "magnolia-prompt",
+   "session_start_context"
+  ],
+  "decision": "continue"
+ },
+ {
+  "seq": 10,
+  "kind": "llm_call",
+  "tool_catalog": {
+   "revision": 0,
+   "tools": [
+    "todo",
+    "unified_harness_scratchpad",
+    "search_tool_functions",
+    "run_typescript",
+    "read_file",
+    "write_file",
+    "edit",
+    "bash",
+    "skill"
+   ],
+   "type": "replace"
+  },
+  "tool_results_in_input": []
+ },
+ {
+  "seq": 14,
+  "kind": "llm_call",
+  "tool_catalog": {
+   "revision": 0,
+   "type": "keep"
+  },
+  "tool_results_in_input": [
+   "{\"a\":{\"success\":true,\"typeofFetch\":\"function\",\"fetchName\":\"\",\"fetchString\":\"function () { throw new Error(\\\"fetch() is not supported in the sandbox. Use a tool to make HTTP requests instead.\\\"); }\"},\"b\":{\"success\":false,\"errorName\":\"Error\",\"errorMessage\":\"fetch() is not supported in the sandbox. Use a tool to make HTTP requests instead.\"},\"c\":{\"success\":true,\"propNames\":[\"AggregateError\",\"Array\",\"ArrayBuffer\",\"AsyncDisposableStack\",\"Atomics\",\"BigInt\",\"BigInt64Array\",\"BigUint64Array\",\"Boolean\",\"DataView\",\"Date\",\"DisposableStack\",\"Error\",\"EvalError\",\"FinalizationRegistry\",\"Float16Array\",\"Float32Array\",\"Float64Array\",\"Function\",\"Infinity\",\"Int16Array\",\"Int32Array\",\"Int8Array\",\"Intl\",\"Iterator\",\"JSON\",\"Map\",\"Math\",\"NaN\",\"Number\",\"Object\",\"Promise\",\"Proxy\",\"RangeError\",\"ReferenceError\",\"Reflect\",\"RegExp\",\"Set\",\"SharedArrayBuffer\",\"String\",\"SuppressedError\",\"Symbol\",\"SyntaxError\",\"Temporal\",\"ToolError\",\"TypeError\",\"URIError\",\"Uint16Array\",\"Uint32Array\",\"Uint8Array\",\"Uint8ClampedArray\",\"WeakMap\",\"WeakRef\",\"WeakSet\",\"WebAssembly\",\"clearImmediate\",\"clearInterval\",\"clearTimeout\",\"console\",\"crypto\",\"decodeURI\",\"decodeURIComponent\",\"encodeURI\",\"encodeURIComponent\",\"escape\",\"eval\",\"fetch\",\"globalThis\",\"isFinite\",\"isNaN\",\"parseFloat\",\"parseInt\",\"performance\",\"setImmediate\",\"setInterval\",\"setTimeout\",\"undefined\",\"unescape\"]}}"
+  ]
+ },
+ {
+  "seq": 18,
+  "kind": "hook",
+  "hook": "post_agent_turn",
+  "bindings": [
+   "magnolia-turn-end"
+  ],
+  "decision": "accept"
+ }
+]

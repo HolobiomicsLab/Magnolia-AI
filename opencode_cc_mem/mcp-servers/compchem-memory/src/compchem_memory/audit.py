@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from compchem_memory.writer_lease import project_writer_lease
+
 
 def run_audit(project_dir: str, lookback_n_sessions: int = 5) -> str:
     """Read the most recent N session logs; compute compliance metrics per session;
@@ -31,7 +33,8 @@ def run_audit(project_dir: str, lookback_n_sessions: int = 5) -> str:
 
     report_path = pd / ".magnolia" / "audit-report.md"
     new_content = "# Audit Report\n\n" + "\n\n---\n\n".join(blocks) + "\n"
-    report_path.write_text(new_content)
+    with project_writer_lease(pd):
+        report_path.write_text(new_content)
     return str(report_path)
 
 

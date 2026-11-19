@@ -1,0 +1,19 @@
+{
+  "class": "read",
+  "decision": "allow",
+  "mode": "enforce",
+  "policy_sha256": "d4417cd05c05cfa2a69d15c957a660d4ae415b3c5f66198bdffcbd9f67497d49",
+  "reason": "inside read roots",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-vibe-DhLzfS/proj",
+    "hook_event_name": "pre_tool",
+    "parent_session_id": null,
+    "session_id": "ses-fixture-1",
+    "tool_call_id": "7NVDhqpxz",
+    "tool_input": {
+      "file_path": "README.md"
+    },
+    "tool_name": "file_system.read_file",
+    "transcript_path": "/HOME/<elided>"
+  }
+}

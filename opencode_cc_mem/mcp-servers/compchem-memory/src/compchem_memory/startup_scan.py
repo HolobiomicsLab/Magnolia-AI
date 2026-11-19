@@ -37,7 +37,18 @@ def scan_and_distill(project_dir: str) -> dict[str, Any]:
     """
     pd = Path(project_dir)
     store = pd / ".magnolia"
-    if is_llm_available() and _has_dialogue_source(store):
+    from compchem_memory.hook.background import drain_opencode_payloads
+
+    has_llm = is_llm_available()
+    has_dialogue = has_llm and _has_dialogue_source(store)
+    if not has_dialogue:
+        from compchem_memory.llm import resolve_route
+
+        if resolve_route("critic") is None:
+            drain_opencode_payloads(store, critic_skip_reason="no route")
+        else:
+            drain_opencode_payloads(store)
+    if has_dialogue:
         result = _distill_dialogue(store)
     else:
         result = _distill_tool_events(pd)
@@ -105,7 +116,10 @@ def _distill_tool_events(pd: Path) -> dict[str, Any]:
             continue
         is_active = session_path.stem == active_id
         try:
-            extractor.commit(session_path, str(pd))
+            saved = extractor.commit(session_path, str(pd))
+            if saved is None:
+                skipped += 1
+                continue
             if not is_active:
                 marker.write_text(
                     json.dumps({"distilled_at": _now_iso(), "events_path": session_path.name})

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "client": "codex",
+  "implementation": "opencode_cc_mem/campaign_runner/executors/codex.py",
+  "registered_roles": ["worker", "reviewer", "helper", "evaluator"],
+  "enabled_contract": "helper/evaluator no-tools only; worker/reviewer D2-refused",
+  "parser_evidence": [
+    "opencode_cc_mem/tests/fixtures/executors/codex/live-p3/x1/",
+    "opencode_cc_mem/tests/fixtures/executors/codex/live-p3/x4b/",
+    "opencode_cc_mem/tests/fixtures/executors/codex/live-p3/x9/"
+  ]
+}

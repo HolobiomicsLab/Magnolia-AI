@@ -26,3 +26,11 @@
    Kimi and providers with automatic caching retain the original plain string.
 
 No critic, handover merge, consolidation or promotion caller supplies `cache_prefix`.
+
+## Explicit-route failure flow
+
+`call_llm` and `call_route` keep an explicit OpenRouter route on missing-key,
+HTTP 429/5xx, transport and empty-response failures. They write a typed error,
+surface one notice per session and use no other provider unless both direct
+fallback settings name that provider and model. An empty HTTP 200 follows the
+same failure and configured-fallback path as an upstream HTTP error.

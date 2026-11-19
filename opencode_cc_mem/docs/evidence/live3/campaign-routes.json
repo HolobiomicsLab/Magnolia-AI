@@ -1,0 +1,75 @@
+{
+  "opencode-control": {
+    "routes": {
+      "reviewer:work": {
+        "allowed_route": true,
+        "client": "opencode",
+        "model": "openrouter/z-ai/glm-5.3-flash",
+        "subscription_key": "opencode:openrouter"
+      },
+      "worker:work": {
+        "allowed_route": true,
+        "client": "opencode",
+        "model": "openrouter/deepseek/deepseek-v4.1-flash",
+        "subscription_key": "opencode:openrouter"
+      }
+    },
+    "service_roles": [
+      "reviewer",
+      "worker"
+    ]
+  },
+  "opencode-reviewer-only": {
+    "routes": {
+      "reviewer:work": {
+        "allowed_route": true,
+        "client": "opencode",
+        "model": "openrouter/deepseek/deepseek-v4.1-flash",
+        "subscription_key": "opencode:openrouter"
+      },
+      "worker:work": {
+        "allowed_route": true,
+        "client": "claude-code",
+        "model": "haiku",
+        "subscription_key": "claude-code"
+      }
+    },
+    "service_roles": [
+      "reviewer"
+    ]
+  },
+  "worker-claude-code-review": {
+    "routes": {
+      "reviewer:work": {
+        "allowed_route": true,
+        "client": "codex",
+        "model": "gpt-5.6-luna",
+        "subscription_key": "codex"
+      },
+      "worker:work": {
+        "allowed_route": true,
+        "client": "claude-code",
+        "model": "haiku",
+        "subscription_key": "claude-code"
+      }
+    },
+    "service_roles": []
+  },
+  "worker-codex-review": {
+    "routes": {
+      "reviewer:work": {
+        "allowed_route": true,
+        "client": "claude-code",
+        "model": "haiku",
+        "subscription_key": "claude-code"
+      },
+      "worker:work": {
+        "allowed_route": true,
+        "client": "codex",
+        "model": "gpt-5.6-luna",
+        "subscription_key": "codex"
+      }
+    },
+    "service_roles": []
+  }
+}

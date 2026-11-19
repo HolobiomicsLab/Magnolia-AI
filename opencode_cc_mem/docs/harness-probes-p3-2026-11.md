@@ -1,0 +1,304 @@
+# Plan 3 Task 0 capability gate — offline record, 16 November 2026
+
+Status: **all Claude Code, Codex, and Vibe roles are refused**. The owner has not authorised live Task 0 Steps 2–5. This record uses only the already committed P0 and round 6 evidence; waiting for a live run is not acceptance.
+
+Machine-readable source: `campaign_runner/executors/capabilities-p3.json` (schema 1, generated from revision `b7504a580631d83ef424819e5659618dde87b1cc`). The loader rejects incomplete client identity, unknown statuses, absent observed artifacts, and synthetic artifacts claimed as observed.
+
+## Initial gate
+
+`identity` is observed for all rows from `docs/harness-probes-2026-11.md`. Vibe's recorded export establishes only the counter shape from one non-resumed free-model run; it does not establish parent/subagent inclusion, resume deltas, or paid cost semantics. Usage semantics therefore remain unknown for all three clients. Constructed quota controls are `synthetic-only` and do not certify an account signal.
+
+| Client | Role | Gate | Blocking cells |
+|---|---|---|---|
+| Claude Code | worker | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Claude Code | reviewer | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Claude Code | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Claude Code | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Codex | worker | **refused (D2)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Codex | reviewer | **refused (D2)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Codex | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Codex | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | worker | **refused (D4)** | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | reviewer | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | service-less helper | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+| Vibe | evaluator | refused | argv, model_delivery, discovery_dir, trust, hook_policy_digest, native_schemas, allowed_actions, denied_actions, resume, caps, usage_semantics |
+
+D2 refuses both Codex campaign roles until the full normal-trust gate passes; a read-only sandbox or changed working directory is insufficient. D4 refuses Vibe worker edits until guarded edits and the complete path gate pass. P0 Codex and Vibe runs used `--dangerously-bypass-hook-trust` and `--trust`; they do not satisfy the normal persisted-trust cell.
+
+## Evidence retained offline
+
+- Executable/version/SHA-256 identities: `docs/harness-probes-2026-11.md#executables`.
+- Small recorded derivatives: `tests/fixtures/executors/<client>/recorded/`; each names its committed P0 source.
+- Vibe's recorded export preserves parent and subagent `input_tokens`, `output_tokens`, `cached_input_tokens`, and `total_tokens`.
+- Parser-only quota controls: `tests/fixtures/executors/<client>/synthetic/quota.json`, each marked `"synthetic": true`.
+- Round 6 context only: `docs/harness-acceptance-2026-11.md` and `docs/harness-campaign-2026-11-15.md`. These runs did not prove the complete role matrix.
+
+## Task 6 offline enforcement evidence
+
+Required mode is recognized from `MAGNOLIA_HOOK_POLICY_REQUIRED=1` before stdin or policy parsing. The real hook CLI now emits Claude/Codex `permissionDecision: deny` or Vibe `decision: deny` for malformed payloads, missing/invalid/schema-mismatched policy, unknown tools, and disallowed targets. A render exception, empty denial stdout, or failed denial write returns nonzero; this is not promoted to client acceptance because normal-trust fail-closed behavior remains unobserved.
+
+Native target decoding remains `synthetic-only`: Claude `Read.file_path`, `Glob.{path,pattern}`, `Grep.{path,glob}`, `Edit.file_path`, and `Write.file_path` are in `tests/fixtures/executors/claude/synthetic/native-tools.json`; Codex only `Read.file_path` is in its corresponding fixture; Vibe `file_system.read_file.path`, `file_system.write_file.path`, and `file_system.edit.path` are in its corresponding fixture. Patch, notebook, move, unrecognized inputs, and every other uncited shape deny in required mode. The neutral policy tests cover multi-target patch/move semantics without claiming a client wire shape.
+
+All client × role rows remain **refused**. The synthetic implementation evidence changes `native_schemas` from `unknown` to `synthetic-only`; it does not satisfy the observed prerequisite or release the live gate.
+
+## Live work still owed
+
+After the owner's explicit go, run the following ledger separately for each client. The hard cap is ten physical invocations per client across Task 0 and acceptance; every launch, resume, empty-output retry, and format repair consumes one. Stop rather than exceed the cap.
+
+1. Normal persisted-trust worker launch: prove executable/argv, selected-model delivery, project discovery, immutable hook/policy digest, native schemas, allowed read, and one edit under its own `work/`.
+   Claude gate: hooks delivered through `--settings` registered and ran.
+2. Worker negative matrix: deny direct/aliased/recursive secret reads; traversal and symlink reads; new-target, multi-file, move, and outside-project/outside-extra-temp edits; native/MCP shell; member/unknown tools; delegation; and code-mode inner calls.
+3. Reviewer launch: allow its named reads while denying every edit and every MCP/native action.
+4. Service-less helper with no tools: prove its own model, cap, schemas, and denial contract.
+5. Service-less helper optional-read variant: prove only the named read root and deny all other actions.
+6. Evaluator: prove the independent one-turn, no-tools contract and selected-model delivery.
+7. Same-session resume of invocation 1: prove identical role/config identity, tools, policy, and effective cap.
+8. First half of a simultaneous worker/reviewer pair: prove role and model isolation.
+9. Second half of that simultaneous pair: prove no cross-contamination and capture both outcomes.
+10. Interactive rendering/session isolation: prove the selected model and member configuration do not leak into or weaken the noninteractive roles.
+
+Use Claude `-p --output-format stream-json --verbose`, Codex `exec --json`, and Vibe `-p --output json --output-dir` with the implemented normal-trust configuration. Never use `--trust`, hook-trust bypass, permission bypass, alternate credential homes, or subscription credentials. Vibe keeps telemetry disabled. Capture a quota signal only if it appears naturally in these runs; do not exhaust an account.
+
+Tasks 6–8 must bind the rows to the implemented policy, renderer, and executor digests, then repeat only changed observations inside the same cap before enabling a role. D3's project-bound HTTP memory service remains required for Vibe-memory acceptance; it does not block no-tools helper/evaluator proof.
+
+The table's `discovery_dir` evidence is composed with runtime project discovery by Tasks 6–8; the static table value is never fed directly to launch.
+
+## Task 8b offline gate — confined Codex reads
+
+Task 8b adds a run-owned `magnolia-read` stdio server for Codex worker and reviewer launches. It does not change `agents/*.yaml` or `executors/capabilities-p3.json`: both Codex campaign rows therefore remain **refused (D2)** until new accepted capability evidence is recorded. Offline tests establish that the server and required hook independently apply the same requested/resolved path rules, recursive case-insensitive deny patterns and bounded descendant scan. The Codex adapter's `apply_patch` target decoding is synthetic-only until observed live.
+
+The following Codex worker/reviewer checks are still owed; this task ran no client:
+
+1. Through `magnolia-read`, allow named reads and reject traversal, case-variant denied paths, denied descendants and escaping symlinks. Exercise each denial once through the hook and once directly against the server to prove both layers.
+2. Confirm the x10–x12 result still holds for the accepted launch identity: the outer code-mode `exec` has no file, process or network access, and every effectful inner `tools.*` call reaches `PreToolUse`.
+3. Confirm direct `apply_patch` reaches `PreToolUse`, permits worker edits only under the run's canonical `work/`, and denies reviewer edits plus worker traversal, symlink, move and multi-target escapes.
+4. Confirm `--disable apps` removes connected-app tools, user MCP servers/plugins are disabled, the selected model is explicit on launch and resume, and the supervising cap stops the process at its effective bound.
+
+Only after those observations match the immutable policy/config identity may the capability projection mark a Codex worker or reviewer row accepted and release D2 for that role.
+
+## Task CF — Claude live evidence folded into the table
+
+The live record `docs/harness-probes-p3-live-2026-11.md`, section **Claude live role gate
+(production code, 02b5f43)**, now supplies every prerequisite cell for the four Claude rows.
+Task 0 run `claude/live-p3/c4/01-run.json` supplies the observed resume mechanism. Quota evidence
+remains `none observed` and is not a prerequisite.
+
+| Role | Live decision | Principal artifacts | Caveat |
+|---|---|---|---|
+| worker | accepted by owner ruling | `claude/live-gate/W1/`, `W2/`, `W3/`; Task 0 `c4/` | MCP allowlist is enforced by the required fail-closed hook; all 26 server tools remain visible |
+| reviewer | passed outright | `claude/live-gate/R1/`; Task 0 `c4/` | cap 8 is tight because boot context consumes turns |
+| helper | passed outright | `claude/live-gate/H1/`; Task 0 `c4/` | boot context is injected despite no memory tools |
+| evaluator | passed outright | `claude/live-gate/E1/`; Task 0 `c4/` | boot context is injected despite a no-tools role |
+
+The machine table records those gates as accepted, with no blocking cells. They remain marked
+**launch-stale** because the current launch consumer cannot yet represent the accepted identity
+semantics below; this is distinct from a failed live gate. Codex and Vibe rows are unchanged and
+remain refused.
+
+### Identity decision and outstanding launch transition
+
+Evidence is portable across projects only when it binds to (1) the Claude binary version and
+SHA-256 and (2) a normalized role template/policy shape. The normalized shape covers rendered
+settings/MCP files, the required-policy body/schema, hook command and required environment-variable
+names; it replaces project/run paths with semantic slots. The observed `discovery_dir` therefore
+means *the launching project*, not the gate's temporary project.
+
+`launch.py` currently does the opposite: it converts `evidence["discovery_dir"]` to a concrete path
+and compares it to `context.project_dir`, then compares `evidence["identity"]` to a digest of
+run-specific rendered bytes. A static table value can neither equal every production project path
+nor every path-bearing digest. The owning Task 9 stream must make this narrow transition before the
+four stale flags can be cleared:
+
+1. accept only discovery evidence with scope `launch-project`, and derive the concrete
+   `discovery_dir` from `context.project_dir`;
+2. compute the same normalized role-shape digest used by the table, including the launched client
+   binary identity, renderer output, policy schema, hook command and required environment names;
+3. compare that digest to the table's configuration binding before materialization and resume;
+4. retain concrete project/run paths only in the invocation's capability/session identity, so
+   resume remains project-bound without making the capability evidence project-specific.
+
+The offline four-role probe rendered `02b5f43` and HEAD `ce681e7` with identical canonical inputs.
+For every role, `settings.json`, `mcp.json`, `claude-settings.json`, `claude-mcp.json`,
+`policy.json`, hook commands, caps and tool surfaces were byte-identical. The worker retained the
+same stdio memory route. The only difference was the expected added environment name
+`MAGNOLIA_HOOK_POLICY_SHA256`, accepted as Task 8b's policy-digest strengthening. No client was run.
+
+## Task CF Round 2 — launch-side identity binding
+
+At base HEAD `a6439a5`, `launch.py` now accepts only a structured `discovery_dir` whose scope is
+`launch-project`; it derives the concrete real path from the launch context. Before both first
+launch and resume it recomputes and compares named components for client version, executable
+SHA-256, normalized settings, normalized MCP payload, native files, normalized policy body/schema,
+hook commands and required policy environment-variable names. Project, run, control, work and
+invocation paths are normalized out of that evidence identity, while the existing concrete
+invocation/session capability identity remains project-bound.
+
+The offline production-shaped recheck resolved `claude` through the same PATH lookup used by the
+governed process, then canonicalized it to
+`<npm-global>/@anthropic-ai/claude-code/bin/claude.exe`.
+Installed package metadata reports `2.1.325`; the real executable SHA-256 is
+`84590fefe6338be9087f5814b61f9a54c5f21524163a4c127cb5a808e31009f2`. No client process was
+started. All four production-shaped role renders reproduced their bound components in two distinct
+temporary projects, so the Claude stale flags are cleared. Codex and Vibe remain refused.
+
+## Task CF Round 3 — review-gap closure
+
+The accepted worker binding now uses the W1-observed stdio memory shape: a named command and args,
+with each named environment entry rendered as `${VAR}` for Claude Code expansion. Campaign launches
+construct that stdio route from Magnolia's selected Python; an unauthenticated HTTP memory URL is
+refused for every client. Vibe's separate authenticated managed-service evidence remains refused.
+
+The normalized binding measures the `MAGNOLIA_HOOK_POLICY*` names actually present in the effective
+child environment. It additionally binds the Magnolia venv-interpreter selection rule and a digest
+of `compchem_memory/hook/**/*.py` plus the required-mode wrapper in `render_common.py`. Settings bind
+the rule that `--max-turns` is a positive `min(role cap, governor cap)`, so production defaults and
+tighter configured caps are accepted without blessing one probe value. Claude's environment is an
+allowlist; endpoint/runtime modifiers are refused with their names.
+
+The prepared argv contains the absolute real path whose bytes were hashed. The Claude executor
+re-hashes that same path immediately before each spawn. A small residual TOCTOU interval remains
+between the final hash read and kernel exec; the gate does not claim descriptor-pinned execution.
+Tests use a local fake npm package and a capability projection rebound to its bytes. The installed
+2.1.325 comparison is separate and skips with an explicit reason when that exact package is absent.
+
+## Task CF Round 4 — exact production route and hook provenance
+
+The accepted worker row now binds the exact seven environment-variable names emitted by
+`campaign_runner.cli._memory_route`; adding or removing one changes the `mcp` component and refuses
+the launch. The same production route passes preparation for worker, reviewer, helper and evaluator.
+The Claude argv is unchanged.
+
+Hook-interpreter identity is lexical: the absolute requested path must equal the absolute
+`MAGNOLIA_PYTHON` value when supplied, otherwise the shared resolver's
+`<repository>/.venv/bin/python3`; its venv root must be `<repository>/.venv` and contain
+`pyvenv.cfg`. Resolving symlinks is deliberately not part of this comparison, so a base
+interpreter, another venv on the same base, and an outside symlink all refuse `interpreter`.
+
+Every hook command uses isolated mode and inserts the repository's
+`mcp-servers/compchem-memory/src` before importing `compchem_memory.hook.__main__`. The source
+binding hashes every file in `compchem_memory/hook/` except paths below `__pycache__`, including
+extension modules and data files, plus the required wrapper. Each preparation assigns a fresh,
+run-owned `PYTHONPYCACHEPREFIX`; the isolated command applies it through `sys.pycache_prefix`
+before importing. A repository test proves that an editable-install decoy and an unchecked forged
+source-tree `.pyc` are ignored, while an added `.so` changes the binding.
+
+The live gate had no `.claude/settings.json` or `.claude/settings.local.json`. Their absence is now
+required in the project, run and work roots because `--setting-sources project` is unchanged; a
+present path refuses with its filename. The required-mode wrapper invokes `/bin/sh` absolutely.
+
+M2 remains deferred under the Task 2 ruling: credential variables outside the refused redirect
+families are stripped, not refused. M3 remains a documented residual: the measured final-hash to
+exec window was 14.3 ms median and 18.5 ms maximum (14–19 ms); this change does not claim
+descriptor-pinned execution. M6 remains a note: inherited Claude endpoint/runtime variables cause a
+named refusal, and the stdio memory server receives no provider credential, consistent with W1.
+
+## Task CF Round 6 — portable binding and exact hook ownership
+
+The runner command keeps the repository-relative path below the installation root without
+resolving that file into another checkout. Normalized identity parses and re-quotes hook
+arguments after replacing installation, interpreter and invocation paths with placeholders;
+shell quoting caused by spaces in a checkout path therefore cannot change the binding.
+Concrete paths remain in the session capability identity. The production test installation
+copies the package instead of symlinking it to the development checkout.
+
+All four role bindings were recomputed offline from production-shaped launches in two independent
+installations, including one with spaces in its path. The sweep-1 production-shape render binds
+these shared components for all four Claude roles: client `2.1.325` / `84590fef…`,
+`hook_command=50995faf…`, `hook_interpreter=2cc2bd87…`, `hook_runner=7430de9e…`,
+`hook_source=2216e082…` and `required_env=22bee604…`. Role-specific values are:
+
+| role | settings | MCP | native files | policy |
+|---|---|---|---|---|
+| worker | `2b81fccb…` | `0125b533…` | `ebc893c5…` | `e314a49b…` |
+| reviewer | `15445e1c…` | `98b6b4d0…` | `d7e1c87d…` | `9c10e4ad…` |
+| helper | `90609e78…` | `98b6b4d0…` | `d7e1c87d…` | `916d1002…` |
+| evaluator | `bcab8b46…` | `98b6b4d0…` | `d7e1c87d…` | `3b50e1c9…` |
+
+Codex and Vibe rows remain unchanged and refused. No identity component contains a home path.
+
+Hook ownership requires a complete shell-parsed command: one Python interpreter, either
+`-m compchem_memory.hook` or `-I <installation>/mcp-servers/compchem-memory/src/compchem_memory/hook/runner.py`,
+then the renderer's client and a well-formed event. The exact required `/bin/sh -c` pre-tool
+wrapper is also recognized, including quoted paths. Extra tokens, compound commands, malformed
+events, other clients and a `magnolia-` name alone do not establish ownership. Any newline or
+carriage return makes the entry member-owned, including a second command that looks like an
+event. Renderers pass their client and exact interpreter path to ownership; this accepts Magnolia
+paths named `pypy3` or `python3-intel64` while retaining legacy `python` migration. Member commands
+survive re-rendering and complete legacy commands migrate once, including mixed matcher groups.
+
+The isolated runner refuses a symlinked file or ancestor and refuses paths outside the expected
+source layout; launch preparation now refuses the same condition as `hook_runner` before starting
+the client. It loads the repository package by file location with a package search path and never
+puts repository `src` on `sys.path`. Marker modules named `_winapi`, `nt` and `json` therefore do
+not run, alongside the existing editable-install, stdlib and forged-bytecode checks.
+The repository venv remains a trust boundary: its `.pth` startup code runs under `-I` before
+the runner, and the venv itself can be a symlink.
+
+The worker's seven-name stdio route is unchanged. Its model/provider environment variables are
+always defined (empty when unset), so Claude expansion cannot pass literal `${...}` values to
+the memory server. The campaign CLI and launch validation share the same lexical interpreter
+resolver instead of inheriting the CLI's `sys.executable` path.
+
+Deferred M1: imports outside `compchem_memory/hook/`, including the parent `__init__.py` and
+`atomic_io`, remain unbound. The stdio memory server's import route and the prior M2/M3/M5/M6
+notes are unchanged. This round is offline evidence only; the changed hook runtime still needs
+the separately authorized live Claude re-run described in the re-review packet.
+
+## Task CF Round 7 — dry re-run corrections
+
+The dry production preparation against `3b0cbca` exposed three regressions in the
+binding, corrected here on base `ef88349`. This is offline preparation and hook
+execution; no Claude client was started and no new live acceptance is claimed.
+
+The interpreter ruling supersedes Round 4's repository-only restriction. The hook
+interpreter must be an absolute, existing executable and lexically equal either
+to the supplied `MAGNOLIA_PYTHON` value, as given, or to
+`<repository>/.venv/bin/python3` with `<repository>/.venv/pyvenv.cfg`. The repository
+alternative remains valid when the override names another path. Resolving to the
+same binary grants no equivalence: unselected base interpreters, other venvs and
+outside symlinks are refused. An exact explicit override does not require the
+repository venv. Hook normalization uses that exact interpreter spelling, including
+nonstandard filenames and paths with spaces, before replacing it with its semantic
+slot.
+
+The helper row now binds H1's `native_read` over `docs/`. Its observed argv is
+`--tools Read --allowedTools Read`, with no MCP server; a no-tools helper now
+refuses `settings`. Evidence is [H1 argv](../tests/fixtures/executors/claude/live-gate/H1/01-run.json),
+[H1 tool inventory](../tests/fixtures/executors/claude/live-gate/H1/04-stream-init.json)
+and [H1 hook decisions](../tests/fixtures/executors/claude/live-gate/H1/08-hook-transcript.json).
+All four production rows were checked against the observed shapes:
+
+| Row | Observed and reproduced shape | Evidence |
+|---|---|---|
+| W1 worker | Read/Glob/Grep, Edit/Write in work, three allowed memory tools, stdio MCP | [W1 hook transcript](../tests/fixtures/executors/claude/live-gate/W1/15-hook-transcript.json), [live gate](harness-probes-p3-live-2026-11.md#claude-live-role-gate-production-code-02b5f43--16-november-2026) |
+| R1 reviewer | Read/Glob/Grep, project reads, no edits or MCP | [R1 argv](../tests/fixtures/executors/claude/live-gate/R1/01-run.json), [hook transcript](../tests/fixtures/executors/claude/live-gate/R1/14-hook-transcript.json) |
+| H1 helper | Exactly Read, only `docs/`, no MCP | H1 artifacts linked above |
+| E1 evaluator | `--tools ""`, empty MCP, one turn | [E1 argv](../tests/fixtures/executors/claude/live-gate/E1/01-run.json), [tool inventory](../tests/fixtures/executors/claude/live-gate/E1/04-stream-init.json) |
+
+W1's argv was not directly captured by `ps`; the original record derives it from
+the same executor path as W2/W3. The current worker retains the already-bound
+seven-name production `_memory_route()`; the original live gate used its stdio
+wrapper to establish environment expansion and memory calls. This round changes
+neither that route nor the hook-only MCP-allowlist ruling.
+
+The Claude environment allowlist now retains `XDG_STATE_HOME`, `XDG_CONFIG_HOME`,
+`XDG_CACHE_HOME` and `XDG_DATA_HOME` from the parent or renderer. An offline
+SessionStart through the rendered hook verifies that the session binding lands in
+`$XDG_STATE_HOME/magnolia/bindings/`, with no binding under the temporary HOME's
+fallback `.local/state`. These names relocate storage and do not change the
+required-policy environment-name component.
+
+Only these active component digests change (full SHA-256, old → new):
+
+| Component | Old | New |
+|---|---|---|
+| All four Claude rows: `hook_interpreter` | `2cc2bd879533dfc44594df03b07f9b830ef198ebe0cbb62510b842db57551d31` | `6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84` |
+| Helper: `settings` | `90609e78600b52d743e2b775c16d691afd37941751d19294ff93ec1c206007fd` | `39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06` |
+| Helper: `policy` | `916d100265521c6a465c6668cf4126a66e0ec63a7d84b796d009109fd93edf2b` | `85125a30f0c1426f797b1f31c52aac42dd1d1401c07dea54ae34d215e6d60c98` |
+
+Candidate components agree in two independent installations, one with spaces.
+Client version/SHA, MCP, native files, hook command, runner/source and required
+environment names are unchanged. Historical live digests are retained; Codex and
+Vibe rows are unchanged and remain refused. The regressions use the real gate,
+and a separate preparation-only probe accepts all four rows against the installed
+Claude `2.1.325` binary without overriding its bound version or SHA.

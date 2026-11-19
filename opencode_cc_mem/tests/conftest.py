@@ -1,0 +1,105 @@
+"""Campaign-suite isolation from the owner's Magnolia state."""
+
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from compchem_memory.harness.memory_service import private_services_root
+
+
+_REAL_HOME_MARKER = "MAGNOLIA_PYTEST_REAL_HOME"
+_REAL_HOME = Path(os.environ.get(_REAL_HOME_MARKER, Path.home())).resolve()
+_OWNER_STATE_ROOTS = (
+    _REAL_HOME / ".local" / "state" / "magnolia",
+    _REAL_HOME / ".config" / "magnolia",
+    private_services_root({**os.environ, "HOME": str(_REAL_HOME)}).parent,
+)
+_TEST_ROOT = Path(tempfile.mkdtemp(prefix="magnolia-pytest-state-"))
+_ISOLATED_ENV = {
+    "HOME": str(_TEST_ROOT / "home"),
+    "XDG_STATE_HOME": str(_TEST_ROOT / "state"),
+    "XDG_CONFIG_HOME": str(_TEST_ROOT / "config"),
+    _REAL_HOME_MARKER: str(_REAL_HOME),
+}
+_ORIGINAL_ENV = {name: os.environ.get(name) for name in _ISOLATED_ENV}
+
+
+def _tree_metadata(root: Path) -> tuple[tuple[str, int], ...]:
+    """List path names and mtimes without reading file contents."""
+    if not root.exists() and not root.is_symlink():
+        return ()
+    rows = [(".", root.lstat().st_mtime_ns)]
+    for path in sorted(root.rglob("*"), key=lambda item: str(item)):
+        rows.append((str(path.relative_to(root)), path.lstat().st_mtime_ns))
+    return tuple(rows)
+
+
+_AUDITED_STATE_PATHS: list[Path] = []
+
+
+def _record_state_path(event, args):
+    """Record path metadata for filesystem mutations, never file contents."""
+    indexes = (0, 1) if event in {"os.rename", "os.replace"} else (0,)
+    if event not in {"os.mkdir", "os.rmdir", "os.remove", "os.rename", "os.replace"}:
+        return
+    for index in indexes:
+        try:
+            raw = args[index]
+            if isinstance(raw, (str, bytes, os.PathLike)):
+                _AUDITED_STATE_PATHS.append(Path(os.fsdecode(raw)).resolve())
+        except (IndexError, OSError, TypeError, ValueError):
+            continue
+
+
+sys.addaudithook(_record_state_path)
+
+
+def _audited_mutation_count(root: Path) -> int:
+    canonical = root.resolve()
+    return sum(
+        path == canonical or path.is_relative_to(canonical)
+        for path in _AUDITED_STATE_PATHS
+    )
+
+
+def _owner_state_metadata(roots):
+    """Snapshot content-free tree and in-process mutation metadata."""
+    return {
+        root: (_tree_metadata(root), _audited_mutation_count(root))
+        for root in roots
+    }
+
+
+_OWNER_STATE_BEFORE = _owner_state_metadata(_OWNER_STATE_ROOTS)
+for _name, _value in _ISOLATED_ENV.items():
+    os.environ[_name] = _value
+Path(_ISOLATED_ENV["HOME"]).mkdir(parents=True)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_magnolia_state():
+    """Redirect state and fail if the owner trees change during this suite."""
+    try:
+        yield
+        after = _owner_state_metadata(_OWNER_STATE_ROOTS)
+        assert after == _OWNER_STATE_BEFORE, (
+            "tests created or modified owner Magnolia state; "
+            "compare listings and mtimes under the guarded roots"
+        )
+    finally:
+        for name, value in _ORIGINAL_ENV.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+@pytest.fixture
+def owner_state_metadata():
+    """Expose the content-free guard snapshot for its contract test."""
+    return _owner_state_metadata

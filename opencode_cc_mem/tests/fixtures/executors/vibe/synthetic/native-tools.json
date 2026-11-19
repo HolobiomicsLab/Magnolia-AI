@@ -1,0 +1,42 @@
+{
+  "synthetic": true,
+  "source": "constructed from the recorded Vibe 3.1.2 foreign-hook payloads",
+  "path_field": "file_path",
+  "grep_path_field": "path",
+  "read": {
+    "session_id": "synthetic-vibe",
+    "parent_session_id": null,
+    "cwd": "__CWD__",
+    "hook_event_name": "pre_tool",
+    "tool_name": "file_system.read_file",
+    "tool_call_id": "synthetic-read",
+    "tool_input": {"file_path": "__PATH__"}
+  },
+  "write": {
+    "session_id": "synthetic-vibe",
+    "parent_session_id": null,
+    "cwd": "__CWD__",
+    "hook_event_name": "pre_tool",
+    "tool_name": "file_system.write_file",
+    "tool_call_id": "synthetic-write",
+    "tool_input": {"file_path": "__PATH__", "content": "new"}
+  },
+  "edit": {
+    "session_id": "synthetic-vibe",
+    "parent_session_id": null,
+    "cwd": "__CWD__",
+    "hook_event_name": "pre_tool",
+    "tool_name": "file_system.edit",
+    "tool_call_id": "synthetic-edit",
+    "tool_input": {"file_path": "__PATH__", "old_string": "old", "new_string": "new"}
+  },
+  "grep": {
+    "session_id": "synthetic-vibe",
+    "parent_session_id": null,
+    "cwd": "__CWD__",
+    "hook_event_name": "pre_tool",
+    "tool_name": "grep",
+    "tool_call_id": "synthetic-grep",
+    "tool_input": {"pattern": "needle", "path": "__PATH__"}
+  }
+}

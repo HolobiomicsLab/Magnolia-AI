@@ -10,6 +10,7 @@ from pathlib import Path
 from compchem_memory.opencode_ingest import (
     export_session,
     ingest_opencode_sessions,
+    live_session_exporter,
     plugin_dump_exporter,
 )
 
@@ -57,6 +58,55 @@ def test_no_dump_uses_cli(tmp_path, monkeypatch):
     monkeypatch.setattr("compchem_memory.opencode_ingest.export_session",
                         lambda sid: {"messages": []})
     assert plugin_dump_exporter(str(store))("ses_c") == {"messages": []}
+
+
+def test_live_exporter_never_reads_worker_dump(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    dump_dir = store / "opencode-transcripts"
+    dump_dir.mkdir()
+    (dump_dir / "ses_live.json").write_text(json.dumps({
+        "messages": [{"info": {"role": "user", "id": "old"}, "parts": []}],
+    }))
+    monkeypatch.delenv("OPENCODE_DB", raising=False)
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.export_session",
+        lambda _sid: {"messages": [{"info": {"role": "user", "id": "live"}, "parts": []}]},
+    )
+
+    exported = live_session_exporter()("ses_live")
+
+    assert exported["messages"][0]["info"]["id"] == "live"
+
+
+def test_live_exporter_never_calls_cli_after_v2_database_failure(tmp_path, monkeypatch):
+    db = tmp_path / "v2.db"
+    db.touch()
+    monkeypatch.setenv("OPENCODE_DB", str(db))
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.v2_db_exporter",
+        lambda _db: lambda _sid: None,
+    )
+    cli_calls = []
+    monkeypatch.setattr(
+        "compchem_memory.opencode_ingest.export_session",
+        lambda sid: cli_calls.append(sid),
+    )
+
+    assert live_session_exporter()("ses_v2") is None
+    assert cli_calls == []
+
+
+def test_ingest_startup_path_drains_pending_turn_payloads(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "compchem_memory.hook.background.drain_opencode_payloads",
+        lambda path: calls.append(Path(path)),
+    )
+
+    ingest_opencode_sessions(str(store), distiller=lambda _text: [])
+
+    assert calls == [store]
 
 
 def test_v2_mode_skips_cli_fallback(tmp_path, monkeypatch):
@@ -148,6 +198,7 @@ def test_v2_db_exporter_full_content(tmp_path, monkeypatch):
             ], "model": {}, "cost": 1})),
         ("m3", "ses_x", "assistant", 3, 3, 3, json.dumps({
             "content": [{"type": "text", "text": "Docking done, score -7.2"}]})),
+        ("m4", "ses_x", "idle", 25, 4, 4, json.dumps({"outcome": "succeeded"})),
     ])
     con.commit(); con.close()
 
@@ -162,6 +213,8 @@ def test_v2_db_exporter_full_content(tmp_path, monkeypatch):
     # flat tool parts normalized to the state family reconstruct reads
     tool_part = out["messages"][1]["parts"][1]
     assert tool_part["state"]["output"] == "score -7.2"
+    assert out["turn_boundaries"] == {"m4": "m1"}
+    assert out["turn_sequences"]["25"] == "m1"
 
 
 def test_chain_prefers_v2_db_over_dump_and_cli(tmp_path, monkeypatch):

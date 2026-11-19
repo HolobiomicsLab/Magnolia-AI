@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "compchem-memory": {
+      "args": [],
+      "command": "/TMPDIR/claude-gate.8E1oyJOLrn/memsrv.sh",
+      "env": {
+        "MAGNOLIA_LIVE_GATE_TOKEN": "${MAGNOLIA_LIVE_GATE_TOKEN}"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "present": true,
+  "rows": [
+    {
+      "kind": "session-start"
+    },
+    {
+      "channel": "boot",
+      "kind": "injected",
+      "text_chars": 1666
+    },
+    {
+      "kind": "prompt"
+    },
+    {
+      "kind": "assistant"
+    },
+    {
+      "kind": "session-end"
+    }
+  ],
+  "source": "<project>/.magnolia/transcripts/claude/<session>.jsonl"
+}

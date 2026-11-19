@@ -1,0 +1,9 @@
+{
+  "input": {
+    "type": "static",
+    "api_key_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN"
+  },
+  "expected_headers": {
+    "Authorization": "Bearer recorded-token"
+  }
+}

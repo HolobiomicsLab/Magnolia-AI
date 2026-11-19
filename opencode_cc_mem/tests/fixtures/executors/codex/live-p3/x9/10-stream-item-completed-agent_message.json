@@ -1,0 +1,8 @@
+{
+  "item": {
+    "id": "item_2",
+    "text": "I\u2019ll perform the four requested calls in order and record any blocks exactly.",
+    "type": "agent_message"
+  },
+  "type": "item.completed"
+}

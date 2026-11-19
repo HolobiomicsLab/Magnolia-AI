@@ -272,3 +272,70 @@ def test_bump_appends_new_content(project_dir):
     assert "reusing a dirty directory copies stale output/" in body
     meta = pm._parse_frontmatter(body)
     assert meta.get("observation_count") == 2
+
+
+def test_bump_unions_origins(project_dir):
+    pm = _pm()
+    path = _make_staging_entry(
+        project_dir,
+        "20260601_120000_origin",
+        "Original observation.",
+        {
+            "title": "origin union",
+            "type": "scientific_finding",
+            "observation_count": 1,
+            "origins": [{"client": "claude", "session_id": "s1"}],
+        },
+    )
+
+    pm.bump_observation_count(
+        str(project_dir), path.name, session_id="s2",
+        origins=[{"client": "codex", "session_id": "s2"}],
+    )
+
+    assert pm._parse_frontmatter(path.read_text())["origins"] == [
+        {"client": "claude", "session_id": "s1"},
+        {"client": "codex", "session_id": "s2"},
+    ]
+
+
+def test_bump_stamps_origin_sessions_without_canonical_session(project_dir):
+    pm = _pm()
+    path = _make_staging_entry(
+        project_dir,
+        "20260601_120000_sessions",
+        "Original observation.",
+        {
+            "title": "session union",
+            "type": "scientific_finding",
+            "observation_count": 1,
+            "observed_in_sessions": ["s0"],
+        },
+    )
+
+    pm.bump_observation_count(
+        str(project_dir), path.name,
+        origins=[{"session_id": "s2"}, {"session_id": "s0"}],
+    )
+
+    assert pm._parse_frontmatter(path.read_text())["observed_in_sessions"] == [
+        "s0", "s2",
+    ]
+
+
+def test_bump_old_entry_without_origins_keeps_key_absent(project_dir):
+    pm = _pm()
+    path = _make_staging_entry(
+        project_dir,
+        "20260601_120000_no_origin",
+        "Original observation.",
+        {
+            "title": "old entry",
+            "type": "scientific_finding",
+            "observation_count": 1,
+        },
+    )
+
+    pm.bump_observation_count(str(project_dir), path.name)
+
+    assert "origins" not in pm._parse_frontmatter(path.read_text())

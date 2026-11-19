@@ -1,0 +1,22 @@
+{
+  "class": null,
+  "decision": null,
+  "mode": "enforce",
+  "policy_sha256": "c9a2970473609afe10dffddf04ae4ad98ab55558a8fc22e73308bde7215015fa",
+  "reason": null,
+  "stdin": {
+    "background_tasks": [],
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "last_assistant_message": "1. OK. README.md read: \"Probe project. ALLOWED-README-213771c61078\"\n2. BLOCKED. `PreToolUse:Glob hook error: glob: recursive search root contains a denied or linked path`\n3. OK. Found 1 file: docs/notes.md\n4. OK. work/draft.txt updated: \"draft v0\" \u2192 \"draft v1\"\n5. OK. work/new.txt created with \"new file\"\n6. BLOCKED. `InputValidationError: NotebookEdit failed due to the following issues: The required parameter notebook_path is missing. An unexpected parameter file_path was provided.` The tool's schema is deferred and wasn't loaded. The error says to call ToolSearch first, but the probe forbids other tools, so I did not retry. The notebook was not edited.\n7. OK. mcp__probe__echo returned {\"result\":\"top\"}",
+    "permission_mode": "default",
+    "prompt_id": "7ddb9b5b-5633-4970-adce-4966befe15c0",
+    "session_crons": [],
+    "session_id": "ses-fixture-1",
+    "stop_hook_active": false,
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "createdAt": 1794810924680,
+  "detail": {
+    "display": {
+      "content": null,
+      "message": "mcp_probe.echo",
+      "settledMessage": "mcp_probe.echo",
+      "settledVerb": "Ran",
+      "statusText": "Running mcp_probe.echo",
+      "suffix": "",
+      "summary": "mcp_probe.echo",
+      "verb": "Running"
+    },
+    "input": {
+      "text": "top"
+    },
+    "kind": "tool",
+    "mcpApp": null,
+    "toolName": "mcp_probe.echo"
+  },
+  "generationStatus": "completed",
+  "id": "effect-7b19dcba-2563-5271-bc3b-1438cc8cdfd9",
+  "inputEntryId": "user-turn-6bf8c5709f3f97086d7a1b781f817608-2",
+  "relatedEntryId": null,
+  "sessionId": "ses-fixture-1",
+  "state": {
+    "approvalSource": "bypass",
+    "approvalType": "always",
+    "decision": "execute",
+    "display": {
+      "approvalNote": null,
+      "message": "mcp_probe.echo",
+      "success": true,
+      "suffix": "",
+      "verb": "",
+      "warnings": []
+    },
+    "durationMs": 0.0,
+    "output": {
+      "_meta": {
+        "approval": {
+          "approvalSource": "bypass",
+          "approvalType": "always",
+          "decision": "execute"
+        },
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "content": [
+        {
+          "text": "top",
+          "type": "text"
+        }
+      ],
+      "structured_content": {
+        "result": "top"
+      },
+      "type": "success"
+    },
+    "outputText": "top",
+    "status": "completed"
+  },
+  "title": "mcp_probe.echo",
+  "turnId": "turn-6bf8c5709f3f97086d7a1b781f817608",
+  "type": "effect",
+  "updatedAt": 1794810925565
+}

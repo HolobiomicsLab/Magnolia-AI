@@ -1,0 +1,67 @@
+{
+  "call_id": "call_7cc8243287334672b07aa9c98200ba4d",
+  "id": "ctco_01a1e367-95bc-75b3-ae44-88482032cc16",
+  "internal_chat_message_metadata_passthrough": {
+    "create_time": 1794816579.004581,
+    "turn_id": "01a1e367-6ed9-7e33-9e82-a8660900c3b1"
+  },
+  "output": [
+    {
+      "text": "Script completed\nWall time 0.0 seconds\nOutput:\n",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC load: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC store: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC notify: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC exit: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC yield_control: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC image: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC audio: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC generatedImage: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "SRC setTimeout: function () { [native code] }",
+      "type": "input_text"
+    },
+    {
+      "text": "LOAD /TMPDIR/probe-p3-outside-JSUnwZ/loadme.js: OK undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "LOAD /TMPDIR/probe-p3-codex-omV8qQ/proj/secret/.env: OK undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "LOAD /TMPDIR/probe-p3-codex-omV8qQ/proj/README.md: OK undefined",
+      "type": "input_text"
+    },
+    {
+      "text": "STORE-GET: FAIL undefined",
+      "type": "input_text"
+    }
+  ],
+  "type": "custom_tool_call_output"
+}

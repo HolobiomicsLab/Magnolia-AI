@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from functools import partial
+import json
+from collections.abc import Mapping
+from typing import Any
 
 from compchem_memory.harness.files import (
     merged_json,
     merged_toml,
+    toml_bytes,
     validate_project_paths,
 )
 from compchem_memory.harness.neutral import NeutralConfig
@@ -24,6 +29,7 @@ from compchem_memory.harness.render_common import (
 )
 
 HARNESS = "codex"
+_owns_entry = partial(owned, client=HARNESS)
 EVENTS = {
     "SessionStart": "session-start",
     "UserPromptSubmit": "prompt",
@@ -45,6 +51,7 @@ _MEMORY_ENV_VARS = [
     "OPENAI_API_KEY", "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY",
     "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY",
     "MAGNOLIA_MEMORY_PROVIDER", "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_DIRECT_FALLBACK_PROVIDER", "MAGNOLIA_DIRECT_FALLBACK_MODEL",
     "MAGNOLIA_LLM_PROVIDER", "MAGNOLIA_LLM_MODEL",
     "MAGNOLIA_OPENROUTER_PROVIDER", "MAGNOLIA_CRITIC",
     "MAGNOLIA_CRITIC_PROVIDER", "MAGNOLIA_CRITIC_MODEL",
@@ -61,8 +68,18 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
     config_path = folder / "config.toml"
     validate_project_paths((hooks_path, config_path), context.project_dir)
     conflicts: list[str] = []
+    hook_owner = partial(
+        owned, client=HARNESS, python_executable=context.python
+    )
     content, found = merged_json(
-        hooks_path, owned, {"hooks": _hooks(context)}, strip_owned_hooks
+        hooks_path,
+        hook_owner,
+        {"hooks": _hooks(context)},
+        partial(
+            strip_owned_hooks,
+            client=HARNESS,
+            python_executable=context.python,
+        ),
     )
     files[hooks_path] = content
     conflicts += found
@@ -78,7 +95,7 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
         )
     content, found, original = merged_toml(
         config_path,
-        owned,
+        _owns_entry,
         magnolia,
         lambda current: _reconcile_transport_fields(current, servers),
     )
@@ -97,6 +114,27 @@ def render(neutral: NeutralConfig, context: LaunchContext) -> Launch:
 render.binary = "codex"
 
 
+def native_artifacts(
+    context: LaunchContext,
+    mcp_servers: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, bytes]:
+    """Render an immutable, client-native Codex project configuration.
+
+    Helper/evaluator runs receive no MCP servers. Governed worker/reviewer runs
+    receive only the immutable run-owned servers supplied by launch preparation.
+    """
+    config: dict[str, Any] = {"mcp_servers": dict(mcp_servers or {})}
+    if context.model:
+        config["model"] = context.model
+    return {
+        ".codex/config.toml": toml_bytes(config),
+        ".codex/hooks.json": (
+            json.dumps({"hooks": _hooks(context)}, indent=2, ensure_ascii=False)
+            + "\n"
+        ).encode("utf-8"),
+    }
+
+
 def _keep_backup(files: dict[Path, bytes], path: Path, original: bytes | None) -> None:
     backup = path.with_name(path.name + ".magnolia-backup")
     if original is not None and not backup.exists():
@@ -111,9 +149,11 @@ def _reconcile_transport_fields(current: dict, rendered: dict) -> dict:
     servers = dict(existing)
     for name, replacement in rendered.items():
         entry = servers.get(name)
-        if not isinstance(entry, dict) or not owned("server", name, entry):
+        if not isinstance(entry, dict) or not _owns_entry("server", name, entry):
             continue
-        obsolete = _STDIO_FIELDS if "url" in replacement else _HTTP_FIELDS
+        obsolete = _STDIO_FIELDS if "url" in replacement else _HTTP_FIELDS | {
+            field for field in ("env", "env_vars") if field not in replacement
+        }
         servers[name] = {key: value for key, value in entry.items() if key not in obsolete}
     return {**current, "mcp_servers": servers}
 

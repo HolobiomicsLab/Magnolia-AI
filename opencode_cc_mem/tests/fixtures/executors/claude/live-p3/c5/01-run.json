@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "claude",
+    "-p",
+    "<prompt:claude-c5.txt>",
+    "--setting-sources",
+    "project",
+    "--mcp-config",
+    "/TMPDIR/probe-p3-claude-Pe5W5B/logs/claude-mcp.json",
+    "--strict-mcp-config",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--max-turns",
+    "14",
+    "--model",
+    "haiku",
+    "--allowedTools",
+    "Read",
+    "Write",
+    "NotebookEdit",
+    "mcp__probe__shell"
+  ],
+  "client": "claude",
+  "exit_status": "0",
+  "stderr_lines": [],
+  "synthetic": false,
+  "tag": "c5"
+}

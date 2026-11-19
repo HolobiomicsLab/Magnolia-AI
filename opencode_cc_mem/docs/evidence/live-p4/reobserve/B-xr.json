@@ -1,0 +1,176 @@
+{
+  "argv_shape": null,
+  "attempts_physical": 1,
+  "client": "codex",
+  "client_env_keys": [
+    "COMPCHEM_TOOLS_PORT",
+    "HOME",
+    "LANG",
+    "LIVE_RUN",
+    "LOGNAME",
+    "MAGNOLIA_CLIENT",
+    "MAGNOLIA_CONTROL_DIR",
+    "MAGNOLIA_DISTILL_INTERVAL_MIN",
+    "MAGNOLIA_DOORBELL",
+    "MAGNOLIA_HOOK_POLICY",
+    "MAGNOLIA_HOOK_POLICY_REQUIRED",
+    "MAGNOLIA_HOOK_POLICY_SHA256",
+    "MAGNOLIA_INSTALLATION_ROOT",
+    "MAGNOLIA_MEMORY_MODEL",
+    "MAGNOLIA_MEMORY_PROVIDER",
+    "MAGNOLIA_MODEL",
+    "MAGNOLIA_OPENROUTER_PROVIDER",
+    "MAGNOLIA_PROJECT_DIR",
+    "MAGNOLIA_PROJECT_IDENTITY",
+    "MAGNOLIA_PYTHON",
+    "MAGNOLIA_ROLE",
+    "MAGNOLIA_ROOT",
+    "MAGNOLIA_RULES_DIR",
+    "MAGNOLIA_RUN_DIR",
+    "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+    "MAGNOLIA_WORKSPACE_ROOT",
+    "MAGNOLIA_WORK_DIR",
+    "OPENROUTER_BASE_URL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONPATH",
+    "PYTHONPYCACHEPREFIX",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "VIBE_ENABLE_TELEMETRY",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING"
+  ],
+  "config_digest": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+  "errors": [
+    {
+      "kind": "client_item_error",
+      "message": "Under-development features enabled: skip_host_skill_discovery. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in ~/.codex/config.toml."
+    }
+  ],
+  "final_text": "{\"issues\":[{\"severity\":\"minor\",\"claim\":\"Review marker is missing.\",\"evidence\":[\"work/result.txt\"],\"suggested_action\":\"Append `REVIEWED: yes` to work/result.txt.\"}],\"followups\":[]}",
+  "identity_observed": {
+    "client_env_keys": [
+      "COMPCHEM_TOOLS_PORT",
+      "HOME",
+      "LANG",
+      "LIVE_RUN",
+      "LOGNAME",
+      "MAGNOLIA_CLIENT",
+      "MAGNOLIA_CONTROL_DIR",
+      "MAGNOLIA_DISTILL_INTERVAL_MIN",
+      "MAGNOLIA_DOORBELL",
+      "MAGNOLIA_HOOK_POLICY",
+      "MAGNOLIA_HOOK_POLICY_REQUIRED",
+      "MAGNOLIA_HOOK_POLICY_SHA256",
+      "MAGNOLIA_INSTALLATION_ROOT",
+      "MAGNOLIA_MEMORY_MODEL",
+      "MAGNOLIA_MEMORY_PROVIDER",
+      "MAGNOLIA_MODEL",
+      "MAGNOLIA_OPENROUTER_PROVIDER",
+      "MAGNOLIA_PROJECT_DIR",
+      "MAGNOLIA_PROJECT_IDENTITY",
+      "MAGNOLIA_PYTHON",
+      "MAGNOLIA_ROLE",
+      "MAGNOLIA_ROOT",
+      "MAGNOLIA_RULES_DIR",
+      "MAGNOLIA_RUN_DIR",
+      "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+      "MAGNOLIA_WORKSPACE_ROOT",
+      "MAGNOLIA_WORK_DIR",
+      "OPENROUTER_BASE_URL",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHONPATH",
+      "PYTHONPYCACHEPREFIX",
+      "SHELL",
+      "TMPDIR",
+      "USER",
+      "VIBE_ENABLE_TELEMETRY",
+      "XDG_CACHE_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "__CF_USER_TEXT_ENCODING"
+    ],
+    "components": {
+      "client_sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+      "client_version": "0.169.0",
+      "code_mode_host": {
+        "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf",
+        "version": "0.169.0"
+      },
+      "codex_package": {
+        "executables": {
+          "code_mode_host": {
+            "path": "bin/codex-code-mode-host",
+            "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+          },
+          "entrypoint": {
+            "path": "bin/codex",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          },
+          "execServer": {
+            "path": "bin/codex-exec-server",
+            "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+          },
+          "pathDir/rg": {
+            "path": "codex-path/rg",
+            "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+          }
+        },
+        "layout_version": 1,
+        "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+        "target": "aarch64-apple-darwin",
+        "version": "0.169.0"
+      },
+      "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+      "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+      "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+      "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+      "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+      "model": "gpt-5.6-luna",
+      "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
+      "policy": "be6df35b2c5c99d8a969c66fbe65eb5d4aa17b4d7255097ca0e2d50e0475d46c",
+      "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+      "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645"
+    },
+    "configuration_identity": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+    "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+    "launch_identity_sha256": "e14f5932f3fe007960ae332b5d9b425e03c82cd88efacf67d32e07e411e81061",
+    "mismatch": {},
+    "native_files": {
+      ".codex/config.toml": "280c97e505a06b2468f98f4cb59a1d2fbd1c6c2858e903000a85df4afe247afe",
+      ".codex/hooks.json": "1f28d87f231b906b4f6e2372a9a31660644098d4c5cd273e4c22412f80dbea6c"
+    }
+  },
+  "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/p4-B-xr/control/executors/b30e6de298d14e8b9ec19fca5fdad892",
+  "label": "B-xr",
+  "max_turns": 8,
+  "outcome": "success",
+  "policy_digest": "f9817e282c625d7cd2b187bfa77da7af443898c4a6bad7d64a40dc25a521f688",
+  "returncode": 0,
+  "review_validation": {
+    "followups": 0,
+    "issues": 1,
+    "valid": true
+  },
+  "role": "reviewer",
+  "session_id_sha16": "e12632ff39f595e8",
+  "timed_out": false,
+  "tool_calls": 6,
+  "usage": {
+    "cache_read_tokens": 204544.0,
+    "cache_write_tokens": 0.0,
+    "cost_usd": null,
+    "input_tokens": 220473.0,
+    "output_tokens": 1369.0,
+    "reasoning_tokens": 684.0,
+    "uncached_input_tokens": 15929.0
+  },
+  "wall_s": 41.5
+}

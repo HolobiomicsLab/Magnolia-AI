@@ -1,0 +1,9 @@
+{
+  "schema_version": "magnolia-live1-campaign-v1",
+  "protocol": "tests/fixtures/campaigns/harness-p3/worker-codex-review.json",
+  "init": "ok (protocol under <project>/campaigns/)",
+  "finding_1": "init copies only prompts/ scripts/ checks/ jobs/ beside the protocol; the fixture's stage prompt 'prompt.md' sits beside the protocol and is not copied, so control/prompt.md is missing (operator copied it verbatim to proceed)",
+  "finding_2": "run halted before any stage: 'core-hour budget exceeded: 0 >= 0.0' (budget.max_core_hours = 0 with runner check usage >= max); queued -> halted, zero client launches",
+  "worker-claude-code-review": "not attempted: its Claude worker is refused by the production table (client_version)",
+  "client_invocations": 0
+}

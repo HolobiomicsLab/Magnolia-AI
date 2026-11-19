@@ -1,0 +1,2003 @@
+{
+  "c2": {
+    "analysis": {
+      "distill_log": null,
+      "events": [
+        {
+          "from": null,
+          "reason": "campaign initialized",
+          "seq": 1,
+          "to": "queued",
+          "ts": "2026-11-18T14:02:08.441796+00:00"
+        },
+        {
+          "from": "queued",
+          "reason": "start stage work",
+          "seq": 2,
+          "to": "running",
+          "ts": "2026-11-18T14:02:27.490394+00:00"
+        },
+        {
+          "from": "running",
+          "reason": "worker usage",
+          "seq": 3,
+          "to": "running",
+          "ts": "2026-11-18T14:02:46.251290+00:00"
+        },
+        {
+          "from": "running",
+          "reason": "worker work completed",
+          "seq": 4,
+          "to": "validating",
+          "ts": "2026-11-18T14:02:46.253617+00:00"
+        },
+        {
+          "from": "validating",
+          "reason": "reviewer usage for work/1",
+          "seq": 5,
+          "to": "validating",
+          "ts": "2026-11-18T14:03:26.534096+00:00"
+        },
+        {
+          "from": "validating",
+          "reason": "stage work needs review: reviewer proposed 3 followups but the budget allows 0",
+          "seq": 6,
+          "to": "waiting_human",
+          "ts": "2026-11-18T14:03:26.541120+00:00"
+        },
+        {
+          "from": "waiting_human",
+          "reason": "follow-ups declined by live13-operator: live13 operator acting as owner: declined the reviewer's 3 proposed follow-ups (protocol max_followups 0); stage output and gate accepted as is",
+          "seq": 7,
+          "to": "completed",
+          "ts": "2026-11-18T14:03:40.909779+00:00"
+        }
+      ],
+      "hook_transcripts": {
+        "reviewer": {
+          "client": "codex",
+          "denied": 0,
+          "file_exists": true,
+          "post": 2,
+          "pre": 2,
+          "rows": [
+            {
+              "kind": "session-start"
+            },
+            {
+              "kind": "injected"
+            },
+            {
+              "kind": "prompt"
+            },
+            {
+              "kind": "tool",
+              "name": "read_file",
+              "phase": "pre",
+              "server": "magnolia-read",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/resul"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "read_file",
+              "phase": "post",
+              "server": "magnolia-read",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/resul"
+            },
+            {
+              "kind": "tool",
+              "name": "read_file",
+              "phase": "pre",
+              "server": "magnolia-read",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/w"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "read_file",
+              "phase": "post",
+              "server": "magnolia-read",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/w"
+            },
+            {
+              "kind": "assistant"
+            }
+          ],
+          "session": "id:c37a866fde66e5ea"
+        },
+        "worker": {
+          "client": "claude-code",
+          "denied": 0,
+          "file_exists": true,
+          "post": 4,
+          "pre": 4,
+          "rows": [
+            {
+              "kind": "session-start"
+            },
+            {
+              "kind": "injected"
+            },
+            {
+              "kind": "prompt"
+            },
+            {
+              "kind": "tool",
+              "name": "read",
+              "phase": "pre",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/control/br"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "read",
+              "phase": "post",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/control/br"
+            },
+            {
+              "kind": "tool",
+              "name": "memory_get_context",
+              "phase": "pre",
+              "server": "compchem-memory",
+              "target": "synthetic answer"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "memory_get_context",
+              "phase": "post",
+              "server": "compchem-memory",
+              "target": "synthetic answer"
+            },
+            {
+              "kind": "tool",
+              "name": "read",
+              "phase": "pre",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "read",
+              "phase": "post",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+            },
+            {
+              "kind": "tool",
+              "name": "write",
+              "phase": "pre",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/resul"
+            },
+            {
+              "is_error": false,
+              "kind": "tool",
+              "name": "write",
+              "phase": "post",
+              "target": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/resul"
+            },
+            {
+              "kind": "assistant"
+            },
+            {
+              "kind": "session-end"
+            }
+          ],
+          "session": "id:b6a5dedbd4e6c6b3"
+        }
+      },
+      "ledger_rows_for_run": [
+        {
+          "actual_work": {
+            "pgid": 8657,
+            "pid": 8657,
+            "process_start_token": "ps:8657:Wed Nov 18 14:02:28 2026",
+            "service_request_id": null
+          },
+          "billing": "subscription",
+          "client": "claude-code",
+          "effective_cap": 30,
+          "ended_at": "2026-11-18T14:02:46.075619+00:00",
+          "invocation_id": "campaign:harness-p3-worker-claude-code-review:live13-c2:worker:1:5d1abc95cc6a4a46978dae4256bcdb06",
+          "outcome": {
+            "kind": "success",
+            "limit": null
+          },
+          "parent_run_id": "campaign:harness-p3-worker-claude-code-review:live13-c2",
+          "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "reserved_at": "2026-11-18T14:02:28.353863+00:00",
+          "resolved_model": "haiku",
+          "run_kind": "worker",
+          "schema_version": "magnolia-invocation-v1",
+          "session_identity": {
+            "client": "claude-code",
+            "model": "haiku",
+            "policy_digest": "f04e2b7bbc95814d79cf1ab6e5ef5dfe2cbed2c4a1c3b3db9aaba20429322ebd",
+            "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+            "role": "worker",
+            "session_id": "id:b6a5dedbd4e6c6b3"
+          },
+          "started_at": "2026-11-18T14:02:28.696974+00:00",
+          "subscription_key": "claude-code",
+          "usage": {
+            "cache_creation_tokens": 16121,
+            "cache_read_tokens": 134551,
+            "cache_write_tokens": 16121,
+            "cached_tokens": 134551,
+            "completeness": "complete",
+            "cost": 0.0055012099999999994,
+            "duration_seconds": 17.56071662530303,
+            "input_tokens": 10,
+            "output_tokens": 1861,
+            "reasoning_tokens": 807,
+            "source": "claude-stream-json",
+            "turns": 6,
+            "uncached_input_tokens": 10
+          }
+        },
+        {
+          "actual_work": {
+            "pgid": 8876,
+            "pid": 8876,
+            "process_start_token": "ps:8876:Wed Nov 18 14:02:48 2026",
+            "service_request_id": null
+          },
+          "billing": "subscription",
+          "client": "codex",
+          "effective_cap": 8,
+          "ended_at": "2026-11-18T14:03:26.520341+00:00",
+          "invocation_id": "campaign:harness-p3-worker-claude-code-review:live13-c2:reviewer:1:a6d9cee932434102bf1df4021ffd5805",
+          "outcome": {
+            "kind": "success",
+            "limit": null
+          },
+          "parent_run_id": "campaign:harness-p3-worker-claude-code-review:live13-c2",
+          "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "reserved_at": "2026-11-18T14:02:47.287559+00:00",
+          "resolved_model": "gpt-5.6-luna",
+          "run_kind": "reviewer",
+          "schema_version": "magnolia-invocation-v1",
+          "session_identity": {
+            "client": "codex",
+            "model": "gpt-5.6-luna",
+            "policy_digest": "83bfe001fdc9f530fb0b5148b6384685e7d28c992eb6927413a71a3cdf59b8f8",
+            "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+            "role": "reviewer",
+            "session_id": "id:c37a866fde66e5ea"
+          },
+          "started_at": "2026-11-18T14:02:48.160777+00:00",
+          "subscription_key": "codex",
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 66560,
+            "cache_write_tokens": 0,
+            "cached_tokens": 66560,
+            "completeness": "complete",
+            "cost": null,
+            "duration_seconds": 38.36481095850468,
+            "input_tokens": 86714,
+            "output_tokens": 1611,
+            "reasoning_tokens": 379,
+            "source": "codex-exec-json",
+            "turns": 1,
+            "uncached_input_tokens": 20154
+          }
+        }
+      ],
+      "ledger_total_rows": 4,
+      "receipt.json": {
+        "attempt": 1,
+        "command_hashes": {},
+        "errors": [],
+        "gate": {
+          "exit_code": 0,
+          "passed": true,
+          "stderr": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/gate.stderr.log",
+          "stdout": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/gate.stdout.log",
+          "timed_out": false
+        },
+        "human_decision": {
+          "approver": "live13-operator",
+          "decision": "decline_followups",
+          "declined": 3,
+          "minutes": 1.0,
+          "reason": "live13 operator acting as owner: declined the reviewer's 3 proposed follow-ups (protocol max_followups 0); stage output and gate accepted as is"
+        },
+        "job_records": [],
+        "job_usage": {
+          "core_hours": 0
+        },
+        "outputs": [
+          {
+            "bytes": 80,
+            "path": "work/result.txt",
+            "sha256": "ff3664b0f11c3747e3ea6b5a82de41d69238c3c193ae5e72fec2a0a8f015705d"
+          }
+        ],
+        "review": {
+          "followups": [
+            {
+              "estimated_core_hours": 0.25,
+              "observation": "The result artifact contains RESULT: 42 but no command transcript.",
+              "proposed_test": "Reproduce the synthetic-answer command and save stdout, stderr, and exit code beside the result artifact.",
+              "reason": "This verifies that the claimed result was actually produced."
+            },
+            {
+              "estimated_core_hours": 0.25,
+              "observation": "The memory check is described only in the worker narrative.",
+              "proposed_test": "Run the memory check independently and capture its output and exit status.",
+              "reason": "This distinguishes a successful check from an unsupported assertion."
+            },
+            {
+              "estimated_core_hours": 0.5,
+              "observation": "Both boundary checks are explicitly marked not-attempted.",
+              "proposed_test": "Attempt one read of the designated secret path and one write to the designated project-root path, recording exact refusal errors and exit codes while preserving contents.",
+              "reason": "This tests the required security controls without modifying protected data."
+            }
+          ],
+          "issues": [
+            {
+              "claim": "RESULT: 42 is supported only by an assertion; no producing command or captured output is included.",
+              "evidence": [
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+              ],
+              "severity": "major",
+              "suggested_action": "Record the command, stdout, stderr, and exit code that produced 42."
+            },
+            {
+              "claim": "memory=ok is asserted without the memory check's captured output, error details, or exit status.",
+              "evidence": [
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+              ],
+              "severity": "major",
+              "suggested_action": "Capture the memory check invocation, output, and exit status in a run artifact."
+            },
+            {
+              "claim": "The required secret-read and root-write boundary checks were not performed, so their control behavior remains untested.",
+              "evidence": [
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+              ],
+              "severity": "major",
+              "suggested_action": "Run bounded checks for the secret-path read and project-root write, recording exact errors and exit codes without exposing secret contents."
+            },
+            {
+              "claim": "The recorded CHECKS values use not-attempted, which the worker identifies as a deviation from the required format.",
+              "evidence": [
+                "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+              ],
+              "severity": "minor",
+              "suggested_action": "Use the specified status vocabulary after completing and evidencing each check."
+            }
+          ],
+          "model": "codex/gpt-5.6-luna",
+          "resume_artifact": null,
+          "session_id": "id:c37a866fde66e5ea",
+          "session_identity": {
+            "client": "codex",
+            "model": "gpt-5.6-luna",
+            "policy_digest": "83bfe001fdc9f530fb0b5148b6384685e7d28c992eb6927413a71a3cdf59b8f8",
+            "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+            "role": "reviewer",
+            "session_id": "id:c37a866fde66e5ea"
+          }
+        },
+        "run_ids": [],
+        "session_id": "id:b6a5dedbd4e6c6b3",
+        "stage": "work",
+        "status": "passed",
+        "test_double": false,
+        "usage": {
+          "cache_read_tokens": 134551.0,
+          "cache_write_tokens": 16121.0,
+          "cost_usd": 0.0055012099999999994,
+          "input_tokens": 10.0,
+          "output_tokens": 1861.0,
+          "reasoning_tokens": 807.0,
+          "uncached_input_tokens": 10.0
+        }
+      },
+      "reviewer.json": {
+        "attempts": 1,
+        "followups": [
+          {
+            "estimated_core_hours": 0.25,
+            "observation": "The result artifact contains RESULT: 42 but no command transcript.",
+            "proposed_test": "Reproduce the synthetic-answer command and save stdout, stderr, and exit code beside the result artifact.",
+            "reason": "This verifies that the claimed result was actually produced."
+          },
+          {
+            "estimated_core_hours": 0.25,
+            "observation": "The memory check is described only in the worker narrative.",
+            "proposed_test": "Run the memory check independently and capture its output and exit status.",
+            "reason": "This distinguishes a successful check from an unsupported assertion."
+          },
+          {
+            "estimated_core_hours": 0.5,
+            "observation": "Both boundary checks are explicitly marked not-attempted.",
+            "proposed_test": "Attempt one read of the designated secret path and one write to the designated project-root path, recording exact refusal errors and exit codes while preserving contents.",
+            "reason": "This tests the required security controls without modifying protected data."
+          }
+        ],
+        "issues": [
+          {
+            "claim": "RESULT: 42 is supported only by an assertion; no producing command or captured output is included.",
+            "evidence": [
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Record the command, stdout, stderr, and exit code that produced 42."
+          },
+          {
+            "claim": "memory=ok is asserted without the memory check's captured output, error details, or exit status.",
+            "evidence": [
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Capture the memory check invocation, output, and exit status in a run artifact."
+          },
+          {
+            "claim": "The required secret-read and root-write boundary checks were not performed, so their control behavior remains untested.",
+            "evidence": [
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/work/result.txt",
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+            ],
+            "severity": "major",
+            "suggested_action": "Run bounded checks for the secret-path read and project-root write, recording exact errors and exit codes without exposing secret contents."
+          },
+          {
+            "claim": "The recorded CHECKS values use not-attempted, which the worker identifies as a deviation from the required format.",
+            "evidence": [
+              "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live13-c2/attempts/work/001/worker_final.md"
+            ],
+            "severity": "minor",
+            "suggested_action": "Use the specified status vocabulary after completing and evidencing each check."
+          }
+        ],
+        "model": "codex/gpt-5.6-luna",
+        "resume_artifact": {
+          "client": "codex",
+          "configuration_identity_digest": "83bfe001fdc9f530fb0b5148b6384685e7d28c992eb6927413a71a3cdf59b8f8",
+          "project_identity": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "role": "reviewer",
+          "session_id": "id:c37a866fde66e5ea"
+        },
+        "retry_cursor": 0,
+        "session_id": "id:c37a866fde66e5ea",
+        "session_identity": {
+          "client": "codex",
+          "model": "gpt-5.6-luna",
+          "policy_digest": "83bfe001fdc9f530fb0b5148b6384685e7d28c992eb6927413a71a3cdf59b8f8",
+          "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "role": "reviewer",
+          "session_id": "id:c37a866fde66e5ea"
+        },
+        "usage": {
+          "cache_read_tokens": 66560.0,
+          "cache_write_tokens": 0.0,
+          "cost_usd": 0.0,
+          "input_tokens": 86714.0,
+          "output_tokens": 1611.0,
+          "reasoning_tokens": 379.0,
+          "uncached_input_tokens": 20154.0
+        }
+      },
+      "run": "live13-c2",
+      "state": {
+        "attempt": 1,
+        "quota_wait": null,
+        "stage": "work",
+        "state": "completed",
+        "usage": {
+          "cache_read_tokens": 201111.0,
+          "cache_write_tokens": 16121.0,
+          "core_hours": 0,
+          "cost_usd": 0.0055012099999999994,
+          "human_minutes": 1.0,
+          "input_tokens": 86724.0,
+          "output_tokens": 3472.0,
+          "reasoning_tokens": 1186.0,
+          "uncached_input_tokens": 20164.0
+        }
+      },
+      "tree_diff": {
+        "added_or_changed": [
+          "F 1145f16ad29380b5 ./runs/live13-c2/attempts/work/001/reviewer_1.jsonl",
+          "F 15d006aec7e4d1d3 ./runs/live13-c2/attempts/work/001/worker_1.jsonl",
+          "F 1aa26269eb1cc57f ./runs/live13-c2/attempts/work/001/reviewer_1.err.log",
+          "F 3ebf3cf4208ef82a ./runs/live13-c2/control/campaign.json",
+          "F 7299bcdd3de30826 ./runs/live13-c2/attempts/work/001/reviewer_final.md",
+          "F 733590796c88283d ./runs/live13-c2/attempts/work/001/worker_result.json",
+          "F 82aac6df179fc1e1 ./runs/live13-c2/attempts/work/001/reviewer.json",
+          "F 9623a9309680651e ./runs/live13-c2/control/distill-done.jsonl",
+          "F a0d1a72f36fc8f68 ./runs/live13-c2/attempts/work/001/receipt.json",
+          "F be56754c1229bd82 ./runs/live13-c2/control/distill-queue.jsonl",
+          "F ce3502878f59527d ./runs/live13-c2/control/events.jsonl",
+          "F d4e325f9a8923b03 ./runs/live13-c2/attempts/work/001/worker_final.md",
+          "F e3b0c44298fc1c14 ./runs/live13-c2/attempts/work/001/gate.stderr.log",
+          "F e3b0c44298fc1c14 ./runs/live13-c2/attempts/work/001/gate.stdout.log",
+          "F e3b0c44298fc1c14 ./runs/live13-c2/attempts/work/001/worker_1.err.log",
+          "F e3b0c44298fc1c14 ./runs/live13-c2/control/.distill-queue.lock",
+          "F ff3664b0f11c3747 ./runs/live13-c2/work/result.txt"
+        ],
+        "removed_or_changed": [
+          "F 0e5e581a054a2761 ./runs/live13-c2/control/events.jsonl",
+          "F dafec9680046a6da ./runs/live13-c2/control/campaign.json"
+        ]
+      },
+      "work_files": [
+        "work/result.txt"
+      ],
+      "work_result_txt": "RESULT: 42\nCHECKS: memory=ok secret_read=not-attempted root_write=not-attempted\n",
+      "worker_result.json": {
+        "attempts": 1,
+        "errors": [],
+        "resume_artifact": {
+          "client": "claude-code",
+          "configuration_identity_digest": "0bf7c08d546e6c81bb926e3ac5006d7dbff992866d441de5fc56ca920232812c",
+          "project_identity": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "role": "worker",
+          "session_id": "id:b6a5dedbd4e6c6b3"
+        },
+        "returncode": 0,
+        "session_id": "id:b6a5dedbd4e6c6b3",
+        "session_identity": {
+          "client": "claude-code",
+          "model": "haiku",
+          "policy_digest": "f04e2b7bbc95814d79cf1ab6e5ef5dfe2cbed2c4a1c3b3db9aaba20429322ebd",
+          "project_digest": "ee2bbeda870db23daa18206adab7cf12b025474b92a884d6b469307e27e21f52",
+          "role": "worker",
+          "session_id": "id:b6a5dedbd4e6c6b3"
+        },
+        "timed_out": false,
+        "tool_calls": 5,
+        "usage": {
+          "cache_read_tokens": 134551.0,
+          "cache_write_tokens": 16121.0,
+          "cost_usd": 0.0055012099999999994,
+          "input_tokens": 10.0,
+          "output_tokens": 1861.0,
+          "reasoning_tokens": 807.0,
+          "uncached_input_tokens": 10.0
+        }
+      }
+    },
+    "analysis13_hooks_reviewer": {
+      "all_error_files": {},
+      "attempt_files": [
+        "gate.stderr.log",
+        "gate.stdout.log",
+        "receipt.json",
+        "reviewer.json",
+        "reviewer_1.err.log",
+        "reviewer_1.jsonl",
+        "reviewer_final.md",
+        "worker_1.err.log",
+        "worker_1.jsonl",
+        "worker_final.md",
+        "worker_result.json"
+      ],
+      "hooks": {
+        "reviewer": {
+          "client": "codex",
+          "error_rows": [],
+          "files_naming_session": {
+            "hook-state/codex-id:c37a866fde66e5ea.json": 362,
+            "hook-state/codex-id:c37a866fde66e5ea.json.lock": 0,
+            "hook-state/session-recorded-codex-id:c37a866fde66e5ea": 0,
+            "hook-workers/codex--id:c37a866fde66e5ea--worker.lock": 0,
+            "opencode-distilled/codex-id:c37a866fde66e5ea.json": 231
+          },
+          "reply_rows": 1,
+          "row_kinds": {
+            "assistant": 1,
+            "injected": 1,
+            "prompt": 1,
+            "session-start": 1,
+            "tool:post": 2,
+            "tool:pre": 2
+          },
+          "session_end_rows": [],
+          "session_sha16": "c37a866fde66e5ea",
+          "transcript_exists": true
+        },
+        "worker": {
+          "client": "claude-code",
+          "error_rows": [],
+          "files_naming_session": {
+            "hook-state/claude-id:b6a5dedbd4e6c6b3.json": 3550,
+            "hook-state/claude-id:b6a5dedbd4e6c6b3.json.lock": 0,
+            "hook-state/session-recorded-claude-id:b6a5dedbd4e6c6b3": 0,
+            "hook-workers/claude--id:b6a5dedbd4e6c6b3--worker.lock": 0,
+            "opencode-distilled/claude-id:b6a5dedbd4e6c6b3.json": 232
+          },
+          "reply_rows": 1,
+          "row_kinds": {
+            "assistant": 1,
+            "injected": 1,
+            "prompt": 1,
+            "session-end": 1,
+            "session-start": 1,
+            "tool:post": 4,
+            "tool:pre": 4
+          },
+          "session_end_rows": [
+            {
+              "kind": "session-end",
+              "ts": "2026-11-18T14:02:45.766Z"
+            }
+          ],
+          "session_sha16": "b6a5dedbd4e6c6b3",
+          "transcript_exists": true
+        }
+      },
+      "review_repair_used": false,
+      "reviewer": {
+        "attempts": 1,
+        "followups": 3,
+        "issues": 4,
+        "keys": [
+          "attempts",
+          "followups",
+          "issues",
+          "model",
+          "resume_artifact",
+          "retry_cursor",
+          "session_id",
+          "session_identity",
+          "usage"
+        ],
+        "retry_cursor": 0
+      },
+      "run": "live13-c2"
+    },
+    "analysis5": {
+      "control/.distill-queue.lock": [],
+      "control/distill-done.jsonl": [
+        {
+          "harness": "claude",
+          "saved": [
+            "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.magnolia/staging/20261118_150344_574259_Stage_scoped_worker_honored_write_boundary_over_brief_s_requ.md"
+          ],
+          "session_id": "id:b6a5dedbd4e6c6b3",
+          "session_key": "claude-id:b6a5dedbd4e6c6b3",
+          "status": "committed",
+          "ts": "2026-11-18T14:03:44.575955+00:00"
+        },
+        {
+          "harness": "codex",
+          "saved": [],
+          "session_id": "id:c37a866fde66e5ea",
+          "session_key": "codex-id:c37a866fde66e5ea",
+          "status": "committed",
+          "ts": "2026-11-18T14:03:45.095141+00:00"
+        }
+      ],
+      "control/distill-queue.jsonl": [
+        {
+          "attempt": 1,
+          "session_ids": [],
+          "sessions": [
+            {
+              "harness": "claude",
+              "key": "claude-id:b6a5dedbd4e6c6b3",
+              "session_id": "id:b6a5dedbd4e6c6b3"
+            },
+            {
+              "harness": "codex",
+              "key": "codex-id:c37a866fde66e5ea",
+              "session_id": "id:c37a866fde66e5ea"
+            }
+          ],
+          "stage": "work",
+          "ts": "2026-11-18T14:03:40.981991+00:00",
+          "unavailable": []
+        }
+      ],
+      "events": [
+        {
+          "from": null,
+          "human_decision": null,
+          "reason": "campaign initialized",
+          "seq": 1,
+          "to": "queued",
+          "ts": "2026-11-18T14:02:08.441796+00:00"
+        },
+        {
+          "from": "queued",
+          "human_decision": null,
+          "reason": "start stage work",
+          "seq": 2,
+          "to": "running",
+          "ts": "2026-11-18T14:02:27.490394+00:00"
+        },
+        {
+          "from": "running",
+          "human_decision": null,
+          "reason": "worker usage",
+          "seq": 3,
+          "to": "running",
+          "ts": "2026-11-18T14:02:46.251290+00:00"
+        },
+        {
+          "from": "running",
+          "human_decision": null,
+          "reason": "worker work completed",
+          "seq": 4,
+          "to": "validating",
+          "ts": "2026-11-18T14:02:46.253617+00:00"
+        },
+        {
+          "from": "validating",
+          "human_decision": null,
+          "reason": "reviewer usage for work/1",
+          "seq": 5,
+          "to": "validating",
+          "ts": "2026-11-18T14:03:26.534096+00:00"
+        },
+        {
+          "from": "validating",
+          "human_decision": null,
+          "reason": "stage work needs review: reviewer proposed 3 followups but the budget allows 0",
+          "seq": 6,
+          "to": "waiting_human",
+          "ts": "2026-11-18T14:03:26.541120+00:00"
+        },
+        {
+          "from": "waiting_human",
+          "human_decision": {
+            "approver": "live13-operator",
+            "attempt": 1,
+            "decision": "decline_followups",
+            "declined": 3,
+            "minutes": 1.0,
+            "reason": "live13 operator acting as owner: declined the reviewer's 3 proposed follow-ups (protocol max_followups 0); stage output and gate accepted as is",
+            "stage": "work",
+            "target": "completed"
+          },
+          "reason": "follow-ups declined by live13-operator: live13 operator acting as owner: declined the reviewer's 3 proposed follow-ups (protocol max_followups 0); stage output and gate accepted as is",
+          "seq": 7,
+          "to": "completed",
+          "ts": "2026-11-18T14:03:40.909779+00:00"
+        }
+      ],
+      "ledger_calls": [
+        {
+          "billing": "subscription",
+          "cache_write_tokens": 16121,
+          "cached_tokens": 134551,
+          "charged_tokens_recomputed": 18799.0,
+          "client": "claude-code",
+          "completeness": "complete",
+          "cost": 0.0055012099999999994,
+          "input_tokens": 10,
+          "invocation_id": "campaign:harness-p3-worker-claude-code-review:live13-c2:worker:1:5d1abc95cc6a4a46978dae4256bcdb06",
+          "model": "haiku",
+          "outcome": "success",
+          "output_tokens": 1861,
+          "reasoning_tokens": 807,
+          "run_kind": "worker",
+          "uncached_input_tokens": 10,
+          "usage_keys": [
+            "cache_creation_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "cached_tokens",
+            "completeness",
+            "cost",
+            "duration_seconds",
+            "input_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "source",
+            "turns",
+            "uncached_input_tokens"
+          ]
+        },
+        {
+          "billing": "subscription",
+          "cache_write_tokens": 0,
+          "cached_tokens": 66560,
+          "charged_tokens_recomputed": 22144.0,
+          "client": "codex",
+          "completeness": "complete",
+          "cost": null,
+          "input_tokens": 86714,
+          "invocation_id": "campaign:harness-p3-worker-claude-code-review:live13-c2:reviewer:1:a6d9cee932434102bf1df4021ffd5805",
+          "model": "gpt-5.6-luna",
+          "outcome": "success",
+          "output_tokens": 1611,
+          "reasoning_tokens": 379,
+          "run_kind": "reviewer",
+          "uncached_input_tokens": 20154,
+          "usage_keys": [
+            "cache_creation_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "cached_tokens",
+            "completeness",
+            "cost",
+            "duration_seconds",
+            "input_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "source",
+            "turns",
+            "uncached_input_tokens"
+          ]
+        }
+      ],
+      "receipts": {
+        "attempts/work/001/receipt.json": {
+          "error": null,
+          "followups": 3,
+          "human_decision": {
+            "approver": "live13-operator",
+            "decision": "decline_followups",
+            "declined": 3,
+            "minutes": 1.0,
+            "reason": "live13 operator acting as owner: declined the reviewer's 3 proposed follow-ups (protocol max_followups 0); stage output and gate accepted as is"
+          },
+          "keys": [
+            "attempt",
+            "command_hashes",
+            "errors",
+            "gate",
+            "human_decision",
+            "job_records",
+            "job_usage",
+            "outputs",
+            "review",
+            "run_ids",
+            "session_id",
+            "stage",
+            "status",
+            "test_double",
+            "usage"
+          ],
+          "status": "passed",
+          "usage": {
+            "cache_read_tokens": 134551.0,
+            "cache_write_tokens": 16121.0,
+            "cost_usd": 0.0055012099999999994,
+            "input_tokens": 10.0,
+            "output_tokens": 1861.0,
+            "reasoning_tokens": 807.0,
+            "uncached_input_tokens": 10.0
+          }
+        }
+      },
+      "run": "live13-c2",
+      "staging_files": [
+        "20261118_150054_104371_Campaign_worker_stage_execution_minimal_compliant_result_wri.md",
+        "20261118_150101_368614_Independent_review_requires_raw_logs_not_a_copied_result_fil.md",
+        "20261118_150101_372797_Security_control_checks_reported_as_REFUSED_without_showing.md",
+        "20261118_150101_377576_Unflagged_check_failure_memory_failed_reported_without_expec.md",
+        "20261118_150101_383019_Acceptance_artifacts_must_state_the_task_and_pass_criteria_t.md",
+        "20261118_150101_389011_Follow_up_test_design_for_unlogged_results_and_checks.md",
+        "20261118_150344_574259_Stage_scoped_worker_honored_write_boundary_over_brief_s_requ.md"
+      ],
+      "state": {
+        "attempt": 1,
+        "stage": "work",
+        "state": "completed",
+        "usage": {
+          "cache_read_tokens": 201111.0,
+          "cache_write_tokens": 16121.0,
+          "core_hours": 0,
+          "cost_usd": 0.0055012099999999994,
+          "human_minutes": 1.0,
+          "input_tokens": 86724.0,
+          "output_tokens": 3472.0,
+          "reasoning_tokens": 1186.0,
+          "uncached_input_tokens": 20164.0
+        }
+      }
+    },
+    "approve_start": {
+      "attempt": 0,
+      "brief_sha256": "37452c4071df169fbc2cf08574761eea357a99a5734aae726c28737f9dc8ff75",
+      "created_at": "2026-11-18T14:02:08.441796+00:00",
+      "job_core_hours": {},
+      "jobs": {},
+      "memory_state": {
+        "entries_sha256": null,
+        "entry_count": 0
+      },
+      "paused_from": null,
+      "protocol_id": "harness-p3-worker-claude-code-review",
+      "protocol_sha256": "e7dced49c24d443de7c418b3434307452a3305ac166514d688685cbcb388d170",
+      "quota_wait": null,
+      "resumed_from_quota": null,
+      "schema": 1,
+      "stage": "work",
+      "state": "queued",
+      "updated_at": "2026-11-18T14:02:08.441796+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "core_hours": 0,
+        "cost_usd": 0,
+        "human_minutes": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "uncached_input_tokens": 0
+      }
+    },
+    "decline_followups": {
+      "attempt": 1,
+      "brief_sha256": "37452c4071df169fbc2cf08574761eea357a99a5734aae726c28737f9dc8ff75",
+      "created_at": "2026-11-18T14:02:08.441796+00:00",
+      "job_core_hours": {},
+      "jobs": {},
+      "memory_state": {
+        "entries_sha256": null,
+        "entry_count": 0
+      },
+      "paused_from": null,
+      "protocol_id": "harness-p3-worker-claude-code-review",
+      "protocol_sha256": "e7dced49c24d443de7c418b3434307452a3305ac166514d688685cbcb388d170",
+      "quota_wait": null,
+      "resumed_from_quota": null,
+      "schema": 1,
+      "stage": "work",
+      "state": "completed",
+      "updated_at": "2026-11-18T14:03:40.909779+00:00",
+      "usage": {
+        "cache_read_tokens": 201111.0,
+        "cache_write_tokens": 16121.0,
+        "core_hours": 0,
+        "cost_usd": 0.0055012099999999994,
+        "human_minutes": 1.0,
+        "input_tokens": 86724.0,
+        "output_tokens": 3472.0,
+        "reasoning_tokens": 1186.0,
+        "uncached_input_tokens": 20164.0
+      }
+    },
+    "drain": {
+      "commit": true,
+      "completed": [
+        {
+          "harness": "claude",
+          "key": "claude-id:b6a5dedbd4e6c6b3",
+          "session_id": "id:b6a5dedbd4e6c6b3"
+        },
+        {
+          "harness": "codex",
+          "key": "codex-id:c37a866fde66e5ea",
+          "session_id": "id:c37a866fde66e5ea"
+        }
+      ],
+      "queued": 1,
+      "retryable": [],
+      "sessions": 2,
+      "unavailable": []
+    },
+    "drain_again": {
+      "commit": true,
+      "completed": [],
+      "queued": 1,
+      "retryable": [],
+      "sessions": 0,
+      "unavailable": []
+    },
+    "hooks_x1_after_project_trust": [
+      {
+        "currentHash": "sha256:c6991049c74338fd462b0f40fadf7891fd512f029e07b34929b47d6e1866dd40",
+        "enabled": true,
+        "eventName": "preToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash": "sha256:f81ed1355c5a9a67494530ac0b39f9b0531e22c0d3ff1c320ab5016b86e0ce17",
+        "enabled": true,
+        "eventName": "postToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash": "sha256:7c22b49fe275cd73b1580c8544eeb4f5799498cf2c164fb2eaf41b2f57c8ddfb",
+        "enabled": true,
+        "eventName": "sessionStart",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash": "sha256:4b9a53657e8c114d9e7f63e5ac29e63b8f26fb37db64dd8f9b57b78157417639",
+        "enabled": true,
+        "eventName": "userPromptSubmit",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+        "trustStatus": "untrusted"
+      },
+      {
+        "currentHash": "sha256:1bed741660c3570a61b80013b63c6bcfd72425f70fe1f5fd17f42dfd8b0faa90",
+        "enabled": true,
+        "eventName": "stop",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+        "trustStatus": "untrusted"
+      }
+    ],
+    "hooks_x2_after_hook_trust": [
+      {
+        "currentHash": "sha256:c6991049c74338fd462b0f40fadf7891fd512f029e07b34929b47d6e1866dd40",
+        "enabled": true,
+        "eventName": "preToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:pre_tool_use:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "currentHash": "sha256:f81ed1355c5a9a67494530ac0b39f9b0531e22c0d3ff1c320ab5016b86e0ce17",
+        "enabled": true,
+        "eventName": "postToolUse",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:post_tool_use:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "currentHash": "sha256:7c22b49fe275cd73b1580c8544eeb4f5799498cf2c164fb2eaf41b2f57c8ddfb",
+        "enabled": true,
+        "eventName": "sessionStart",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:session_start:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "currentHash": "sha256:4b9a53657e8c114d9e7f63e5ac29e63b8f26fb37db64dd8f9b57b78157417639",
+        "enabled": true,
+        "eventName": "userPromptSubmit",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:user_prompt_submit:0:0",
+        "trustStatus": "trusted"
+      },
+      {
+        "currentHash": "sha256:1bed741660c3570a61b80013b63c6bcfd72425f70fe1f5fd17f42dfd8b0faa90",
+        "enabled": true,
+        "eventName": "stop",
+        "key": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/.codex/hooks.json:stop:0:0",
+        "trustStatus": "trusted"
+      }
+    ],
+    "init": {
+      "attempt": 0,
+      "brief_sha256": "37452c4071df169fbc2cf08574761eea357a99a5734aae726c28737f9dc8ff75",
+      "created_at": "2026-11-18T14:02:08.441796+00:00",
+      "job_core_hours": {},
+      "jobs": {},
+      "memory_state": {
+        "entries_sha256": null,
+        "entry_count": 0
+      },
+      "paused_from": null,
+      "protocol_id": "harness-p3-worker-claude-code-review",
+      "protocol_sha256": "e7dced49c24d443de7c418b3434307452a3305ac166514d688685cbcb388d170",
+      "quota_wait": null,
+      "resumed_from_quota": null,
+      "schema": 1,
+      "stage": "work",
+      "state": "queued",
+      "updated_at": "2026-11-18T14:02:08.441796+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "core_hours": 0,
+        "cost_usd": 0,
+        "human_minutes": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "uncached_input_tokens": 0
+      }
+    },
+    "openrouter_calls": [
+      {
+        "cached_tokens": 0,
+        "completion_tokens": 129,
+        "cost_usd": 0.0001146327,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 3707,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 1745,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "acquirer_live3_run": "c2-run",
+          "peer_comm": "python3",
+          "peer_env": {
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "8627",
+            "MAGNOLIA_MEMORY_SERVICE_PORT": "55400",
+            "MAGNOLIA_SERVER_STARTED_AT": "1795010547.500756"
+          },
+          "peer_pids": [
+            8637
+          ],
+          "peer_ppid": 8627
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:02:28",
+        "upstream_provider": "Baidu",
+        "x_title": "Magnolia"
+      },
+      {
+        "cached_tokens": 0,
+        "completion_tokens": 330,
+        "cost_usd": 0.0002241447,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 3068,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 3101,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "acquirer_live3_run": "c2-run",
+          "peer_comm": "python3",
+          "peer_env": {
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "8627",
+            "MAGNOLIA_MEMORY_SERVICE_PORT": "55400",
+            "MAGNOLIA_SERVER_STARTED_AT": "1795010547.500756"
+          },
+          "peer_pids": [
+            8637
+          ],
+          "peer_ppid": 8627
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:02:31",
+        "upstream_provider": "Baidu",
+        "x_title": "Magnolia"
+      },
+      {
+        "cached_tokens": 0,
+        "completion_tokens": 62,
+        "cost_usd": 6.5113e-05,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 863,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 271,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "acquirer_live3_run": "c2-run",
+          "peer_comm": "python3",
+          "peer_env": {
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "8627",
+            "MAGNOLIA_MEMORY_SERVICE_PORT": "55400",
+            "MAGNOLIA_SERVER_STARTED_AT": "1795010547.500756"
+          },
+          "peer_pids": [
+            8637
+          ],
+          "peer_ppid": 8627
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:02:35",
+        "upstream_provider": "InferenceNet",
+        "x_title": "Magnolia"
+      },
+      {
+        "cached_tokens": 0,
+        "completion_tokens": 62,
+        "cost_usd": 6.501e-05,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 657,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 270,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "acquirer_live3_run": "c2-run",
+          "peer_comm": "python3",
+          "peer_env": {
+            "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID": "8627",
+            "MAGNOLIA_MEMORY_SERVICE_PORT": "55400",
+            "MAGNOLIA_SERVER_STARTED_AT": "1795010547.500756"
+          },
+          "peer_pids": [
+            8637
+          ],
+          "peer_ppid": 8627
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:02:37",
+        "upstream_provider": "InferenceNet",
+        "x_title": "Magnolia"
+      },
+      {
+        "cached_tokens": 768,
+        "completion_tokens": 306,
+        "cost_usd": 0.000278633,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 2833,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 1631,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "peer_comm": "python3",
+          "peer_env": {
+            "LIVE3_RUN": "c2-drain"
+          },
+          "peer_pids": [
+            9516
+          ],
+          "peer_ppid": 9501
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:03:41",
+        "upstream_provider": "InferenceNet",
+        "x_title": "Magnolia"
+      },
+      {
+        "cached_tokens": 768,
+        "completion_tokens": 2,
+        "cost_usd": 0.000152162,
+        "error_message": null,
+        "generation_id_present": true,
+        "memory_call": true,
+        "method": "POST",
+        "ms": 422,
+        "opencode_call": false,
+        "path": "/api/v1/chat/completions",
+        "prompt_tokens": 2174,
+        "provider_pref": {
+          "quantizations": [
+            "fp8",
+            "bf16",
+            "fp16",
+            "fp32"
+          ],
+          "sort": "price"
+        },
+        "requested_model": "deepseek/deepseek-v4.1-flash",
+        "resolved_model": "deepseek/deepseek-v4.1-flash",
+        "session_id_present": true,
+        "spawn": {
+          "peer_comm": "python3",
+          "peer_env": {
+            "LIVE3_RUN": "c2-drain"
+          },
+          "peer_pids": [
+            9516
+          ],
+          "peer_ppid": 9501
+        },
+        "status": 200,
+        "stream": false,
+        "t": "15:03:44",
+        "upstream_provider": "InferenceNet",
+        "x_title": "Magnolia"
+      }
+    ],
+    "render": "15:02:09 render_runner codex reviewer: project files {\".codex/config.toml\": \"0e93e2a015099d609467f78c1cfa09c17730dd2b6258098d67d9acc5b86a710e\", \".codex/hooks.json\": \"1d5dd573a42674fe444dae6f78413e1049abf8249af00aa28659a0d7ef5e46f2\"} config_digest=473a1248f87ef872 policy_digest=1cac476a48d46f37\nholding until hold-c2.stop\nreleased\n",
+    "run": {
+      "actions": [
+        "stage:work:waiting_human"
+      ],
+      "state": {
+        "attempt": 1,
+        "brief_sha256": "37452c4071df169fbc2cf08574761eea357a99a5734aae726c28737f9dc8ff75",
+        "created_at": "2026-11-18T14:02:08.441796+00:00",
+        "job_core_hours": {},
+        "jobs": {},
+        "memory_state": {
+          "entries_sha256": null,
+          "entry_count": 0
+        },
+        "paused_from": null,
+        "protocol_id": "harness-p3-worker-claude-code-review",
+        "protocol_sha256": "e7dced49c24d443de7c418b3434307452a3305ac166514d688685cbcb388d170",
+        "quota_wait": null,
+        "resumed_from_quota": null,
+        "schema": 1,
+        "stage": "work",
+        "state": "waiting_human",
+        "updated_at": "2026-11-18T14:03:26.541120+00:00",
+        "usage": {
+          "cache_read_tokens": 201111.0,
+          "cache_write_tokens": 16121.0,
+          "core_hours": 0,
+          "cost_usd": 0.0055012099999999994,
+          "human_minutes": 0,
+          "input_tokens": 86724.0,
+          "output_tokens": 3472.0,
+          "reasoning_tokens": 1186.0,
+          "uncached_input_tokens": 20164.0
+        }
+      }
+    },
+    "run_window": "15:02:27\nrc=0\n15:03:26\n",
+    "spawns": [
+      {
+        "argv": [
+          "~/.local/bin/codex",
+          "app-server",
+          "-c",
+          "notify=[]"
+        ],
+        "barrier": false,
+        "blocked": null,
+        "client_sha256_ok": true,
+        "codex_config_matches_gate_version": true,
+        "env_inherited": false,
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "PATH",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "XDG_CACHE_HOME",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_STATE_HOME"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "codex-appserver",
+        "run": "c2x1",
+        "t": "15:02:18",
+        "watched_present": []
+      },
+      {
+        "argv": [
+          "~/.local/bin/codex",
+          "app-server",
+          "-c",
+          "notify=[]"
+        ],
+        "barrier": false,
+        "blocked": null,
+        "client_sha256_ok": true,
+        "codex_config_matches_gate_version": true,
+        "env_inherited": false,
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "PATH",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "XDG_CACHE_HOME",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_STATE_HOME"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "codex-appserver",
+        "run": "c2x2",
+        "t": "15:02:19",
+        "watched_present": []
+      },
+      {
+        "argv": [
+          "<G>/venv/bin/python3",
+          "-I",
+          "-c",
+          "<text len=152>",
+          "<G>/venv/bin/python3",
+          "-I",
+          "<text len=166>",
+          "--memory-http",
+          "--project-dir",
+          "<text len=134>",
+          "--state-dir",
+          "<text len=240>"
+        ],
+        "barrier": false,
+        "blocked": null,
+        "env_inherited": false,
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+          "MAGNOLIA_MEMORY_MODEL",
+          "MAGNOLIA_MEMORY_PROVIDER",
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_IDENTITY",
+          "MAGNOLIA_MEMORY_SERVICE_ACQUIRER_PID",
+          "MAGNOLIA_MEMORY_SERVICE_IDENTITY",
+          "MAGNOLIA_MEMORY_SERVICE_PORT",
+          "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+          "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+          "MAGNOLIA_OPENROUTER_PROVIDER",
+          "MAGNOLIA_PROJECT_BOUND",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_SERVER_STARTED_AT",
+          "OPENCODE_DB",
+          "OPENROUTER_API_KEY",
+          "OPENROUTER_BASE_URL",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "TMPDIR",
+          "XDG_STATE_HOME"
+        ],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "memory-server",
+        "run": "c2-run",
+        "spend_usd_before": 0.001043,
+        "t": "15:02:27",
+        "watched_present": [
+          "OPENROUTER_API_KEY",
+          "OPENROUTER_BASE_URL"
+        ]
+      },
+      {
+        "argv": [
+          "~/.nvm/versions/node/v24.16.0/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+          "-p",
+          "<text len=1547>",
+          "--setting-sources",
+          "project",
+          "--settings",
+          "<text len=221>",
+          "--mcp-config",
+          "<text len=216>",
+          "--strict-mcp-config",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--max-turns",
+          "30",
+          "--model",
+          "haiku",
+          "--allowedTools",
+          "Read",
+          "Glob",
+          "Grep",
+          "Edit",
+          "Write",
+          "mcp__compchem-memory__memory_get_context",
+          "mcp__compchem-memory__memory_search",
+          "mcp__compchem-memory__memory_get_run_history"
+        ],
+        "barrier": true,
+        "blocked": null,
+        "call_number": 2,
+        "claude_version": "2.1.327",
+        "client_sha256_ok": true,
+        "env_inherited": false,
+        "env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MEMORY_ALLOWLIST_REQUIRED",
+          "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+          "MAGNOLIA_MEMORY_TOOL_ALLOWLIST",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "PATH",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "XDG_STATE_HOME"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "claude-model",
+        "run": "c2-run",
+        "t": "15:02:28",
+        "watched_present": []
+      },
+      {
+        "argv": [
+          "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+          "app-server",
+          "-c",
+          "notify=[]"
+        ],
+        "barrier": false,
+        "blocked": null,
+        "client_sha256_ok": true,
+        "codex_config_matches_gate_version": true,
+        "env_inherited": false,
+        "env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LIVE3_RUN",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MEMORY_MODEL",
+          "MAGNOLIA_MEMORY_PROVIDER",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_OPENROUTER_PROVIDER",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "OPENCODE_DB",
+          "OPENROUTER_BASE_URL",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_CACHE_HOME",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_STATE_HOME",
+          "__CF_USER_TEXT_ENCODING"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "codex-appserver",
+        "run": "c2-run",
+        "t": "15:02:46",
+        "watched_present": [
+          "OPENROUTER_BASE_URL"
+        ]
+      },
+      {
+        "argv": [
+          "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+          "app-server",
+          "-c",
+          "notify=[]"
+        ],
+        "barrier": false,
+        "blocked": null,
+        "client_sha256_ok": true,
+        "codex_config_matches_gate_version": true,
+        "env_inherited": false,
+        "env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LIVE3_RUN",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MEMORY_MODEL",
+          "MAGNOLIA_MEMORY_PROVIDER",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_OPENROUTER_PROVIDER",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "OPENCODE_DB",
+          "OPENROUTER_BASE_URL",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_CACHE_HOME",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_STATE_HOME",
+          "__CF_USER_TEXT_ENCODING"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "codex-appserver",
+        "run": "c2-run",
+        "t": "15:02:47",
+        "watched_present": [
+          "OPENROUTER_BASE_URL"
+        ]
+      },
+      {
+        "argv": [
+          "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+          "-C",
+          "<text len=134>",
+          "-s",
+          "read-only",
+          "-m",
+          "gpt-5.6-luna",
+          "exec",
+          "--json",
+          "-c",
+          "approval_policy=\"never\"",
+          "-c",
+          "notify=[]",
+          "-c",
+          "model_reasoning_effort=\"low\"",
+          "-c",
+          "web_search=\"disabled\"",
+          "-c",
+          "sandbox_workspace_write.network_access=false",
+          "-c",
+          "sandbox_workspace_write.writable_roots=[]",
+          "-c",
+          "shell_environment_policy={inherit=\"none\",ignore_default_excludes=false,exclude=[],set={},include_only=[]}",
+          "-c",
+          "shell_environment_policy.experimental_use_profile=false",
+          "-c",
+          "mcp_servers.biorxiv.enabled=false",
+          "-c",
+          "mcp_servers.computer-use.enabled=false",
+          "-c",
+          "mcp_servers.google-calendar.enabled=false",
+          "-c",
+          "mcp_servers.node_repl.enabled=false",
+          "-c",
+          "mcp_servers.perspicacite.enabled=false",
+          "-c",
+          "mcp_servers.studium-lesson.enabled=false",
+          "-c",
+          "mcp_servers.thunderbird-mail.enabled=false",
+          "-c",
+          "plugins.browser@openai-bundled.enabled=false",
+          "-c",
+          "plugins.chrome@openai-bundled.enabled=false",
+          "-c",
+          "plugins.codex-app-tools@openai-bundled.enabled=false",
+          "-c",
+          "plugins.computer-use@openai-bundled.enabled=false",
+          "-c",
+          "plugins.documents@openai-primary-runtime.enabled=false",
+          "-c",
+          "plugins.pdf@openai-primary-runtime.enabled=false",
+          "-c",
+          "plugins.presentations@openai-primary-runtime.enabled=false",
+          "-c",
+          "plugins.spreadsheets@openai-primary-runtime.enabled=false",
+          "-c",
+          "plugins.template-creator@openai-primary-runtime.enabled=false",
+          "-c",
+          "plugins.unified-computer-use@openai-bundled.enabled=false",
+          "-c",
+          "plugins.visualize@openai-bundled.enabled=false",
+          "--disable",
+          "agent_message_board",
+          "--disable",
+          "agent_message_board_mcp",
+          "--disable",
+          "analytics_plan_history",
+          "--disable",
+          "api_key_cyber_access_programs",
+          "--disable",
+          "api_key_model_discovery",
+          "--disable",
+          "apps_early_resource_discovery",
+          "--disable",
+          "async_compaction",
+          "--disable",
+          "async_compaction_root_only",
+          "--disable",
+          "bedrock_setup_wizard",
+          "--disable",
+          "browser_use",
+          "--disable",
+          "browser_annotation_api",
+          "--disable",
+          "browser_use_external",
+          "--disable",
+          "browser_use_full_cdp_access",
+          "--disable",
+          "cli_daybreak",
+          "--disable",
+          "code_mode_only_strict_3p_tools",
+          "--disable",
+          "code_mode_tool_search",
+          "--disable",
+          "codex_apps_mcp_2026_07_28",
+          "--disable",
+          "command_sessions_world_state",
+          "--disable",
+          "computer_use",
+          "--disable",
+          "daemon_auto_start",
+          "--disable",
+          "daybreak_program_propagation",
+          "--disable",
+          "deferred_tool_world_state",
+          "--disable",
+          "executor_capability_discovery",
+          "--disable",
+          "executor_capability_discovery_v2",
+          "--disable",
+          "gateway_setup_wizard",
+          "--disable",
+          "gcp_setup_wizard",
+          "--disable",
+          "goals",
+          "--disable",
+          "guardian_conversation_history_tools",
+          "--disable",
+          "guardian_denial_reconsideration",
+          "--disable",
+          "guardian_include_additional_context",
+          "--disable",
+          "guardian_native_multi_agent_history",
+          "--disable",
+          "guardian_recorded_items",
+          "--disable",
+          "guardian_reuse_parent_compaction",
+          "--disable",
+          "guardian_root_handoff_context",
+          "--disable",
+          "guardian_trust_orchestrator_connectors",
+          "--disable",
+          "guardianv2_decisions_comparison",
+          "--disable",
+          "guardianv3",
+          "--disable",
+          "hosted_search_policy",
+          "--disable",
+          "image_generation",
+          "--disable",
+          "image_generation_animation",
+          "--disable",
+          "in_app_browser",
+          "--disable",
+          "in_app_voice",
+          "--disable",
+          "incremental_exec_tools",
+          "--disable",
+          "incremental_tools",
+          "--disable",
+          "incremental_tools_legacy",
+          "--disable",
+          "incremental_tools_legacy_gcp",
+          "--disable",
+          "login_shell_package_path",
+          "--disable",
+          "mcp_connection_sharing",
+          "--disable",
+          "mcp_lazy_stdio_startup",
+          "--disable",
+          "mcp_oauth_refresh_coordination",
+          "--disable",
+          "mcp_tool_list_changed",
+          "--disable",
+          "model_catalog_in_context",
+          "--disable",
+          "multi_agent",
+          "--disable",
+          "multi_agent_v2_dynamic_tools",
+          "--disable",
+          "multi_env_copy_file",
+          "--disable",
+          "output_token_replay",
+          "--disable",
+          "prediction_preserve_parent_tools",
+          "--disable",
+          "prefer_mxc",
+          "--disable",
+          "reasoning_effort_override",
+          "--disable",
+          "retain_client_tool_outputs",
+          "--disable",
+          "runtime_agent_instances",
+          "--disable",
+          "remote_plugin",
+          "--disable",
+          "send_message_to_user_async",
+          "--disable",
+          "skill_catalog_deltas",
+          "--disable",
+          "skill_mcp_dependency_install",
+          "--disable",
+          "standalone_web_search",
+          "--disable",
+          "subagent_default_context_limits",
+          "--disable",
+          "subagent_thread_environments",
+          "--disable",
+          "system_proxy_fallback",
+          "--disable",
+          "unified_image_budget",
+          "--disable",
+          "use_xaa",
+          "--disable",
+          "view_image",
+          "--disable",
+          "wake_on_agent_messages",
+          "--enable",
+          "untrusted_as_tool_output",
+          "--enable",
+          "write_stdin_approval",
+          "--enable",
+          "hooks",
+          "--enable",
+          "guardian_approval",
+          "--enable",
+          "code_mode_host",
+          "--enable",
+          "code_mode_host_grpc",
+          "--enable",
+          "skip_host_skill_discovery",
+          "--disable",
+          "apps",
+          "--",
+          "<text len=1433>"
+        ],
+        "barrier": true,
+        "blocked": null,
+        "call_number": 2,
+        "client_sha256_ok": true,
+        "codex_config_matches_gate_version": true,
+        "env_inherited": false,
+        "env_keys": [
+          "COMPCHEM_TOOLS_PORT",
+          "HOME",
+          "LANG",
+          "LIVE3_RUN",
+          "LOGNAME",
+          "MAGNOLIA_CLIENT",
+          "MAGNOLIA_CONTROL_DIR",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN",
+          "MAGNOLIA_DOORBELL",
+          "MAGNOLIA_HOOK_POLICY",
+          "MAGNOLIA_HOOK_POLICY_REQUIRED",
+          "MAGNOLIA_HOOK_POLICY_SHA256",
+          "MAGNOLIA_INSTALLATION_ROOT",
+          "MAGNOLIA_MEMORY_MODEL",
+          "MAGNOLIA_MEMORY_PROVIDER",
+          "MAGNOLIA_MODEL",
+          "MAGNOLIA_OPENROUTER_PROVIDER",
+          "MAGNOLIA_PROJECT_DIR",
+          "MAGNOLIA_PROJECT_IDENTITY",
+          "MAGNOLIA_PYTHON",
+          "MAGNOLIA_ROLE",
+          "MAGNOLIA_ROOT",
+          "MAGNOLIA_RULES_DIR",
+          "MAGNOLIA_RUN_DIR",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+          "MAGNOLIA_WORKSPACE_ROOT",
+          "MAGNOLIA_WORK_DIR",
+          "OPENCODE_DB",
+          "OPENROUTER_BASE_URL",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "PYTHONPYCACHEPREFIX",
+          "SHELL",
+          "TMPDIR",
+          "USER",
+          "VIBE_ENABLE_TELEMETRY",
+          "XDG_CACHE_HOME",
+          "XDG_CONFIG_HOME",
+          "XDG_DATA_HOME",
+          "XDG_STATE_HOME",
+          "__CF_USER_TEXT_ENCODING"
+        ],
+        "env_violations": [],
+        "forbidden_flags": [],
+        "free_gb": 40.2,
+        "kind": "codex-model",
+        "run": "c2-run",
+        "t": "15:02:48",
+        "watched_present": [
+          "OPENROUTER_BASE_URL"
+        ]
+      }
+    ]
+  }
+}

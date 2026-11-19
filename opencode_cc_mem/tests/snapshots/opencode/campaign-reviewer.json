@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "@@TMP@@/opencode",
+    "run",
+    "--model",
+    "provider/model",
+    "--agent",
+    "campaign-reviewer",
+    "--format",
+    "json",
+    "--auto",
+    "--server",
+    "http://127.0.0.1:4111",
+    "REVIEW"
+  ],
+  "environment_keys": [
+    "BASE_ENV",
+    "OPENCODE_CONFIG_CONTENT",
+    "OPENCODE_DB",
+    "PWD",
+    "RECIPE_EXTRA"
+  ],
+  "step_cap_config": {
+    "agents": {
+      "campaign-reviewer": {
+        "steps": 8
+      }
+    }
+  },
+  "timeout_seconds": 55,
+  "agent_file_bytes": "---\ndescription: Reviews campaign artifacts without changing them\nmode: primary\nsteps: 8\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n  - action: read\n    resource: \"*\"\n    effect: allow\n  - action: read\n    resource: \"*.env*\"\n    effect: deny\n  - action: read\n    resource: \"**/.magnolia/campaign-service.json\"\n    effect: deny\n  - action: read\n    resource: \"**/.magnolia/campaign-service.log\"\n    effect: deny\n  - action: read\n    resource: \"**/.magnolia/services/**\"\n    effect: deny\n  - action: glob\n    resource: \"*\"\n    effect: allow\n  - action: glob\n    resource: \"*.env*\"\n    effect: deny\n  - action: glob\n    resource: \"**/.magnolia/campaign-service.json\"\n    effect: deny\n  - action: glob\n    resource: \"**/.magnolia/campaign-service.log\"\n    effect: deny\n  - action: glob\n    resource: \"**/.magnolia/services/**\"\n    effect: deny\n  - action: grep\n    resource: \"*\"\n    effect: allow\n  - action: grep\n    resource: \"*.env*\"\n    effect: deny\n  - action: grep\n    resource: \"**/.magnolia/campaign-service.json\"\n    effect: deny\n  - action: grep\n    resource: \"**/.magnolia/campaign-service.log\"\n    effect: deny\n  - action: grep\n    resource: \"**/.magnolia/services/**\"\n    effect: deny\n---\n\nYou are an independent campaign reviewer.\n\nRead raw artifacts before reading the worker report. Find unsupported claims,\ncontradictions, missing controls, alternative explanations, and bounded follow-up\ntests. Cite existing file paths for every issue.\n\nDo not modify files. Do not run commands. Do not approve the stage. Return only\nthe requested JSON review object.\n"
+}

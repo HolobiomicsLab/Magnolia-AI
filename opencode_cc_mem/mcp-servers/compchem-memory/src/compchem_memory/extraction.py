@@ -1,8 +1,10 @@
 """Automatic memory extraction: distill session logs into project-tier entries."""
 
+import hashlib
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,9 +15,19 @@ from compchem_memory.storage import ensure_project_store
 from compchem_memory.llm import is_llm_available, call_llm_json
 from compchem_memory import distill_log
 from compchem_memory.reflections import pick_quote
+from compchem_memory.writer_lease import project_writer_lease
 
 MIN_TOKENS_BETWEEN_EXTRACTIONS = 5000
 MIN_TOOL_CALLS_BETWEEN_EXTRACTIONS = 3
+
+
+class ManualRetryRefused(RuntimeError):
+    """A model-callable forced retry cannot safely run yet."""
+
+    def __init__(self, reason: str, next_retry_at: str | None = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.next_retry_at = next_retry_at
 
 
 # Matches a bare 'exit=N' error message with optional surrounding whitespace
@@ -305,13 +317,17 @@ class AutomaticMemoryExtractor:
             out.append(ev)
         return out
 
-    def _llm_distill(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Use LLM to extract structured knowledge from session events."""
+    def _llm_distill(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]] | None:
+        """Extract knowledge, preserving ``None`` as a retryable LLM failure."""
         events = self.stub_memory_write_events(events)
         events_json = json.dumps(events, indent=2, default=str)
         result = call_llm_json(EXTRACTION_SYSTEM_PROMPT, events_json, max_tokens=4000,
                                disable_thinking=True)
-        if not result or not isinstance(result, list):
+        if result is None:
+            return None
+        if not isinstance(result, list):
             return []
         return [r for r in result if isinstance(r, dict) and "title" in r]
 
@@ -400,6 +416,7 @@ class AutomaticMemoryExtractor:
 
     def __init__(self, project_dir: str | None = None):
         self.last_cursor: str = ""
+        self.session_retries: dict[str, dict[str, Any]] = {}
         self.state_path: Path | None = None
         if project_dir:
             self.state_path = Path(project_dir) / "extraction-state.yaml"
@@ -451,7 +468,9 @@ class AutomaticMemoryExtractor:
             or has_significant_result(since, project_dir)
         )
 
-    def _generate_candidates(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _generate_candidates(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]] | None:
         """Shared candidate generation: LLM-first, heuristic fallback.
         Pure — reads nothing, writes nothing."""
         candidates: list[dict[str, Any]] = []
@@ -459,19 +478,22 @@ class AutomaticMemoryExtractor:
         # Try LLM-based extraction first
         if is_llm_available():
             llm_candidates = self._llm_distill(events)
+            if llm_candidates is None:
+                return None
             if llm_candidates:
                 candidates = llm_candidates
 
         # Fallback to heuristic extraction
         if not candidates:
             for err, resolution in self._find_error_resolutions(events):
+                tool = _tool_for_error(events, err)
                 candidates.append(
                     {
                         "type": "error_resolution",
                         "title": f"Resolved: {err[:80]}",
                         "content": f"## Error\n{err}\n\n## Resolution\n{resolution}",
                         "tags": ["error-resolution", "auto"],
-                        "tools": [],
+                        "tools": [tool] if tool else [],
                         "confidence": 0.8,
                     }
                 )
@@ -519,48 +541,133 @@ class AutomaticMemoryExtractor:
                     }
                 )
 
-        return candidates
+        return _attach_event_origins(candidates, events)
 
     def preview(self, session_path: Path) -> list[dict[str, Any]]:
         """Compute candidate learnings and return them. Saves nothing, advances
         no cursor. The read-only inspection mode."""
-        events = self._read_events(session_path)
+        events = self._extractable_events(self._read_events(session_path))
         if not events:
             return []
-        return self._generate_candidates(events)
+        return self._generate_candidates(events) or []
 
-    def commit(self, session_path: Path, project_dir: str) -> list[str]:
-        """Compute candidate learnings, save them to staging, advance the cursor.
-        Returns the list of saved staging-entry paths."""
-        events = self._read_events(session_path)
+    def commit(
+        self,
+        session_path: Path,
+        project_dir: str,
+        *,
+        force_retry: bool = False,
+    ) -> list[str] | None:
+        """Compute candidates, persist them, and advance the extraction cursor.
+
+        Return saved paths, or ``None`` when provider failure or a concurrent
+        commit requires a later retry. A successful zero-candidate extraction
+        returns ``[]`` and advances normally.
+        """
+        all_events = self._read_events(session_path)
+        events = self._extractable_events(all_events)
         if not events:
             return []
+
+        if force_retry:
+            from compchem_memory.extraction_retry import retry_is_due
+
+            with project_writer_lease(project_dir):
+                self._load_state()
+                forced_retry = self.session_retries.get(session_path.name)
+                if forced_retry and not is_llm_available():
+                    raise ManualRetryRefused(
+                        "configured memory LLM is unavailable"
+                    )
+                if forced_retry and forced_retry.get("exhausted") is True:
+                    self.session_retries.pop(session_path.name, None)
+                    self._save_state()
+                elif forced_retry and not retry_is_due(forced_retry):
+                    scheduled_at = forced_retry.get("next_retry_at")
+                    raise ManualRetryRefused(
+                        f"extraction retry scheduled at {scheduled_at}",
+                        next_retry_at=scheduled_at,
+                    )
+
+        fingerprint = hashlib.sha256(session_path.read_bytes()).hexdigest()
+        retry = self.session_retries.get(session_path.name)
+        from compchem_memory.extraction_retry import retry_for_activity, retry_is_due
+
+        retry = retry_for_activity(retry, fingerprint)
+
+        if not retry_is_due(retry):
+            return None
 
         store = ensure_project_store(project_dir)
+        cursor_read = self._stored_cursor()
+        # Candidate generation can call an LLM, so it runs outside the project
+        # writer lease; the save re-validates the cursor it started from.
         candidates = self._generate_candidates(events)
+        if candidates is None:
+            from compchem_memory.extraction_retry import next_retry
 
-        saved = []
-        for candidate in candidates:
-            candidate["run_ids"] = _link_run_ids(store, candidate)
-            path = self._save_to_staging(store, candidate, session_id=session_path.stem)
-            saved.append(path)
+            with project_writer_lease(project_dir):
+                if self._stored_cursor() != cursor_read:
+                    return None
+                self._load_state()
+                current_retry = retry_for_activity(
+                    self.session_retries.get(session_path.name), fingerprint
+                )
+                retry = next_retry(current_retry, fingerprint=fingerprint)
+                self.session_retries[session_path.name] = retry
+                self._save_state()
+            distill_log.push_extraction_failure_notice(project_dir)
+            if retry["exhausted"]:
+                distill_log.push_extraction_retry_exhausted_notice(
+                    project_dir, session_path.name
+                )
+            return None
 
-        if saved:
-            quote = pick_quote("closing")
-            summary = f"{len(saved)} learning(s) distilled from {session_path.name}"
-            distill_log.append_distill_log(project_dir, quote, summary)
-            distill_log.push_distill_notice(project_dir, quote, summary)
+        with project_writer_lease(project_dir):
+            if self._stored_cursor() != cursor_read:
+                print(f"[extraction] {session_path.name}: cursor moved during "
+                      "extraction; nothing saved, the next pass retries", file=sys.stderr)
+                return None
+            saved = []
+            for candidate in candidates:
+                candidate["run_ids"] = _link_run_ids(store, candidate)
+                path = self._save_to_staging(store, candidate, session_id=session_path.stem)
+                saved.append(path)
 
-        self.last_cursor = events[-1].get("timestamp", "")
-        self._save_state()
+            if saved:
+                quote = pick_quote("closing")
+                summary = f"{len(saved)} learning(s) distilled from {session_path.name}"
+                distill_log.append_distill_log(project_dir, quote, summary)
+                distill_log.push_distill_notice(project_dir, quote, summary)
+
+            self._load_state()
+            self.session_retries.pop(session_path.name, None)
+            self.last_cursor = all_events[-1].get("timestamp", "")
+            self._save_state()
 
         return saved
+
+    def _stored_cursor(self) -> str | None:
+        """Return the cursor currently on disk (None when unreadable or absent)."""
+        if not self.state_path or not self.state_path.exists():
+            return None
+        try:
+            data = yaml.safe_load(self.state_path.read_text()) or {}
+        except (yaml.YAMLError, OSError):
+            return None
+        return data.get("last_cursor", "") if isinstance(data, dict) else None
 
     def _load_state(self) -> None:
         if self.state_path and self.state_path.exists():
             try:
                 data = yaml.safe_load(self.state_path.read_text()) or {}
                 self.last_cursor = data.get("last_cursor", "")
+                retries = data.get("session_retries", {})
+                self.session_retries = (
+                    {str(key): dict(value) for key, value in retries.items()
+                     if isinstance(value, dict)}
+                    if isinstance(retries, dict) else {}
+                )
             except (yaml.YAMLError, OSError):
                 pass
 
@@ -571,6 +678,8 @@ class AutomaticMemoryExtractor:
             "last_cursor": self.last_cursor,
             "last_extraction": datetime.now(timezone.utc).isoformat(),
         }
+        if self.session_retries:
+            state["session_retries"] = self.session_retries
         try:
             self.state_path.write_text(yaml.dump(state, default_flow_style=False))
         except OSError:
@@ -683,6 +792,12 @@ class AutomaticMemoryExtractor:
             pass
         return events
 
+    @staticmethod
+    def _extractable_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop lifecycle-only rows that cannot yield a memory candidate."""
+        lifecycle = {"session_start", "session_end", "boot"}
+        return [event for event in events if event.get("event_type") not in lifecycle]
+
 
 def _link_run_ids(store: Path, candidate: dict[str, Any]) -> list[str]:
     """Link a distilled candidate to run records by exact run_id mention.
@@ -701,3 +816,66 @@ def _link_run_ids(store: Path, candidate: dict[str, Any]) -> list[str]:
         if run_id and run_id in text:
             run_ids.append(run_id)
     return run_ids
+
+
+def _tool_for_error(events: list[dict[str, Any]], error: str) -> str | None:
+    """Return the observed tool that emitted an extracted error."""
+    for event in events:
+        if event.get("event_type") == "tool_error" and event.get("error") == error:
+            tool = event.get("tool")
+            return tool if isinstance(tool, str) and tool else None
+    return None
+
+
+def _attach_event_origins(
+    candidates: list[dict[str, Any]], events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Bind candidates to matching captured tools, or only to known sessions."""
+    from compchem_memory.staging_io import normalize_origins
+
+    for candidate in candidates:
+        tools = {
+            str(tool).lower() for tool in candidate.get("tools", [])
+            if isinstance(tool, str) and tool
+        }
+        matched = [
+            _event_origin(event, include_tool=True)
+            for event in events
+            if str(event.get("tool") or "").lower() in tools
+        ]
+        origins = normalize_origins(matched)
+        if not origins:
+            origins = normalize_origins([
+                _event_origin(event, include_tool=False) for event in events
+            ])
+        candidate["origins"] = origins
+    return candidates
+
+
+def _event_origin(event: dict[str, Any], *, include_tool: bool) -> dict[str, str]:
+    """Extract observed origin fields from one captured session event."""
+    stored = event.get("origin")
+    origin = dict(stored) if isinstance(stored, dict) else {}
+    direct = {
+        "client": event.get("client"),
+        "session_id": event.get("session_id"),
+        "model": event.get("model"),
+        "role": event.get("role"),
+    }
+    for field, value in direct.items():
+        if isinstance(value, str) and value:
+            origin.setdefault(field, value)
+    agent = event.get("agent")
+    if isinstance(agent, dict) and agent.get("id"):
+        origin.setdefault("agent_id", agent["id"])
+        if agent.get("type"):
+            origin.setdefault("agent_type", agent["type"])
+    if include_tool:
+        if isinstance(event.get("tool"), str) and event["tool"]:
+            origin.setdefault("tool", event["tool"])
+        if isinstance(event.get("source"), str) and event["source"]:
+            origin.setdefault("mcp_server", event["source"])
+    else:
+        for field in ("agent_id", "agent_type", "tool", "mcp_server"):
+            origin.pop(field, None)
+    return origin

@@ -1,0 +1,66 @@
+[
+  {
+    "decision": "continue",
+    "hook": "pre_agent_turn",
+    "kind": "hook",
+    "seq": 132
+  },
+  {
+    "kind": "llm_call",
+    "model_tool_calls": [],
+    "seq": 138,
+    "tool_catalog": [
+      "todo",
+      "unified_harness_scratchpad",
+      "search_tool_functions",
+      "run_typescript",
+      "read_file",
+      "write_file",
+      "edit",
+      "bash",
+      "skill"
+    ],
+    "tool_catalog_keys": [
+      "revision",
+      "tools",
+      "type"
+    ]
+  },
+  {
+    "arguments": {
+      "action": "write",
+      "todos": [
+        {
+          "content": "check result",
+          "id": "check-result",
+          "priority": "medium",
+          "status": "pending"
+        }
+      ]
+    },
+    "call_id": "lKs0ANkmO",
+    "call_type": "provided",
+    "decision": "skip",
+    "hook": "pre_tool_call",
+    "kind": "hook",
+    "reason": "Magnolia required role policy denied this operation.",
+    "seq": 142,
+    "tool_name_on_wire": "vibe.todo"
+  },
+  {
+    "kind": "llm_call",
+    "model_tool_calls": [],
+    "seq": 149,
+    "tool_catalog": [],
+    "tool_catalog_keys": [
+      "revision",
+      "type"
+    ]
+  },
+  {
+    "decision": "accept",
+    "hook": "post_agent_turn",
+    "kind": "hook",
+    "seq": 153
+  }
+]

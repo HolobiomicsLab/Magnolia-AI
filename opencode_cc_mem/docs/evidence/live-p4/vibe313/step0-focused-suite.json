@@ -1,0 +1,17 @@
+{
+  "run1_unresolved_gate_paths_tail": [
+    "58 failed, 1628 passed, 31 skipped in 150.67s (0:02:30)",
+    "exit 1",
+    "basetemp removed"
+  ],
+  "run2_failed": [
+    "FAILED mcp-servers/compchem-memory::test_vibe_child_env_allows_only_mistral_account_process_basics",
+    "FAILED mcp-servers/compchem-memory/tests/harness/test_read_server.py::test_isolated_read_server_ignores_project_shadow_modules",
+    "ERROR mcp-servers/compchem-memory/tests/hook/test_transcript.py::test_injected_and_denied_rows_are_scrubbed"
+  ],
+  "run2_tail": [
+    "2 failed, 1685 passed, 30 skipped, 1 error in 175.12s (0:02:55)",
+    "exit 1",
+    "basetemp removed"
+  ]
+}

@@ -1,0 +1,1 @@
+Call the memory tool memory_search once with the query `D4`, then answer in one line with the number of results. Do not call any other tool.

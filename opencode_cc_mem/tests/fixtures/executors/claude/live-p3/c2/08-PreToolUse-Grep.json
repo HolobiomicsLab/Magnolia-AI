@@ -1,0 +1,23 @@
+{
+  "class": "grep",
+  "decision": "deny",
+  "mode": "enforce",
+  "policy_sha256": "c9a2970473609afe10dffddf04ae4ad98ab55558a8fc22e73308bde7215015fa",
+  "reason": "grep: recursive search root contains a denied or linked path",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-claude-Pe5W5B/proj",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "permission_mode": "default",
+    "prompt_id": "65fbb822-6951-41b9-8620-0c792127838a",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "pattern": "SENTINEL"
+    },
+    "tool_name": "Grep",
+    "tool_use_id": "toolu_01TLtmqgs6VeVZNukYMCYE6o",
+    "transcript_path": "/HOME/.claude/projects/-TMPDIR-probe-p3-claude-Pe5W5B-proj/ses-fixture-1.jsonl"
+  }
+}

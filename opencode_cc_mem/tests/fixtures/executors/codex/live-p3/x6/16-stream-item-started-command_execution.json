@@ -1,0 +1,11 @@
+{
+  "item": {
+    "aggregated_output": "",
+    "command": "/bin/zsh -lc 'cat secret/.env'",
+    "exit_code": null,
+    "id": "item_2",
+    "status": "in_progress",
+    "type": "command_execution"
+  },
+  "type": "item.started"
+}

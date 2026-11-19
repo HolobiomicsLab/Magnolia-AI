@@ -1,0 +1,2658 @@
+{
+  "schema_version": 1,
+  "generated_from": {
+    "revision": "03333f9ced9e117aeae36b5dcfbafefd6e95b38f",
+    "sources": [
+      "opencode_cc_mem/docs/harness-acceptance-2026-11.md",
+      "opencode_cc_mem/docs/harness-campaign-2026-11-15.md",
+      "opencode_cc_mem/docs/harness-probes-2026-11.md",
+      "opencode_cc_mem/docs/harness-probes-p3-live-2026-11.md",
+      "opencode_cc_mem/tests/fixtures/executors/claude/live-gate/",
+      "opencode_cc_mem/docs/evidence/codex/task-codex-livefix-report.md",
+      "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/README.md",
+      "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/reviewer-policy.json",
+      "opencode_cc_mem/docs/evidence/codex/gate4/runtime-surface.json",
+      "opencode_cc_mem/docs/evidence/live1/README.md",
+      "opencode_cc_mem/docs/evidence/live1/campaign-runner.json",
+      "opencode_cc_mem/docs/evidence/live1/claude-production-refusal.json",
+      "opencode_cc_mem/docs/evidence/live1/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/live1/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/live1/reviewer-policy.json",
+      "opencode_cc_mem/docs/evidence/live1/runtime-surface.json",
+      "opencode_cc_mem/docs/evidence/live1b/README.md",
+      "opencode_cc_mem/docs/evidence/live1b/capabilities-p3.candidate.json",
+      "opencode_cc_mem/docs/evidence/live1b/launch-identities.json",
+      "opencode_cc_mem/docs/evidence/live1b/worker-policy.json",
+      "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R.json",
+      "opencode_cc_mem/docs/evidence/live1b/reviewer-policy-R2.json",
+      "opencode_cc_mem/docs/evidence/live1b/helper-policy.json",
+      "opencode_cc_mem/docs/evidence/live1b/evaluator.json",
+      "opencode_cc_mem/docs/evidence/live1b/usage-ledger.json",
+      "opencode_cc_mem/docs/evidence/live2a/README.md",
+      "opencode_cc_mem/docs/evidence/live2a/dry-runs.json",
+      "opencode_cc_mem/docs/evidence/live2a/cont-runs.json",
+      "opencode_cc_mem/docs/evidence/live2a/run2-opencode-control.json",
+      "opencode_cc_mem/docs/evidence/live3/cont-run2-worker-codex-review.json",
+      "opencode_cc_mem/docs/evidence/live5/pass-summary.json",
+      "opencode_cc_mem/docs/evidence/live5/c1-worker-codex-review.json",
+      "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+      "opencode_cc_mem/docs/evidence/live5/c3-opencode-control.json",
+      "opencode_cc_mem/docs/evidence/live5/c4-opencode-reviewer-only.json"
+    ]
+  },
+  "note": "Plan 4 Task 6 (17 Nov 2026) re-observed Claude Code reviewer/helper/evaluator and Codex worker/reviewer live on the rebound hook_source; they are no longer stale. Plan 4 Task 6b then re-observed the Claude Code worker's denied outside write, clearing that row too. Codex helper/evaluator remain refused. OpenCode live observations remain campaign evidence rather than alternate-client capability rows. Vibe 3.1.2 rows are accepted (Plan 4 Task 9b, 18 Nov 2026) as an accepted limitation: Vibe cannot remove its builtins from the model catalogue (mistralai/mistral-vibe#1552) and run_typescript fires no hook (#1431); the strict pre_tool hook and Vibe's deny-on-call are the enforcement boundary, and calls nested in run_typescript are hooked (Task 9a). See docs/vibe-known-issues.md.",
+  "rows": [
+    {
+      "client": "claude-code",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "2b81fccb6b4136cd5135d2bf7fc2ce4d686301d3961e67eb6ae790a1f5908517",
+              "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+              "native_files": "ba3c23f21ec0421a7e84124e99a8baf71599688bb872fd9c0691dd38725cf3d8",
+              "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted on the owner-recorded hook-only enforcement ruling: the required fail-closed hook enforces the worker MCP allowlist; the gate is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.327:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "d1751bad4966afa1dd70323daf405eaeeb7b048e0e4b0f0a3639a445eac2a085",
+            "live_policy_sha256": "94cb6806fb81bef4a914d2651cba22454ecabb60b5adf88a740b50e6e9b033b7",
+            "live_configuration_sha256": "50ceb8a320a76fa79c400901afa9c7e456c991126de6dad5179720666a519c97",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "role": "worker",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json",
+          "value": {
+            "actions": [
+              "secret and recursive reads",
+              "edits outside run/work",
+              "symlink escapes",
+              "shell",
+              "delegation",
+              "non-allowlisted MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live5/c2-worker-claude-code-review.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "Live pass 2a re-observed the worker identity, tool surface, policy boundaries and usage on the final role shape.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): identity matched; read, grep, secret and alias denials and work/ write and edit observed (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cw.json). Still stale: the model declined to attempt the outside write, so that denial was not re-observed; one live call that attempts it clears the row.",
+        "Plan 4 Task 6b live (17-18 Nov 2026): identity recomputed equal (launch 88de138b, config 7f544ae3, hook_source 496c1102); the outside write was attempted and denied by the hook before execution, outside directory unchanged (opencode_cc_mem/docs/evidence/live-p4/live6b/c1-claude-worker-hooks.json). The allowed work/ write and edit on this identity are from Task 6 (live-p4/reobserve/B-cw-hooks.json); 6b's own work/ write was denied only because the gate had not created work/, which the campaign run store always creates.",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row (hook_source 496c1102). One call: read, grep, memory_get_context and work/ write and edit allowed; secret and alias reads and the sanctioned outside write denied by the hook before execution; outside directory unchanged; catalogue identical to 2.1.326 (33 tools) (opencode_cc_mem/docs/evidence/live-p4/claude327/worker-run.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: memory_get_context, read, grep, work/ write and edit allowed; secret and alias reads and one sanctioned outside write denied by the hook before execution (the model typed the throwaway outside path with '.' for '-': a different, nonexistent directory outside the project, still denied, nothing created); outside directory unchanged; catalogue 33 tools as on 2.1.327. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/claude-worker-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: memory_get_context, read, grep, work/ write and edit allowed; secret and alias reads and the sanctioned outside write (exact throwaway path) denied by the hook before execution; outside directory unchanged; catalogue 33 tools as on 2.1.327. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-worker-run.json)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "15445e1cf4f9c3aa2c63040cb307d07a10318f3bcfe04629a91a97bc2fde2da6",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.327:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "3a314b1c2436653b5994065fb5af9c976f0849b4a647d3a1a4817a3327d249bf",
+            "live_policy_sha256": "84b24a1aac6a4bea856b8ffe08dbb574e67051c039d4cc11a6b51870e8e5606d",
+            "live_configuration_sha256": "23ab86d3864a4af1484fcab6a60e556d4a5927ba2a4d682e6d0cb40ce7a30b00",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "role": "reviewer",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_argv": true
+          },
+          "note": "Cap 8 is enforced but tight because SessionStart boot context consumed turns."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "Reviewer cap 8 is tight because boot-context handling consumed two turns in R1.",
+        "The first reviewer output failed the review schema; the R2 observation passed with followups exactly [].",
+        "Live pass 2a re-observed the reviewer identity and read-only policy boundaries. First-try review validation failed because the prompt omitted the run-directory evidence-path rule fixed by F-L3.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, grep; denied: secret read, alias read, edit, write; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-cr.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One call: read x2 and grep allowed; secret and alias reads, edit and write denied by the hook; valid review JSON (1 issue); catalogue identical to 2.1.326 (27 tools) (opencode_cc_mem/docs/evidence/live-p4/claude327/reviewer-run.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: reads and grep allowed; secret, alias, edit and write denied by the hook before execution. The review JSON of this call failed production validate_review (evidence cited docs/notes.md, outside the run directory): model output, not policy. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/claude-reviewer-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: reads and grep allowed; secret, alias, edit and write denied by the hook before execution; review JSON valid under production validate_review (1 issue, evidence inside the run directory). (opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-reviewer-run.json)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "39a36a4d130a372f91410be0f61ec7eea650be315ea6cc20925e51a10540be06",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live H1 gate passed for native_read over docs/ (--tools Read --allowedTools Read), with no MCP; bound to the real Claude binary plus that normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "H1/01-run.json records --tools Read --allowedTools Read; H1/04-stream-init.json confirms exactly [Read] and no MCP servers."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.327:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "a7c3b924b3e068237db3a69ced605aa987cf992ce9110ad830c26da552a394a6",
+            "live_policy_sha256": "5730624c6a60c4837b68e9779eba217fef948c991f408a39893245be01992b82",
+            "live_configuration_sha256": "0971c74d2a12899e7cae4c36908e5b93becc33b83cb0165a94a69c2c3ed2e516",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "role": "helper",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "H1/08-hook-transcript.json observes docs/notes.md allowed and README.md denied; the bound policy grants native_read only over docs/."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json",
+          "value": {
+            "actions": [
+              "reads outside the named root",
+              "edits",
+              "shell",
+              "MCP tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live2a/cont-usage-ledger.json",
+          "value": {
+            "effective_max_turns": 25,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "The accepted helper shape remains native_read over docs/; the no-tools helper shape was refused and is not accepted.",
+        "Live pass 2a re-observed the native_read helper identity, docs-only boundary and usage.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; bound native_read allowed, secret and alias reads denied; grep and write/edit absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ch.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One call in the bound native_read shape: docs/notes.md read allowed; secret, alias and README (outside the read root) denied by the hook; offered tools exactly [Read] (opencode_cc_mem/docs/evidence/live-p4/claude327/helper-run.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: offered tools exactly [Read]; bound read allowed; secret, alias and README (outside the read root) denied; no write tool offered. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/claude-helper-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: offered tools exactly [Read]; bound read allowed; secret, alias and README (outside the read root) denied; no write tool offered. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-helper-run.json)"
+      ]
+    },
+    {
+      "client": "claude-code",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "configuration_binding": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ],
+            "components": {
+              "settings": "bcab8b46bad2c8d3a369a85173b6154b43a1bf35231a6ebaaf0e8ee82ad40534",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "d7e1c87dbabe7245270385dbb863d9d03f4f243e64b85af211fabc80d87d9b1c",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "hook_command": "50995faff5a09cdcad94b03558fd4d32b1af600eb869820865d4b41976e022c9",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Live role gate passed outright and is bound to the real Claude binary plus normalized launch shape."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<npm-global>/@anthropic-ai/claude-code/bin/claude.exe",
+            "version": "2.1.327",
+            "sha256": "76d48205c926c8a6978cfc2171b631bcd01e20bbadd085638bb2ec57bea91c5b"
+          },
+          "note": "Executable version and SHA-256 re-observed live on 2.1.327 in Plan 4 Task 11."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "entrypoint": [
+              "claude",
+              "-p"
+            ],
+            "output_format": "stream-json",
+            "verbose": true,
+            "strict_mcp_config": true,
+            "selected_model_flag": "haiku"
+          },
+          "note": "Production executor argv observed for this role."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "accepted": true,
+            "model": "haiku",
+            "reported_model": "claude-haiku-5-5",
+            "identity": "claude-code-2.1.327:--model=haiku"
+          },
+          "note": "Requested haiku was reported by the init/modelUsage stream."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned --settings and --mcp-config"
+          },
+          "note": "Observed in the gate temp project; evidence binds to the launch-project scope, not that temporary path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": true,
+          "note": "Claude print mode loaded run-owned settings without a project-trust bypass."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "kind": "claude-role-shape-v1",
+            "observed_revision": "02b5f43",
+            "head_revision": "ce681e7133255c18a453d1eee9a81605a5e59725",
+            "normalized_shape_sha256": "2ff45ef3a73c825bc43f944b91973142c73fdd3764094b8878e2c933380cdf36",
+            "live_policy_sha256": "855d771835455f87db3cdae8261e676bf2c6700daade6717dab3d8ec0c2f126d",
+            "live_configuration_sha256": "2bfea4568b126f45b98fb0dcca1bb1c54f249184e8bbc14a869124c89c3fa9ab",
+            "required_policy_schema": "magnolia-role-v1",
+            "hook_command_module": "compchem_memory.hook",
+            "required_policy_env": [
+              "MAGNOLIA_HOOK_POLICY",
+              "MAGNOLIA_HOOK_POLICY_REQUIRED",
+              "MAGNOLIA_HOOK_POLICY_SHA256"
+            ]
+          },
+          "note": "HEAD render matches 02b5f43 except the accepted MAGNOLIA_HOOK_POLICY_SHA256 environment name."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "role": "evaluator",
+            "source": "Claude live role gate / What was established"
+          },
+          "note": "Native schemas and exact tool list are recorded in the live-gate section and role fixtures."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "capabilities": []
+          },
+          "note": "Allowed actions observed with the production required hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json",
+          "value": {
+            "actions": [
+              "all tools"
+            ]
+          },
+          "note": "Denied actions or the role no-tools surface were observed without side effects."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/claude/live-p3/c4/01-run.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Task 0 c4 resumed the same Claude session and policy digest; production resume remains identity-bound."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 1,
+            "ledger_matches_argv": true
+          },
+          "note": "Client cap and ledger effective cap matched."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "Native result counters were preserved and reconciled into one ledger receipt."
+        },
+        "quota_evidence": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "none observed; quota evidence is not an acceptance prerequisite"
+        }
+      },
+      "notes": [
+        "Live pass 1b re-observed the final role shape, tool catalog and policy boundary on Claude Code 2.1.326.",
+        "SessionStart boot context is injected into every Claude role; removing it from roles without memory tools is a follow-up, not a blocker.",
+        "No additional role-specific live caveat.",
+        "Live pass 2a re-observed the no-tools evaluator identity, boundary and usage.",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; one turn with no tools exposed; write absent from the tool set (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-ce.json).",
+        "Plan 4 Task 11 live (18 Nov 2026, Claude Code 2.1.327, sha256 76d48205): only the client identity changed; all nine bound components equal the row. One turn, zero tools offered, no tool call, answer parsed (EVAL-OK 0 / TOOLS: NONE) (opencode_cc_mem/docs/evidence/live-p4/claude327/evaluator-run.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: 1 turn, zero tools offered, answer 'EVAL-OK 0 / TOOLS: NONE' parsed. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/claude-evaluator-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: 1 turn, zero tools offered, answer 'EVAL-OK 0 / TOOLS: NONE' parsed. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/claude-evaluator-run.json)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
+            "components": {
+              "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
+              },
+              "settings": "c12409129bd23bffc1f8ab90ed5cebdd6fcf9b6e749db03ea4746a268b6b9805",
+              "mcp": "9e190ce265349be86610dd87d19177c8479ed8c884216ed034ff3aa46e9bfaae",
+              "native_files": "bfbf362f82117769828ee722a8eeb73d029943a5cbf5c9767f9e431707a78f92",
+              "policy": "211e05cc288c85203d119123ff0623aad960a05a5519e6e6293a816354bc3d65",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted by the lead after gate 4 met the complete worker role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "workspace-write",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production worker argv was captured before the one-attempt live launch."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-trust-hooks-list.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": "70f44a77076eee1580bee981b205316f4ff8a14f85ec260efae0dcddd633665d",
+          "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "role": "worker",
+            "source": "live pass 1 code-mode catalog and routed calls"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Allowed reads/searches and one worker-owned edit completed under the production hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json",
+          "value": {
+            "actions": [
+              "secret and symlink-alias reads",
+              "edits outside the worker-owned work tree",
+              "control edits",
+              "shell",
+              "non-allowlisted memory writes"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 30,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective worker cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "One subscription ledger receipt retained the native token/cache counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "Live pass 1 re-observed the final role identity, tool catalog and policy boundary on the production prepare_launch path.",
+        "Accepted limitation: the code-mode catalog is wider than the worker allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
+        "The allowlisted memory_get_context call was catalogued but did not route on the first code-mode exec; a usability re-test remains pending.",
+        "re-observation pending after final-review fix wave (2026-11-17)",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: memory_get_context, read, search, apply_patch add and update in work/; denied: secret read, alias read, outside apply_patch, bash (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xw.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: memory_get_context, read_file, search, apply_patch add and update in work/ allowed; secret and alias reads and the sanctioned outside apply_patch denied by the hook before execution; outside directory unchanged. hooks/list showed the 5 project hooks untrusted before and trusted after the gate's trusted_hash write. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/codex-worker-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: memory_get_context (model-supplied project_dir, completed under the bound-project rebinding), read_file, search, apply_patch add and update in work/ allowed; secret and alias reads and the sanctioned outside apply_patch denied by the hook before execution; outside directory unchanged. hooks/list showed the 5 project hooks untrusted before and trusted after the gate's trusted_hash write. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-worker-run.json)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+            "components": {
+              "model": "gpt-5.6-luna",
+              "code_mode_host": {
+                "version": "0.169.0",
+                "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+              },
+              "codex_package": {
+                "layout_version": 1,
+                "version": "0.169.0",
+                "target": "aarch64-apple-darwin",
+                "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+                "executables": {
+                  "code_mode_host": {
+                    "path": "bin/codex-code-mode-host",
+                    "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                  },
+                  "entrypoint": {
+                    "path": "bin/codex",
+                    "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                  },
+                  "execServer": {
+                    "path": "bin/codex-exec-server",
+                    "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                  },
+                  "pathDir/rg": {
+                    "path": "codex-path/rg",
+                    "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                  }
+                }
+              },
+              "settings": "e3c90d7ee9552a6869b34d4e16c3bece99b89fd126f8692e244a9fbc5cb2a645",
+              "mcp": "b9343b800d4e70c3f62748c3bcfd0376e85e27f3bc92eeb3ac69ab362f6eed66",
+              "native_files": "8e630d53f7b09381a05a86aa2ae4284af35409eb677184c69c79a5c534807ad2",
+              "policy": "be6df35b2c5c99d8a969c66fbe65eb5d4aa17b4d7255097ca0e2d50e0475d46c",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Accepted by the lead after gate 4 met the complete reviewer role gate; identity extended after gate 4 (host binary bound); behaviour unchanged. Enforcement is bound to the exercised client, host, model, normalized launch identity and required hook allowlist."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "<codex-standalone>/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002",
+            "code_mode_host": {
+              "version": "0.169.0",
+              "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+            },
+            "codex_package": {
+              "layout_version": 1,
+              "version": "0.169.0",
+              "target": "aarch64-apple-darwin",
+              "manifest_sha256": "3fc1ae4675acbd90d86eacf6a41ddde2a96e0c588e200049cae5b69ffe4e56b5",
+              "executables": {
+                "code_mode_host": {
+                  "path": "bin/codex-code-mode-host",
+                  "sha256": "10feae2abe764bcf2273e241ace67aecc360eb8c28a82a2988bf1d8498a9bacf"
+                },
+                "entrypoint": {
+                  "path": "bin/codex",
+                  "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+                },
+                "execServer": {
+                  "path": "bin/codex-exec-server",
+                  "sha256": "0532760c03ec71af4ce4d7a8f745399dabdae2b9ee0283ec849c4997facdb918"
+                },
+                "pathDir/rg": {
+                  "path": "codex-path/rg",
+                  "sha256": "2caf75aae63d8fd944456686d5241f4864f5e2a930e0a93434e121873f7ff6bf"
+                }
+              }
+            }
+          },
+          "note": "The main executable version and SHA-256 were exercised by gate 4; identity extended after gate 4 (host binary bound); behaviour unchanged. Gate 4 did not record the host hash; the same 0.169.0 package files were rechecked offline and the tracked paths are sanitized."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "entrypoint": [
+              "codex",
+              "-C",
+              "<project>",
+              "-s",
+              "read-only",
+              "-m",
+              "gpt-5.6-luna",
+              "exec",
+              "--json"
+            ],
+            "approval_policy": "never",
+            "code_mode_host": true,
+            "apps_disabled": true
+          },
+          "note": "Production reviewer argv was captured before the one-attempt live launch."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "accepted": true,
+            "model": "gpt-5.6-luna",
+            "reported_model": "gpt-5.6-luna",
+            "identity": "codex-cli-0.169.0:--model=gpt-5.6-luna"
+          },
+          "note": "The selected model is recorded by the launch and subscription ledger."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "The tracked record binds to the launch-project scope, not an ephemeral gate path."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-trust-hooks-list.json",
+          "value": true,
+          "note": "Five project hook rows changed from untrusted to trusted through normal persisted review; no bypass flag was used."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": "473a1248f87ef87227a086d3b58f7da492a9e2e2e7ed4b04d5e6da6a67603a8c",
+          "note": "Final-code live pass 1 confirmed the deterministic merged-tree normalized identity."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "role": "reviewer",
+            "source": "live pass 1 code-mode catalog and routed calls"
+          },
+          "note": "Exact routed tool names, logical inputs and decisions are retained in the tracked evidence."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_glob",
+              "native_grep"
+            ]
+          },
+          "note": "Allowed documentation and worker-result reads completed under the production hook."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json",
+          "value": {
+            "actions": [
+              "all edits and writes",
+              "shell",
+              "MCP-resource tools",
+              "delegation"
+            ]
+          },
+          "note": "Denied calls had PreToolUse rows and no persisted side effect; write_stdin failed before a hook because no session existed."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/gate4/launch-identities.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "restriction": "same client, project, role, model and configuration identity"
+          },
+          "note": "Gate 4 re-established the exact identity; resume enforcement is implementation-bound and was not charged another live call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_launch": true
+          },
+          "note": "The executor and ledger recorded the same effective reviewer cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "codex-exec-json",
+            "completeness": "complete",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "reasoning_tokens",
+              "cached_tokens",
+              "cache_write_tokens",
+              "cost",
+              "turns"
+            ]
+          },
+          "note": "One subscription ledger receipt per reviewer invocation retained the native token/cache counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "Live pass 1 re-observed the final role identity, tool catalog and policy boundary on the production prepare_launch path.",
+        "Accepted limitation: the code-mode catalog is wider than the reviewer allowlist; the required deny-unknown hook is the enforcement boundary.",
+        "write_stdin is unhooked but unreachable because the hooked exec_command call cannot create a session.",
+        "No documented 0.169.0 switch was found offline that removes the residual shell-session, MCP-resource or multi_agent_v1 tools; an argv change requires a new gate.",
+        "re-observation pending after final-review fix wave (2026-11-17)",
+        "Plan 4 Task 6 live re-observation (17 Nov 2026, hook_source 496c1102): launch and configuration identity matched the row; allowed: read, search; denied: secret read, alias read, apply_patch add and update, bash; valid review JSON (opencode_cc_mem/docs/evidence/live-p4/reobserve/B-xr.json).",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: read_file and search allowed; secret (twice) and alias reads, apply_patch update and add denied by the hook; valid review JSON. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/codex-reviewer-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: read_file and search allowed; secret and alias reads, apply_patch update and add denied by the hook; valid review JSON. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/codex-reviewer-run.json)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "helper",
+      "role_label": "service-less helper",
+      "stale": true,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "fb2f62b49f767c2d2f6c8a4aa883290ebdde32b160b308868cf5b3404c258c6f",
+            "recompute_contract": {
+              "identity": "codex-refused-role-unobserved",
+              "discovery_dir": {
+                "scope": "launch-project",
+                "configuration": "run-owned-refused-role-fixture"
+              },
+              "capabilities": [
+                "native_read"
+              ],
+              "model_isolation": {
+                "accepted": true,
+                "model": "gpt-5.6-luna",
+                "identity": "bound-identity-recompute-v1"
+              }
+            },
+            "components": {
+              "model": "gpt-5.6-luna",
+              "settings": "32300abaf02d6aa0744eedf2a701867f4054523cc185e5020afc4071068a4498",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "codex",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": true,
+      "gate": {
+        "status": "refused",
+        "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+        "value": {
+          "decision": "refused-awaiting-live-rerun",
+          "client_identity": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          },
+          "configuration_binding": {
+            "kind": "codex-role-shape-v1",
+            "configuration_identity_sha256": "20a96c8e7dc2d057fe35ae7c5fdbb90d444f32f722eb3eb3d2badcdf90129e14",
+            "recompute_contract": {
+              "identity": "codex-refused-role-unobserved",
+              "discovery_dir": {
+                "scope": "launch-project",
+                "configuration": "run-owned-refused-role-fixture"
+              },
+              "capabilities": [],
+              "model_isolation": {
+                "accepted": true,
+                "model": "gpt-5.6-luna",
+                "identity": "bound-identity-recompute-v1"
+              }
+            },
+            "components": {
+              "model": "gpt-5.6-luna",
+              "settings": "f376af8c2dace335e8dddc0df06c1bdb675cc4c69e15d0248e2ab0e1fdc7805e",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "7c932b149000e48c3a2f440a91b4e0cddf93dae931241947b9d86ca7f67bd106",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "hook_command": "bb95ecb67cd7f19452c3f3330b224f8d96fa164f014ca2076c7c6e0cc30f199a",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "8f09a5cede107d6f5f1717de8175fdbd1156d222c7b528b9fd2f9702fd6c8cff",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d"
+            }
+          }
+        },
+        "reason": "Prerequisite cells remain unproved; role is refused by the initial Task 0 gate."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/codex/task-codex-0169-audit-report.md",
+          "value": {
+            "executable": "~/.codex/packages/standalone/releases/0.169.0-aarch64-apple-darwin/bin/codex",
+            "version": "0.169.0",
+            "sha256": "739cda86e15d30a6e2b40cf8dcbbfb988aaf48b305b27065573bb8e9fd41d002"
+          }
+        },
+        "argv": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "model_delivery": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "discovery_dir": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "trust": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "hook_policy_digest": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "native_schemas": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/docs/harness-probes-p3-2026-11.md",
+          "note": "Task 6 decodes only the client fixture under tests/fixtures/executors/<client>/synthetic/native-tools.json; live observation is still required"
+        },
+        "allowed_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "denied_actions": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "resume": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "caps": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go)"
+        },
+        "usage_semantics": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "awaits live Task 0 (owner's go); P0 scrubbed the recorded usage object"
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/codex/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        }
+      },
+      "notes": [
+        "re-observation pending after final-review fix wave (2026-11-17)"
+      ]
+    },
+    {
+      "client": "vibe",
+      "role": "worker",
+      "role_label": "worker",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "d4aa8f8c2019f9ae2cc1e08155b5d6c117851211d7aacbf0f92e0068aa5379e9",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "mcp": "f14c6b39a77838b116be68961842cb48d4c081fcf3cda4ca737ae23e1fd8486d",
+              "native_files": "174dbe7574d45d27cf4ae8dd611eb43af0822bd76e909c69984be8f3843a31a5",
+              "policy": "0deb11014e05d0fa7e118c6e5d0f405e0a1d6fcc459e7020232640d9bc3c094f",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "de2916383297e0689849b43baebea3d9212419268f34c6b36ae46652a0da6460"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026), re-observed on Vibe 3.1.3 in live gate 12: the offered catalogue is still wider than the role (mistralai/mistral-vibe#1552 open on 3.1.3; #1431), and 3.1.3 also offers the provided group connector_web_search to every role; the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt, including connector web_search and open_url called from run_typescript. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): dist-info mistral_vibe-3.1.3, bin/vibe sha256 unchanged (c3190bb8...e5e9); production prepare_launch bound it on every call; the spawn guard rechecked sha and dist-info before each spawn. | Task 9b (Vibe 3.1.2): Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "30",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": {
+              "direct_tools": "not recorded by Vibe 3.1.3: every llm_call carries model_input.tool_catalog = {type: keep, revision: 2^53-1} and no tool list; tools context 13311 tokens for every role",
+              "provided_groups": {
+                "vibe": [
+                  "todo (direct_and_programmatic)",
+                  "unified_harness_scratchpad (direct)"
+                ],
+                "connector_web_search": [
+                  "finance_search",
+                  "news_search",
+                  "open_url",
+                  "weather_search",
+                  "web_search"
+                ],
+                "mcp_compchem_memory": [
+                  "memory_get_context",
+                  "memory_get_run_history",
+                  "memory_search"
+                ]
+              }
+            }
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): production argv and run-owned .vibe/config.toml unchanged from 9b; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation unchanged (#1552 still open on 3.1.3, gate probes 1a/1b). New on 3.1.3: every role is also offered the provided group connector_web_search (5 programmatic tools); calls reach the strict pre_tool hook and are denied (deny-unknown, probe 6x). | Task 9b (Vibe 3.1.2): Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.3:active_model=mistral-medium-3.5"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): export config.active_model = mistral-medium-3.5 on every role call (Vibe 3.1.3 default is mistral-large-4-0; the pin holds); no fallback, model_unverified or model_mismatch. | Task 9b (Vibe 3.1.2): Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): project .vibe files byte-equal to the run-owned render at launch (production check). | Task 9b (Vibe 3.1.2): Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/trust-and-owner-state.json",
+          "value": true,
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): backed-up append to ~/.vibe/trusted_folders.toml (project + 3 probe dirs), restored byte-identical (cmp, sha, size, mode, mtime); trust absent refused before spawn (dry, gate-only empty trust file). | Task 9b (Vibe 3.1.2): Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/identity-stability.json",
+          "value": "d4aa8f8c2019f9ae2cc1e08155b5d6c117851211d7aacbf0f92e0068aa5379e9",
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): configuration identity of this gate; normalized launch identity 5697909958eca3c5a7c3f5605d9d6068e5fbab97b403c32e6b16f0f8fc9e2d9c; equal across 3 separate-process recomputations (2 before the first call, 1 after the last); all binding components equal the 9b row except client_version. | Task 9b (Vibe 3.1.2): Configuration identity; normalized launch identity 8469cfe39ab92ae8222c223e8741af72480dc9b247d9799a7482ab4bd74ff869; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "role": "worker",
+            "source": "live 12 recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}",
+              "mcp_compchem_memory.<tool>",
+              "typescript:<n>:<program>:<i>:tool:<i> nested call ids",
+              "connector_web_search.<tool> (programmatic, provided)"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): same wire names as 9b; provided tools reach the hook as <group>.<tool>. | Task 9b (Vibe 3.1.2): The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "capabilities": [
+              "native_read",
+              "native_edit",
+              "mcp:compchem-memory.memory_get_context",
+              "mcp:compchem-memory.memory_search",
+              "mcp:compchem-memory.memory_get_run_history"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): write_file and edit in work/, nested run_typescript edit in work/ (step3; d4.txt ends D4-NESTED); memory_get_context and memory_search hooked and allowed (step3b) and again on the bound resume. | Task 9b (Vibe 3.1.2): allowed: memory_get_context and memory_search (both from inside run_typescript, hooked and allowed), direct write_file and edit in work/, nested run_typescript edit in work/ (step3b; file ends D4-NESTED), memory_search on the bound resume; campaign worker reads + work/result.txt write. Vibe 3.1.2 offers no native glob/grep tool; the baseline does not require them for Vibe."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json",
+          "value": {
+            "actions": [
+              "direct write_file outside the project",
+              "nested run_typescript edit outside the project",
+              "direct bash",
+              "edit/write while the edit root is absent (fail-closed)"
+            ],
+            "layer": "strict pre_tool hook (Vibe tool_skipped); Vibe's own bash deny never reached"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): direct outside write_file, nested outside edit, direct bash: Magnolia 'denied' rows, no effect. | Task 9b (Vibe 3.1.2): Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step3b-worker.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bound resume, same session and invocation dir; tampered artifact refused before spawn (worker: needs the managed memory service held between calls and the project files synced before prepare_launch, as the campaign render holder does). | Task 9b (Vibe 3.1.2): One bound resume; ledger shows one row per physical call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 30,
+            "ledger_matches_launch": true
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): argv --max-turns equals the ledger effective_cap. | Task 9b (Vibe 3.1.2): argv --max-turns equals the ledger effective_cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): one subscription ledger row per physical role call (11 rows = 11 role spawns). | Task 9b (Vibe 3.1.2): One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step3b-worker.json",
+          "value": {
+            "env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+            "auth": "static api_key_env in .vibe/config.toml",
+            "absent_from": [
+              "run-owned artifacts",
+              "project .vibe files",
+              "ledger",
+              "logs",
+              "evidence",
+              "hook transcripts"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bearer passed by env reference MAGNOLIA_MEMORY_SERVICE_TOKEN; production _reject_forbidden_data passed; the gate did not capture the bearer value, so no independent digest scan; no token file left after release. | Task 9b (Vibe 3.1.2): Bearer digest scan over 18,245 gate files: 0 hits."
+        },
+        "vibe_memory": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step3b-worker.json",
+          "value": {
+            "accepted": true,
+            "transport": "http loopback",
+            "operations": [
+              "memory_get_context",
+              "memory_search"
+            ],
+            "continuation": "memory_get_context and memory_search on the bound resume",
+            "cleanup": "lease released; no service process left"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): loopback managed service held across the initial and resume calls; 4 OpenRouter memory calls US$0.0013, key only in the memory server process. | Task 9b (Vibe 3.1.2): OpenRouter key only in the memory server process; 13 memory LLM calls US$0.0048."
+        }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Campaign 9b: Vibe worker succeeded in the real runner (receipt, ledger); the Claude haiku reviewer was refused before spawn (Claude Code 2.1.327 differs from its row's 2.1.326).",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): rebound to 3.1.3 (bin/vibe sha unchanged); all prerequisite cells re-observed on gate 12 (commit 5346c1a snapshot); calls: 3 calls (step3 D4 initial US$0.1301, step3b D3 initial US$0.0641 + bound resume US$0.0723; step3 resume refused before spawn); evidence opencode_cc_mem/docs/evidence/live-p4/vibe313/.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): #1552 still open; #1538 fixed (pre_agent without match no longer breaks sub-agents); #1540 fixed (post_agent payload carries turn_id and response_text); session_end finished on every call well inside 2 s; connector_web_search offered and hook-denied.",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: read_file, write_file and edit in work/ allowed; secret and alias reads and the sanctioned outside write_file denied by the hook before execution; outside directory unchanged. The memory step was rejected by Vibe's own argument schema (gate prompt used a wrong argument name), so vibe_memory and http_api_key_env keep their Task 12 evidence. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/vibe-worker-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: read_file, write_file and edit in work/ allowed; memory_get_context through run_typescript hooked (pre and post) and succeeded; secret and alias reads and the sanctioned outside write_file denied by the hook before execution; outside directory unchanged. vibe_memory and http_api_key_env keep their Task 12 evidence (no continuation in this pass). (opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-worker-run.json)"
+      ]
+    },
+    {
+      "client": "vibe",
+      "role": "reviewer",
+      "role_label": "reviewer",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "4ef776badacc0ebf3c71b652285bac1e63ee35861e26ea6ff527f9c398aac147",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "74172e94e3d93426dd37bffdb5e720b6c7e35d3d718a81fe5d7360c683253889",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "eb95486a0a37546883abb2f8f9b786837b49c9c783c12549c10831cbe37ab588"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026), re-observed on Vibe 3.1.3 in live gate 12: the offered catalogue is still wider than the role (mistralai/mistral-vibe#1552 open on 3.1.3; #1431), and 3.1.3 also offers the provided group connector_web_search to every role; the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt, including connector web_search and open_url called from run_typescript. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): dist-info mistral_vibe-3.1.3, bin/vibe sha256 unchanged (c3190bb8...e5e9); production prepare_launch bound it on every call; the spawn guard rechecked sha and dist-info before each spawn. | Task 9b (Vibe 3.1.2): Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "8",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": {
+              "direct_tools": "not recorded by Vibe 3.1.3: every llm_call carries model_input.tool_catalog = {type: keep, revision: 2^53-1} and no tool list; tools context 13311 tokens for every role",
+              "provided_groups": {
+                "vibe": [
+                  "todo (direct_and_programmatic)",
+                  "unified_harness_scratchpad (direct)"
+                ],
+                "connector_web_search": [
+                  "finance_search",
+                  "news_search",
+                  "open_url",
+                  "weather_search",
+                  "web_search"
+                ]
+              }
+            }
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): production argv and run-owned .vibe/config.toml unchanged from 9b; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation unchanged (#1552 still open on 3.1.3, gate probes 1a/1b). New on 3.1.3: every role is also offered the provided group connector_web_search (5 programmatic tools); calls reach the strict pre_tool hook and are denied (deny-unknown, probe 6x). | Task 9b (Vibe 3.1.2): Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.3:active_model=mistral-medium-3.5"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): export config.active_model = mistral-medium-3.5 on every role call (Vibe 3.1.3 default is mistral-large-4-0; the pin holds); no fallback, model_unverified or model_mismatch. | Task 9b (Vibe 3.1.2): Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): project .vibe files byte-equal to the run-owned render at launch (production check). | Task 9b (Vibe 3.1.2): Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/trust-and-owner-state.json",
+          "value": true,
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): backed-up append to ~/.vibe/trusted_folders.toml (project + 3 probe dirs), restored byte-identical (cmp, sha, size, mode, mtime); trust absent refused before spawn (dry, gate-only empty trust file). | Task 9b (Vibe 3.1.2): Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/identity-stability.json",
+          "value": "4ef776badacc0ebf3c71b652285bac1e63ee35861e26ea6ff527f9c398aac147",
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): configuration identity of this gate; normalized launch identity 5e9a465a712384cb9c1a9c567ecd4b1598d117816a623eb426b65bb715178a40; equal across 3 separate-process recomputations (2 before the first call, 1 after the last); all binding components equal the 9b row except client_version. | Task 9b (Vibe 3.1.2): Configuration identity; normalized launch identity 3f5be1103f404a8ac4c8af329199325b09c2c6349640ef04cf3e6e398e5df7e7; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "role": "reviewer",
+            "source": "live 12 recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}",
+              "connector_web_search.<tool> (programmatic, provided)"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): same wire names as 9b; provided tools reach the hook as <group>.<tool>. | Task 9b (Vibe 3.1.2): The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): read_file of docs/notes.md and of the run's work/result.txt; review JSON parsed and validated (1 issue). | Task 9b (Vibe 3.1.2): allowed: read_file of docs/notes.md and of two run files; the bound resume returned review JSON that the production parser accepted and validate_review validated (1 issue). Vibe 3.1.2 offers no native glob/grep tool; the baseline does not require them for Vibe."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json",
+          "value": {
+            "actions": [
+              "write_file",
+              "bash",
+              "secret read (secret/.env)",
+              "symlink-alias read (alias-env)",
+              "unified_harness_scratchpad write",
+              "todo write"
+            ],
+            "layer": "strict pre_tool hook (deny-unknown for provided tools)"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): write_file, bash, secret read, alias read: Magnolia 'denied' rows, no effect. | Task 9b (Vibe 3.1.2): Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step2-reviewer.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bound resume, same session and invocation dir; tampered artifact refused before spawn. | Task 9b (Vibe 3.1.2): One bound resume; ledger shows one row per physical call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 8,
+            "ledger_matches_launch": true
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): argv --max-turns equals the ledger effective_cap. | Task 9b (Vibe 3.1.2): argv --max-turns equals the ledger effective_cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): one subscription ledger row per physical role call (11 rows = 11 role spawns). | Task 9b (Vibe 3.1.2): One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
+        }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): rebound to 3.1.3 (bin/vibe sha unchanged); all prerequisite cells re-observed on gate 12 (commit 5346c1a snapshot); calls: 2 calls (initial US$0.1120, bound resume US$0.0599); evidence opencode_cc_mem/docs/evidence/live-p4/vibe313/.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): #1552 still open; #1538 fixed (pre_agent without match no longer breaks sub-agents); #1540 fixed (post_agent payload carries turn_id and response_text); session_end finished on every call well inside 2 s; connector_web_search offered and hook-denied.",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: two reads allowed; write_file, edit, secret and alias reads denied by the hook; valid review JSON. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/vibe-reviewer-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: two reads allowed; write_file, edit, secret and alias reads denied by the hook; valid review JSON. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-reviewer-run.json)"
+      ]
+    },
+    {
+      "client": "vibe",
+      "role": "helper",
+      "role_label": "helper",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "9abfb76c97fd27ab274ac56bfd9a4b516b27b2c16aa175dd7b48a6d9dfeebc55",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "f5911a9da490a2e1e4b828192fc664f5ae176a3e963461440fa6807f918d576d",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "756302ab630e020bb9df6a148129c210995574f7ba009e9528d58a38c974b5df"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026), re-observed on Vibe 3.1.3 in live gate 12: the offered catalogue is still wider than the role (mistralai/mistral-vibe#1552 open on 3.1.3; #1431), and 3.1.3 also offers the provided group connector_web_search to every role; the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt, including connector web_search and open_url called from run_typescript. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): dist-info mistral_vibe-3.1.3, bin/vibe sha256 unchanged (c3190bb8...e5e9); production prepare_launch bound it on every call; the spawn guard rechecked sha and dist-info before each spawn. | Task 9b (Vibe 3.1.2): Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "40",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": {
+              "direct_tools": "not recorded by Vibe 3.1.3: every llm_call carries model_input.tool_catalog = {type: keep, revision: 2^53-1} and no tool list; tools context 13311 tokens for every role",
+              "provided_groups": {
+                "vibe": [
+                  "todo (direct_and_programmatic)",
+                  "unified_harness_scratchpad (direct)"
+                ],
+                "connector_web_search": [
+                  "finance_search",
+                  "news_search",
+                  "open_url",
+                  "weather_search",
+                  "web_search"
+                ]
+              },
+              "observed_called_and_denied": [
+                "write_file",
+                "edit",
+                "bash",
+                "skill",
+                "todo",
+                "unified_harness_scratchpad",
+                "connector_web_search.web_search",
+                "connector_web_search.open_url"
+              ]
+            }
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): production argv and run-owned .vibe/config.toml unchanged from 9b; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation unchanged (#1552 still open on 3.1.3, gate probes 1a/1b). New on 3.1.3: every role is also offered the provided group connector_web_search (5 programmatic tools); calls reach the strict pre_tool hook and are denied (deny-unknown, probe 6x). | Task 9b (Vibe 3.1.2): Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.3:active_model=mistral-medium-3.5"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): export config.active_model = mistral-medium-3.5 on every role call (Vibe 3.1.3 default is mistral-large-4-0; the pin holds); no fallback, model_unverified or model_mismatch. | Task 9b (Vibe 3.1.2): Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): project .vibe files byte-equal to the run-owned render at launch (production check). | Task 9b (Vibe 3.1.2): Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/trust-and-owner-state.json",
+          "value": true,
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): backed-up append to ~/.vibe/trusted_folders.toml (project + 3 probe dirs), restored byte-identical (cmp, sha, size, mode, mtime); trust absent refused before spawn (dry, gate-only empty trust file). | Task 9b (Vibe 3.1.2): Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/identity-stability.json",
+          "value": "9abfb76c97fd27ab274ac56bfd9a4b516b27b2c16aa175dd7b48a6d9dfeebc55",
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): configuration identity of this gate; normalized launch identity 2e4c79fdec703b17d292f2656e4a3d1cc6141c2d0dde3c702d23dce410481cb1; equal across 3 separate-process recomputations (2 before the first call, 1 after the last); all binding components equal the 9b row except client_version. | Task 9b (Vibe 3.1.2): Configuration identity; normalized launch identity cc8a756ab27cd1e5b409254996a88341658dda9c9cfac1236aa976378f487e57; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "role": "helper",
+            "source": "live 12 recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}",
+              "connector_web_search.<tool> (programmatic, provided)"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): same wire names as 9b; provided tools reach the hook as <group>.<tool>. | Task 9b (Vibe 3.1.2): The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "capabilities": [
+              "native_read"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bound read of docs/notes.md; search_tool_functions ran (no hook record, as on 3.1.2). | Task 9b (Vibe 3.1.2): allowed: bound read of docs/notes.md (lane read root docs/); plain-text reply; resume answered from the session ('42')."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json",
+          "value": {
+            "actions": [
+              "read outside the bound lane root (README.md)",
+              "secret read",
+              "write_file",
+              "bash",
+              "skill.read",
+              "connector_web_search.web_search from run_typescript",
+              "connector_web_search.open_url from run_typescript"
+            ],
+            "layer": "strict pre_tool hook"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): README outside the lane, secret, write_file, bash, skill.read denied (step4); connector web_search and open_url denied (step6x, deny-unknown); no effect, no network result. | Task 9b (Vibe 3.1.2): Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step4-helper.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bound resume, same session and invocation dir; tampered artifact refused before spawn. | Task 9b (Vibe 3.1.2): One bound resume; ledger shows one row per physical call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 40,
+            "ledger_matches_launch": true
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): argv --max-turns equals the ledger effective_cap. | Task 9b (Vibe 3.1.2): argv --max-turns equals the ledger effective_cap."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): one subscription ledger row per physical role call (11 rows = 11 role spawns). | Task 9b (Vibe 3.1.2): One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
+        }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): rebound to 3.1.3 (bin/vibe sha unchanged); all prerequisite cells re-observed on gate 12 (commit 5346c1a snapshot); calls: 3 calls (initial US$0.0778, bound resume US$0.0533, connector probe US$0.0622); evidence opencode_cc_mem/docs/evidence/live-p4/vibe313/.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): #1552 still open; #1538 fixed (pre_agent without match no longer breaks sub-agents); #1540 fixed (post_agent payload carries turn_id and response_text); session_end finished on every call well inside 2 s; connector_web_search offered and hook-denied.",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: bound read allowed; secret, alias, README (outside the read root), write_file and edit denied by the hook. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/vibe-helper-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: bound read allowed; secret, alias, README (outside the read root), write_file and edit denied by the hook. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-helper-run.json)"
+      ]
+    },
+    {
+      "client": "vibe",
+      "role": "evaluator",
+      "role_label": "evaluator",
+      "stale": false,
+      "gate": {
+        "status": "observed",
+        "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+        "value": {
+          "decision": "accepted-live",
+          "client_identity": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "configuration_binding": {
+            "kind": "vibe-role-shape-v1",
+            "configuration_identity_sha256": "683e83a34834eb2966a40b38a214f4a71e8d458ca481148a817fdc73edcce8d0",
+            "components": {
+              "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+              "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+              "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+              "hook_source": "90458459705c1054486d74d30f8452c7efe592517083e254e57d9f5f8f3e0b55",
+              "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+              "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+              "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+              "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+              "settings": "d21a64962472d402847631282d285c458a0a5309ffe3e6ea982f6590c2826d00"
+            }
+          }
+        },
+        "reason": "Accepted limitation (Codex worker precedent; owner ruling 18 Nov 2026), re-observed on Vibe 3.1.3 in live gate 12: the offered catalogue is still wider than the role (mistralai/mistral-vibe#1552 open on 3.1.3; #1431), and 3.1.3 also offers the provided group connector_web_search to every role; the strict deny-unknown pre_tool hook is the enforcement boundary and denied every forbidden attempt, including connector web_search and open_url called from run_typescript. run_typescript and search_tool_functions fire no hook; calls made from run_typescript are hooked."
+      },
+      "cells": {
+        "identity": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/identity-preflight.json",
+          "value": {
+            "executable": "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+            "version": "3.1.3",
+            "sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): dist-info mistral_vibe-3.1.3, bin/vibe sha256 unchanged (c3190bb8...e5e9); production prepare_launch bound it on every call; the spawn guard rechecked sha and dist-info before each spawn. | Task 9b (Vibe 3.1.2): Installed dist-info 3.1.2 and bin/vibe sha256 bound by production prepare_launch on every live 9b call (spawn guard rechecked the hash)."
+        },
+        "argv": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+          "value": {
+            "entrypoint": [
+              "vibe",
+              "-p",
+              "<prompt>",
+              "--output",
+              "json",
+              "--workdir",
+              "<project>",
+              "--max-turns",
+              "1",
+              "--output-dir",
+              "<attempt>/<stem>_1.out",
+              "--auto-approve",
+              "--disabled-tools",
+              "bash",
+              "--disabled-tools",
+              "edit",
+              "--disabled-tools",
+              "write_file"
+            ],
+            "native_config": {
+              "active_model": "mistral-medium-3.5",
+              "disabled_tools": [
+                "bash",
+                "edit",
+                "write_file"
+              ],
+              "enable_subagents": false,
+              "enable_background_processes": false
+            },
+            "offered_catalogue": {
+              "direct_tools": "not recorded by Vibe 3.1.3: every llm_call carries model_input.tool_catalog = {type: keep, revision: 2^53-1} and no tool list; tools context 13311 tokens for every role",
+              "provided_groups": {
+                "vibe": [
+                  "todo (direct_and_programmatic)",
+                  "unified_harness_scratchpad (direct)"
+                ],
+                "connector_web_search": [
+                  "finance_search",
+                  "news_search",
+                  "open_url",
+                  "weather_search",
+                  "web_search"
+                ]
+              }
+            }
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): production argv and run-owned .vibe/config.toml unchanged from 9b; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation unchanged (#1552 still open on 3.1.3, gate probes 1a/1b). New on 3.1.3: every role is also offered the provided group connector_web_search (5 programmatic tools); calls reach the strict pre_tool hook and are denied (deny-unknown, probe 6x). | Task 9b (Vibe 3.1.2): Production argv and run-owned .vibe/config.toml; no --trust/--yolo/--bare/--dangerously-*. Accepted limitation: the offered catalogue still lists disabled tools (deny-on-call only)."
+        },
+        "model_delivery": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+          "value": {
+            "accepted": true,
+            "model": "mistral-medium-3.5",
+            "reported_model": "mistral-medium-3.5",
+            "identity": "vibe-3.1.3:active_model=mistral-medium-3.5"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): export config.active_model = mistral-medium-3.5 on every role call (Vibe 3.1.3 default is mistral-large-4-0; the pin holds); no fallback, model_unverified or model_mismatch. | Task 9b (Vibe 3.1.2): Export config.active_model equalled the pinned id on every call; no fallback, model_unverified or model_mismatch."
+        },
+        "discovery_dir": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+          "value": {
+            "scope": "launch-project",
+            "configuration": "run-owned project config"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): project .vibe files byte-equal to the run-owned render at launch (production check). | Task 9b (Vibe 3.1.2): Project .vibe/config.toml and hooks.toml byte-equal to the run-owned render at launch; missing files refuse before spawn."
+        },
+        "trust": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/trust-and-owner-state.json",
+          "value": true,
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): backed-up append to ~/.vibe/trusted_folders.toml (project + 3 probe dirs), restored byte-identical (cmp, sha, size, mode, mtime); trust absent refused before spawn (dry, gate-only empty trust file). | Task 9b (Vibe 3.1.2): Production nearest-ancestor persisted-trust precheck passed after the owner-approved backed-up append; trust absent refused before spawn (dry-notrust); file restored byte-identical (cmp)."
+        },
+        "hook_policy_digest": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/identity-stability.json",
+          "value": "683e83a34834eb2966a40b38a214f4a71e8d458ca481148a817fdc73edcce8d0",
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): configuration identity of this gate; normalized launch identity 97dff0a6096fa583d0710ab8d133fbafe476b0dae6d0ba75f71437dbb9199612; equal across 3 separate-process recomputations (2 before the first call, 1 after the last); all binding components equal the 9b row except client_version. | Task 9b (Vibe 3.1.2): Configuration identity; normalized launch identity 0c9c96a02dcc700e1201ce9d59ee291a5a7c0ce5f77ef4c36a233808f5033e01; deterministic across 4 separate-process recomputations (2 before the first call, 2 after the last)."
+        },
+        "native_schemas": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+          "value": {
+            "role": "evaluator",
+            "source": "live 12 recovery journal and Magnolia hook transcript",
+            "wire_names": [
+              "file_system.read_file{path}",
+              "file_system.write_file{path,content}",
+              "file_system.edit{file_path,old_string,new_string}",
+              "file_system.bash{command,timeout_seconds}",
+              "vibe.todo",
+              "vibe.unified_harness_scratchpad",
+              "skill.read{name}",
+              "connector_web_search.<tool> (programmatic, provided)"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): same wire names as 9b; provided tools reach the hook as <group>.<tool>. | Task 9b (Vibe 3.1.2): The adapter normalised path to file_path; provided tools reach the hook as <group>.<tool>."
+        },
+        "allowed_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json",
+          "value": {
+            "capabilities": []
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): no tool needed; final_text {\"verdict\":\"EVAL-OK\",\"tools_offered\":9} parsed as JSON. | Task 9b (Vibe 3.1.2): no capability: one-turn structured reply {\"verdict\":\"EVAL-OK\",\"tools_offered\":9} parsed as JSON on both the initial call and the bound resume."
+        },
+        "denied_actions": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step5b-evaluator.json",
+          "value": {
+            "actions": [
+              "secret read",
+              "write_file",
+              "bash"
+            ],
+            "layer": "strict pre_tool hook (reserve call step5b, one turn)"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): one-turn call: secret read, write_file, bash all hook-denied (turn_limit). | Task 9b (Vibe 3.1.2): Every denial has a pre_tool skip record and a Magnolia 'denied' transcript row; no effect (state snapshots unchanged, secret and outside sentinels in no tool result)."
+        },
+        "resume": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/vibe313/step5-evaluator.json",
+          "value": {
+            "supported": true,
+            "same_session": true,
+            "same_invocation_dir": true,
+            "restriction": "same client, project, role, model and configuration identity",
+            "tampered_artifact": "refused before spawn"
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): bound resume, same session and invocation dir; tampered artifact refused before spawn. | Task 9b (Vibe 3.1.2): One bound resume; ledger shows one row per physical call."
+        },
+        "caps": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "effective_max_turns": 1,
+            "ledger_matches_launch": true
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): argv --max-turns equals the ledger effective_cap. | Task 9b (Vibe 3.1.2): argv --max-turns equals the ledger effective_cap. The 1-turn cap ended a tool-calling turn as turn_limit (step5b)."
+        },
+        "usage_semantics": {
+          "status": "observed",
+          "artifact": "opencode_cc_mem/docs/evidence/live-p4/reobserve3/usage-ledger-rows.json",
+          "value": {
+            "scope": "physical invocation",
+            "source": "vibe-export-json",
+            "completeness": "partial",
+            "counters": [
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "cost",
+              "turns"
+            ],
+            "null_counters": [
+              "reasoning_tokens",
+              "cache_write_tokens"
+            ]
+          },
+          "note": "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): one subscription ledger row per physical role call (11 rows = 11 role spawns). | Task 9b (Vibe 3.1.2): One subscription ledger row per physical call (11 Vibe rows); resume rows carry their own call's counters."
+        },
+        "quota_evidence": {
+          "status": "synthetic-only",
+          "artifact": "opencode_cc_mem/tests/fixtures/executors/vibe/synthetic/quota.json",
+          "note": "constructed parser fixture only; no account quota was observed"
+        },
+        "http_api_key_env": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role renders no memory server"
+        },
+        "vibe_memory": {
+          "status": "unknown",
+          "artifact": null,
+          "note": "not applicable: the role has no memory tools (mcp_servers = [])"
+        }
+      },
+      "notes": [
+        "Live gate 9b (18 Nov 2026, commit 0f762c9, mistral-medium-3.5): accepted by the lead on LFX's decision (18 Nov 2026) under the Codex accepted-limitation precedent.",
+        "Accepted limitation: the 9-tool catalogue is wider than the role; strict deny-unknown pre_tool is the enforcement boundary.",
+        "run_typescript and search_tool_functions are executed by Vibe Core without a pre_tool record; todo, unified_harness_scratchpad and skill are hooked and denied.",
+        "Known issues and residual risks: opencode_cc_mem/docs/vibe-known-issues.md; upstream mistralai/mistral-vibe#1552 and #1431.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): rebound to 3.1.3 (bin/vibe sha unchanged); all prerequisite cells re-observed on gate 12 (commit 5346c1a snapshot); calls: 3 calls (initial US$0.0281, bound resume US$0.0514, one-turn denial US$0.0298); evidence opencode_cc_mem/docs/evidence/live-p4/vibe313/.",
+        "Plan 4 Task 12 live (18 Nov 2026, Vibe 3.1.3): #1552 still open; #1538 fixed (pre_agent without match no longer breaks sub-agents); #1540 fixed (post_agent payload carries turn_id and response_text); session_end finished on every call well inside 2 s; connector_web_search offered and hook-denied.",
+        "Plan 4 Task 13a live (18 Nov 2026): re-observed after the PR2/PR3 restack on the PR1 follow-up (hook_source 496c1102… → 170065f4…). One call: 1 turn, no tool call, answer {\"verdict\":\"EVAL-OK\",\"tools_offered\":9} parsed; denied_actions keeps its Task 12 (5b) evidence. (opencode_cc_mem/docs/evidence/live-p4/reobserve2/vibe-evaluator-run.json)",
+        "Plan 4 Task 17 live (18 Nov 2026): re-observed on v3 (always-on + PR #26 f1df4a6, finding 2, memory project_dir fix; hook_source 170065f4… → 90458459…). One call: 1 turn, no tool call, answer {\"verdict\":\"EVAL-OK\",\"tools_offered\":9} parsed; denied_actions keeps its Task 12 (5b) evidence. (opencode_cc_mem/docs/evidence/live-p4/reobserve3/vibe-evaluator-run.json)"
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 from compchem_memory.harness import files
+from compchem_memory.harness.ownership import strip_owned_hooks
 
 
 MAGNOLIA_SERVERS = {"compchem-memory", "compchem-tools", "perspicacite"}
@@ -402,6 +403,25 @@ def test_nameless_member_hook_group_does_not_block_magnolia_group(tmp_path):
     assert conflicts == []
     assert json.loads(first)["hooks"]["PostToolUse"] == [member, new]
     assert path.read_bytes() == first
+
+
+def test_stale_magnolia_hook_event_is_removed_when_no_longer_rendered(tmp_path):
+    path = tmp_path / "hooks.json"
+    stale = _hook_group("/py -m compchem_memory.hook codex notification")
+    member = _hook_group("member-hook")
+    path.write_text(json.dumps({"hooks": {"Notification": [stale], "Keep": [member]}}))
+
+    content, _ = files.merged_json(
+        path,
+        _owned_group,
+        {"hooks": {"PreToolUse": [_hook_group("/py -m compchem_memory.hook codex pre-tool")]}},
+        strip_owned_hooks,
+    )
+    path.write_bytes(content)
+
+    hooks = json.loads(path.read_text())["hooks"]
+    assert "Notification" not in hooks
+    assert hooks["Keep"] == [member]
 
 
 def test_claude_mcp_servers_owned_by_name(tmp_path):

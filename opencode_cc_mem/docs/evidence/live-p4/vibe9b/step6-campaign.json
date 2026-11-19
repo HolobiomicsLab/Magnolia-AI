@@ -1,0 +1,370 @@
+{
+  "catalog": [
+    "todo",
+    "unified_harness_scratchpad",
+    "search_tool_functions",
+    "run_typescript",
+    "read_file",
+    "write_file",
+    "edit",
+    "bash",
+    "skill"
+  ],
+  "claude_reviewer_dry": {
+    "result": "refused before spawn: capability launch identity mismatch: client_version",
+    "route": [
+      "claude-code",
+      "haiku"
+    ],
+    "row_bound_client": {
+      "client_sha256": "e214ad76dcc0e846b03be28ed1c2734aacd4e27acb527cb7f8a9e2bed644e837",
+      "client_version": "2.1.326"
+    },
+    "row_projection": {
+      "accepted": true,
+      "blocking_cells": [],
+      "stale": false
+    }
+  },
+  "events": [
+    {
+      "attempt": 0,
+      "campaign": "harness-p3-worker-vibe-review",
+      "from": null,
+      "initial": {
+        "attempt": 0,
+        "brief_sha256": "10e14ae96e45807b4a67b2a939881140348c03906baf710f5cc96814034ce6cd",
+        "created_at": "2026-11-18T06:06:46.631345+00:00",
+        "job_core_hours": {},
+        "jobs": {},
+        "memory_state": {
+          "entries_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "entry_count": 0
+        },
+        "paused_from": null,
+        "protocol_id": "harness-p3-worker-vibe-review",
+        "protocol_sha256": "85a2d1773019ceb9c2ff0e1c79ea673cc464da70a3ef5dc8d0b29a52c694fdb7",
+        "quota_wait": null,
+        "resumed_from_quota": null,
+        "schema": 1,
+        "stage": "work",
+        "state": "queued",
+        "updated_at": "2026-11-18T06:06:46.631345+00:00",
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "core_hours": 0,
+          "cost_usd": 0,
+          "human_minutes": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "uncached_input_tokens": 0
+        }
+      },
+      "reason": "campaign initialized",
+      "schema": 1,
+      "seq": 1,
+      "stage": "work",
+      "to": "queued",
+      "ts": "2026-11-18T06:06:46.631345+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-worker-vibe-review",
+      "from": "queued",
+      "reason": "start stage work",
+      "schema": 1,
+      "seq": 2,
+      "stage": "work",
+      "to": "running",
+      "ts": "2026-11-18T06:06:57.799062+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-worker-vibe-review",
+      "from": "running",
+      "reason": "worker usage",
+      "schema": 1,
+      "seq": 3,
+      "stage": "work",
+      "to": "running",
+      "ts": "2026-11-18T06:07:13.955633+00:00",
+      "usage_after": {
+        "cache_read_tokens": 132608.0,
+        "cache_write_tokens": 0,
+        "core_hours": 0,
+        "cost_usd": 0.052111199999999996,
+        "human_minutes": 0,
+        "input_tokens": 150373.0,
+        "output_tokens": 743.0,
+        "reasoning_tokens": 0,
+        "uncached_input_tokens": 17765.0
+      }
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-worker-vibe-review",
+      "from": "running",
+      "reason": "worker work completed",
+      "schema": 1,
+      "seq": 4,
+      "stage": "work",
+      "to": "validating",
+      "ts": "2026-11-18T06:07:13.957378+00:00"
+    },
+    {
+      "attempt": 1,
+      "campaign": "harness-p3-worker-vibe-review",
+      "from": "validating",
+      "reason": "stage work needs review: review failed: capability launch identity mismatch: client_version",
+      "schema": 1,
+      "seq": 5,
+      "stage": "work",
+      "to": "waiting_human",
+      "ts": "2026-11-18T06:07:14.132063+00:00"
+    }
+  ],
+  "export_summary": {
+    "active_model": "mistral-medium-3.5",
+    "cost_usd": 0.052111199999999996,
+    "exit_code": 0,
+    "outcome": "finished",
+    "steps": 4,
+    "usage": {
+      "cached_input_tokens": 132608,
+      "input_tokens": 150373,
+      "output_tokens": 743,
+      "total_tokens": 151116
+    }
+  },
+  "hook_actions": [
+    {
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/control/brief.md"
+      },
+      "call_id": "fX5J8MZ8K",
+      "call_type": "runtime_builtin",
+      "decision": "continue",
+      "hook": "pre_tool_call",
+      "kind": "hook",
+      "seq": 14,
+      "tool_name_on_wire": "file_system.read_file"
+    },
+    {
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/control/brief.md"
+      },
+      "call_id": "fX5J8MZ8K",
+      "call_type": "runtime_builtin",
+      "decision": null,
+      "hook": "post_tool_call",
+      "kind": "hook",
+      "seq": 25,
+      "tool_name_on_wire": "file_system.read_file"
+    },
+    {
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+      },
+      "call_id": "Gy7Cz1mJP",
+      "call_type": "runtime_builtin",
+      "decision": "continue",
+      "hook": "pre_tool_call",
+      "kind": "hook",
+      "seq": 35,
+      "tool_name_on_wire": "file_system.read_file"
+    },
+    {
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+      },
+      "call_id": "Gy7Cz1mJP",
+      "call_type": "runtime_builtin",
+      "decision": null,
+      "hook": "post_tool_call",
+      "kind": "hook",
+      "seq": 46,
+      "tool_name_on_wire": "file_system.read_file"
+    },
+    {
+      "arguments": {
+        "content": "RESULT: 42",
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/work/result.txt"
+      },
+      "call_id": "uSLVDGaCp",
+      "call_type": "runtime_builtin",
+      "decision": "continue",
+      "hook": "pre_tool_call",
+      "kind": "hook",
+      "seq": 56,
+      "tool_name_on_wire": "file_system.write_file"
+    },
+    {
+      "arguments": {
+        "content": "RESULT: 42",
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/work/result.txt"
+      },
+      "call_id": "uSLVDGaCp",
+      "call_type": "runtime_builtin",
+      "decision": null,
+      "hook": "post_tool_call",
+      "kind": "hook",
+      "seq": 67,
+      "tool_name_on_wire": "file_system.write_file"
+    }
+  ],
+  "receipt": {
+    "attempt": 1,
+    "command_hashes": {},
+    "errors": [
+      "review failed: capability launch identity mismatch: client_version"
+    ],
+    "gate": null,
+    "job_records": [],
+    "job_usage": {
+      "core_hours": 0
+    },
+    "outputs": [],
+    "review": null,
+    "run_ids": [],
+    "session_id": "1df766b2-8082-b4c8-1ffa-2d1333c753cd",
+    "stage": "work",
+    "status": "failed",
+    "test_double": false,
+    "usage": {
+      "cache_read_tokens": 132608.0,
+      "cache_write_tokens": null,
+      "cost_usd": 0.052111199999999996,
+      "input_tokens": 150373.0,
+      "output_tokens": 743.0,
+      "reasoning_tokens": null,
+      "uncached_input_tokens": 17765.0
+    }
+  },
+  "render": {
+    "config_digest": "9cb430ea7fb5d642ab08a1fb5752fbe6f2cb8129d2c4a51c1df406f52ea35601",
+    "mcp_memory_service": {
+      "authorization_env": "MAGNOLIA_MEMORY_SERVICE_TOKEN",
+      "transport": "http",
+      "url": "http://127.0.0.1:<port>/mcp"
+    },
+    "policy_digest": "a1b1811fce59dbdc5ec62e4b8e4f4a09fb263fce9121e532def334c15c5b5610",
+    "project_vibe": {
+      ".vibe/config.toml": "90ceaed1111efff37cb141da1a22fe859098c899c220d025db15173651c697c6",
+      ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+    },
+    "route": [
+      "vibe",
+      "mistral-medium-3.5"
+    ],
+    "t": "07:06:52"
+  },
+  "result_txt": "RESULT: 42",
+  "tool_executions": [
+    {
+      "approval": {
+        "approvalSource": "bypass",
+        "approvalType": "always",
+        "decision": "execute"
+      },
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/control/brief.md"
+      },
+      "call_id": "fX5J8MZ8K",
+      "call_type": "runtime_builtin",
+      "kind": "tool_execution",
+      "name": "file_system.read_file",
+      "parent_call_id": null,
+      "result_excerpt": "{\"action_id\": \"9b15e0c9-cdfe-5523-a8b3-3f1203b6175e\", \"call_id\": \"fX5J8MZ8K\", \"result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"Read docs/notes.md and write the synthetic answer it states to work/result.txt as one line `RESULT: <answer>`.\\n\", \"file_size_bytes\": 111, \"lines_read\": 1, \"ne",
+      "result_type": "tool_succeeded",
+      "seq": 20,
+      "state": "succeeded"
+    },
+    {
+      "approval": {
+        "approvalSource": "bypass",
+        "approvalType": "always",
+        "decision": "execute"
+      },
+      "arguments": {
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/docs/notes.md"
+      },
+      "call_id": "Gy7Cz1mJP",
+      "call_type": "runtime_builtin",
+      "kind": "tool_execution",
+      "name": "file_system.read_file",
+      "parent_call_id": null,
+      "result_excerpt": "{\"action_id\": \"c5da4465-b385-5ec1-9a5d-b7a48cf8f1fb\", \"call_id\": \"Gy7Cz1mJP\", \"result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"content\": \"# Harness P3 acceptance notes\\n\\nALLOWED: synthetic note for the live 9b gate. The answer to the synthetic question is 42.\\n\", \"file_size_bytes\": 121, \"lines_r",
+      "result_type": "tool_succeeded",
+      "seq": 41,
+      "state": "succeeded"
+    },
+    {
+      "approval": {
+        "approvalSource": "bypass",
+        "approvalType": "always",
+        "decision": "execute"
+      },
+      "arguments": {
+        "content": "RESULT: 42",
+        "path": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/live9b-c1/work/result.txt"
+      },
+      "call_id": "uSLVDGaCp",
+      "call_type": "runtime_builtin",
+      "kind": "tool_execution",
+      "name": "file_system.write_file",
+      "parent_call_id": null,
+      "result_excerpt": "{\"action_id\": \"8b3efa48-e593-5c4c-ab8c-e9b2822e73de\", \"call_id\": \"uSLVDGaCp\", \"result\": {\"_meta\": {\"approval\": {\"approvalSource\": \"bypass\", \"approvalType\": \"always\", \"decision\": \"execute\"}}, \"content\": [], \"structured_content\": {\"bytes_written\": 10, \"file_existed\": false, \"path\": \"<G>/snap/opencode_cc_mem/projects/ha",
+      "result_type": "tool_succeeded",
+      "seq": 62,
+      "state": "succeeded"
+    }
+  ],
+  "worker_final_text": "Complete. Result written to work/result.txt: `RESULT: 42`",
+  "worker_result": {
+    "attempts": 1,
+    "errors": [
+      {
+        "kind": "client_notice",
+        "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      },
+      {
+        "kind": "client_notice",
+        "message": "Reading API keys from the macOS Keychain (set them as environment variables to skip this)"
+      },
+      {
+        "kind": "client_notice",
+        "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      }
+    ],
+    "resume_artifact": {
+      "client": "vibe",
+      "configuration_identity_digest": "5ed1d8d2e16306cf8c3c3387b6d3cc4699450d79db8ecda582d0555578749c27",
+      "project_identity": "914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142",
+      "role": "worker",
+      "session_id": "1df766b2-8082-b4c8-1ffa-2d1333c753cd"
+    },
+    "returncode": 0,
+    "session_id": "1df766b2-8082-b4c8-1ffa-2d1333c753cd",
+    "session_identity": {
+      "client": "vibe",
+      "model": "mistral-medium-3.5",
+      "policy_digest": "5ed1d8d2e16306cf8c3c3387b6d3cc4699450d79db8ecda582d0555578749c27",
+      "project_digest": "914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142",
+      "role": "worker",
+      "session_id": "1df766b2-8082-b4c8-1ffa-2d1333c753cd"
+    },
+    "timed_out": false,
+    "tool_calls": 0,
+    "usage": {
+      "cache_read_tokens": 132608.0,
+      "cache_write_tokens": null,
+      "cost_usd": 0.052111199999999996,
+      "input_tokens": 150373.0,
+      "output_tokens": 743.0,
+      "reasoning_tokens": null,
+      "uncached_input_tokens": 17765.0
+    }
+  }
+}

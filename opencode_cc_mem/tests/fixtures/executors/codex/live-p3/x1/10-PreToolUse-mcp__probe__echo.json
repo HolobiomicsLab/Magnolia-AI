@@ -1,0 +1,21 @@
+{
+  "class": "mcp",
+  "decision": "allow",
+  "mode": "enforce",
+  "policy_sha256": "b0faf105996e7d67673401c48f9ab140dceba0a8a004f4f47d646c3216a6ef9f",
+  "reason": "mcp tool on the allowlist",
+  "stdin": {
+    "cwd": "/TMPDIR/probe-p3-codex-omV8qQ/proj",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "bypassPermissions",
+    "session_id": "ses-fixture-1",
+    "tool_input": {
+      "text": "top"
+    },
+    "tool_name": "mcp__probe__echo",
+    "tool_use_id": "exec-6c62aec5-9ad2-4450-8a0d-7f71b1e524b5",
+    "transcript_path": "/HOME/.codex/sessions/2026/11/16/rollout-2026-11-16T07-30-05-ses-fixture-1.jsonl",
+    "turn_id": "01a1e30c-7112-7463-ba51-a28475330cf7"
+  }
+}

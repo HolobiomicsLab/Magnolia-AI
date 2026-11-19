@@ -16,14 +16,17 @@ Robustness contract:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .evaluator import (
     EvalDecision,
+    EvalQuotaWait,
     confidence_threshold,
     make_evaluator,
 )
@@ -117,6 +120,7 @@ class RouteReply:
     work_item_id: str | None = None
     detail: str = ""
     flags: list[str] = field(default_factory=list)
+    waiter_id: str | None = None
 
 
 class Router:
@@ -165,6 +169,8 @@ class Router:
 
         # No explicit project: try the LLM Eval (Jev or generative fallback).
         decision = self._eval(text)
+        if isinstance(decision, EvalQuotaWait):
+            return self._waiting_reply(decision, flags)
         if decision is not None:
             return self._apply_eval(decision, text, flags)
         candidates = [p for p in self.registry if p != "demo"]
@@ -174,19 +180,241 @@ class Router:
 
     # ---------- internals ----------
 
-    def _eval(self, text: str) -> EvalDecision | None:
-        if self.evaluator is None or not self.evaluator.available():
-            return None
-        context = {
+    def _eval(self, text: str) -> EvalDecision | EvalQuotaWait | None:
+        context = self._eval_context()
+        result = self._evaluate_once(text, context)
+        if isinstance(result, EvalQuotaWait):
+            self._store_eval_waiter(text, context, result)
+            return result
+        if result is not None:
+            self.engine.record_eval_decision(text, result)
+        return result
+
+    def _eval_context(self) -> dict:
+        return {
             "projects": sorted(self.registry),
             "last_project": getattr(self, "_last_project", None),
         }
-        decision = self.evaluator.evaluate(text, context)
-        if decision is not None:
-            self.engine.record_eval_decision(text, decision)
-        return decision
 
-    def _apply_eval(self, decision: EvalDecision, text: str, flags: list[str]) -> RouteReply:
+    def _evaluate_once(
+        self,
+        text: str,
+        context: dict,
+        *,
+        waiter_id: str | None = None,
+        availability_checked: bool = False,
+    ) -> EvalDecision | EvalQuotaWait | None:
+        if self.evaluator is None:
+            return None
+        if not availability_checked and not self.evaluator.available():
+            return None
+        kwargs = {"waiter_id": waiter_id} if waiter_id is not None else {}
+        if getattr(self.evaluator, "supports_availability_checked", False):
+            kwargs["availability_checked"] = True
+        return self.evaluator.evaluate(text, context, **kwargs)
+
+    def _route_identity(self) -> dict:
+        identity = getattr(self.evaluator, "route_identity", None)
+        if callable(identity):
+            return identity()
+        return {"model": getattr(self.evaluator, "model", None)}
+
+    def _registry_digest(self) -> str:
+        encoded = json.dumps(
+            self.registry, sort_keys=True, separators=(",", ":"), default=str
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _waiter_binding(self, text: str, context: dict) -> dict:
+        project_dir = getattr(self.evaluator, "project_dir", None)
+        return {
+            "route_identity": self._route_identity(),
+            "project_registry_digest": self._registry_digest(),
+            "pending_input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "project": context.get("last_project"),
+            "evaluator_project_dir": str(project_dir) if project_dir else None,
+        }
+
+    def _restore_waiter_project(self, binding: dict) -> bool:
+        project_dir = binding.get("evaluator_project_dir")
+        if project_dir is None:
+            route_identity = binding.get("route_identity")
+            if isinstance(route_identity, dict):
+                project_dir = route_identity.get("project_dir")
+        if project_dir is None:
+            return True
+        bind_project = getattr(self.evaluator, "bind_project", None)
+        if not callable(bind_project):
+            return False
+        try:
+            bind_project(project_dir)
+        except (OSError, TypeError, ValueError):
+            return False
+        return True
+
+    def _store_eval_waiter(
+        self, text: str, context: dict, waiting: EvalQuotaWait
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        route_model = getattr(self.evaluator, "model", None)
+        persisted_context = {
+            "evaluation": context,
+            "binding": self._waiter_binding(text, context),
+        }
+        with self.engine.store.tx():
+            self.engine.store.insert(
+                "eval_waiters",
+                {
+                    "waiter_id": waiting.waiter_id,
+                    "text": text,
+                    "context": json.dumps(persisted_context, sort_keys=True),
+                    "subscription_key": waiting.subscription_key,
+                    "hold_id": waiting.hold_id,
+                    "reset_at": waiting.reset_at,
+                    "route_model": route_model,
+                    "state": "pending",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+
+    @staticmethod
+    def _waiting_reply(waiting: EvalQuotaWait, flags: list[str]) -> RouteReply:
+        reset = f" until {waiting.reset_at}" if waiting.reset_at else ""
+        return RouteReply(
+            "waiting_quota",
+            detail=f"evaluator waiting for {waiting.reason}{reset}",
+            flags=flags,
+            waiter_id=waiting.waiter_id,
+        )
+
+    def resume_evaluation(self, waiter_id: str, manual: bool = False) -> RouteReply:
+        """Resume one stored evaluator action after observing its exact hold."""
+        row = self.engine.store.get("eval_waiters", "waiter_id", waiter_id)
+        if row is None or row["state"] not in {"pending", "running"}:
+            return RouteReply("unavailable", detail="evaluation waiter is not pending")
+        try:
+            persisted = json.loads(row["context"])
+            context = persisted["evaluation"]
+            binding = persisted["binding"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            return RouteReply("unavailable", detail="evaluator waiter binding is invalid")
+        if not self._restore_waiter_project(binding):
+            return RouteReply("unavailable", detail="evaluator waiter binding is invalid")
+        if binding.get("route_identity") != self._route_identity():
+            return RouteReply("unavailable", detail="evaluator route changed")
+        if binding.get("project_registry_digest") != self._registry_digest():
+            return RouteReply("unavailable", detail="evaluator project registry changed")
+        input_digest = hashlib.sha256(row["text"].encode("utf-8")).hexdigest()
+        if binding.get("pending_input_digest") != input_digest:
+            return RouteReply("unavailable", detail="evaluator pending input changed")
+        project = binding.get("project")
+        if project is not None and project not in self.registry:
+            return RouteReply("unavailable", detail="evaluator project registry changed")
+        has_checkpointed_decision = bool(row.get("decision_json"))
+        if not has_checkpointed_decision and (
+            self.evaluator is None or not self.evaluator.available()
+        ):
+            return RouteReply("unavailable", detail="evaluator route is unavailable")
+        hold = (
+            None
+            if has_checkpointed_decision
+            else self.evaluator.quota_wait(row["subscription_key"], waiter_id)
+        )
+        if hold is not None:
+            if row["hold_id"] is not None and hold.hold_id != row["hold_id"]:
+                return RouteReply("unavailable", detail="evaluator quota hold changed")
+            if not manual:
+                return self._waiting_reply(
+                    EvalQuotaWait(
+                        waiter_id,
+                        hold.key,
+                        hold.reason,
+                        hold.reset_at.isoformat() if hold.reset_at else None,
+                        hold.hold_id,
+                    ),
+                    [],
+                )
+            if not self.evaluator.release_hold(hold.key, hold.hold_id):
+                return RouteReply("unavailable", detail="evaluator quota hold changed")
+        now = datetime.now(timezone.utc).isoformat()
+        claimed = self.engine.store.claim_eval_waiter(waiter_id, now)
+        if claimed is None:
+            return RouteReply("unavailable", detail="evaluation waiter is not pending")
+        try:
+            if claimed.get("decision_json"):
+                result = EvalDecision(**json.loads(claimed["decision_json"]))
+            else:
+                result = self._evaluate_once(
+                    claimed["text"],
+                    context,
+                    waiter_id=waiter_id,
+                    availability_checked=True,
+                )
+        except Exception:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=claimed["hold_id"],
+                reset_at=claimed["reset_at"],
+            )
+            return RouteReply("unavailable", detail="evaluator resume failed; waiter remains pending")
+        if isinstance(result, EvalQuotaWait):
+            self.engine.store.set_eval_waiter_state(
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=result.hold_id,
+                reset_at=result.reset_at,
+            )
+            return self._waiting_reply(result, [])
+        if result is None:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id, "unavailable", datetime.now(timezone.utc).isoformat()
+            )
+            return RouteReply("unavailable", detail="evaluator produced no decision")
+        decision_json = json.dumps(asdict(result), sort_keys=True)
+        self.engine.record_waiter_eval_decision(
+            waiter_id,
+            claimed["text"],
+            result,
+            decision_json,
+            datetime.now(timezone.utc).isoformat(),
+        )
+        flags = ["untrusted_text"] if INJECTION.search(claimed["text"]) else []
+        try:
+            reply = self._apply_eval(
+                result, claimed["text"], flags, idempotency_key=waiter_id
+            )
+        except Exception:
+            self.engine.store.set_eval_waiter_state(
+                waiter_id,
+                "pending",
+                datetime.now(timezone.utc).isoformat(),
+                hold_id=claimed["hold_id"],
+                reset_at=claimed["reset_at"],
+            )
+            return RouteReply(
+                "unavailable", detail="evaluator action failed; waiter remains pending"
+            )
+        self.engine.store.set_eval_waiter_state(
+            waiter_id,
+            "completed",
+            datetime.now(timezone.utc).isoformat(),
+            clear_input=True,
+            reply_json=json.dumps(asdict(reply), sort_keys=True),
+        )
+        return reply
+
+    def _apply_eval(
+        self,
+        decision: EvalDecision,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         if decision.confidence < confidence_threshold():
             return RouteReply(
                 "clarify",
@@ -197,6 +425,20 @@ class Router:
         if decision.action == "stop":
             if decision.work_item_id:
                 try:
+                    existing = self.engine.store.get(
+                        "work_items", "work_item_id", decision.work_item_id
+                    )
+                    if (
+                        idempotency_key is not None
+                        and existing is not None
+                        and existing["state"] == WorkItemState.STOPPED
+                    ):
+                        return RouteReply(
+                            "stopped",
+                            work_item_id=decision.work_item_id,
+                            detail=f"{decision.work_item_id} stopped by eval",
+                            flags=flags,
+                        )
                     self.engine.stop(decision.work_item_id, by=operator())
                     return RouteReply("stopped", work_item_id=decision.work_item_id,
                                       detail=f"{decision.work_item_id} stopped by eval", flags=flags)
@@ -207,12 +449,22 @@ class Router:
         if decision.action == "ignore":
             return RouteReply("ignored", detail=f"eval ignored: {decision.reason}", flags=flags)
         if decision.action == "attach" and decision.work_item_id:
-            return self._follow_up(decision.work_item_id, text, flags)
+            return self._follow_up(
+                decision.work_item_id,
+                text,
+                flags,
+                idempotency_key=idempotency_key,
+            )
         if not decision.project or decision.project not in self.registry:
             return RouteReply("clarify",
                               detail=f"eval proposed unknown project {decision.project}: not allowed",
                               flags=flags)
-        return self._handoff(decision.project, text, flags + ["eval"])
+        return self._handoff(
+            decision.project,
+            text,
+            flags + ["eval"],
+            idempotency_key=idempotency_key,
+        )
 
     def _explicit_project(self, text: str) -> str | None:
         m = AT_PROJECT.search(text)
@@ -226,7 +478,14 @@ class Router:
             return m.group(1) if m.group(1) in self.registry else "__unknown__"
         return None
 
-    def _handoff(self, project: str, text: str, flags: list[str]) -> RouteReply:
+    def _handoff(
+        self,
+        project: str,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         if project not in self.registry:
             return RouteReply("rejected", detail=f"project not allowed: {project}", flags=flags)
         lane_inbox = self.registry[project].get("inbox")
@@ -244,14 +503,37 @@ class Router:
         try:
             Path(lane_inbox).mkdir(parents=True, exist_ok=True)
             from .models import new_id
-            path = Path(lane_inbox) / f"{new_id('route')}.task.md"
-            path.write_text(letter, encoding="utf-8")
+            filename = (
+                "route-eval-"
+                + hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]
+                + ".task.md"
+                if idempotency_key
+                else f"{new_id('route')}.task.md"
+            )
+            path = Path(lane_inbox) / filename
+            if path.exists():
+                if path.read_text(encoding="utf-8") != letter:
+                    return RouteReply(
+                        "rejected",
+                        project=project,
+                        detail="handoff idempotency key collision",
+                        flags=flags,
+                    )
+            else:
+                path.write_text(letter, encoding="utf-8")
             self._last_project = project
             return RouteReply("handoff", project=project, detail=str(path), flags=flags)
         except OSError as exc:
             return RouteReply("rejected", project=project, detail=f"handoff failed: {exc}", flags=flags)
 
-    def _follow_up(self, work_item_id: str, text: str, flags: list[str]) -> RouteReply:
+    def _follow_up(
+        self,
+        work_item_id: str,
+        text: str,
+        flags: list[str],
+        *,
+        idempotency_key: str | None = None,
+    ) -> RouteReply:
         try:
             wi = self.engine.store.get("work_items", "work_item_id", work_item_id)
         except Exception:
@@ -263,11 +545,15 @@ class Router:
             return RouteReply("rejected", work_item_id=work_item_id,
                               detail="work item is stopped; no automatic resume", flags=flags)
         if wi["state"] in (WorkItemState.COMPLETED, WorkItemState.FAILED):
-            result = self.engine.follow_up(work_item_id, operator(), text)
+            result = self.engine.follow_up(
+                work_item_id, operator(), text, idempotency_key=idempotency_key
+            )
             return RouteReply("work_item", project=wi["project"],
                               work_item_id=result.get("work_item_id"),
                               detail=f"new linked work item after {wi['state']}", flags=flags)
-        result = self.engine.follow_up(work_item_id, operator(), text)
+        result = self.engine.follow_up(
+            work_item_id, operator(), text, idempotency_key=idempotency_key
+        )
         return RouteReply("post", project=wi["project"], work_item_id=work_item_id,
                           detail=f"context post to {result.get('kind')}", flags=flags)
 

@@ -1,0 +1,29 @@
+[
+  {
+    "type": "notice",
+    "level": "info",
+    "message": "Session started",
+    "content": null
+  },
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Return the evaluation."
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "VERDICT: true\nSCORE: 10"
+      }
+    ],
+    "generationStatus": "completed"
+  }
+]

@@ -6,7 +6,13 @@ import threading
 import time
 from types import SimpleNamespace
 
-from compchem_memory.hook.notices import commit_notices, peek_notices, release_notices
+from compchem_memory.hook.notices import (
+    claim_opencode_critic_toast,
+    commit_notices,
+    peek_notices,
+    release_notices,
+    settle_opencode_critic_toast,
+)
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState
 from compchem_memory.job_notices import push_job_notice
@@ -89,6 +95,24 @@ def test_job_notice_keeps_run_ids_through_64_chars_and_shortens_longer_ids(tmp_p
     assert shown.startswith("start-") and shown.endswith("-end")
     assert shown.count("…") == 1 and len(shown) == 64
     assert all(len(line) <= 160 for line in lines)
+
+
+def test_opencode_critic_toast_is_session_scoped_and_releasable(tmp_path):
+    paths = _paths(tmp_path)
+    _queue_critic(paths, ["warning one"], harness="opencode", session="s1")
+
+    assert claim_opencode_critic_toast(str(paths.store), "other") is None
+    claim = claim_opencode_critic_toast(str(paths.store), "s1")
+    assert claim is not None and claim.critic == ["warning one"]
+
+    # Upstream peek semantics: nothing is reserved, an undelivered toast stays queued.
+    settle_opencode_critic_toast(str(paths.store), "s1", claim, False)
+    retried = claim_opencode_critic_toast(str(paths.store), "s1")
+    assert retried is not None and retried.critic == ["warning one"]
+    _queue_critic(paths, ["warning two"], harness="opencode", session="s1")
+    settle_opencode_critic_toast(str(paths.store), "s1", retried, True)
+    kept = claim_opencode_critic_toast(str(paths.store), "s1")
+    assert kept is not None and kept.critic == ["warning two"]
 
 
 def test_commit_keeps_notices_added_after_peek(tmp_path):

@@ -1,0 +1,30 @@
+{
+  "message": {
+    "content": [
+      {
+        "content": "PreToolUse:CronList hook error: unknown tool CronList denied by role policy",
+        "is_error": true,
+        "tool_use_id": "toolu_01U1FrKRVNFdPiA5PvEu7fn8",
+        "type": "tool_result"
+      }
+    ],
+    "role": "user"
+  },
+  "parent_tool_use_id": null,
+  "session_id": "ses-fixture-1",
+  "timestamp": "2026-11-16T06:28:35.008Z",
+  "tool_result_meta": [
+    {
+      "id": "toolu_01U1FrKRVNFdPiA5PvEu7fn8",
+      "non_execution_kind": "permission-rule",
+      "permission_decision": {
+        "decision": "reject",
+        "reason_type": "hook",
+        "source": "hook"
+      }
+    }
+  ],
+  "tool_use_result": "Error: PreToolUse:CronList hook error: unknown tool CronList denied by role policy",
+  "type": "user",
+  "uuid": "a87f8f61-96bb-4069-a1b8-8005a11fac46"
+}

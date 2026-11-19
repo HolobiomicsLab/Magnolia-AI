@@ -24,9 +24,11 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
    `vendor/model` id → openrouter.
 3. Autodetect by first key present, in order: `MAGNOLIA_LLM_API_KEY`
    (backward-compat: this was the old hardcoded Anthropic path) →
-   `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Kimi
+   `DEEPSEEK_API_KEY` → `ANTHROPIC_API_KEY` → OpenAI
+   (`MAGNOLIA_OPENAI_API_KEY` / `OPENAI_API_KEY`) → Kimi
    (`KIMI_PLAN_MAGNOLIA_API_KEY` / `KIMI_API_KEY`) → `OPENROUTER_API_KEY`
-   → `MISTRAL_API_KEY` → Z.ai (`ZHIPU_API_KEY` / `ZAI_API_KEY`). DeepSeek-first is
+   → Mistral (`MAGNOLIA_MISTRAL_API_KEY` / `MISTRAL_API_KEY`) → Z.ai
+   (`ZHIPU_API_KEY` / `ZAI_API_KEY`). DeepSeek-first is
    intentional: it's the cheapest and the most commonly-configured key in
    the Magnolia user environment. Later providers never hijack an existing
    setup: adding a Kimi, Mistral or Z.ai key changes nothing until it is
@@ -60,6 +62,10 @@ The single user-facing knob is `MAGNOLIA_LLM_MODEL` — the provider is
   floor. Invalid JSON falls back to that floor with one stderr warning.
 - `MAGNOLIA_OPENROUTER_STICKY=0` (also false/no/off) disables the default
   role-specific, project-private OpenRouter session id.
+- `MAGNOLIA_DIRECT_FALLBACK_PROVIDER` and `MAGNOLIA_DIRECT_FALLBACK_MODEL`
+  opt into one direct-provider fallback after an explicit OpenRouter failure.
+  They are unset by default; unrelated provider keys are never autodetected as
+  fallbacks.
 - All errors are swallowed and surface as `None` — callers must handle the
   None case. (The heuristic extractor and prompt-fallback in the wrapper
   both rely on this contract.)
@@ -154,13 +160,13 @@ def _autodetect_provider() -> str | None:
         return PROVIDER_DEEPSEEK
     if os.environ.get("ANTHROPIC_API_KEY"):
         return PROVIDER_ANTHROPIC
-    if os.environ.get("OPENAI_API_KEY"):
+    if os.environ.get("MAGNOLIA_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY"):
         return PROVIDER_OPENAI
     if os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY"):
         return PROVIDER_KIMI
     if os.environ.get("OPENROUTER_API_KEY"):
         return PROVIDER_OPENROUTER
-    if os.environ.get("MISTRAL_API_KEY"):
+    if os.environ.get("MAGNOLIA_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY"):
         return PROVIDER_MISTRAL
     if os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY"):
         return PROVIDER_ZAI
@@ -178,14 +184,14 @@ def _get_api_key(provider: str) -> str | None:
     if provider == PROVIDER_DEEPSEEK:
         return os.environ.get("DEEPSEEK_API_KEY")
     if provider == PROVIDER_OPENAI:
-        return os.environ.get("OPENAI_API_KEY")
+        return os.environ.get("MAGNOLIA_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if provider == PROVIDER_KIMI:
         # Magnolia-specific plan key first; KIMI_API_KEY is the models.dev convention.
         return os.environ.get("KIMI_PLAN_MAGNOLIA_API_KEY") or os.environ.get("KIMI_API_KEY")
     if provider == PROVIDER_OPENROUTER:
         return os.environ.get("OPENROUTER_API_KEY")
     if provider == PROVIDER_MISTRAL:
-        return os.environ.get("MISTRAL_API_KEY")
+        return os.environ.get("MAGNOLIA_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
     if provider == PROVIDER_ZAI:
         # ZHIPU_API_KEY is the name OpenCode/models.dev use for Z.ai.
         return os.environ.get("ZHIPU_API_KEY") or os.environ.get("ZAI_API_KEY")
@@ -311,6 +317,8 @@ class CallResult:
     upstream_provider: str | None = None
     usage: dict | None = None
     quality_floor_dropped: bool = False
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
 
 
 def _usage_value(usage: object, key: str) -> object:
@@ -376,6 +384,7 @@ def normalise_usage(usage: object) -> dict | None:
 
 
 _INVALID_OPENROUTER_PROVIDER_WARNED: set[str] = set()
+_OPENROUTER_FAILURE_WARNED: set[str] = set()
 _OPENROUTER_QUALITY_FLOOR = {
     "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
 }
@@ -409,6 +418,35 @@ def _openrouter_provider() -> dict:
     if member_provider is not None:
         return member_provider
     return {key: list(value) for key, value in _OPENROUTER_QUALITY_FLOOR.items()}
+
+
+def _warn_openrouter_failure_once(role: str, reason: str) -> None:
+    """Emit one visible degradation notice per role in this session process."""
+    project = Path(os.environ.get("MAGNOLIA_PROJECT_DIR", "."))
+    session_path = project / ".magnolia" / ".current-session-id"
+    try:
+        session = session_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        session = "process"
+    warning_key = f"{role}:{session or 'process'}"
+    if warning_key in _OPENROUTER_FAILURE_WARNED:
+        return
+    _OPENROUTER_FAILURE_WARNED.add(warning_key)
+    if role == "memory":
+        try:
+            from compchem_memory.distill_log import push_distill_notice
+
+            push_distill_notice(
+                str(project), "OpenRouter memory route unavailable",
+                "Memory degraded to its heuristic path; inspect llm-timing.jsonl",
+            )
+        except Exception:  # noqa: BLE001 - notice delivery cannot break memory work
+            pass
+    print(
+        f"[llm] OpenRouter {role} route failed ({reason}); "
+        "using Magnolia's heuristic/disabled behaviour",
+        file=sys.stderr,
+    )
 
 
 def _openrouter_session_id(role: Literal["memory", "critic"]) -> str | None:
@@ -451,10 +489,10 @@ _CRITIC_AUTODETECT_ORDER = (
 _PROVIDER_KEYS = {
     PROVIDER_DEEPSEEK: ("DEEPSEEK_API_KEY",),
     PROVIDER_ANTHROPIC: ("ANTHROPIC_API_KEY",),
-    PROVIDER_OPENAI: ("OPENAI_API_KEY",),
+    PROVIDER_OPENAI: ("MAGNOLIA_OPENAI_API_KEY", "OPENAI_API_KEY"),
     PROVIDER_KIMI: ("KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY"),
     PROVIDER_OPENROUTER: ("OPENROUTER_API_KEY",),
-    PROVIDER_MISTRAL: ("MISTRAL_API_KEY",),
+    PROVIDER_MISTRAL: ("MAGNOLIA_MISTRAL_API_KEY", "MISTRAL_API_KEY"),
     PROVIDER_ZAI: ("ZHIPU_API_KEY", "ZAI_API_KEY"),
 }
 
@@ -492,14 +530,14 @@ def _memory_route() -> Route | None:
     if not provider or not model:
         return None
     key = _get_api_key(provider)
-    if not key:
+    if not key and _explicit_provider() != provider:
         return None
     if provider == PROVIDER_ANTHROPIC:
         raw_base = os.environ.get("ANTHROPIC_BASE_URL")
         base = _normalise_base(raw_base) if raw_base else _ANTHROPIC_BASE
     else:
         base = _get_base_url(provider)
-    return _route(provider, model, key, base, "memory")
+    return _route(provider, model, key or "", base, "memory")
 
 
 def _critic_route() -> Route | None:
@@ -514,7 +552,7 @@ def _critic_route() -> Route | None:
     if not provider:
         return None
     key = _trimmed_env("MAGNOLIA_CRITIC_API_KEY") or _first_critic_key(provider)
-    if not key:
+    if not key and explicit != provider:
         return None
     base_env = "ANTHROPIC_BASE_URL" if provider == PROVIDER_ANTHROPIC else _BASE_URL_ENV[provider]
     raw_base = _trimmed_env("MAGNOLIA_CRITIC_BASE_URL") or _trimmed_env(base_env)
@@ -524,7 +562,7 @@ def _critic_route() -> Route | None:
         base = _ANTHROPIC_BASE
     else:
         base = _DEFAULT_BASE[provider]
-    return _route(provider, requested_model or _DEFAULT_MODEL[provider], key, base, "critic")
+    return _route(provider, requested_model or _DEFAULT_MODEL[provider], key or "", base, "critic")
 
 
 def resolve_route(role: Literal["memory", "critic"]) -> Route | None:
@@ -534,6 +572,23 @@ def resolve_route(role: Literal["memory", "critic"]) -> Route | None:
     if role == "critic":
         return _critic_route()
     raise ValueError(f"unknown LLM role {role!r}")
+
+
+def _direct_fallback_route(role: Literal["memory", "critic"]) -> Route | None:
+    """Resolve only the explicitly configured direct fallback route."""
+    provider = _trimmed_env("MAGNOLIA_DIRECT_FALLBACK_PROVIDER").lower()
+    model = _trimmed_env("MAGNOLIA_DIRECT_FALLBACK_MODEL")
+    if provider not in _VALID_PROVIDERS or provider == PROVIDER_OPENROUTER or not model:
+        return None
+    key = _get_api_key(provider)
+    if not key:
+        return None
+    if provider == PROVIDER_ANTHROPIC:
+        raw_base = _trimmed_env("ANTHROPIC_BASE_URL")
+        base = _normalise_base(raw_base) if raw_base else _ANTHROPIC_BASE
+    else:
+        base = _get_base_url(provider)
+    return _route(provider, model, key, base, role)
 
 
 def _route_request(
@@ -682,7 +737,7 @@ def _post_openrouter(url: str, headers: dict, body: dict) -> tuple[object, bool]
     return response, quality_floor_dropped
 
 
-def call_route(
+def _call_route_once(
     route: Route,
     system: str,
     user: str,
@@ -694,6 +749,8 @@ def call_route(
     cache_prefix: str | None = None,
 ) -> CallResult:
     """Call one resolved route and contain every HTTP or decoding failure."""
+    if not route.key:
+        return CallResult(None, None, None, f"missing API key for {route.provider}", None)
     status = None
     quality_floor_dropped = False
     try:
@@ -735,9 +792,50 @@ def call_route(
         )
 
 
+def call_route(
+    route: Route,
+    system: str,
+    user: str,
+    *,
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+    disable_thinking: bool = False,
+    cache_prefix: str | None = None,
+) -> CallResult:
+    """Call a route, using a direct fallback only when explicitly configured."""
+    result = _call_route_once(
+        route, system, user, max_tokens=max_tokens, temperature=temperature,
+        json_mode=json_mode, disable_thinking=disable_thinking,
+        cache_prefix=cache_prefix,
+    )
+    if route.provider != PROVIDER_OPENROUTER or (result.text and not result.error):
+        return result
+    fallback = _direct_fallback_route(route.role)
+    if fallback is None:
+        _warn_openrouter_failure_once(route.role, result.error or f"HTTP {result.status}")
+        return result
+    recovered = _call_route_once(
+        fallback, system, user, max_tokens=max_tokens, temperature=temperature,
+        json_mode=json_mode, disable_thinking=disable_thinking,
+        cache_prefix=cache_prefix,
+    )
+    return CallResult(
+        recovered.text, recovered.finish_reason, recovered.resolved_model,
+        recovered.error, recovered.status, recovered.upstream_provider,
+        recovered.usage, recovered.quality_floor_dropped,
+        fallback.provider, fallback.model,
+    )
+
+
 def is_llm_available() -> bool:
     p = _resolve_provider()
-    return bool(p and _get_api_key(p))
+    if p and _get_api_key(p):
+        return True
+    if p == PROVIDER_OPENROUTER:
+        _warn_openrouter_failure_once("memory", "OPENROUTER_API_KEY is not configured")
+        return bool(_direct_fallback_route("memory"))
+    return False
 
 
 def _record_timing(provider: str | None, model: str | None, ms: float,
@@ -802,7 +900,25 @@ def call_llm(
         return (None, None) if return_finish_reason else None
     key = _get_api_key(provider)
     if not key:
+        fallback = _direct_fallback_route("memory") if provider == PROVIDER_OPENROUTER else None
+        if fallback is not None:
+            recovered = call_route(
+                fallback, system_prompt, user_content, max_tokens=max_tokens,
+                temperature=temperature, disable_thinking=disable_thinking,
+                cache_prefix=cache_prefix,
+            )
+            _record_timing(
+                provider, model, 0, "fallback_ok" if recovered.text else "fallback_error",
+                resolved_model=recovered.resolved_model,
+                fallback_provider=fallback.provider, fallback_model=fallback.model,
+                status=recovered.status, error=recovered.error,
+                **(recovered.usage or {}),
+            )
+            value = recovered.text
+            return (value, recovered.finish_reason) if return_finish_reason else value
         _record_timing(provider, None, 0, "no_key")
+        if provider == PROVIDER_OPENROUTER:
+            _warn_openrouter_failure_once("memory", "missing API key")
         return (None, None) if return_finish_reason else None
     t0 = time.monotonic()
     upstream_provider = None
@@ -822,20 +938,67 @@ def call_llm(
                 provider, key, model, system_prompt, user_content, max_tokens,
                 temperature, disable_thinking, cache_prefix)
             )
-        _record_timing(provider, model, (time.monotonic() - t0) * 1000,
-                       "ok" if out else "empty", resolved_model=resolved,
-                       chars=len(out) if out else 0,
-                       upstream_provider=upstream_provider,
-                       **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
-                       **(usage or {}))
+        if not out and provider == PROVIDER_OPENROUTER:
+            fallback = _direct_fallback_route("memory")
+            recovered = None
+            if fallback is not None:
+                recovered = call_route(
+                    fallback, system_prompt, user_content, max_tokens=max_tokens,
+                    temperature=temperature, disable_thinking=disable_thinking,
+                    cache_prefix=cache_prefix,
+                )
+            _record_timing(
+                provider, model, (time.monotonic() - t0) * 1000,
+                "fallback_ok" if recovered and recovered.text else "error",
+                resolved_model=resolved, chars=0, upstream_provider=upstream_provider,
+                status=200,
+                error=(recovered.error if recovered and recovered.error else "empty response"),
+                **({"fallback_provider": fallback.provider, "fallback_model": fallback.model}
+                   if fallback else {}),
+                **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+                **(recovered.usage if recovered and recovered.usage else usage or {}),
+            )
+            if recovered and recovered.text:
+                return ((recovered.text, recovered.finish_reason) if return_finish_reason
+                        else recovered.text)
+            _warn_openrouter_failure_once("memory", "empty response")
+            return (None, None) if return_finish_reason else None
+        _record_timing(
+            provider, model, (time.monotonic() - t0) * 1000,
+            "ok" if out else "empty", resolved_model=resolved,
+            chars=len(out) if out else 0, upstream_provider=upstream_provider,
+            **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+            **(usage or {}),
+        )
         return (out, finish) if return_finish_reason else out
     except Exception as e:  # noqa: BLE001 - contract: never raise
         quality_floor_dropped = bool(
             getattr(e, "quality_floor_dropped", quality_floor_dropped)
         )
-        _record_timing(provider, model, (time.monotonic() - t0) * 1000, "error",
-                       error=type(e).__name__,
-                       **({"quality_floor_dropped": True} if quality_floor_dropped else {}))
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        fallback = _direct_fallback_route("memory") if provider == PROVIDER_OPENROUTER else None
+        recovered = None
+        if fallback is not None:
+            recovered = call_route(
+                fallback, system_prompt, user_content, max_tokens=max_tokens,
+                temperature=temperature, disable_thinking=disable_thinking,
+                cache_prefix=cache_prefix,
+            )
+        _record_timing(
+            provider, model, (time.monotonic() - t0) * 1000,
+            "fallback_ok" if recovered and recovered.text else "error",
+            error=(recovered.error if recovered else type(e).__name__),
+            status=status,
+            **({"fallback_provider": fallback.provider, "fallback_model": fallback.model}
+               if fallback else {}),
+            **({"quality_floor_dropped": True} if quality_floor_dropped else {}),
+            **(recovered.usage if recovered and recovered.usage else {}),
+        )
+        if recovered and recovered.text:
+            return ((recovered.text, recovered.finish_reason) if return_finish_reason
+                    else recovered.text)
+        if provider == PROVIDER_OPENROUTER:
+            _warn_openrouter_failure_once("memory", type(e).__name__)
         return (None, None) if return_finish_reason else None
 
 

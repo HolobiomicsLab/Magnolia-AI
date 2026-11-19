@@ -1,0 +1,18 @@
+{
+  "synthetic": false,
+  "recorded_from": "opencode_cc_mem/mcp-servers/compchem-memory/tests/fixtures/hooks/codex/deny-shell/03-PreToolUse.json",
+  "dropped_keys": [
+    "cwd",
+    "model",
+    "session_id",
+    "tool_use_id",
+    "transcript_path",
+    "turn_id"
+  ],
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hi > shell-ran.txt"
+  },
+  "permission_mode": "default"
+}

@@ -1,0 +1,355 @@
+{
+  "calls": [
+    {
+      "all_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "attempt_dir": "<G>/attempts/step5-evaluator/initial",
+      "call": "initial",
+      "catalog_first_llm_call": [
+        "todo",
+        "unified_harness_scratchpad",
+        "search_tool_functions",
+        "run_typescript",
+        "read_file",
+        "write_file",
+        "edit",
+        "bash",
+        "skill"
+      ],
+      "diagnostics": null,
+      "duration_seconds": 9.758496584370732,
+      "export_summary": {
+        "active_model": "mistral-medium-3.5",
+        "cost_usd": 0.0327105,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enabled_tools": [],
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 1,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "session_id": "c3787f41-6e68-b0a1-0fe0-b79540243685",
+        "steps": 1,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 17280,
+          "input_tokens": 36499,
+          "output_tokens": 172,
+          "total_tokens": 36671
+        },
+        "vibe_version": "3.1.2",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "final_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "hook_actions": [],
+      "model_tool_calls": [],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "physical_attempts": null,
+      "resume_artifact": {
+        "client": "vibe",
+        "configuration_identity_digest": "42b7c3364709bb780efd3f19de663d27b282e8b7943d2cda13a22250ce21c49e",
+        "project_identity": "914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142",
+        "role": "evaluator",
+        "session_id": "c3787f41-6e68-b0a1-0fe0-b79540243685"
+      },
+      "returncode": 0,
+      "session_id": "c3787f41-6e68-b0a1-0fe0-b79540243685",
+      "session_identity": "SessionIdentity(client='vibe', model='mistral-medium-3.5', session_id='c3787f41-6e68-b0a1-0fe0-b79540243685', project_digest='914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142', role='evaluator', policy_digest='42b7c3364709bb780efd3f19de663d27b282e8b7943d2cda13a22250ce21c49e')",
+      "stderr_lines": [
+        "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+        "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      ],
+      "stopped_reason": null,
+      "timed_out": false,
+      "tool_executions": [],
+      "usage": {
+        "cache_read_tokens": 17280.0,
+        "cache_write_tokens": null,
+        "cost_usd": 0.0327105,
+        "input_tokens": 36499.0,
+        "output_tokens": 172.0,
+        "reasoning_tokens": null,
+        "uncached_input_tokens": 19219.0
+      },
+      "vibe_spawns": 1,
+      "wall_s": 21.3
+    },
+    {
+      "all_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}\n{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "attempt_dir": "<G>/attempts/step5-evaluator/resume",
+      "call": "resume",
+      "catalog_first_llm_call": [
+        "todo",
+        "unified_harness_scratchpad",
+        "search_tool_functions",
+        "run_typescript",
+        "read_file",
+        "write_file",
+        "edit",
+        "bash",
+        "skill"
+      ],
+      "diagnostics": null,
+      "duration_seconds": 13.649980083107948,
+      "export_summary": {
+        "active_model": "mistral-medium-3.5",
+        "cost_usd": 0.0510006,
+        "disabled_tools": [
+          "bash",
+          "edit",
+          "write_file",
+          "bash",
+          "edit",
+          "write_file",
+          "ask_user_question",
+          "cron"
+        ],
+        "enabled_tools": [],
+        "error": null,
+        "exit_code": 0,
+        "limits": {
+          "max_price": null,
+          "max_tokens": null,
+          "max_turns": 1,
+          "time_limit_s": null
+        },
+        "outcome": "finished",
+        "session_id": "c3787f41-6e68-b0a1-0fe0-b79540243685",
+        "steps": 1,
+        "stop_reason": null,
+        "usage": {
+          "cached_input_tokens": 20864,
+          "input_tokens": 51983,
+          "output_tokens": 159,
+          "total_tokens": 52142
+        },
+        "vibe_version": "3.1.2",
+        "warnings": [
+          {
+            "message": "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available.",
+            "source": null
+          }
+        ]
+      },
+      "final_text": "{\"verdict\":\"EVAL-OK\",\"tools_offered\":9}",
+      "hook_actions": [],
+      "model_tool_calls": [],
+      "outcome": "RunOutcome(kind='success', limit=None)",
+      "physical_attempts": null,
+      "returncode": 0,
+      "same_session": true,
+      "session_id": "c3787f41-6e68-b0a1-0fe0-b79540243685",
+      "session_identity": "SessionIdentity(client='vibe', model='mistral-medium-3.5', session_id='c3787f41-6e68-b0a1-0fe0-b79540243685', project_digest='914197e1fe65532d5347a4a02b0ecda77173e492cc155789933ef10ffa57d142', role='evaluator', policy_digest='42b7c3364709bb780efd3f19de663d27b282e8b7943d2cda13a22250ce21c49e')",
+      "stderr_lines": [
+        "Reading API keys from the macOS Keychain (set them as environment variables to skip this)",
+        "Settings for model 'zai-glm-5-3-flash' are ignored: no such model is available."
+      ],
+      "stopped_reason": null,
+      "timed_out": false,
+      "tool_executions": [],
+      "usage": {
+        "cache_read_tokens": 20864.0,
+        "cache_write_tokens": null,
+        "cost_usd": 0.0510006,
+        "input_tokens": 51983.0,
+        "output_tokens": 159.0,
+        "reasoning_tokens": null,
+        "uncached_input_tokens": 31119.0
+      },
+      "vibe_spawns": 1,
+      "wall_s": 33.8
+    }
+  ],
+  "executor_accepted": true,
+  "identity_recomputed": {
+    "client_env_keys": [
+      "COMPCHEM_TOOLS_PORT",
+      "HOME",
+      "LANG",
+      "LOGNAME",
+      "MAGNOLIA_CLIENT",
+      "MAGNOLIA_CONTROL_DIR",
+      "MAGNOLIA_DISTILL_INTERVAL_MIN",
+      "MAGNOLIA_DOORBELL",
+      "MAGNOLIA_HOOK_POLICY",
+      "MAGNOLIA_HOOK_POLICY_REQUIRED",
+      "MAGNOLIA_HOOK_POLICY_SHA256",
+      "MAGNOLIA_INSTALLATION_ROOT",
+      "MAGNOLIA_MODEL",
+      "MAGNOLIA_PROJECT_DIR",
+      "MAGNOLIA_PROJECT_IDENTITY",
+      "MAGNOLIA_PYTHON",
+      "MAGNOLIA_ROLE",
+      "MAGNOLIA_ROOT",
+      "MAGNOLIA_RULES_DIR",
+      "MAGNOLIA_RUN_DIR",
+      "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+      "MAGNOLIA_WORKSPACE_ROOT",
+      "MAGNOLIA_WORK_DIR",
+      "PATH",
+      "PYTHONPYCACHEPREFIX",
+      "SHELL",
+      "TMPDIR",
+      "USER",
+      "VIBE_ENABLE_TELEMETRY",
+      "XDG_STATE_HOME"
+    ],
+    "components": {
+      "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+      "client_version": "3.1.2",
+      "hook_command": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "hook_interpreter": "6f5930c95c83bc518805f3656eab1ad7ee727e88edc25a816c6847fb66c38c84",
+      "hook_runner": "7430de9ec30c1fc3803aae4b15829f7afe6f3ee5056aa47a65b60fba8f45f79c",
+      "hook_source": "496c110246e34b55ecd01042d2a7289e74f1d8494d9e0b80f494394ecb390bc0",
+      "mcp": "98b6b4d0d5b6e250fa4bf507487a837e4880cf338af42b6c16b39978989c74c2",
+      "native_files": "a8a5a936cb472c06bb0f40ed2c61ea12977ed1b44d4cfb3f0f1d20065c90dfe2",
+      "policy": "97cf923d4c54c818697bc3c815409508d880c3cb07010abcf9715fe615157579",
+      "required_env": "22bee604009d2aad555b1480a8ba197c6d5b42afaf562905d3177e6a76e2cb7d",
+      "settings": "d21a64962472d402847631282d285c458a0a5309ffe3e6ea982f6590c2826d00"
+    },
+    "configuration_identity": "378d373110088bcae33833088d7dcaa9561fb4a944b959b1e120da4f5592958c",
+    "launch_identity_sha256": "0c9c96a02dcc700e1201ce9d59ee291a5a7c0ce5f77ef4c36a233808f5033e01",
+    "mismatch_vs_candidate_row": {},
+    "native_sha256": {
+      ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+      ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+    },
+    "policy_digest_raw": "39844b0fa750c5ca4433a13b71ba1d8129b8b012272af5474b1c2727332918d1"
+  },
+  "label": "step5-evaluator",
+  "model_pinned": "mistral-medium-3.5",
+  "prepared": {
+    "argv_shape": [
+      "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "-p",
+      "<PROMPT>",
+      "--output",
+      "json",
+      "--workdir",
+      "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance",
+      "--max-turns",
+      "1",
+      "--output-dir",
+      "<OUT>",
+      "--auto-approve",
+      "--disabled-tools",
+      "bash",
+      "--disabled-tools",
+      "edit",
+      "--disabled-tools",
+      "write_file"
+    ],
+    "client_sha256": "c3190bb894f335e32030046e07286daad17a172c35d303e108a448fcd57ca5e9",
+    "config_digest": "378d373110088bcae33833088d7dcaa9561fb4a944b959b1e120da4f5592958c",
+    "env_keys": [
+      "COMPCHEM_TOOLS_PORT",
+      "HOME",
+      "LANG",
+      "LOGNAME",
+      "MAGNOLIA_CLIENT",
+      "MAGNOLIA_CONTROL_DIR",
+      "MAGNOLIA_DISTILL_INTERVAL_MIN",
+      "MAGNOLIA_DOORBELL",
+      "MAGNOLIA_HOOK_POLICY",
+      "MAGNOLIA_HOOK_POLICY_REQUIRED",
+      "MAGNOLIA_HOOK_POLICY_SHA256",
+      "MAGNOLIA_INSTALLATION_ROOT",
+      "MAGNOLIA_MODEL",
+      "MAGNOLIA_PROJECT_DIR",
+      "MAGNOLIA_PROJECT_IDENTITY",
+      "MAGNOLIA_PYTHON",
+      "MAGNOLIA_ROLE",
+      "MAGNOLIA_ROOT",
+      "MAGNOLIA_RULES_DIR",
+      "MAGNOLIA_RUN_DIR",
+      "MAGNOLIA_TRANSCRIPT_TOOL_CHARS",
+      "MAGNOLIA_WORKSPACE_ROOT",
+      "MAGNOLIA_WORK_DIR",
+      "PATH",
+      "PYTHONPYCACHEPREFIX",
+      "SHELL",
+      "TMPDIR",
+      "USER",
+      "VIBE_ENABLE_TELEMETRY",
+      "XDG_STATE_HOME"
+    ],
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step5-evaluator/control/executors/a06ee802bfb24afc88ede35d3b31e8e7",
+    "max_price": null,
+    "max_turns": 1,
+    "mcp_json": {
+      "memory_service": null,
+      "schema_version": "magnolia-launch-mcp-v1",
+      "tool_allowlist": []
+    },
+    "memory_service_handle": false,
+    "native_sha256": {
+      ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+      ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+    },
+    "policy_digest": "39844b0fa750c5ca4433a13b71ba1d8129b8b012272af5474b1c2727332918d1",
+    "telemetry": "false",
+    "vibe_config_toml": "active_model = \"mistral-medium-3.5\"\ndisabled_tools = [\"bash\", \"edit\", \"write_file\"]\nenable_subagents = false\nenable_background_processes = false\nmcp_servers = []\n"
+  },
+  "preview": {
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step5-evaluator/control/executors/107b85ce227043c4ada866503e534686",
+    "mcp_memory_service": null
+  },
+  "preview_released": true,
+  "project_files_synced": {
+    ".vibe/config.toml": "b3d74d689a2a4f723a11a510ab9e6c88518fdbbeaf79c4cca6c0beb05a0beb01",
+    ".vibe/hooks.toml": "dae6170cebe3bfc5cfb801c7374750b1311565df0861bdd37b5bfcc72ffda97e"
+  },
+  "prompt_initial": "Do not call any tool. Reply with exactly one JSON object and nothing else: {\"verdict\":\"EVAL-OK\",\"tools_offered\":<the number of tools you can see in your tool list>}.\n",
+  "prompt_resume": "Do not call any tool. Repeat the same JSON object, exactly one JSON object and nothing else.\n",
+  "render_equals_prepared": true,
+  "resume_prepared": {
+    "argv_shape": [
+      "~/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "-p",
+      "<PROMPT>",
+      "--output",
+      "json",
+      "--workdir",
+      "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance",
+      "--max-turns",
+      "1",
+      "--output-dir",
+      "<OUT>",
+      "--auto-approve",
+      "--resume",
+      "c3787f41-6e68-b0a1-0fe0-b79540243685",
+      "--disabled-tools",
+      "bash",
+      "--disabled-tools",
+      "edit",
+      "--disabled-tools",
+      "write_file"
+    ],
+    "config_digest_equal": true,
+    "invocation_dir": "<G>/snap/opencode_cc_mem/projects/harness-p3-acceptance/runs/step5-evaluator/control/executors/a06ee802bfb24afc88ede35d3b31e8e7",
+    "policy_digest_equal": true,
+    "same_invocation_dir": true
+  },
+  "resume_tamper": "refused before spawn: Vibe resume artifact does not match client, role, policy, or project",
+  "resume_tamper_vibe_spawns": 0,
+  "role": "evaluator",
+  "t_end": "07:06:27",
+  "t_start": "07:05:32"
+}

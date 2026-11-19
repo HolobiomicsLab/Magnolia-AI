@@ -3,11 +3,15 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from campaign_runner.cli import main  # noqa: E402
+from campaign_runner.cli import _memory_route, main  # noqa: E402
+from campaign_runner.routing import ResolvedRoute  # noqa: E402
 from campaign_runner.state import CampaignStore  # noqa: E402
 
 
@@ -39,6 +43,47 @@ def protocol_payload():
             },
         ],
     }
+
+
+def test_vibe_campaign_route_is_managed_and_never_static(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_MEMORY_URL", "http://127.0.0.1:9999/mcp")
+    route = ResolvedRoute("vibe", "model", "family", "vibe", "reviewer", "test")
+
+    assert _memory_route(route) == {"transport": "managed"}
+
+
+def test_claude_campaign_route_keeps_provider_keys_in_managed_server():
+    route = ResolvedRoute("claude-code", "haiku", "family", "claude-code", "worker", "test")
+
+    memory = _memory_route(route, "/repo/.venv/bin/python3", managed=True)
+
+    assert memory == {"transport": "managed"}
+
+
+@pytest.mark.parametrize("override", (None, "/selected/.venv/bin/python3"))
+def test_campaign_uses_repository_interpreter_for_context_and_memory(tmp_path, monkeypatch, override):
+    from campaign_runner import cli
+
+    installation = tmp_path / "installation" / "opencode_cc_mem"
+    monkeypatch.setattr(cli, "_ROOT", installation)
+    monkeypatch.setattr(cli.sys, "executable", "/bare/python3")
+    monkeypatch.delenv("MAGNOLIA_PYTHON", raising=False)
+    if override:
+        monkeypatch.setenv("MAGNOLIA_PYTHON", override)
+    expected = override or str(installation.parent / ".venv/bin/python3")
+    protocol, brief = make_inputs(tmp_path)
+    payload = protocol_payload()
+    payload["worker"]["model"] = "claude-code/haiku"
+    protocol.write_text(json.dumps(payload))
+    run = tmp_path / "project/runs/test"
+    CampaignStore(run).initialize(protocol, brief)
+    monkeypatch.setattr(cli, "Governor", lambda: SimpleNamespace(policy=SimpleNamespace(max_turns_per_run=60)))
+    monkeypatch.setattr(cli, "executor_for", lambda route, role, context: context)
+    runner = cli._build_runner(SimpleNamespace(run_dir=str(run), command="run"))
+    context = runner.config.worker_factory("claude-code/haiku", 30)
+    assert context.python_executable == expected
+    assert context.memory_service == {"transport": "managed"}
+    assert _memory_route(context.route, managed=True) == {"transport": "managed"}
 
 
 def make_inputs(tmp_path):
@@ -84,6 +129,38 @@ def test_approve_command(tmp_path, capsys):
     assert store.load().state == "queued"
     output = capsys.readouterr().out
     assert '"state": "queued"' in output
+
+
+def test_decline_followups_command_uses_runner_state_api(tmp_path, capsys, monkeypatch):
+    protocol, brief = make_inputs(tmp_path)
+    run_dir = tmp_path / "project" / "runs" / "run"
+    store = CampaignStore(run_dir)
+    store.initialize(protocol, brief)
+    store.transition("running", "start")
+    store.transition("waiting_human", "review followups need a decision")
+    calls = []
+    runtime = []
+
+    class Runner:
+        def decline_followups(self, approver, reason, minutes=0):
+            calls.append((approver, reason, minutes))
+            return store.transition("completed", "declined followups")
+
+    def build_runner(args):
+        runtime.append((args.distill_on_complete, args.db, args.opencode_bin))
+        return Runner()
+
+    monkeypatch.setattr("campaign_runner.cli._build_runner", build_runner)
+
+    assert main([
+        "decline-followups", str(run_dir), "--approver", "tao",
+        "--reason", "stage is sufficient", "--minutes", "2",
+        "--distill-on-complete", "--db", "/tmp/custom.db",
+        "--opencode-bin", "/tmp/opencode",
+    ]) == 0
+    assert calls == [("tao", "stage is sufficient", 2.0)]
+    assert runtime == [(True, "/tmp/custom.db", "/tmp/opencode")]
+    assert '"state": "completed"' in capsys.readouterr().out
 
 
 def test_invalid_protocol_returns_two(tmp_path, capsys):
