@@ -1,5 +1,6 @@
 """compchem-tools MCP server: Domain tools for computational chemistry."""
 
+import hmac
 import json
 import os
 import shutil
@@ -15,6 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "compchem-memory" /
 from compchem_memory.capture import captured
 
 from fastmcp import FastMCP
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
+import uvicorn
 
 from compchem_tools.tools.haddock3 import (
     haddock3_run as _haddock3_run,
@@ -922,6 +926,39 @@ def _serve_resilient(run_fn=None, *, monotonic=None, log=None) -> None:
             log(f"swallowed client disconnect after {elapsed:.3f}s; resuming.")
 
 
+class _ToolServiceAuth:
+    """Require the current file's bearer token on every HTTP request."""
+
+    def __init__(self, app: ASGIApp, token_file: Path) -> None:
+        self.app = app
+        self.token_file = token_file
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # Let ASGI lifespan events reach the streamable HTTP app, which has no WebSocket route.
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            token = self.token_file.read_bytes().strip()
+        except OSError:
+            token = b""
+        authorization = [value for name, value in scope["headers"] if name.lower() == b"authorization"]
+        if token and len(authorization) == 1 and hmac.compare_digest(authorization[0], b"Bearer " + token):
+            await self.app(scope, receive, send)
+            return
+        response = JSONResponse({"error": "Unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        await response(scope, receive, send)
+
+
+def _run_http(host: str, port: int) -> None:
+    token_file = os.environ.get("COMPCHEM_TOOLS_AUTH_TOKEN_FILE")
+    if token_file is None:
+        mcp.run(transport="streamable-http", host=host, port=port)
+        return
+    app = _ToolServiceAuth(mcp.http_app(transport="streamable-http"), Path(token_file))
+    uvicorn.run(app, host=host, port=port, lifespan="on", timeout_graceful_shutdown=2)
+
+
 if __name__ == "__main__":
     # Transport selection: stdio (opencode-spawned, legacy) or streamable-http
     # (supervised daemon). The HTTP daemon decouples server lifetime from the
@@ -931,8 +968,6 @@ if __name__ == "__main__":
     if transport == "http":
         host = os.environ.get("COMPCHEM_TOOLS_HOST", "127.0.0.1")
         port = int(os.environ.get("COMPCHEM_TOOLS_PORT", "8001"))
-        _serve_resilient(
-            run_fn=lambda: mcp.run(transport="streamable-http", host=host, port=port)
-        )
+        _serve_resilient(run_fn=lambda: _run_http(host, port))
     else:
         _serve_resilient()
