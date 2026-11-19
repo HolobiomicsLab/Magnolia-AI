@@ -104,6 +104,54 @@ The OpenCode side of the comparison rests on the test suite, which distils
 `tests/fixtures/v2_session_export.json` through the same pipeline; OpenCode
 was not run live.
 
+## Trust boundaries
+
+Recorded after Tao's review of PR #27 (18 November 2026).
+
+- **The client's transcript reference is trusted, not confined.** The hook
+  reads the transcript path the client puts in its hook payload: Claude Code's
+  `transcript_path` (or `agent_transcript_path` for a sub-agent), and the
+  session directory Vibe reports. `hook/events.py` takes it as given, and
+  `hook/client_transcripts.py` reads it when it is a regular file (Claude Code,
+  Codex) or a directory (Vibe). It checks no root. The readers are narrow: a
+  bounded tail, the client's own row shapes, scrubbed output. Even so, a
+  crafted payload could point the hook at a JSONL file of the expected shape
+  elsewhere. Its assistant blocks would then be appended to the session
+  transcript and memory. In normal use only the client writes the hook's input;
+  the model has no channel to it. A process that can run the hook command with
+  its own input can pass any path. That includes a model with a shell tool. The
+  shipped template turns the shell off (`"tools": {"bash": false}`), and a
+  member who turns it back on extends this trust to the model. Planned: confine
+  the path to each client's transcript root and reject symlinks that resolve
+  outside it. This change touches the hook, so it moves the capability rows'
+  `hook_source`. It will land with the next live re-observation of those rows.
+- **Claude Code permissions add up across sources.** Magnolia passes its
+  settings with `--settings` and loads the member's project and local settings
+  with `--setting-sources project,local`. Claude Code combines list keys such
+  as `permissions.allow` across settings sources instead of replacing them, so
+  a member's project `allow` entries still apply next to Magnolia's two MCP
+  entries. Project `allow` rules still wait for the member to trust the folder;
+  `deny` and `ask` apply at once (Claude Code settings documentation, "Lists
+  merge instead of overriding"). The rendered `settings.json` is Magnolia's own
+  file in the harness folder. If its `permissions.allow` is not a list, which
+  Claude Code would not accept, the render replaces it with Magnolia's list.
+- **The member's user settings are not loaded.** `--setting-sources
+  project,local` leaves out `~/.claude/settings.json`, so the member's global
+  permissions and hooks do not apply in a Magnolia launch. This is deliberate:
+  the launch behaves the same for every member. The member's login and model
+  choice are unaffected. The Claude Code documentation does not say whether
+  this also drops the MCP servers in `~/.claude.json`. Magnolia passes
+  `--strict-mcp-config`, so only its own `mcp.json` is used either way.
+- **The pre-tool policy is a guard, not a sandbox.** `hook/policy.py` blocks a
+  denied tool before it runs, and fails closed when the policy file cannot be
+  read. Its docstring lists the deliberate fail-open paths: stdin that is not a
+  JSON object, an unknown harness, no recoverable tool name, a failed adapter
+  render, a failed stdout write. Vibe also removes the shell from its tool
+  list. Claude Code and Codex rely on the hook plus `--disallowedTools` or the
+  Codex sandbox. Confinement that must hold against the model comes from the
+  client's own sandbox and the campaign roles of Plan 3, not from this hook
+  alone.
+
 ## Not covered
 
 - OpenCode was not run (not installed on this Mac).
