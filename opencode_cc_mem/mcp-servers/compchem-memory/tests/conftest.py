@@ -135,5 +135,6 @@ def _hermetic_magnolia_flags(monkeypatch):
         # handover behavior. Tests that exercise v2 mode set them explicitly.
         "OPENCODE_DB",
         "MAGNOLIA_OPENCODE_V2",
+        "MAGNOLIA_HOOK_POLICY",
     ):
         monkeypatch.delenv(var, raising=False)

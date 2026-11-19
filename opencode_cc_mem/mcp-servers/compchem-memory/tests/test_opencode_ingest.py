@@ -190,6 +190,30 @@ def test_ingest_marks_even_with_zero_candidates(store):
     assert (store / "opencode-distilled" / "ses_empty.json").exists()  # don't re-export forever
 
 
+def test_manual_distill_skips_provider_when_no_new_dialogue(store, monkeypatch):
+    from compchem_memory.transcript_source import SessionRef
+
+    calls = []
+    ref = SessionRef("vibe", "s1", "vibe-s1", None, None, True)
+    monkeypatch.setattr(
+        oi, "_session_exporter",
+        lambda store_dir, legacy: (
+            lambda current: {
+                "messages": [],
+                "known_entry_ids": ["/HOME/x/.magnolia/entries/a.md"],
+            }
+        ),
+    )
+
+    result = oi.distill_session_transcript(
+        str(store), ref, commit=False,
+        distiller=lambda text: calls.append(text) or [],
+    )
+
+    assert result == {"status": "preview", "candidates": []}
+    assert calls == []
+
+
 def test_ingest_does_not_mark_on_export_failure(store):
     _write_mapping(store, ["ses_fail"])
     oi.ingest_opencode_sessions(str(store), exporter=lambda s: None, distiller=lambda t: [{"title": "x", "content": "c"}])
@@ -251,3 +275,224 @@ def test_saved_entry_carries_provenance(store):
     assert meta["source"] == "opencode_distill"
     assert meta["opencode_session_id"] == "ses_prov"
     assert meta["type"] == "scientific_finding"
+
+
+def _write_hook_session(store, harness, session_id, timestamp, texts):
+    sessions = store / "agent-sessions.jsonl"
+    with sessions.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "ts": timestamp,
+            "harness": harness,
+            "session_id": session_id,
+            "transcript_ref": None,
+        }) + "\n")
+    transcript = store / "transcripts" / harness / f"{session_id}.jsonl"
+    transcript.parent.mkdir(parents=True, exist_ok=True)
+    transcript.write_text(
+        "".join(json.dumps({"kind": "prompt", "text": text}) + "\n" for text in texts),
+        encoding="utf-8",
+    )
+    return transcript
+
+
+def _one_candidate(transcript):
+    return [{
+        "title": transcript.splitlines()[-1],
+        "content": transcript,
+        "type": "scientific_finding",
+    }]
+
+
+def test_switching_clients_never_seals_an_active_session(store):
+    mapping = store / "opencode-sessions.jsonl"
+    mapping.write_text(
+        json.dumps({"ts": "2026-11-15T09:00:00Z", "opencode_session_id": "ses-old"}) + "\n"
+        + json.dumps({"ts": "2026-11-15T11:00:00Z", "opencode_session_id": "ses-active"}) + "\n",
+        encoding="utf-8",
+    )
+    claude = _write_hook_session(
+        store, "claude", "claude-one", "2026-11-15T10:00:00Z", ["claude first"],
+    )
+    exports = {
+        "ses-old": _export([{"info": {"id": "old-1", "role": "user"},
+                              "parts": [{"type": "text", "text": "old opencode"}]}]),
+        "ses-active": _export([{"info": {"id": "active-1", "role": "user"},
+                                 "parts": [{"type": "text", "text": "active opencode"}]}]),
+    }
+
+    oi.ingest_opencode_sessions(
+        str(store), exporter=lambda sid: exports[sid], distiller=_one_candidate,
+    )
+
+    old = json.loads((store / "opencode-distilled" / "ses-old.json").read_text())
+    active = json.loads((store / "opencode-distilled" / "ses-active.json").read_text())
+    hook = json.loads((store / "opencode-distilled" / "claude-claude-one.json").read_text())
+    assert old["done"] is True
+    assert active["done"] is False
+    assert hook["done"] is False
+
+    with claude.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"kind": "prompt", "text": "claude late"}) + "\n")
+    oi.ingest_opencode_sessions(
+        str(store), exporter=lambda sid: exports[sid], distiller=_one_candidate,
+    )
+
+    hook = json.loads((store / "opencode-distilled" / "claude-claude-one.json").read_text())
+    assert hook["cursor"] == "claude-claude-one:1"
+    assert hook["candidates"] == 2
+    assert hook["done"] is False
+
+
+def test_legacy_only_store_unchanged(store):
+    _write_mapping(store, ["ses-a", "ses-b"])
+    exports = {
+        "ses-a": _export([{"info": {"id": "a1", "role": "user"},
+                           "parts": [{"type": "text", "text": "alpha"}]}]),
+        "ses-b": _export([{"info": {"id": "b1", "role": "user"},
+                           "parts": [{"type": "text", "text": "beta"}]}]),
+    }
+    calls = []
+
+    saved = oi.ingest_opencode_sessions(
+        str(store),
+        exporter=lambda sid: calls.append(sid) or exports[sid],
+        distiller=_one_candidate,
+    )
+
+    assert calls == ["ses-a", "ses-b"]
+    assert len(saved) == 2
+    assert json.loads((store / "opencode-distilled" / "ses-a.json").read_text()) | {
+        "updated": "ignored"
+    } == {
+        "cursor": "a1", "candidates": 1, "done": True, "updated": "ignored",
+    }
+    assert json.loads((store / "opencode-distilled" / "ses-b.json").read_text()) | {
+        "updated": "ignored"
+    } == {
+        "cursor": "b1", "candidates": 1, "done": False, "updated": "ignored",
+    }
+
+
+def test_custom_mapping_path_keeps_legacy_string_exporter(store):
+    mapping = store / "legacy-mapping.jsonl"
+    mapping.write_text(
+        json.dumps({"opencode_session_id": "ses-custom", "ts": "t"}) + "\n"
+    )
+    calls = []
+
+    oi.ingest_opencode_sessions(
+        str(store),
+        mapping_path=str(mapping),
+        exporter=lambda sid: calls.append(sid) or _export([{
+            "info": {"id": "custom-1", "role": "user"},
+            "parts": [{"type": "text", "text": "custom mapping"}],
+        }]),
+        distiller=_one_candidate,
+    )
+
+    assert calls == ["ses-custom"]
+    progress = json.loads(
+        (store / "opencode-distilled" / "ses-custom.json").read_text()
+    )
+    assert progress["cursor"] == "custom-1"
+    assert progress["done"] is False
+
+
+def test_two_harnesses_distilled_without_cursor_collision(store):
+    _write_hook_session(
+        store, "claude", "same-id", "2026-11-15T09:00:00Z", ["from claude"],
+    )
+    _write_hook_session(
+        store, "codex", "same-id", "2026-11-15T10:00:00Z", ["from codex"],
+    )
+
+    saved = oi.ingest_opencode_sessions(str(store), distiller=_one_candidate)
+
+    assert len(saved) == 2
+    claude = json.loads(
+        (store / "opencode-distilled" / "claude-same-id.json").read_text()
+    )
+    codex = json.loads(
+        (store / "opencode-distilled" / "codex-same-id.json").read_text()
+    )
+    assert claude["cursor"] == "claude-same-id:0"
+    assert codex["cursor"] == "codex-same-id:0"
+    assert claude["done"] is codex["done"] is False
+
+
+def test_provenance_uses_key(store):
+    _write_hook_session(
+        store, "claude", "raw-session", "2026-11-15T09:00:00Z", ["a finding"],
+    )
+
+    oi.ingest_opencode_sessions(str(store), distiller=_one_candidate)
+
+    entry = next((store / "staging").glob("*.md"))
+    meta = yaml.safe_load(entry.read_text().split("---")[1])
+    assert meta["opencode_session_id"] == "claude-raw-session"
+    assert meta["observed_in_sessions"] == ["claude-raw-session"]
+
+
+def test_switching_clients_across_sweeps_seals_only_superseded_opencode(store):
+    mapping = store / "opencode-sessions.jsonl"
+    mapping.write_text(json.dumps({
+        "ts": "2026-11-15T09:00:00Z", "opencode_session_id": "ses-a",
+    }) + "\n", encoding="utf-8")
+    exports = {
+        "ses-a": _export([{
+            "info": {"id": "a1", "role": "user"},
+            "parts": [{"type": "text", "text": "opencode A"}],
+        }]),
+    }
+    distilled = []
+
+    def distiller(transcript):
+        distilled.append(transcript)
+        return _one_candidate(transcript)
+
+    def sweep():
+        return oi.ingest_opencode_sessions(
+            str(store), exporter=lambda sid: exports[sid], distiller=distiller,
+        )
+
+    sweep()
+    assert json.loads(
+        (store / "opencode-distilled" / "ses-a.json").read_text()
+    )["done"] is False
+
+    claude = _write_hook_session(
+        store, "claude", "claude-one", "2026-11-15T10:00:00Z", ["claude first"],
+    )
+    sweep()
+    assert json.loads(
+        (store / "opencode-distilled" / "ses-a.json").read_text()
+    )["done"] is False
+
+    with mapping.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "ts": "2026-11-15T11:00:00Z", "opencode_session_id": "ses-b",
+        }) + "\n")
+    exports["ses-b"] = _export([{
+        "info": {"id": "b1", "role": "user"},
+        "parts": [{"type": "text", "text": "opencode B"}],
+    }])
+    sweep()
+
+    assert json.loads(
+        (store / "opencode-distilled" / "ses-a.json").read_text()
+    )["done"] is True
+    assert json.loads(
+        (store / "opencode-distilled" / "ses-b.json").read_text()
+    )["done"] is False
+    assert json.loads(
+        (store / "opencode-distilled" / "claude-claude-one.json").read_text()
+    )["done"] is False
+
+    distilled.clear()
+    with claude.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"kind": "prompt", "text": "claude late"}) + "\n")
+    sweep()
+
+    assert len(distilled) == 1
+    assert "claude late" in distilled[0]
+    assert "claude first" not in distilled[0]

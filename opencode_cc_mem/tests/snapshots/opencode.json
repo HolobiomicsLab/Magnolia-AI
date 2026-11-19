@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "logLevel": "INFO",
+  "mcp": {
+    "servers": {
+      "compchem-tools": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8267/mcp",
+        "timeout": {
+          "startup": 660000,
+          "catalog": 660000,
+          "execution": 660000
+        },
+        "disabled": false
+      },
+      "compchem-memory": {
+        "type": "local",
+        "command": [
+          "@@TMP@@/ws/.venv/bin/python3",
+          "-m",
+          "compchem_memory.server"
+        ],
+        "timeout": {
+          "startup": 660000,
+          "catalog": 660000,
+          "execution": 660000
+        },
+        "environment": {
+          "MAGNOLIA_ROOT": "@@TMP@@/ws",
+          "MAGNOLIA_RULES_DIR": "rules",
+          "MAGNOLIA_PROJECT_DIR": "@@TMP@@/ws/opencode_cc_mem/projects/demo",
+          "MAGNOLIA_TRANSCRIPT_TOOL_CHARS": "4000",
+          "MAGNOLIA_DISTILL_INTERVAL_MIN": "60"
+        },
+        "disabled": true
+      },
+      "perspicacite": {
+        "type": "remote",
+        "url": "http://localhost:8000/mcp",
+        "timeout": {
+          "startup": 660000,
+          "catalog": 660000,
+          "execution": 660000
+        },
+        "disabled": false
+      }
+    }
+  },
+  "permissions": [
+    {
+      "action": "edit",
+      "resource": "~/elise/**",
+      "effect": "allow"
+    },
+    {
+      "action": "edit",
+      "resource": "~/repos/**",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "*",
+      "effect": "deny"
+    }
+  ]
+}

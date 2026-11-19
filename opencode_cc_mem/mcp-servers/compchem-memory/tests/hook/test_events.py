@@ -51,6 +51,18 @@ def test_canonical_tool_extra_forms(raw, expected):
     assert canonical_tool(raw) == expected
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("mcp_compchem-tools.run_shell", ("compchem-tools", "run_shell")),
+    ("file_system.bash", (None, "bash")),
+    ("file_system.write_file", (None, "write")),
+    ("file_system.edit", (None, "edit")),
+    ("agents.spawn", (None, "agents.spawn")),
+    ("Bash", (None, "bash")),
+])
+def test_canonical_tool_vibe_forms(raw, expected):
+    assert canonical_tool(raw) == expected
+
+
 def test_canonical_tool_rejects_empty_name():
     with pytest.raises(ValueError):
         canonical_tool("")
@@ -279,3 +291,17 @@ def test_lone_surrogates_are_replaced_at_the_boundary():
         text.encode("utf-8")
     assert normalise_output("a\ud800") == "a\ufffd"
     assert normalise_output({"k": "\udfff"}) == '{"k": "\ufffd"}'
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Live finding (Codex 0.154): MCP server names arrive with "_" for "-".
+        ("mcp__compchem_tools__run_shell", ("compchem-tools", "run_shell")),
+        ("mcp__compchem_memory__memory_search", ("compchem-memory", "memory_search")),
+        ("mcp_compchem_tools.run_shell", ("compchem-tools", "run_shell")),
+        ("mcp__my_server__echo", ("my_server", "echo")),
+    ],
+)
+def test_canonical_tool_restores_known_server_hyphens(raw, expected):
+    assert canonical_tool(raw) == expected

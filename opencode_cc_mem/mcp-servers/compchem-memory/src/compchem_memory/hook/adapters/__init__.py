@@ -21,8 +21,8 @@ class Rendered:
 class Adapter(Protocol):
     """Translate one client payload and render one neutral response."""
 
-    def parse(self, raw: dict, event: str) -> HookEvent:
-        """Build a neutral event from a native payload."""
+    def parse(self, raw: dict, event: str) -> HookEvent | None:
+        """Build a neutral event, or ignore a native event with ``None``."""
         ...
 
     def render(self, resp: HookResponse, event: HookEvent) -> Rendered:
@@ -31,7 +31,13 @@ class Adapter(Protocol):
 
 
 from compchem_memory.hook.adapters import json_adapter  # noqa: E402
+from compchem_memory.hook.adapters import claude, codex, vibe  # noqa: E402
 
-ADAPTERS: dict[str, Adapter] = {"json": json_adapter}
+ADAPTERS: dict[str, Adapter] = {
+    "json": json_adapter,
+    "claude": claude,
+    "codex": codex,
+    "vibe": vibe,
+}
 
 __all__ = ["ADAPTERS", "Adapter", "Rendered"]

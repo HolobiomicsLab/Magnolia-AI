@@ -1,0 +1,364 @@
+"""Identify and export legacy OpenCode and harness-neutral transcripts.
+
+Hook-fed sessions remain appendable after they close. Each consumer records a
+size/mtime fingerprint after a successful pass so unchanged transcripts can be
+skipped without opening them and grown transcripts reopen automatically. In a
+mixed store where OpenCode is unavailable, dialogue mode processes hook sessions
+only: legacy OpenCode sessions do not receive the tool-event fallback in that
+sweep.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable
+
+from compchem_memory.hook.sessions import iter_sessions
+from compchem_memory.hook.state import safe_component
+from compchem_memory.hook.transcript import read_turns, transcript_path
+from compchem_memory.opencode_ingest import (
+    _latest_sid,
+    _read_mapping_ids,
+    plugin_dump_exporter,
+)
+
+Export = dict | None
+LegacyExporter = Callable[[str], Export]
+SessionExporter = Callable[["SessionRef"], Export]
+
+SESSION_FINGERPRINT_KEY = "transcript_fingerprint"
+SESSION_CLOSED_KEY = "closed"
+DEFAULT_SESSION_IDLE_CLOSE_HOURS = 24.0
+
+
+@dataclass(frozen=True)
+class SessionRef:
+    """One client session and its stable distillation/provenance identity."""
+
+    harness: str
+    session_id: str
+    key: str
+    first_ts: str | None
+    last_ts: str | None
+    sealable: bool
+
+
+def list_sessions(store: str | Path) -> list[SessionRef]:
+    """List legacy sessions first, then hook-fed sessions by first timestamp."""
+    root = Path(store)
+    mapping = root / "opencode-sessions.jsonl"
+    first_by_sid, last_by_sid = _mapping_timestamps(mapping)
+    legacy_ids = _read_mapping_ids(mapping)
+    legacy = [
+        SessionRef(
+            harness="opencode",
+            session_id=sid,
+            key=sid,
+            first_ts=first_by_sid.get(sid),
+            last_ts=(
+                _mtime_utc(root / "opencode-transcripts" / f"{sid}.json")
+                or last_by_sid.get(sid)
+            ),
+            sealable=True,
+        )
+        for sid in legacy_ids
+    ]
+
+    legacy_set = set(legacy_ids)
+    hook_fed: list[SessionRef] = []
+    seen: set[tuple[str, str]] = set()
+    for row in iter_sessions(root):
+        harness = row.get("harness")
+        session_id = row.get("session_id")
+        if not isinstance(harness, str) or not harness:
+            continue
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        if harness == "opencode" and session_id in legacy_set:
+            continue
+        identity = (harness, session_id)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        first_ts = row.get("ts") if isinstance(row.get("ts"), str) else None
+        path = transcript_path(root, harness, session_id)
+        hook_fed.append(SessionRef(
+            harness=harness,
+            session_id=session_id,
+            key=session_id if harness == "opencode" else f"{harness}-{safe_component(session_id)}",
+            first_ts=first_ts,
+            last_ts=_mtime_utc(path),
+            sealable=False,
+        ))
+
+    hook_fed.sort(key=lambda ref: (ref.first_ts is None, ref.first_ts or ""))
+    return legacy + hook_fed
+
+
+def active_opencode_sid(store: str | Path) -> str | None:
+    """Return the active legacy OpenCode id using the existing mapping rule."""
+    return _latest_sid(Path(store) / "opencode-sessions.jsonl")
+
+
+def session_activity(ref: SessionRef) -> str:
+    """Return the best sortable activity timestamp carried by a session."""
+    return ref.last_ts or ref.first_ts or ""
+
+
+def hook_transcript_fingerprint(
+    store: str | Path,
+    ref: SessionRef,
+) -> dict[str, int] | None:
+    """Return a hook transcript's size/mtime fingerprint without opening it."""
+    if ref.sealable:
+        return None
+    path = transcript_path(Path(store), ref.harness, ref.session_id)
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+
+
+def fingerprint_matches(
+    record: dict | None,
+    fingerprint: dict[str, int] | None,
+) -> bool:
+    """Whether a backward-compatible cursor record covers this exact file."""
+    if not record or fingerprint is None:
+        return False
+    stored = record.get(SESSION_FINGERPRINT_KEY)
+    return isinstance(stored, dict) and stored == fingerprint
+
+
+def hook_session_closed(
+    store: str | Path,
+    ref: SessionRef,
+    *,
+    fingerprint: dict[str, int] | None = None,
+    now_ns: int | None = None,
+) -> bool:
+    """Whether a hook transcript ended explicitly or exceeded its idle TTL."""
+    if ref.sealable:
+        return False
+    current = fingerprint or hook_transcript_fingerprint(store, ref)
+    if current is None:
+        return False
+    idle_ns = (now_ns if now_ns is not None else time.time_ns()) - current["mtime_ns"]
+    if idle_ns > _session_idle_close_hours() * 60 * 60 * 1_000_000_000:
+        return True
+    if ref.harness == "codex":
+        return False
+    path = transcript_path(Path(store), ref.harness, ref.session_id)
+    return _last_jsonl_kind(path) == "session-end"
+
+
+def current_session(store: str | Path) -> SessionRef | None:
+    """Choose the caller session using activity and the OpenCode capture hint.
+
+    The last mapping row identifies the active OpenCode session. Prefer that
+    session on ties or when hook activity is older; a hook-fed session wins only
+    when its transcript activity is strictly newer.
+    """
+    refs = list_sessions(store)
+    if not refs:
+        return None
+
+    active_sid = active_opencode_sid(store)
+    active = next(
+        (ref for ref in refs if ref.sealable and ref.session_id == active_sid),
+        None,
+    )
+    indexed_hooks = [
+        (index, ref) for index, ref in enumerate(refs) if not ref.sealable
+    ]
+    if active is None:
+        return max(
+            enumerate(refs),
+            key=lambda item: (session_activity(item[1]), item[0]),
+        )[1]
+    if not indexed_hooks:
+        return active
+
+    _, latest_hook = max(
+        indexed_hooks,
+        key=lambda item: (session_activity(item[1]), item[0]),
+    )
+    if session_activity(latest_hook) > session_activity(active):
+        return latest_hook
+    return active
+
+
+def exporter_for(
+    store: str | Path,
+    injected: LegacyExporter | None = None,
+) -> SessionExporter:
+    """Return an exporter preserving the legacy OpenCode string-id boundary."""
+    legacy = injected or plugin_dump_exporter(str(store))
+    neutral = magnolia_exporter(store)
+
+    def export(ref: SessionRef) -> Export:
+        if ref.harness == "opencode":
+            return legacy(ref.session_id)
+        return neutral(ref)
+
+    return export
+
+
+def magnolia_exporter(store: str | Path) -> SessionExporter:
+    """Convert append-only hook rows to the OpenCode-v1 message family."""
+    root = Path(store)
+
+    def export(ref: SessionRef) -> Export:
+        path = transcript_path(root, ref.harness, ref.session_id)
+        if not path.exists():
+            return None
+        messages: list[dict] = []
+        known_entry_ids: list[str] = []
+        for index, row in enumerate(read_turns(path)):
+            if row.get("kind") == "injected":
+                for entry_id in row.get("entry_ids", []):
+                    if isinstance(entry_id, str) and entry_id not in known_entry_ids:
+                        known_entry_ids.append(entry_id)
+            message = _row_message(ref, row, index)
+            if message is not None:
+                messages.append(message)
+        return {"messages": messages, "known_entry_ids": known_entry_ids}
+
+    return export
+
+
+def resolve_transcript(store: str | Path, key: str) -> Path | None:
+    """Resolve a provenance key to its legacy or hook-fed transcript file."""
+    root = Path(store)
+    for path in (
+        root / "opencode-transcripts" / f"{key}.json",
+        root / "sessions" / f"{key}.jsonl",
+    ):
+        if path.exists():
+            return path
+
+    for row in iter_sessions(root):
+        harness = row.get("harness")
+        session_id = row.get("session_id")
+        if not isinstance(harness, str) or not harness:
+            continue
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        candidate = (
+            session_id if harness == "opencode"
+            else f"{harness}-{safe_component(session_id)}"
+        )
+        if candidate != key:
+            continue
+        path = transcript_path(root, harness, session_id)
+        return path if path.exists() else None
+    return None
+
+
+def _mapping_timestamps(mapping: Path) -> tuple[dict[str, str | None], dict[str, str | None]]:
+    """Return the first and last row timestamps for each valid legacy id."""
+    first: dict[str, str | None] = {}
+    last: dict[str, str | None] = {}
+    try:
+        lines = mapping.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return first, last
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(row, dict):
+            continue
+        session_id = row.get("opencode_session_id")
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        timestamp = row.get("ts") if isinstance(row.get("ts"), str) else None
+        if session_id not in first:
+            first[session_id] = timestamp
+        last[session_id] = timestamp
+    return first, last
+
+
+def _session_idle_close_hours() -> float:
+    """Resolve the idle-close TTL, falling back on invalid environment values."""
+    raw = os.environ.get("MAGNOLIA_SESSION_IDLE_CLOSE_HOURS", "")
+    try:
+        hours = float(raw) if raw else DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    except (TypeError, ValueError):
+        return DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    if not math.isfinite(hours) or hours <= 0:
+        return DEFAULT_SESSION_IDLE_CLOSE_HOURS
+    return hours
+
+
+def _last_jsonl_kind(path: Path) -> str | None:
+    """Read only the final non-empty JSONL row and return its kind."""
+    lines: list[bytes] = []
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            position = stream.tell()
+            suffix = b""
+            while position > 0:
+                chunk_size = min(4096, position)
+                position -= chunk_size
+                stream.seek(position)
+                suffix = stream.read(chunk_size) + suffix
+                lines = suffix.splitlines()
+                if position == 0 or len(lines) > 1:
+                    break
+    except OSError:
+        return None
+    lines = [line for line in lines if line.strip()]
+    if not lines:
+        return None
+    try:
+        row = json.loads(lines[-1])
+    except (TypeError, ValueError):
+        return None
+    return row.get("kind") if isinstance(row, dict) else None
+
+
+def _mtime_utc(path: Path) -> str | None:
+    try:
+        timestamp = path.stat().st_mtime
+    except OSError:
+        return None
+    moment = datetime.fromtimestamp(timestamp, timezone.utc)
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _row_message(ref: SessionRef, row: dict, index: int) -> dict | None:
+    kind = row.get("kind")
+    info = {
+        "id": f"{ref.key}:{index}",
+        "role": "user" if kind == "prompt" else "assistant",
+        "agent": row.get("agent"),
+    }
+    if kind in {"prompt", "assistant"}:
+        return {"info": info, "parts": [{"type": "text", "text": row.get("text", "")}]}
+    if kind != "tool" or row.get("phase") != "post":
+        return None
+
+    name = row.get("name") or "tool"
+    state = {
+        "status": "error" if row.get("is_error") else "completed",
+        "input": row.get("input", {}),
+        "output": row.get("output"),
+    }
+    part = {
+        "type": "tool",
+        "tool": name,
+        "name": name,
+        "server": row.get("server"),
+        "state": state,
+    }
+    return {"info": info, "parts": [part]}

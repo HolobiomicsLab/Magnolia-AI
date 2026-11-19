@@ -5,7 +5,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
-from compchem_memory.hook.transcript import append_event, read_turns, transcript_path
+from compchem_memory.hook.transcript import (
+    append_denied, append_event, append_injected, clean_text, read_turns, transcript_path,
+)
 
 
 def test_transcript_paths_are_private_regardless_of_umask(tmp_path):
@@ -113,6 +115,14 @@ def test_transcript_scrubs_secrets(tmp_path):
     assert "[REDACTED_SECRET]" in rows[1]["output"]
 
 
+def test_public_clean_text_matches_assistant_row_storage(tmp_path):
+    raw = " Authorization: Basic ZmFrZS1jcmVkZW50aWFscw==\x00 "
+    append_event(tmp_path, _event("turn-end", assistant_text=raw))
+
+    row = read_turns(transcript_path(tmp_path, "opencode", "ses-1"))[0]
+    assert clean_text(raw) == row["text"] == " Authorization: Basic [REDACTED_SECRET] "
+
+
 def test_transcript_redacts_secret_keys_recursively(tmp_path):
     secrets = (
         "hunter2", "918273645", "fake-list-password", "it's-a-fake-pw",
@@ -205,3 +215,18 @@ def test_transcript_dot_dot_session_id_stays_in_store(tmp_path):
     assert all((store / "transcripts") in p.parents for p in written)
     assert transcript_path(store, "opencode", "a/b").parent == store / "transcripts" / "opencode"
     assert transcript_path(store, "opencode", "a/b") != transcript_path(store, "opencode", "a_b")
+
+
+def test_injected_and_denied_rows_are_scrubbed(tmp_path):
+    event = _event("post-tool", tool=_tool())
+    assert append_injected(
+        tmp_path, event, channel="action_memory", text="OPENAI_API_KEY=sk-test-12345678901234567890",
+        entry_ids=["entry-1"], tool_call_id="call-1",
+    )
+    assert append_denied(tmp_path, event, "policy denied")
+
+    injected, denied = read_turns(transcript_path(tmp_path, "opencode", "ses-1"))
+    assert injected["kind"] == "injected"
+    assert injected["text"] == "OPENAI_API_KEY=[REDACTED_SECRET]"
+    assert injected["entry_ids"] == ["entry-1"]
+    assert denied["phase"] == "denied" and denied["output"] == "policy denied"

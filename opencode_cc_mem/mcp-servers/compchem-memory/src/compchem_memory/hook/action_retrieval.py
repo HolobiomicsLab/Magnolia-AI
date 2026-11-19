@@ -115,6 +115,54 @@ class ActionNote:
     delivery: _Delivery | None = field(default=None, repr=False)
 
 
+def serialise_note(note: ActionNote) -> dict:
+    """Return the JSON-safe reservation needed to deliver a note later."""
+    delivery = note.delivery
+    if delivery is None:
+        return {"text": note.text, "sources": {}}
+    return {
+        "text": note.text,
+        "sources": {str(store): rows for store, rows in note.sources_by_store.items()},
+        "delivery": {
+            "harness": delivery.harness,
+            "session_id": delivery.session_id,
+            "entry_paths": delivery.entry_paths,
+            "pending": delivery.pending,
+            "coarse_row": delivery.coarse_row,
+            "hits_row": delivery.hits_row,
+        },
+    }
+
+
+def restore_note(payload: dict, paths: ProjectPaths) -> ActionNote | None:
+    """Rebuild a carried note without taking a second reservation."""
+    text = payload.get("text")
+    raw_delivery = payload.get("delivery")
+    if not isinstance(text, str) or not isinstance(raw_delivery, dict):
+        return None
+    sources = payload.get("sources")
+    sources_by_store = {
+        Path(store): rows for store, rows in sources.items()
+        if isinstance(store, str) and isinstance(rows, list)
+    } if isinstance(sources, dict) else {}
+    delivery = _Delivery(
+        paths=paths,
+        harness=str(raw_delivery.get("harness") or "vibe"),
+        session_id=str(raw_delivery.get("session_id") or ""),
+        entry_paths=[str(item) for item in raw_delivery.get("entry_paths", [])],
+        pending=dict(raw_delivery.get("pending") or {}),
+        coarse_row=dict(raw_delivery.get("coarse_row") or {}),
+        hits_row=dict(raw_delivery.get("hits_row") or {}),
+    )
+    return ActionNote(text, sources_by_store, delivery)
+
+
+def note_entry_ids(note: ActionNote) -> list[str]:
+    """Return stable source identifiers for an injected transcript row."""
+    delivery = note.delivery
+    return [] if delivery is None else list(delivery.entry_paths)
+
+
 def args_to_query(args: object) -> str:
     """Collect short string leaves through depth two and cap at 400 chars."""
     parts: list[str] = []
@@ -197,7 +245,7 @@ def _release(paths: ProjectPaths, harness: str, session_id: str, entry_paths: li
                     entry_counts.pop(entry, None)
 
 
-def discard_note(note: ActionNote) -> None:
+def discard_note(note: ActionNote, *, reason: str | None = None) -> None:
     """Release a note the client did not emit and log it with ``injected: 0``.
 
     The note is marked settled before the release, so a failed state write
@@ -209,7 +257,10 @@ def discard_note(note: ActionNote) -> None:
     try:
         _release(delivery.paths, delivery.harness, delivery.session_id, delivery.entry_paths)
     finally:
-        _log(delivery.paths, {**delivery.coarse_row, "injected": 0})
+        row = {**delivery.coarse_row, "injected": 0}
+        if reason is not None:
+            row["reason"] = reason
+        _log(delivery.paths, row)
 
 
 def _canonical_key(event: HookEvent) -> str | None:
@@ -463,6 +514,7 @@ def on_post_tool(
             pending={
                 "callID": str(event.tool.call_id or ""),
                 "tool": ledger_tool,
+                "turn_id": event.turn_id,
                 "titles": [str(hit.get("title") or "") for hit in selected],
                 "paths": [str(hit.get("path") or "") for hit in selected],
             },
@@ -501,11 +553,25 @@ def _distinctive_tokens(titles: list[str], paths: list[str]) -> list[str]:
     )
 
 
+def _pending_for_turn(items: list[dict], turn_id: str | None) -> tuple[list[dict], list[dict]]:
+    """Partition pending probes while retaining legacy items for compatibility."""
+    has_turns = any(isinstance(item, dict) and item.get("turn_id") is not None for item in items)
+    if turn_id is None or not has_turns:
+        return items, []
+    selected: list[dict] = []
+    remaining: list[dict] = []
+    for item in items:
+        target = item.get("turn_id") if isinstance(item, dict) else None
+        (selected if target in {None, turn_id} else remaining).append(item)
+    return selected, remaining
+
+
 def probe_application(
     paths: ProjectPaths,
     harness: str,
     session_id: str,
     reply_text: str,
+    turn_id: str | None = None,
 ) -> None:
     """Probe pending notes in one state transaction, removing each after its row.
 
@@ -523,7 +589,8 @@ def probe_application(
         if not isinstance(pending, list) or not pending:
             return
         reply = reply_text.lower()
-        for item in list(pending):
+        selected, _ = _pending_for_turn(pending, turn_id)
+        for item in list(selected):
             try:
                 tokens = _distinctive_tokens(item.get("titles", []), item.get("paths", []))
                 matched = [token for token in tokens if token in reply]

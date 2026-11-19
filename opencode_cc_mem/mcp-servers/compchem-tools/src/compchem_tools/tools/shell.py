@@ -32,7 +32,23 @@ def _truncate(s: str | bytes | None) -> str:
             s = s.decode("utf-8", errors="replace")
         except Exception:
             s = repr(s)
-    return s[-_OUTPUT_TAIL:]
+    if len(s) <= _OUTPUT_TAIL:
+        return s
+    start = len(s) - _OUTPUT_TAIL
+    kept = s[start:]
+    first_line_cut = False
+    if start and s[start - 1] != "\n":
+        boundary = kept.rstrip("\r\n").find("\n")
+        if boundary >= 0:
+            kept = kept[boundary + 1:]
+        else:
+            first_line_cut = True
+    cut_note = "; first line cut" if first_line_cut else ""
+    marker = (
+        f"[output truncated: showing the last {len(kept)} "
+        f"of {len(s)} characters{cut_note}]"
+    )
+    return f"{marker}\n{kept}" if kept else marker
 
 
 def _build_local_redirect(cmd: str, cwd: str | None, timeout: int) -> dict[str, Any]:
@@ -85,7 +101,9 @@ def run_shell(
     returns immediately with ``{"background": true, "pid": ..., "log_file": ...}``.
     Use it for anything long-running instead of blocking the call.
 
-    Returns on success: ``{"exit_code": int, "stdout": str (<=4KB tail), "stderr": str (<=4KB tail)}``.
+    Returns on success: ``{"exit_code": int, "stdout": str, "stderr": str}``.
+    Outputs over 4 KB carry a truncation marker and begin at the first complete
+    line in the retained tail; shorter outputs are unchanged.
 
     Returns on failure (NEVER raises):
         ``{"exit_code": -1, "stdout": <partial>, "stderr": <partial>, "error_kind": <str>, "error": <str>}``

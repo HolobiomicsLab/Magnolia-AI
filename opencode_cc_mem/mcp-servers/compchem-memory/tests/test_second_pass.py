@@ -32,7 +32,7 @@ def _patch_llm(monkeypatch, responses):
     calls = []
 
     def fake(system, user, max_tokens=2000, **kw):
-        calls.append({"system": system, "user": user})
+        calls.append({"system": system, "user": user, **kw})
         val = responses[len(calls) - 1] if len(calls) <= len(responses) else []
         if kw.get("return_finish_reason") and not isinstance(val, tuple):
             val = (val, None)
@@ -55,6 +55,7 @@ def test_flag_off_single_call(monkeypatch, store):
     ext = extraction.AutomaticMemoryExtractor()
     assert ext.distill_transcript("transcript text") == PASS1
     assert len(calls) == 1
+    assert calls[0]["cache_prefix"] is None
     assert _telemetry_rows(store) == []
 
 
@@ -64,6 +65,9 @@ def test_flag_on_union_dedups_against_pass1(monkeypatch, store):
     ext = extraction.AutomaticMemoryExtractor()
     out = ext.distill_transcript("transcript text")
     assert len(calls) == 2
+    assert [call["cache_prefix"] for call in calls] == [
+        "transcript text", "transcript text",
+    ]
     # pass-2 user message contains transcript + the already-extracted list
     assert "ALREADY EXTRACTED IN A FIRST PASS" in calls[1]["user"]
     assert "Contact map shows F2 near R272" in calls[1]["user"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import statistics
@@ -14,11 +15,13 @@ from types import SimpleNamespace
 import pytest
 
 from compchem_memory import quick_search
-from compchem_memory.hook.__main__ import _commit_delivered, _log_error, _render_handled
+from compchem_memory.hook.__main__ import (
+    _commit_delivered, _log_error, _render_handled, _write_rendered,
+)
 from compchem_memory.hook.adapters import Rendered
 from compchem_memory.hook.adapters import json_adapter
 from compchem_memory.hook.dispatch import handle
-from compchem_memory.hook.events import Block, HookEvent, HookResponse, ToolCall
+from compchem_memory.hook.events import AgentRef, Block, HookEvent, HookResponse, ToolCall
 from compchem_memory.hook import project as project_module
 from compchem_memory.hook.state import SessionState
 from compchem_memory.job_notices import push_job_notice
@@ -63,6 +66,26 @@ def _run_cli(project: Path, state: Path, event: str, session_id: str, env: dict 
     )
 
 
+def _invoke_main(monkeypatch, payload: dict, harness: str, event: str) -> int:
+    """Run the CLI entry point without letting its hard exit stop pytest."""
+    from compchem_memory.hook import __main__ as cli
+
+    monkeypatch.setattr(sys, "argv", ["hook", harness, event])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setattr(os, "_exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    return stopped.value.code
+
+
+@pytest.fixture
+def isolated_cli_state(tmp_path, monkeypatch):
+    """Keep in-process CLI failures out of the developer's state home."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    return tmp_path / "state"
+
+
 def test_dropped_tool_note_leaves_no_exposure(tmp_path, monkeypatch):
     project = _workspace(tmp_path)
     store = project / ".magnolia"
@@ -96,7 +119,7 @@ def test_dropped_notice_is_delivered_on_next_event(tmp_path, monkeypatch):
     push_job_notice(str(project), run_id="run-1", tool="dock", state="completed", category="success")
     with SessionState.open(store, "json", "s1") as state:
         state.data["unshown_notices"] = ["⚠ (high) unsupported ranking"]
-    expected = "✅ dock finished (completed) — run …run-1\n⚠ (high) unsupported ranking"
+    expected = "✅ dock finished (completed) — run run-1\n⚠ (high) unsupported ranking"
 
     def event():
         return HookEvent(
@@ -151,6 +174,226 @@ def test_dropped_tool_note_is_offered_again(tmp_path, monkeypatch):
     assert (store / "surfacing.jsonl").exists()
 
 
+def test_vibe_mcp_note_is_carried_to_next_prompt_once(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    event = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(event, env, time.monotonic() + 8)
+    rendered = vibe.render(first.response, event)
+    assert rendered.stdout == ""
+    _commit_delivered(rendered, first, event)
+    transcript = store / "transcripts" / "vibe" / "s1.jsonl"
+    assert not transcript.exists() or not [
+        row for row in map(json.loads, transcript.read_text().splitlines())
+        if row["kind"] == "injected"
+    ]
+
+    prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
+    carried = handle(prompt, env, time.monotonic() + 8)
+    assert carried.response.context.startswith("After your earlier `run_shell` call:")
+    _commit_delivered(Rendered("ok", "", 0, frozenset({"context"})), carried, prompt)
+
+    injected = [
+        row for row in map(json.loads, transcript.read_text().splitlines())
+        if row["kind"] == "injected" and row["channel"] == "action_memory"
+    ]
+    assert len(injected) == 1
+    assert injected[0]["turn_id"] == "t2" and injected[0]["tool_call_id"] == "c1"
+
+    assert "After your earlier" not in (handle(
+        HookEvent("vibe", "prompt", "s1", str(project), prompt="later", turn_id="t3"),
+        env, time.monotonic() + 8,
+    ).response.context or "")
+
+
+def test_vibe_carried_note_is_reserved_for_the_same_agent(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    child = AgentRef("child-1", "worker")
+    child_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("read_file", None, "read_file", "child-read", {"path": "x"}, "text"),
+    )
+    assert "After your earlier" not in (
+        handle(child_builtin, env, time.monotonic() + 8).response.tool_note or ""
+    )
+
+    main_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("read_file", None, "read_file", "main-read", {"path": "x"}, "text"),
+    )
+    carried = handle(main_builtin, env, time.monotonic() + 8)
+    assert "After your earlier `run_shell` call" in carried.response.tool_note
+    _commit_delivered(vibe.render(carried.response, main_builtin), carried, main_builtin)
+
+
+def test_vibe_child_note_is_dropped_when_child_ends(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    child = AgentRef("child-1", "worker")
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    child_builtin = HookEvent(
+        "vibe", "post-tool", "s1", str(project), agent=child,
+        tool=ToolCall("read_file", None, "read_file", "child-read", {"path": "x"}, "text"),
+    )
+    reserved = handle(child_builtin, env, time.monotonic() + 8)
+    assert reserved.carried
+
+    prompt = HookEvent("vibe", "prompt", "s1", str(project), prompt="next", turn_id="t2")
+    assert "After your earlier" not in (handle(prompt, env, time.monotonic() + 8).response.context or "")
+    handle(HookEvent("vibe", "turn-end", "s1", str(project), agent=child),
+           env, time.monotonic() + 8)
+
+    rows = [json.loads(line) for line in (store / "action-retrieval.jsonl").read_text().splitlines()]
+    dropped = [row for row in rows if row.get("injected") == 0]
+    assert len(dropped) == 1
+    assert dropped[0]["reason"] == "child ended before a deliverable post-tool event"
+    with SessionState.open(store, "vibe", "s1") as state:
+        assert state.data.get("carried_action_notes") == []
+        assert state.data.get("carried_action_notes_in_flight") == {}
+
+
+def test_commit_failure_after_stdout_does_not_requeue_emitted_carried_note(
+    tmp_path, monkeypatch,
+):
+    from compchem_memory.hook import action_retrieval
+    from compchem_memory.hook import __main__ as cli
+    from compchem_memory.hook import dispatch
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    event = HookEvent("vibe", "prompt", "s1", str(project), prompt="next")
+    payload = {"id": "n1", "tool": "run_shell", "call_id": "c1",
+               "agent_id": None, "note": {"entry": "e1"}}
+    with SessionState.open(store, "vibe", "s1") as state:
+        state.data["carried_action_notes_in_flight"] = {
+            "n1": {"ts": time.time(), "payload": payload},
+        }
+    handled = SimpleNamespace(
+        pending=None, notices=None,
+        paths=SimpleNamespace(store=store),
+        carried=[SimpleNamespace(id="n1")], carried_field="context", injections=[],
+    )
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    monkeypatch.setattr(cli, "_log_error", lambda *args: None)
+    monkeypatch.setattr(action_retrieval, "restore_note", lambda data, paths: SimpleNamespace(text="note"))
+
+    _write_rendered(Rendered("delivered", "", 0, frozenset({"context"})), handled, event, {})
+
+    real_time = time.time
+    monkeypatch.setattr(
+        dispatch.time, "time",
+        lambda: real_time() + dispatch._CARRIED_RESERVATION_TTL_SECONDS + 1,
+    )
+    assert dispatch._carried_notes(handled.paths, event) == []
+
+
+def test_commit_failure_after_stdout_commits_emitted_notice(tmp_path, monkeypatch):
+    from compchem_memory.hook import __main__ as cli
+    from compchem_memory.hook import notices
+
+    project = _workspace(tmp_path)
+    event = HookEvent("vibe", "prompt", "s1", str(project), prompt="next")
+    notice = SimpleNamespace(text="notice")
+    handled = SimpleNamespace(
+        pending=None, notices=notice, paths=SimpleNamespace(store=project / ".magnolia"),
+        carried=[], carried_field=None, injections=[],
+    )
+    settled = []
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    monkeypatch.setattr(cli, "_log_error", lambda *args: None)
+    monkeypatch.setattr(notices, "commit_notices", lambda *args: settled.append("committed"))
+    monkeypatch.setattr(notices, "release_notices", lambda *args: settled.append("released"))
+
+    _write_rendered(Rendered("delivered", "", 0, frozenset({"notice"})), handled, event, {})
+
+    assert settled == ["committed"]
+
+
+def test_carried_reservation_ttl_exceeds_hook_timeout():
+    from compchem_memory.hook import dispatch
+    from compchem_memory.harness.render_common import DEFAULT_HOOK_TIMEOUT_S
+
+    assert dispatch._CARRIED_RESERVATION_TTL_SECONDS >= 2 * DEFAULT_HOOK_TIMEOUT_S
+
+
+def test_vibe_overlapping_post_tools_deliver_carried_note_once(tmp_path, monkeypatch):
+    from compchem_memory.hook.adapters import vibe
+
+    project = _workspace(tmp_path)
+    store = project / ".magnolia"
+    entry = store / "entries" / "haddock.md"
+    entry.write_text("Haddock workflow recovery\n", encoding="utf-8")
+    hit = {"title": "Haddock workflow", "type": "error_resolution", "tier": "project",
+           "score": 4, "path": str(entry), "gist": "Recover safely."}
+    monkeypatch.setattr(quick_search, "search", lambda *args, **kwargs: [hit])
+    env = {"XDG_STATE_HOME": str(tmp_path / "state")}
+    mcp = HookEvent(
+        "vibe", "post-tool", "s1", str(project),
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell", "c1",
+                      {"cmd": "haddock3 run workflow"}, "ok"),
+    )
+    first = handle(mcp, env, time.monotonic() + 8)
+    _commit_delivered(vibe.render(first.response, mcp), first, mcp)
+
+    def builtin(call_id):
+        return HookEvent(
+            "vibe", "post-tool", "s1", str(project),
+            tool=ToolCall("read_file", None, "read_file", call_id, {"path": "x"}, "text"),
+        )
+
+    events = [builtin("a"), builtin("b")]
+    handled = [handle(event, env, time.monotonic() + 8) for event in events]
+    assert sum("After your earlier" in (item.response.tool_note or "") for item in handled) == 1
+    for event, item in zip(events, handled):
+        _commit_delivered(vibe.render(item.response, event), item, event)
+    rows = [json.loads(line) for line in (store / "action-retrieval.jsonl").read_text().splitlines()]
+    assert sum(row.get("injected") == 1 for row in rows) == 1
+
+
 def test_block_rendered_by_adapter():
     event = HookEvent("json", "pre-tool", "s1", "/tmp")
 
@@ -163,6 +406,211 @@ def test_block_rendered_by_adapter():
     assert rendered.stderr == "unsafe operation\n"
     assert json.loads(rendered.stdout) == {"context": "context before block"}
     assert rendered.emitted == frozenset({"context"})
+
+
+def test_cli_policy_block_survives_handle_failure(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook import dispatch
+    from compchem_memory.hook.policy import REASON
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setattr(dispatch, "handle", lambda *args: (_ for _ in ()).throw(RuntimeError("boom")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+    captured = capfd.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert captured.err == REASON + "\n"
+
+
+def test_cli_policy_block_is_written_before_dispatch(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook import dispatch
+    from compchem_memory.hook.policy import REASON
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    dispatched = []
+
+    def blocked_dispatch(*args):
+        dispatched.append(args)
+        raise AssertionError("dispatch must not run")
+
+    monkeypatch.setattr(
+        dispatch,
+        "handle",
+        blocked_dispatch,
+    )
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+    captured = capfd.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert captured.err == REASON + "\n"
+    assert dispatched == []
+    rows = [json.loads(line) for line in (
+        project / ".magnolia" / "transcripts" / "json" / "s1.jsonl"
+    ).read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["phase"] == "denied"
+    assert rows[0]["output"] == REASON
+
+
+def test_cli_policy_exception_still_blocks_bash(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook import policy
+
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "policy.json"))
+    monkeypatch.setattr(policy, "decide", lambda *args: (_ for _ in ()).throw(RuntimeError("policy")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_ignored_event_writes_no_row(tmp_path, monkeypatch, capfd):
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    ignored = SimpleNamespace(
+        parse=lambda raw, event: None,
+        render=lambda response, event: (_ for _ in ()).throw(AssertionError("rendered")),
+    )
+    monkeypatch.setitem(ADAPTERS, "ignored", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"session_id": "s1", "cwd": str(project), "prompt": "ignore me"},
+        "ignored",
+        "prompt",
+    )
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not (project / ".magnolia" / "transcripts").exists()
+
+
+def test_commit_failure_keeps_block_exit_code(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook import __main__ as cli
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setattr(cli, "_commit_delivered", lambda *args: (_ for _ in ()).throw(OSError("commit")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    code = _invoke_main(monkeypatch, payload, "json", "pre-tool")
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_output_failure_keeps_policy_block_exit_code(
+    tmp_path, monkeypatch, isolated_cli_state,
+):
+    from compchem_memory.hook import __main__ as cli
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools":["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    monkeypatch.setattr(cli, "_write_rendered", lambda *args: (_ for _ in ()).throw(OSError("pipe")))
+    payload = {
+        "session_id": "s1", "cwd": str(project),
+        "tool": {"raw_name": "Bash", "input": {"cmd": "pwd"}},
+    }
+
+    assert _invoke_main(monkeypatch, payload, "json", "pre-tool") == 2
+
+
+@pytest.mark.parametrize(
+    "native_tool",
+    [
+        {"tool_name": "Bash"},
+        {"tool": {"raw_name": "Bash"}},
+        {"tool": {"name": "Bash"}},
+    ],
+)
+def test_unparseable_named_bash_payload_is_blocked(
+    tmp_path, monkeypatch, capfd, isolated_cli_state, native_tool,
+):
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+
+    code = _invoke_main(
+        monkeypatch,
+        {"cwd": str(project), **native_tool},
+        "json",
+        "pre-tool",
+    )
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+    assert not (project / ".magnolia" / "transcripts").exists()
+
+
+def test_ignored_named_bash_payload_is_blocked(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+    ignored = SimpleNamespace(parse=lambda raw, event: None, render=json_adapter.render)
+    monkeypatch.setitem(ADAPTERS, "ignored-policy", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"cwd": str(project), "tool": {"name": "Bash"}},
+        "ignored-policy",
+        "pre-tool",
+    )
+
+    assert code == 2
+    assert "Magnolia disables" in capfd.readouterr().err
+
+
+def test_unparseable_payload_without_tool_name_is_allowed_and_logged(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    project = _workspace(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(tmp_path / "missing-policy.json"))
+
+    code = _invoke_main(monkeypatch, {"cwd": str(project)}, "json", "pre-tool")
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    error_log = isolated_cli_state / "magnolia" / "hook-errors.jsonl"
+    rows = [json.loads(line) for line in error_log.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["event"] == "pre-tool"
 
 
 def test_json_adapter_parses_cli_harness_and_emits_present_fields():
@@ -456,3 +904,51 @@ def test_cli_cold_start_under_budget(tmp_path):
 
     assert medians["session-start"] < 1.0
     assert medians["post-tool"] < 1.0
+
+
+def test_ignored_pre_tool_without_tool_name_writes_nothing_under_policy(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    """An adapter-ignored pre-tool event with no recoverable tool is not an error."""
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools": ["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    ignored = SimpleNamespace(
+        parse=lambda raw, event: None,
+        render=lambda response, event: (_ for _ in ()).throw(AssertionError("rendered")),
+    )
+    monkeypatch.setitem(ADAPTERS, "ignored", ignored)
+
+    code = _invoke_main(monkeypatch, {"session_id": "s1", "cwd": str(project)}, "ignored", "pre-tool")
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not list(tmp_path.rglob("hook-errors.jsonl"))
+
+
+def test_ignored_allowed_tool_writes_no_error_row(
+    tmp_path, monkeypatch, capfd, isolated_cli_state,
+):
+    """Live finding: Claude's ignored ToolSearch pre-tool events logged spurious errors."""
+    from compchem_memory.hook.adapters import ADAPTERS
+
+    project = _workspace(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text('{"deny_tools": ["bash"]}', encoding="utf-8")
+    monkeypatch.setenv("MAGNOLIA_HOOK_POLICY", str(policy))
+    ignored = SimpleNamespace(parse=lambda raw, event: None, render=json_adapter.render)
+    monkeypatch.setitem(ADAPTERS, "ignored-search", ignored)
+
+    code = _invoke_main(
+        monkeypatch,
+        {"session_id": "s1", "cwd": str(project), "tool_name": "ToolSearch"},
+        "ignored-search",
+        "pre-tool",
+    )
+
+    assert code == 0
+    assert capfd.readouterr() == ("", "")
+    assert not list(tmp_path.rglob("hook-errors.jsonl"))

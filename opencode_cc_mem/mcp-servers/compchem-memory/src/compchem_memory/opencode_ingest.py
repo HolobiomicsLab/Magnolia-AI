@@ -151,6 +151,14 @@ def reconstruct_transcript(export: dict, *, tool_chars: Optional[int] = None) ->
     if _looks_like_v2_export(export):
         return _reconstruct_v2(export)
     lines: list[str] = []
+    known_entry_ids = export.get("known_entry_ids")
+    if isinstance(known_entry_ids, list):
+        shown = [str(entry_id) for entry_id in known_entry_ids if isinstance(entry_id, str)]
+        if shown:
+            lines.append(
+                "SYSTEM: Magnolia already supplied memory entries "
+                f"{', '.join(shown)}; do not re-stage them."
+            )
     for m in export.get("messages", []) or []:
         role = ((m.get("info") or {}).get("role") or "?").upper()
         for p in m.get("parts", []) or []:
@@ -394,13 +402,13 @@ def _read_mapping_ids(mapping: Path) -> list[str]:
     return ids
 
 
-def _save_candidate(store: Path, candidate: dict, ses_id: str) -> str:
+def _save_candidate(store: Path, candidate: dict, session_key: str) -> str:
     """Write a distilled candidate to staging, stamped with provenance back to
-    the opencode session it came from."""
+    the client-neutral session key it came from."""
     from compchem_memory.staging_io import save_candidate
 
     return save_candidate(store, candidate, source="opencode_distill",
-                          opencode_session_id=ses_id)
+                          opencode_session_id=session_key)
 
 
 def _default_distiller(transcript: str) -> list[dict[str, Any]]:
@@ -457,18 +465,71 @@ def _read_progress(rec_path: Path) -> dict | None:
         return None
 
 
-def _write_progress(rec_path: Path, cursor: str | None, candidates: int, done: bool) -> None:
-    rec_path.write_text(json.dumps({
+def _write_progress(
+    rec_path: Path,
+    cursor: str | None,
+    candidates: int,
+    done: bool,
+    *,
+    fingerprint: dict[str, int] | None = None,
+    closed: bool | None = None,
+) -> None:
+    from compchem_memory.transcript_source import (
+        SESSION_CLOSED_KEY,
+        SESSION_FINGERPRINT_KEY,
+    )
+
+    payload = {
         "cursor": cursor,
         "candidates": candidates,
         "done": done,
         "updated": datetime.now(timezone.utc).isoformat(),
-    }) + "\n")
+    }
+    if fingerprint is not None:
+        payload[SESSION_FINGERPRINT_KEY] = fingerprint
+    if closed is not None:
+        payload[SESSION_CLOSED_KEY] = closed
+    rec_path.write_text(json.dumps(payload) + "\n")
+
+
+def _session_exporter(
+    store_dir: str,
+    legacy_exporter: Callable[[str], Optional[dict]],
+) -> Callable[[Any], Optional[dict]]:
+    """Route SessionRefs without changing the legacy string-id exporter.
+
+    A hook-fed session whose harness is ``opencode`` is not a legacy mapping
+    session, so it deliberately follows the other hook-fed clients through
+    ``magnolia_exporter``.
+    """
+    from compchem_memory.transcript_source import exporter_for, magnolia_exporter
+
+    contracted = exporter_for(store_dir, injected=legacy_exporter)
+    neutral = magnolia_exporter(store_dir)
+
+    def export(ref: Any) -> Optional[dict]:
+        if ref.harness == "opencode" and not ref.sealable:
+            return neutral(ref)
+        return contracted(ref)
+
+    return export
+
+
+def _session_ref(store_dir: str, session: Any) -> Any:
+    """Resolve a key/string to a SessionRef while preserving the old API."""
+    from compchem_memory.transcript_source import SessionRef, list_sessions
+
+    if isinstance(session, SessionRef):
+        return session
+    for ref in list_sessions(store_dir):
+        if ref.key == session:
+            return ref
+    return SessionRef("opencode", str(session), str(session), None, None, True)
 
 
 def distill_session_transcript(
     store_dir: str,
-    sid: str,
+    sid: Any,
     *,
     commit: bool,
     exporter: Callable[[str], Optional[dict]] | None = None,
@@ -483,22 +544,41 @@ def distill_session_transcript(
     ``distiller`` resolve to the live functions when not injected, so the module
     attributes stay monkeypatchable.
     """
-    exporter = exporter or plugin_dump_exporter(store_dir)
+    ref = _session_ref(store_dir, sid)
+    legacy_exporter = exporter or plugin_dump_exporter(store_dir)
+    export_session_ref = _session_exporter(store_dir, legacy_exporter)
     distiller = distiller or _default_distiller
 
     store = Path(store_dir)
-    rec_path = store / "opencode-distilled" / f"{sid}.json"
+    rec_path = store / "opencode-distilled" / f"{ref.key}.json"
     rec = _read_progress(rec_path)
     cursor = rec.get("cursor") if rec else None
 
-    export = exporter(sid)
+    from compchem_memory.transcript_source import (
+        fingerprint_matches,
+        hook_session_closed,
+        hook_transcript_fingerprint,
+    )
+
+    fingerprint = hook_transcript_fingerprint(store, ref)
+    if commit and fingerprint_matches(rec, fingerprint):
+        return {"status": "committed", "saved": []}
+
+    export = export_session_ref(ref)
     if export is None:
         return None  # unavailable — let caller fall back
 
     new_msgs = _messages_after_cursor(export.get("messages") or [], cursor)
-    transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
-    candidates = distiller(transcript) if transcript.strip() else []
-    if candidates is None:
+    if new_msgs:
+        transcript = scrub_secrets(reconstruct_transcript({
+            "messages": new_msgs,
+            "known_entry_ids": export.get("known_entry_ids", []),
+        }))
+        candidates = distiller(transcript) if transcript.strip() else []
+    else:
+        candidates = []
+    distillation_failed = candidates is None
+    if distillation_failed:
         candidates = []
     kept = [c for c in candidates if isinstance(c, dict) and c.get("title")]
 
@@ -506,10 +586,21 @@ def distill_session_transcript(
         return {"status": "preview", "candidates": kept}
 
     rec_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = [_save_candidate(store, c, sid) for c in kept]
+    saved = [_save_candidate(store, c, ref.key) for c in kept]
     new_cursor = _last_message_id(new_msgs) or cursor
     prior = rec.get("candidates", 0) if rec else 0
-    _write_progress(rec_path, new_cursor, prior + len(kept), done=False)
+    closed = (
+        hook_session_closed(store, ref, fingerprint=fingerprint)
+        if not ref.sealable and not distillation_failed else None
+    )
+    _write_progress(
+        rec_path,
+        new_cursor,
+        prior + len(kept),
+        done=False,
+        fingerprint=None if distillation_failed else fingerprint,
+        closed=closed,
+    )
     return {"status": "committed", "saved": saved}
 
 
@@ -523,37 +614,60 @@ def ingest_opencode_sessions(
     """Incrementally distil opencode conversations into staging.
 
     Cursor-based, not once-and-done: each sweep distils only the messages
-    appended since the recorded cursor. The active session (latest in the
-    mapping) is re-swept every call and never sealed, so a long live session
-    keeps producing learnings as it grows. A superseded session is sealed
-    (``done: true``) once drained and skipped thereafter — that is the only state
-    that stops re-export. Returns saved staging-entry paths. ``exporter`` /
-    ``distiller`` are injectable for tests; the default exporter prefers the
-    v2 plugin's in-process transcript dump (see plugin_dump_exporter).
+    appended since the recorded cursor. Hook transcripts also carry a stat
+    fingerprint, so an unchanged file is skipped before export while any growth
+    reopens it. A superseded legacy OpenCode session is sealed (``done: true``)
+    once drained and skipped thereafter. Returns saved staging-entry paths.
+    ``exporter`` / ``distiller`` are injectable for tests; the default exporter
+    prefers the v2 plugin's in-process transcript dump (see plugin_dump_exporter).
 
     The per-session record at ``opencode-distilled/<sid>.json`` is a progress
-    record: ``{cursor, candidates, done, updated}``.
+    record: ``{cursor, candidates, done, updated}``, plus hook-only fingerprint
+    and closed-state fields when available.
     """
+    from compchem_memory.transcript_source import (
+        SessionRef,
+        active_opencode_sid,
+        fingerprint_matches,
+        hook_session_closed,
+        hook_transcript_fingerprint,
+        list_sessions,
+    )
+
     store = Path(store_dir)
-    exporter = exporter or plugin_dump_exporter(store_dir)
-    mapping = Path(mapping_path) if mapping_path else store / "opencode-sessions.jsonl"
+    legacy_exporter = exporter or plugin_dump_exporter(store_dir)
+    export_session_ref = _session_exporter(store_dir, legacy_exporter)
     markers = store / "opencode-distilled"
     markers.mkdir(parents=True, exist_ok=True)
 
-    latest = _latest_sid(mapping)
+    refs = list_sessions(store)
+    active_sid = active_opencode_sid(store)
+    default_mapping = store / "opencode-sessions.jsonl"
+    if mapping_path is not None and Path(mapping_path) != default_mapping:
+        custom_mapping = Path(mapping_path)
+        legacy_refs = [
+            SessionRef("opencode", sid, sid, None, None, True)
+            for sid in _read_mapping_ids(custom_mapping)
+        ]
+        refs = legacy_refs + [ref for ref in refs if not ref.sealable]
+        active_sid = _latest_sid(custom_mapping)
     saved: list[str] = []
 
-    for sid in _read_mapping_ids(mapping):
-        rec_path = markers / f"{sid}.json"
+    for ref in refs:
+        rec_path = markers / f"{ref.key}.json"
         rec = _read_progress(rec_path)
         if rec and rec.get("done"):
             continue  # sealed — never re-export
 
         cursor = rec.get("cursor") if rec else None
         prior_count = rec.get("candidates", 0) if rec else 0
-        is_active = sid == latest
+        is_active = ref.harness == "opencode" and ref.session_id == active_sid
+        can_seal = ref.sealable and not is_active
+        fingerprint = hook_transcript_fingerprint(store, ref)
+        if fingerprint_matches(rec, fingerprint):
+            continue
 
-        export = exporter(sid)
+        export = export_session_ref(ref)
         if export is None:
             continue  # export failed — don't advance; retry on a later sweep
 
@@ -562,11 +676,25 @@ def ingest_opencode_sessions(
             # Nothing new since the cursor. Seal it if it is no longer the active
             # session, so we stop re-exporting a finished conversation; leave the
             # active one open for its next slice.
-            if not is_active:
+            if can_seal:
                 _write_progress(rec_path, cursor, prior_count, done=True)
+            elif not ref.sealable:
+                _write_progress(
+                    rec_path,
+                    cursor,
+                    prior_count,
+                    done=False,
+                    fingerprint=fingerprint,
+                    closed=hook_session_closed(
+                        store, ref, fingerprint=fingerprint,
+                    ),
+                )
             continue
 
-        transcript = scrub_secrets(reconstruct_transcript({"messages": new_msgs}))
+        transcript = scrub_secrets(reconstruct_transcript({
+            "messages": new_msgs,
+            "known_entry_ids": export.get("known_entry_ids", []),
+        }))
         candidates = distiller(transcript) if transcript.strip() else []
         if candidates is None:
             # Distillation FAILED (LLM error / overflow), distinct from succeeding
@@ -589,15 +717,26 @@ def ingest_opencode_sessions(
             try:
                 from compchem_memory.admission import AdmissionGate
                 _gate = AdmissionGate(store)
-                _gres = _gate.admit(kept, transcript=transcript, session=sid)
+                _gres = _gate.admit(kept, transcript=transcript, session=ref.key)
                 kept = _gres.admitted
             except Exception as e:  # noqa: BLE001 - gate failure never blocks distillation
                 print(f"[admission] gate error (fail-open): {e}")
 
         for c in kept:
-            saved.append(_save_candidate(store, c, sid))
+            saved.append(_save_candidate(store, c, ref.key))
 
         new_cursor = _last_message_id(new_msgs) or cursor
-        _write_progress(rec_path, new_cursor, prior_count + len(kept), done=not is_active)
+        closed = (
+            hook_session_closed(store, ref, fingerprint=fingerprint)
+            if not ref.sealable else None
+        )
+        _write_progress(
+            rec_path,
+            new_cursor,
+            prior_count + len(kept),
+            done=can_seal,
+            fingerprint=fingerprint,
+            closed=closed,
+        )
 
     return saved

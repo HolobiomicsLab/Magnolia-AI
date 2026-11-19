@@ -3,6 +3,7 @@ backward compat, error containment, and HTTP shapes."""
 import json
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -33,12 +34,47 @@ def _clean_env(monkeypatch):
         "ZAI_BASE_URL",
         "OPENROUTER_API_KEY",
         "OPENROUTER_BASE_URL",
+        "MAGNOLIA_OPENROUTER_PROVIDER",
         "OPENROUTER_CODING_API_KEY",
     ]:
         monkeypatch.delenv(k, raising=False)
 
 
 from compchem_memory import llm  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    [
+        (
+            {"prompt_tokens": 12508, "completion_tokens": 31, "cost": 0.00184,
+             "prompt_tokens_details": {"cached_tokens": 12416, "cache_write_tokens": 7}},
+            {"prompt_tokens": 12508, "cached_tokens": 12416, "cache_write_tokens": 7,
+             "completion_tokens": 31, "cost": 0.00184},
+        ),
+        (
+            {"prompt_tokens": 80, "completion_tokens": 9,
+             "prompt_cache_hit_tokens": 60},
+            {"prompt_tokens": 80, "cached_tokens": 60, "completion_tokens": 9},
+        ),
+        (
+            SimpleNamespace(input_tokens=10, cache_read_input_tokens=3,
+                            cache_creation_input_tokens=2, output_tokens=4),
+            {"prompt_tokens": 15, "cached_tokens": 3, "cache_write_tokens": 2,
+             "completion_tokens": 4},
+        ),
+        (
+            {"input_tokens": 10, "cache_read_input_tokens": 3,
+             "cache_creation_input_tokens": 2, "output_tokens": 4},
+            {"prompt_tokens": 15, "cached_tokens": 3, "cache_write_tokens": 2,
+             "completion_tokens": 4},
+        ),
+        (None, None),
+        ({"prompt_tokens": "many", "prompt_tokens_details": []}, None),
+    ],
+)
+def test_normalise_usage_shapes_and_malformed_values(usage, expected):
+    assert llm.normalise_usage(usage) == expected
 
 
 # ============ _resolve_provider =============
@@ -353,6 +389,18 @@ def test_call_llm_json_returns_none_when_text_is_none(monkeypatch):
     assert llm.call_llm_json("s", "u") is None
 
 
+def test_call_llm_json_passes_cache_prefix_through(monkeypatch):
+    captured = {}
+
+    def fake_call(*args, **kwargs):
+        captured.update(kwargs)
+        return ('{"ok": true}', "stop")
+
+    monkeypatch.setattr(llm, "call_llm", fake_call)
+    assert llm.call_llm_json("s", "transcript", cache_prefix="transcript") == {"ok": True}
+    assert captured["cache_prefix"] == "transcript"
+
+
 def test_disable_thinking_and_temperature_sent_for_deepseek(monkeypatch):
     """call_llm_json(disable_thinking=True, temperature=0) must send DeepSeek's
     thinking-disabled param and temperature in the request body."""
@@ -529,6 +577,10 @@ def test_call_llm_records_resolved_model_deepseek(monkeypatch, tmp_path):
         resp.json = lambda: {
             "model": "deepseek-v4.1-flash",
             "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 100, "completion_tokens": 5, "cost": 0.25,
+                "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 4},
+            },
         }
         return resp
 
@@ -538,6 +590,12 @@ def test_call_llm_records_resolved_model_deepseek(monkeypatch, tmp_path):
     assert row["model"] == "deepseek-flash"
     assert row["resolved_model"] == "deepseek-v4.1-flash"
     assert row["outcome"] == "ok"
+    assert {key: row[key] for key in (
+        "prompt_tokens", "cached_tokens", "cache_write_tokens", "completion_tokens", "cost",
+    )} == {
+        "prompt_tokens": 100, "cached_tokens": 80, "cache_write_tokens": 4,
+        "completion_tokens": 5, "cost": 0.25,
+    }
 
 
 def test_call_llm_records_resolved_model_kimi(monkeypatch, tmp_path):
@@ -592,9 +650,44 @@ def test_call_anthropic_returns_resolved_model(monkeypatch):
             self.messages = FakeMessages()
 
     monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
-    out, finish, resolved = llm._call_anthropic(
+    out, finish, resolved, usage = llm._call_anthropic(
         "k", "claude-haiku-4-5", "s", "u", 10)
     assert (out, finish, resolved) == ("hello", "end_turn", "claude-haiku-4-5-20251001")
+    assert usage is None
+
+
+def test_call_anthropic_marks_reused_prefix(monkeypatch):
+    import anthropic
+
+    captured = {}
+
+    class FakeMessage:
+        content = [type("Block", (), {"text": "hello"})()]
+        stop_reason = "end_turn"
+        model = "claude-haiku-4-5-20251001"
+        usage = None
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return FakeMessage()
+
+    class FakeAnthropic:
+        def __init__(self, api_key):
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
+    llm._call_anthropic(
+        "k", "claude-haiku-4-5", "s", "transcript plus instruction", 10,
+        cache_prefix="transcript",
+    )
+    assert captured["messages"][0]["content"] == [
+        {
+            "type": "text", "text": "transcript",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": " plus instruction"},
+    ]
 
 
 # ============ mistral and zai providers =============
