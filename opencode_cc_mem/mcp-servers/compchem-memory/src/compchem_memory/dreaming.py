@@ -288,7 +288,12 @@ def _default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | N
         system_prompt, user_content, max_tokens=1500,
         temperature=0, disable_thinking=True,
     )
-    return raw if isinstance(raw, dict) else None
+    # A provider error or an unrelated JSON object is not a verdict. The worker
+    # turns None into a failed judge call instead of posting an unverifiable finding.
+    if not isinstance(raw, dict):
+        return None
+    verdict = str(raw.get("verdict", "")).strip().lower()
+    return raw if verdict in VERDICTS else None
 
 
 def _normalize_verdict(raw: dict[str, Any] | None) -> dict[str, Any]:

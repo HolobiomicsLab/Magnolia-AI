@@ -48,6 +48,28 @@ def judge_returning(verdict, corrected_text="", evidence=None, rationale="test r
     return _judge
 
 
+def test_default_judge_rejects_an_unrelated_response(monkeypatch):
+    """A provider error object must fail the judge, not become an unverifiable finding."""
+    from compchem_memory import llm
+
+    monkeypatch.setenv("MAGNOLIA_DREAMING_JUDGE", "on")
+    monkeypatch.setattr(llm, "call_llm_json", lambda *args, **kwargs: {"error": "provider unavailable"})
+    assert dreaming._default_judge({"meta": {}, "body": ""}, "transcript") is None
+
+    monkeypatch.setattr(
+        llm,
+        "call_llm_json",
+        lambda *args, **kwargs: {
+            "verdict": "unverifiable",
+            "corrected_text": "",
+            "evidence": [],
+            "rationale": "the transcript does not settle it",
+        },
+    )
+    verdict = dreaming._default_judge({"meta": {}, "body": ""}, "transcript")
+    assert verdict is not None and verdict["verdict"] == "unverifiable"
+
+
 def anchored(store, name="20261101_000000_000001_entry.md", sid="2026-11-01_000000", body="The run completed."):
     write_session(store, sid, [{
         "timestamp": "2026-11-01T00:00:00+00:00",
