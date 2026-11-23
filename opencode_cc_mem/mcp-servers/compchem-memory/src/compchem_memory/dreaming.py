@@ -267,6 +267,18 @@ def _require_valid_judge_response(raw: object) -> dict[str, Any]:
     return raw
 
 
+def judge_identity() -> dict[str, str]:
+    """The configured judge's public identity, never its credential or endpoint."""
+    import os
+    if (os.environ.get("MAGNOLIA_DREAMING_JUDGE") or "").strip().lower() == "off":
+        return {"provider": "off", "model": "off"}
+    from .llm import resolve_route
+    route = resolve_route("critic")
+    if route is None:
+        return {"provider": "unconfigured", "model": "unconfigured"}
+    return {"provider": route.provider, "model": route.model}
+
+
 def _default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | None:
     """LLM verdict on one entry against its transcript. A malformed response
     raises :class:`JudgeResponseError` and fails the pass before any proposal
@@ -308,6 +320,11 @@ def _default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | N
     return _require_valid_judge_response(raw)
 
 
+def default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | None:
+    """Public judge entry point for adapters and contract tests."""
+    return _default_judge(entry, transcript)
+
+
 def _normalize_verdict(raw: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {"verdict": "unverifiable", "corrected_text": "", "evidence": [],
@@ -337,7 +354,7 @@ def propose_dreaming(
     content hash of every entry at proposal time.
     """
     config = config or DreamingConfig()
-    judge = judge or _default_judge
+    judge = judge or default_judge
     store = Path(project_dir) / ".magnolia"
     reflex = store / "reflex"
     reflex.mkdir(parents=True, exist_ok=True)

@@ -98,6 +98,40 @@ def test_an_injected_malformed_judge_also_fails_the_full_pass(tmp_path):
     assert not (store / "reflex" / dreaming.PROPOSAL_FILE).exists()
 
 
+def test_public_judge_identity_reports_only_provider_and_model(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", "mistral")
+    monkeypatch.setenv("MAGNOLIA_CRITIC_MODEL", "judge-test")
+    monkeypatch.setenv("MISTRAL_API_KEY", "a-secret-token")
+
+    identity = dreaming.judge_identity()
+
+    assert identity == {"provider": "mistral", "model": "judge-test"}
+    assert "a-secret-token" not in json.dumps(identity)
+
+
+def test_public_judge_identity_reports_off_and_unconfigured(monkeypatch):
+    monkeypatch.setenv("MAGNOLIA_DREAMING_JUDGE", "off")
+    assert dreaming.judge_identity() == {"provider": "off", "model": "off"}
+
+    monkeypatch.delenv("MAGNOLIA_DREAMING_JUDGE")
+    for name in (
+        "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+        "KIMI_PLAN_MAGNOLIA_API_KEY", "KIMI_API_KEY", "OPENROUTER_API_KEY",
+        "MISTRAL_API_KEY", "ZHIPU_API_KEY", "ZAI_API_KEY", "MAGNOLIA_CRITIC_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("MAGNOLIA_CRITIC_PROVIDER", raising=False)
+    monkeypatch.delenv("MAGNOLIA_CRITIC_MODEL", raising=False)
+    assert dreaming.judge_identity() == {"provider": "unconfigured", "model": "unconfigured"}
+
+
+def test_public_default_judge_delegates_to_the_existing_entry_point(monkeypatch):
+    expected = {"verdict": "confirmed", "corrected_text": "", "evidence": [], "rationale": "ok"}
+    monkeypatch.setattr(dreaming, "_default_judge", lambda entry, transcript: expected)
+
+    assert dreaming.default_judge({"meta": {}, "body": ""}, "transcript") is expected
+
+
 def anchored(store, name="20261101_000000_000001_entry.md", sid="2026-11-01_000000", body="The run completed."):
     write_session(store, sid, [{
         "timestamp": "2026-11-01T00:00:00+00:00",
