@@ -49,6 +49,10 @@ PROPOSAL_FILE = "dreaming-proposal.json"
 LOG_FILE = "dreaming-log.jsonl"
 
 
+class JudgeResponseError(RuntimeError):
+    """The judge returned an error or an object that is not a valid verdict."""
+
+
 @dataclass(frozen=True)
 class DreamingConfig:
     """Bounds for one dreaming pass. The task-pack protocol carries the same
@@ -253,9 +257,20 @@ def resolve_transcripts(
     }
 
 
+def _require_valid_judge_response(raw: object) -> dict[str, Any]:
+    """Return a verdict-shaped response, or fail the whole dreaming pass."""
+    if not isinstance(raw, dict):
+        raise JudgeResponseError("judge returned no valid verdict")
+    verdict = str(raw.get("verdict", "")).strip().lower()
+    if verdict not in VERDICTS:
+        raise JudgeResponseError("judge returned no valid verdict")
+    return raw
+
+
 def _default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | None:
-    """LLM verdict on one entry against its transcript. None on any failure —
-    a judge outage must never be read as a verdict.
+    """LLM verdict on one entry against its transcript. A malformed response
+    raises :class:`JudgeResponseError` and fails the pass before any proposal
+    is written — a judge outage must never be read as a verdict.
 
     ``MAGNOLIA_DREAMING_JUDGE=off`` disables the LLM entirely (dry run /
     offline demo): every anchored entry comes back unverifiable and nothing is
@@ -288,12 +303,9 @@ def _default_judge(entry: dict[str, Any], transcript: str) -> dict[str, Any] | N
         system_prompt, user_content, max_tokens=1500,
         temperature=0, disable_thinking=True,
     )
-    # A provider error or an unrelated JSON object is not a verdict. The worker
-    # turns None into a failed judge call instead of posting an unverifiable finding.
-    if not isinstance(raw, dict):
-        return None
-    verdict = str(raw.get("verdict", "")).strip().lower()
-    return raw if verdict in VERDICTS else None
+    # A provider error or an unrelated JSON object is not a verdict. Fail the
+    # pass instead of posting an unverifiable finding.
+    return _require_valid_judge_response(raw)
 
 
 def _normalize_verdict(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -341,7 +353,8 @@ def propose_dreaming(
                 "rationale": "no transcript found for the anchored session(s)",
             }
         else:
-            verdict = _normalize_verdict(judge(entry, transcripts["text"]))
+            raw = judge(entry, transcripts["text"])
+            verdict = _normalize_verdict(raw if raw is None else _require_valid_judge_response(raw))
         proposals.append({
             "entry": entry["entry"],
             "path": entry["path"],

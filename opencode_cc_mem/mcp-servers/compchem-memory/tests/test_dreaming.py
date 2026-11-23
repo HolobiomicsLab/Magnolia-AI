@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from compchem_memory import dreaming
@@ -54,7 +55,8 @@ def test_default_judge_rejects_an_unrelated_response(monkeypatch):
 
     monkeypatch.setenv("MAGNOLIA_DREAMING_JUDGE", "on")
     monkeypatch.setattr(llm, "call_llm_json", lambda *args, **kwargs: {"error": "provider unavailable"})
-    assert dreaming._default_judge({"meta": {}, "body": ""}, "transcript") is None
+    with pytest.raises(dreaming.JudgeResponseError):
+        dreaming._default_judge({"meta": {}, "body": ""}, "transcript")
 
     monkeypatch.setattr(
         llm,
@@ -68,6 +70,32 @@ def test_default_judge_rejects_an_unrelated_response(monkeypatch):
     )
     verdict = dreaming._default_judge({"meta": {}, "body": ""}, "transcript")
     assert verdict is not None and verdict["verdict"] == "unverifiable"
+
+
+def test_malformed_judge_response_fails_the_full_pass_without_a_proposal(tmp_path, monkeypatch):
+    """The whole pass fails before writing an artifact, not merely the helper."""
+    from compchem_memory import llm
+
+    store = make_store(tmp_path)
+    anchored(store)
+    monkeypatch.setenv("MAGNOLIA_DREAMING_JUDGE", "on")
+    monkeypatch.setattr(llm, "call_llm_json", lambda *args, **kwargs: {"error": "provider unavailable"})
+
+    with pytest.raises(dreaming.JudgeResponseError):
+        dreaming.propose_dreaming(tmp_path)
+
+    assert not (store / "reflex" / dreaming.PROPOSAL_FILE).exists()
+
+
+def test_an_injected_malformed_judge_also_fails_the_full_pass(tmp_path):
+    """The public judge seam cannot smuggle an unrelated object into a proposal."""
+    store = make_store(tmp_path)
+    anchored(store)
+
+    with pytest.raises(dreaming.JudgeResponseError):
+        dreaming.propose_dreaming(tmp_path, judge=lambda entry, transcript: {"error": "provider unavailable"})
+
+    assert not (store / "reflex" / dreaming.PROPOSAL_FILE).exists()
 
 
 def anchored(store, name="20261101_000000_000001_entry.md", sid="2026-11-01_000000", body="The run completed."):
