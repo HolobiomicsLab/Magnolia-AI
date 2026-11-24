@@ -16,8 +16,8 @@ from router_runner.job_service import MARKER
 from router_runner.models import ApprovalError, RouterError, WorkItemState, WorkSpec
 
 NEW_SPEC = WorkSpec(
-    project="demo", protocol="nk2r-challenge-v0.1",
-    scope="NK2R funnel with s20000", budget="local seconds",
+    project="demo", protocol="demo-taskpack-v0.1",
+    scope="demo task pack with local seconds", budget="local seconds",
 )
 
 
@@ -27,7 +27,7 @@ def make_engine(tmp_path):
 
 def parked(engine, run_id="run_A", event=None):
     req = agentd.ingest_letter(
-        engine, {**agentd.NK2R_LETTER, "source_event_id": event or run_id}
+        engine, {**agentd.DEMO_PACK_LETTER, "source_event_id": event or run_id}
     )
     wi = req["work_item_id"]
     engine.approve(wi, req["nonce"], agentd.operator())
@@ -50,7 +50,7 @@ def test_happy_path_cancel_cleanup_resubmit(tmp_path):
     wi_row = engine.store.get("work_items", "work_item_id", wi)
     assert wi_row["state"] == WorkItemState.WAITING_JOB
     assert wi_row["job_run_id"] == new_run
-    assert wi_row["scope"] == "NK2R funnel with s20000"
+    assert wi_row["scope"] == "demo task pack with local seconds"
     links = [l for l in engine.store.all("evidence_links") if l["kind"] == "superseded_run"]
     assert len(links) == 1 and links[0]["ref_id"] == "run_A"
     decisions = [d["outcome"] for d in engine.store.all("decisions")]
@@ -96,7 +96,7 @@ def test_cleanup_guard_refuses_missing_marker(tmp_path):
 
 def test_cancel_requires_waiting_job(tmp_path):
     engine = make_engine(tmp_path)
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     try:
         engine.cancel_and_resubmit(req["work_item_id"], NEW_SPEC, "too early", agentd.operator())

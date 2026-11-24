@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "id": "memory-dreaming-v0.1",
+  "kind": "memory-dreaming",
+  "status": "active",
+  "protocol_file": "protocols/memory-dreaming-v0.1.json",
+  "adapter": "router_runner.taskpacks:DreamingTaskPack",
+  "entry": null,
+  "scope": "offline memory dreaming on a throwaway store",
+  "budget": {"local_seconds": 60}
+}

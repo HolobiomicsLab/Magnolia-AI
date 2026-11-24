@@ -25,7 +25,7 @@ def make_engine(tmp_path):
 
 
 def parked(engine):
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     wi = req["work_item_id"]
     engine.approve(wi, req["nonce"], agentd.operator())
     engine.park_on_job(wi, "run_x1")

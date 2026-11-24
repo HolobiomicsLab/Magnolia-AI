@@ -1,7 +1,6 @@
 # Always-on agent system (v0.1, PROVISIONAL)
 
-Branch: `exp/always-on-agents` (renamed from `exp/nk2r-challenge` per user
-decision 2026-11-03: the deliverable is the SYSTEM, not a challenge project).
+Branch: `exp/always-on-agents`. The deliverable is the SYSTEM, not a challenge project.
 
 All design choices are provisional and subject to change — see
 `router-prototype-decisions.md` and `dsh-magnolia-v2-router-assessment.md`.
@@ -27,7 +26,7 @@ ControlEngine (router_runner) — the single writer of Work Item state:
       |
       v
 CompositeAdapter — fake protocols (control demos) OR real task packs:
-      nk2r-challenge-v0.1 -> nk2r_funnel (generate/filter/calibrate/rank)
+      demo-taskpack-v0.1 -> DemoTaskPack; memory-dreaming-v0.1 -> DreamingTaskPack
       |
       v
 receipt + evidence links (run record, gate report, ranked candidates)
@@ -46,25 +45,32 @@ authority. agentd adds no new execution authority of its own.
   requires an operator-terminal approval (single-use nonce + content hash) and
   an explicit `agentd execute`. No inferred acceptance, no proactive sweeps.
 
-## The NK2R challenge as the first task pack
+## Task packs are data, not core code
 
-The NK2R challenge is a *task pack*, not the system. The pack
-(`nk2r-challenge-v0.1`, bound by hash to `nk2r_challenge/campaign/protocol.json`)
-runs the executable funnel: 3 generators -> liability filters -> NKB
-calibration -> 60 ranked candidates + run records. Docking, selectivity, and
-submission remain gated exactly as documented in the pack's protocol.
+The always-on core is project-agnostic. A task pack is a manifest plus an adapter,
+loaded from `router_runner/taskpacks/`; the core knows a pack only by its `id`,
+`kind`, protocol hash and adapter. It never imports a project module or builds a
+project path.
 
-### Run it end to end
+Current packs:
+
+- `demo-taskpack-v0.1` — a generic pack with a real run/reconcile path, used by
+  the control-plane and recovery tests.
+- `memory-dreaming-v0.1` — an offline dreaming pass on a throwaway store.
+- `nk2r-challenge-v0.1` — retired; its protocol hash is kept so old receipts stay
+  readable, and execution is refused.
+
+### Run the demo pack end to end
 
 ```sh
 cd opencode_cc_mem
 rm -f /tmp/agentd-demo.db
-python3 -m router_runner.agentd demo-nk2r --db /tmp/agentd-demo.db
+python3 -m router_runner.agentd demo-taskpack --db /tmp/agentd-demo.db
 ```
 
-Expected: letter ingested -> approval -> NK2R funnel executes ->
-`outcome=completed selected=60`, all acceptance items true, candidate CSV path,
-receipted reply, `DEMO-NK2R OK`.
+Expected: letter ingested -> approval -> demo task pack executes ->
+`outcome=completed selected=3`, all acceptance items true, candidate CSV path,
+receipted reply, `DEMO-TASKPACK OK`.
 
 ### Event-driven operation (`agentd run`)
 
@@ -118,7 +124,7 @@ python3 -m router_runner.agentd execute <work_item_id> --db /tmp/agentd.db
 ### Tests
 
 ```sh
-python3 -m pytest tests/test_router_runner.py tests/test_nk2r_funnel.py tests/test_agentd.py -q
+python3 -m pytest tests/test_router_runner.py tests/test_agentd.py -q
 ```
 
 ## Not in v0.1 (unchanged exclusions)

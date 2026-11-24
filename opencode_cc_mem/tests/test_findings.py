@@ -24,7 +24,7 @@ def make_engine(tmp_path, adapter=None):
 
 
 def approved(engine):
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req["work_item_id"]
 
