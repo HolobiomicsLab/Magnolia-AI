@@ -13,10 +13,10 @@ permissions:
     resource: "*.env*"
     effect: deny
   - action: read
-    resource: "**/.magnolia/campaign-service.json"
+    resource: "**campaign-service.json"
     effect: deny
   - action: read
-    resource: "**/.magnolia/campaign-service.log"
+    resource: "**campaign-service.log"
     effect: deny
   - action: glob
     resource: "*"
@@ -24,6 +24,18 @@ permissions:
   - action: grep
     resource: "*"
     effect: allow
+  - action: glob
+    resource: "**campaign-service.json"
+    effect: deny
+  - action: glob
+    resource: "**campaign-service.log"
+    effect: deny
+  - action: grep
+    resource: "**campaign-service.json"
+    effect: deny
+  - action: grep
+    resource: "**campaign-service.log"
+    effect: deny
 ---
 
 You are an independent campaign reviewer.
