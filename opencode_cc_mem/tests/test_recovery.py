@@ -39,8 +39,8 @@ def dead_pid() -> int:
     return proc.pid
 
 
-def approved_nk2r(engine):
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+def approved_demo(engine):
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     return req["work_item_id"]
 
@@ -82,7 +82,7 @@ def simulate_crash_before_side_effect(engine, work_item_id, attempt=1):
 
 def test_crash_before_side_effect_recovers_and_completes(tmp_path):
     engine = make_engine(tmp_path)
-    wi = approved_nk2r(engine)
+    wi = approved_demo(engine)
     asg_id = simulate_crash_before_side_effect(engine, wi)
 
     recovered = engine.recover()
@@ -105,7 +105,7 @@ def test_crash_before_side_effect_recovers_and_completes(tmp_path):
 
 def test_crash_after_side_effect_reconciles_without_duplicate(tmp_path):
     engine = make_engine(tmp_path)
-    wi = approved_nk2r(engine)
+    wi = approved_demo(engine)
     first = engine.execute(wi)
     original_candidate_file = first["result"]["candidate_file"]
 
@@ -136,7 +136,7 @@ def test_crash_after_side_effect_reconciles_without_duplicate(tmp_path):
 
 def test_live_owner_blocks_second_executor(tmp_path):
     engine = make_engine(tmp_path)
-    wi = approved_nk2r(engine)
+    wi = approved_demo(engine)
     engine.store.update(
         "work_items", "work_item_id", wi, {"state": WorkItemState.RUNNING}
     )
@@ -162,7 +162,7 @@ def test_live_owner_blocks_second_executor(tmp_path):
 
 def test_attempt_scoped_run_directories(tmp_path):
     engine = make_engine(tmp_path)
-    wi = approved_nk2r(engine)
+    wi = approved_demo(engine)
     result = engine.execute(wi)["result"]
     run_dir = Path(result["candidate_file"]).parent
     assert run_dir.name == "attempt-1"

@@ -1,4 +1,4 @@
-"""Tests for agentd + the NK2R task pack (always-on agent system).
+"""Tests for agentd + the demo task pack (always-on agent system).
 
 Run from opencode_cc_mem/:
     python3 -m pytest tests/test_agentd.py -q
@@ -25,28 +25,28 @@ def make_engine(tmp_path):
     )
 
 
-def test_nk2r_protocol_is_registered_and_hashed():
-    h = protocol_hash("nk2r-challenge-v0.1")
+def test_demo_protocol_is_registered_and_hashed():
+    h = protocol_hash("demo-taskpack-v0.1")
     assert isinstance(h, str) and len(h) == 64
     try:
-        protocol_hash("nk2r-challenge-v999")
+        protocol_hash("demo-taskpack-v999")
         assert False
     except RouterError:
         pass
 
 
-def test_nk2r_taskpack_end_to_end(tmp_path):
+def test_demo_taskpack_end_to_end(tmp_path):
     engine = make_engine(tmp_path)
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     engine.approve(req["work_item_id"], req["nonce"], agentd.operator())
     outcome = engine.execute(req["work_item_id"])
     result = outcome["result"]
     assert result["outcome"] == "completed"
-    assert result["receipt"]["selected"] == 60
+    assert result["receipt"]["selected"] == 3
     assert all(result["gate_report"]["acceptance"].values())
     candidate_file = Path(result["candidate_file"])
     assert candidate_file.exists()
-    assert len(candidate_file.read_text().strip().splitlines()) == 61
+    assert len(candidate_file.read_text().strip().splitlines()) == 4
     links = engine.store.all("evidence_links", "work_item_id = ?", (req["work_item_id"],))
     assert {l["kind"] for l in links} == {"run_record", "gate_report", "ranked_candidates"}
     wi = engine.store.get("work_items", "work_item_id", req["work_item_id"])
@@ -56,7 +56,7 @@ def test_nk2r_taskpack_end_to_end(tmp_path):
 def test_watch_stages_candidates_without_executing(tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
-    (inbox / "letter.json").write_text(json.dumps(agentd.NK2R_LETTER))
+    (inbox / "letter.json").write_text(json.dumps(agentd.DEMO_PACK_LETTER))
     engine = make_engine(tmp_path)
     summary = agentd.watch(inbox, str(tmp_path / "agentd.db"), once=True,
                            out_root=tmp_path / "runs")
@@ -71,7 +71,7 @@ def test_watch_stages_candidates_without_executing(tmp_path):
 def test_watch_is_idempotent_across_sweeps(tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
-    (inbox / "letter.json").write_text(json.dumps(agentd.NK2R_LETTER))
+    (inbox / "letter.json").write_text(json.dumps(agentd.DEMO_PACK_LETTER))
     db = str(tmp_path / "agentd.db")
     agentd.watch(inbox, db, once=True, out_root=tmp_path / "runs")
     summary = agentd.watch(inbox, db, once=True, out_root=tmp_path / "runs")

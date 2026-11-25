@@ -12,7 +12,8 @@ come from deployment configuration — never from this file.
 from __future__ import annotations
 
 from .models import RouterError, canonical_hash, new_id
-from .taskpacks import TASK_PACKS, run_task_pack, task_pack_hash
+from .taskpack_registry import default_registry
+from .taskpacks import run_task_pack, task_pack_hash
 
 PROTOCOLS = {
     "demo-docking-v1": {
@@ -34,7 +35,7 @@ PROTOCOLS = {
 def protocol_hash(name: str) -> str:
     if name in PROTOCOLS:
         return canonical_hash({"name": name, "definition": PROTOCOLS[name]})
-    if name in TASK_PACKS:
+    if name in default_registry():
         return task_pack_hash(name)
     raise RouterError(f"protocol not pre-registered: {name}")
 

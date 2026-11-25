@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "nk2r-challenge-v0.1",
+  "kind": "peptide-design-funnel",
+  "status": "retired",
+  "protocol_file": null,
+  "protocol_hash": "b4d4129a3e0b1186b9a29c01b869d65cd7a2b6e7ea62f4eefc0069784d929c5b",
+  "adapter": null,
+  "entry": null,
+  "scope": "retired: the challenge data was removed from the public repository",
+  "budget": {}
+}

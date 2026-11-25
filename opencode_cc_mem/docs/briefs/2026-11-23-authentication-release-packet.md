@@ -1,7 +1,7 @@
 # Tool-service authentication release packet
 
 Date: 23 November 2026
-Status: review evidence only — **no tag, pin move, deployment, or notice activation**
+Status: integrated verification green — **no tag, pin move, deployment, or notice activation**
 
 ## 1. Exact references
 
@@ -11,6 +11,8 @@ Status: review evidence only — **no tag, pin move, deployment, or notice activ
 | Authentication candidate | `7f0211c46ca9ab43d5f25cbbf572521fe2e23d59` |
 | Current `exp/dreaming-pass` head | `fc18124f8cd2b4dc217bb53271d1cfe1eecad273` |
 | Contract-test branch | `7be6063032637e9ff77e81e87190e6c9ad851188` |
+| Integrated authentication commit | `089a07517d0352a3f322c4c110dfd8cca3f131fe` |
+| SC-25 lab commit with the Git safe-directory fix | `8568f2a7` |
 
 The authentication branch is `feat/tool-service-run-auth`. It is pushed. No pull request is open for it.
 
@@ -36,7 +38,30 @@ Primary retained evidence:
 
 The SC-28 archive confirms both directions of rotation: the old bearer fails and the new bearer succeeds, without changing the service owner PID or child PID.
 
-## 3. Required integration before release
+## 3. Integrated verification completed on 24 November
+
+The integrated commit `089a07517d0352a3f322c4c110dfd8cca3f131fe` combines the authentication candidate with `fc18124f`.
+
+| Check | Result |
+| --- | --- |
+| Real-Magnolia contract suite | 35 passed. FastMCP 4.2.5 was used, with package imports confirmed from the integrated checkout. |
+| Full offline release gate | 4,044 passed, 2 skipped, followed by another 35 contract tests. No provider credential was requested. |
+| Live x86_64 SC-25 | 40 of 40 checks passed on PR 209 with the integrated Magnolia runtime. |
+
+The live report is at:
+
+```text
+/tmp/opencode/collegium-pr209/.runtime/lab-runs/20261124T090437Z-SC-25/report.md
+```
+
+Two environment details matter for reproducing the result:
+
+- A normal clone was required because Docker cannot use a worktree's `.git` pointer file without also mounting its referenced Git directory.
+- The lab image needed the trial Git directory marked safe. PR 209 carries that fix as `8568f2a7`. The architecture-aware OpenCode download in PR 209 was required; the contract branch alone downloaded the wrong architecture and failed with `exec format error`.
+
+The integrated Magnolia commit has not been pushed as a release or used to move the pin.
+
+## 4. Required integration before release
 
 `exp/dreaming-pass` has advanced since the authentication candidate was verified:
 
@@ -47,16 +72,13 @@ d390463f fix(agents): deny service files through every file tool
 45cc4adb fix(memory): reject a judge response that carries no valid verdict
 ```
 
-Before tagging or moving the pin:
+The remaining release gates are joint decisions rather than more implementation:
 
-1. Merge or rebase the authentication candidate onto `fc18124f`, preserving the exact authentication behavior.
-2. Run the real-Magnolia contract suite against the resulting commit.
-3. Run the full offline release gate against that same commit.
-4. Re-run live x86_64 SC-25 on that exact commit and require 40 of 40 checks.
-5. Complete the outstanding Collegium boundary reviews, including PRs #207–#210 and #218.
-6. Only then decide the tag, pin move, and participant-notice activation jointly.
+1. Review the integrated commit and the SC-25 Dockerfile fix.
+2. Complete the outstanding Collegium boundary reviews, including PRs #207–#210 and #218.
+3. Decide the tag, pin move, and participant-notice activation jointly.
 
-## 4. Limits of the existing evidence
+## 5. Limits of the existing evidence
 
 - Contract tests use real Magnolia modules and real servers, but stand-ins remain for several lifecycle paths. They do not replace a live interactive client turn or long-lived real-service reuse.
 - The earlier second-run SC-25 timeout did not recur, so it is not fully explained. A green retry is not proof that the timeout is impossible.
@@ -65,7 +87,7 @@ Before tagging or moving the pin:
 - Some earlier evidence lived in temporary worktrees that have since been removed. Final approval should use a fresh integrated run rather than rely on those paths alone.
 - The current pin, `553a04e`, does not contain the newer judge, permission, or authentication changes.
 
-## 5. Suggested final verification commands
+## 6. Suggested final verification commands
 
 Use an integrated authentication worktree and the exact resulting SHA:
 
@@ -83,7 +105,7 @@ scripts/lab.sh run SC-25 --commit <integrated-auth-sha>
 
 Do not activate the participant notice before the pin and final guardrails are approved.
 
-## 6. Release decision still needed
+## 7. Release decision still needed
 
 Joint review must decide:
 

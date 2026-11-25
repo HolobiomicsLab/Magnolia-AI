@@ -1,64 +1,49 @@
-"""Task packs: real, executable campaign stages the always-on system can run.
+"""Task packs: real, executable stages the always-on system can run.
 
-A task pack is a pre-registered, narrow execution interface — never arbitrary
-shell. The first pack runs the NK2R challenge funnel (generation -> filters ->
-calibration -> ranked candidates). Docking stages remain gated exactly as in
-nk2r_challenge/campaign/protocol.json.
+A task pack is a pre-registered narrow execution interface — never arbitrary
+shell. The core knows a pack only by its id, kind, protocol hash and adapter;
+manifests live in router_runner/taskpacks/ and are loaded by taskpack_registry.py.
 
-PROVISIONAL: registry shape and pack interface are subject to change.
+PROVISIONAL: the registry shape is subject to change.
 """
 
 from __future__ import annotations
 
-import hashlib
-import importlib.util
 import json
 import sys
 from pathlib import Path
 
 from .models import RouterError
+from .taskpack_registry import TaskPackManifest, default_registry
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-NK2R_DIR = REPO_ROOT / "nk2r_challenge"
-DEFAULT_RUNS_DIR = NK2R_DIR / "runs"
 DREAMING_PROTOCOL = "memory-dreaming-v0.1"
-
-TASK_PACKS = {
-    "nk2r-challenge-v0.1": {
-        "kind": "peptide-design-funnel",
-        "protocol_file": NK2R_DIR / "campaign" / "protocol.json",
-        "entry": NK2R_DIR / "src" / "nk2r_funnel.py",
-    },
-    DREAMING_PROTOCOL: {
-        "kind": "memory-dreaming",
-        "protocol_file": REPO_ROOT / "router_runner" / "protocols" / "memory-dreaming-v0.1.json",
-        # The dreaming pass lives in the memory server package, not in a
-        # single entry script; _load_dreaming() resolves it.
-        "entry": None,
-    },
-}
+DEFAULT_OUT_ROOT = Path("/tmp/agentd-runs")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def task_pack_hash(name: str) -> str:
-    """Bind the protocol to the exact content of its protocol.json."""
-    pack = TASK_PACKS.get(name)
+    """Bind the protocol to the exact content of its protocol file."""
+    pack = default_registry().get(name)
     if pack is None:
         raise RouterError(f"unknown task pack: {name}")
-    return hashlib.sha256(pack["protocol_file"].read_bytes()).hexdigest()
+    return pack.protocol_hash
 
 
-def _load_funnel():
-    spec = importlib.util.spec_from_file_location(
-        "nk2r_funnel", TASK_PACKS["nk2r-challenge-v0.1"]["entry"]
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _load_dreaming():
+    """Import the memory-server dreaming module.
 
-
-def _seed_for(work_item_id: str) -> int:
-    """Deterministic per-Work-Item seed (reproducible reruns)."""
-    return int(hashlib.sha256(work_item_id.encode()).hexdigest()[:8], 16) % (2**31)
+    compchem_memory is a separate uv project under mcp-servers/; when it is not
+    already importable (e.g. the router test suite), add its src/ to sys.path.
+    """
+    try:
+        from compchem_memory import dreaming
+        return dreaming
+    except ImportError:
+        src = REPO_ROOT / "mcp-servers" / "compchem-memory" / "src"
+        if str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+        from compchem_memory import dreaming
+        return dreaming
 
 
 def _result_from_record(work_item: dict, mandate: dict, out_dir: Path) -> dict:
@@ -84,51 +69,6 @@ def _result_from_record(work_item: dict, mandate: dict, out_dir: Path) -> dict:
         },
         "candidate_file": str(candidate_file),
     }
-
-
-def run_nk2r(work_item: dict, mandate: dict, out_root: Path | None = None, attempt: int = 1) -> dict:
-    funnel = _load_funnel()
-    out_root = Path(out_root) if out_root else DEFAULT_RUNS_DIR
-    # Attempt-scoped directory: attempt N's cleanup can never touch attempt N+1.
-    out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
-    funnel.run(
-        seed=_seed_for(work_item["work_item_id"]),
-        per_generator=120,
-        target_n=60,
-        out_dir=out_dir,
-    )
-    return _result_from_record(work_item, mandate, out_dir)
-
-
-def run_nk2r_reconcile(work_item: dict, mandate: dict, attempt: int, out_root: Path | None = None) -> dict | None:
-    """If the interrupted attempt's external run already produced its records,
-    finalize from them instead of re-running (no duplicate execution)."""
-    out_root = Path(out_root) if out_root else DEFAULT_RUNS_DIR
-    out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
-    if not (out_dir / "run-record.json").exists():
-        return None
-    return _result_from_record(work_item, mandate, out_dir)
-
-
-def _load_dreaming():
-    """Import the memory-server dreaming module.
-
-    compchem_memory is a separate uv project under mcp-servers/; when it is not
-    already importable (e.g. the router test suite), add its src/ to sys.path.
-    """
-    try:
-        from compchem_memory import dreaming
-        return dreaming
-    except ImportError:
-        src = REPO_ROOT / "mcp-servers" / "compchem-memory" / "src"
-        if str(src) not in sys.path:
-            sys.path.insert(0, str(src))
-        from compchem_memory import dreaming
-        return dreaming
-
-
-def _dreaming_protocol() -> dict:
-    return json.loads(TASK_PACKS[DREAMING_PROTOCOL]["protocol_file"].read_text())
 
 
 def _result_from_dreaming_record(work_item: dict, mandate: dict, out_dir: Path) -> dict:
@@ -165,14 +105,22 @@ def _result_from_dreaming_record(work_item: dict, mandate: dict, out_dir: Path) 
     }
 
 
-def run_dreaming(work_item: dict, mandate: dict, out_root: Path | None = None, attempt: int = 1) -> dict:
+def run_dreaming(
+    work_item: dict, mandate: dict, out_root: Path | None = None, attempt: int = 1,
+    protocol_file: Path | None = None,
+) -> dict:
     """Execute one bounded dreaming pass against the project memory store.
 
     The project directory is resolved from out_root (out_root = <project>/runs),
     and the pass fails closed when that directory has no .magnolia store — a
     dreaming run must never create or guess a memory store.
     """
-    out_root = Path(out_root) if out_root else DEFAULT_RUNS_DIR
+    if protocol_file is None:
+        pack = default_registry().get(work_item["protocol"])
+        if pack is None or pack.manifest.protocol_file is None:
+            raise RouterError("dreaming requires the protocol file of its task-pack manifest")
+        protocol_file = pack.manifest.protocol_file
+    out_root = Path(out_root) if out_root else DEFAULT_OUT_ROOT
     out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -183,7 +131,7 @@ def run_dreaming(work_item: dict, mandate: dict, out_root: Path | None = None, a
         )
 
     dreaming = _load_dreaming()
-    config = dreaming.DreamingConfig.from_protocol(_dreaming_protocol())
+    config = dreaming.DreamingConfig.from_protocol(json.loads(Path(protocol_file).read_text()))
     summary = dreaming.run_dreaming(project_dir, config=config)
 
     (out_dir / "run-record.json").write_text(
@@ -193,31 +141,86 @@ def run_dreaming(work_item: dict, mandate: dict, out_root: Path | None = None, a
     return _result_from_dreaming_record(work_item, mandate, out_dir)
 
 
-def run_dreaming_reconcile(work_item: dict, mandate: dict, attempt: int, out_root: Path | None = None) -> dict | None:
-    """Finalize from an existing run record; never re-execute a finished pass.
-
-    A crash before run-record.json is written is safe to re-run: apply is
-    hash-guarded and corrections are append-only, so a repeated pass cannot
-    double-apply a correction that already landed.
-    """
-    out_root = Path(out_root) if out_root else DEFAULT_RUNS_DIR
+def run_dreaming_reconcile(
+    work_item: dict, mandate: dict, attempt: int, out_root: Path | None = None,
+) -> dict | None:
+    """Finalize from an existing run record; never re-execute a finished pass."""
+    out_root = Path(out_root) if out_root else DEFAULT_OUT_ROOT
     out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
     if not (out_dir / "run-record.json").exists():
         return None
     return _result_from_dreaming_record(work_item, mandate, out_dir)
 
 
-def run_task_pack(name: str, work_item: dict, mandate: dict, out_root: Path | None = None, attempt: int = 1) -> dict:
-    if name == "nk2r-challenge-v0.1":
-        return run_nk2r(work_item, mandate, out_root, attempt=attempt)
-    if name == DREAMING_PROTOCOL:
-        return run_dreaming(work_item, mandate, out_root, attempt=attempt)
-    raise RouterError(f"no runner for task pack: {name}")
+class DemoTaskPack:
+    """A generic task pack with a real run/reconcile path and no project."""
+
+    def __init__(self, manifest: TaskPackManifest) -> None:
+        self.manifest = manifest
+
+    def run(
+        self, work_item: dict, mandate: dict, out_root: Path | None, attempt: int = 1,
+    ) -> dict:
+        out_root = Path(out_root) if out_root else DEFAULT_OUT_ROOT
+        out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "acceptance": {"demo_completed": True},
+            "stages": {
+                "calibrate": {"passed": True, "note": "demo"},
+                "rank": {"selected": 3, "generator_shares": {"demo": 1.0}},
+            },
+        }
+        (out_dir / "run-record.json").write_text(json.dumps(record, indent=2))
+        (out_dir / "ranked_candidates.csv").write_text(
+            "id,score\ndemo-1,1\ndemo-2,2\ndemo-3,3\n"
+        )
+        return _result_from_record(work_item, mandate, out_dir)
+
+    def reconcile(
+        self, work_item: dict, mandate: dict, attempt: int, out_root: Path | None,
+    ) -> dict | None:
+        out_root = Path(out_root) if out_root else DEFAULT_OUT_ROOT
+        out_dir = out_root / work_item["work_item_id"] / f"attempt-{attempt}"
+        if not (out_dir / "run-record.json").exists():
+            return None
+        return _result_from_record(work_item, mandate, out_dir)
 
 
-def reconcile_task_pack(name: str, work_item: dict, mandate: dict, attempt: int, out_root: Path | None = None) -> dict | None:
-    if name == "nk2r-challenge-v0.1":
-        return run_nk2r_reconcile(work_item, mandate, attempt, out_root)
-    if name == DREAMING_PROTOCOL:
+class DreamingTaskPack:
+    def __init__(self, manifest: TaskPackManifest) -> None:
+        self.manifest = manifest
+
+    def run(
+        self, work_item: dict, mandate: dict, out_root: Path | None, attempt: int = 1,
+    ) -> dict:
+        return run_dreaming(
+            work_item, mandate, out_root, attempt=attempt, protocol_file=self.manifest.protocol_file,
+        )
+
+    def reconcile(
+        self, work_item: dict, mandate: dict, attempt: int, out_root: Path | None,
+    ) -> dict | None:
         return run_dreaming_reconcile(work_item, mandate, attempt, out_root)
-    raise RouterError(f"no runner for task pack: {name}")
+
+
+def run_task_pack(
+    name: str, work_item: dict, mandate: dict, out_root: Path | None = None, attempt: int = 1,
+) -> dict:
+    pack = default_registry().get(name)
+    if pack is None:
+        raise RouterError(f"unknown task pack: {name}")
+    if pack.adapter is None:
+        raise RouterError(f"task pack is retired: {name}")
+    return pack.adapter.run(work_item, mandate, out_root, attempt=attempt)
+
+
+def reconcile_task_pack(
+    name: str, work_item: dict, mandate: dict, attempt: int, out_root: Path | None = None,
+) -> dict | None:
+    pack = default_registry().get(name)
+    if pack is None:
+        raise RouterError(f"unknown task pack: {name}")
+    if pack.adapter is None:
+        raise RouterError(f"task pack is retired: {name}")
+    return pack.adapter.reconcile(work_item, mandate, attempt, out_root)
