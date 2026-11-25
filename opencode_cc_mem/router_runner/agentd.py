@@ -26,7 +26,7 @@ Usage (from opencode_cc_mem/):
     python3 -m router_runner.agentd ingest <letter.json> --db /tmp/agentd.db
     python3 -m router_runner.agentd approve <work_item_id> <nonce> --db /tmp/agentd.db
     python3 -m router_runner.agentd execute <work_item_id> --db /tmp/agentd.db
-    python3 -m router_runner.agentd demo-nk2r --db /tmp/agentd-demo.db
+    python3 -m router_runner.agentd demo-taskpack --db /tmp/agentd-demo.db
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def watch(inbox: Path, db: str, once: bool = False, quiet: bool = False,
 def demo_letter(project: str = "demo", protocol: str = "demo-docking-v1",
                 event_id: str = "letter-demo-1") -> dict:
     """Neutral demo letter: no real project names and no real protocol by
-    default. The NK2R pack demo passes its protocol explicitly."""
+    default. A task-pack demo passes its protocol explicitly."""
     return {
         "source_id": "inbox:demo",
         "source_event_id": event_id,
@@ -133,11 +133,11 @@ def demo_letter(project: str = "demo", protocol: str = "demo-docking-v1",
     }
 
 
-# Generic demo letter (fake adapter, not tied to NK2R).
+# Generic demo letter (fake adapter, no project).
 DEMO_LETTER = demo_letter()
-# NK2R task-pack demo letter, used only by the NK2R-specific demo/tests.
-NK2R_LETTER = demo_letter(
-    project="demo", protocol="nk2r-challenge-v0.1", event_id="letter-nk2r-2026-11-03"
+# Generic task-pack demo letter: exercises the registry and the real run/reconcile path.
+DEMO_PACK_LETTER = demo_letter(
+    project="demo", protocol="demo-taskpack-v0.1", event_id="letter-demo-pack-1"
 )
 # Dreaming task-pack demo letter (offline, throwaway store).
 from .taskpacks import DREAMING_PROTOCOL
@@ -146,23 +146,23 @@ DREAMING_LETTER = demo_letter(
 )
 
 
-def demo_nk2r(db: str, out_root: str | None = None) -> int:
+def demo_taskpack(db: str, out_root: str | None = None) -> int:
     engine = get_engine(db, out_root)
-    print("--- ingest NK2R letter ---")
-    req = ingest_letter(engine, DEMO_LETTER)
+    print("--- ingest demo task-pack letter ---")
+    req = ingest_letter(engine, DEMO_PACK_LETTER)
     print(f"work item {req['work_item_id']} awaiting approval (nonce {req['nonce'][:12]}...)")
     print("--- operator approval (simulated terminal) ---")
     wi = engine.approve(req["work_item_id"], req["nonce"], operator() + " (simulated)")
     print(f"state={wi['state']} mandate={wi['mandate_id']}")
-    print("--- execute NK2R task pack ---")
+    print("--- execute demo task pack ---")
     outcome = engine.execute(req["work_item_id"])
     result = outcome["result"]
     print(f"outcome={result['outcome']} selected={result['receipt']['selected']}")
     print(f"acceptance={result['gate_report']['acceptance']}")
     print(f"candidates: {result['candidate_file']}")
     print("--- receipted reply ---")
-    print(engine.reply(req["work_item_id"], "NK2R funnel completed"))
-    print("DEMO-NK2R OK")
+    print(engine.reply(req["work_item_id"], "demo task pack completed"))
+    print("DEMO-TASKPACK OK")
     return 0 if result["outcome"] == "completed" else 2
 
 
@@ -399,7 +399,7 @@ def demo_local(db: str, workdir: str | None = None, out_root: str | None = None)
     """One-command local end-to-end tour. No Slurm, no LLM, no network.
 
     Uses the PRODUCTION job_watcher.emit_job_notice for the terminal event,
-    the real NK2R funnel for both design batches, and the real findings
+    the real demo task pack for both design batches, and the real findings
     lifecycle (intermediate -> completed_campaign on completion).
     """
     import shutil
@@ -565,7 +565,7 @@ def router_chat(db: str, registry: dict | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "watch", "ingest", "approve", "execute", "demo-nk2r", "demo-dreaming", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
+    for name in ("init", "watch", "ingest", "approve", "execute", "demo-taskpack", "demo-dreaming", "context", "follow-up", "consume-jobs", "demo-jobloop", "demo-local", "demo-cancel", "run", "demo-router", "router-chat"):
         p = sub.add_parser(name)
         p.add_argument("--db", default="/tmp/agentd.db")
         if name == "run":
@@ -589,14 +589,14 @@ def main() -> int:
             p.add_argument("--workdir", default=None)
         if name == "demo-cancel":
             p.add_argument("--workdir", default=None)
-        if name in ("watch", "execute", "demo-nk2r", "demo-dreaming", "demo-jobloop", "demo-local", "demo-cancel"):
+        if name in ("watch", "execute", "demo-taskpack", "demo-dreaming", "demo-jobloop", "demo-local", "demo-cancel"):
             p.add_argument("--out-root", default=None)
     args = parser.parse_args()
 
     if args.command == "init":
         engine = get_engine(args.db)
-        from .taskpacks import TASK_PACKS
-        print(json.dumps({"db": args.db, "task_packs": sorted(TASK_PACKS)}, indent=2))
+        from .taskpack_registry import default_registry
+        print(json.dumps({"db": args.db, "task_packs": sorted(default_registry())}, indent=2))
         return 0
     if args.command == "watch":
         watch(args.inbox, args.db, once=args.once, out_root=args.out_root)
@@ -614,8 +614,8 @@ def main() -> int:
         engine = get_engine(args.db, args.out_root)
         print(json.dumps(engine.execute(args.work_item_id), indent=2, default=str))
         return 0
-    if args.command == "demo-nk2r":
-        return demo_nk2r(args.db, args.out_root)
+    if args.command == "demo-taskpack":
+        return demo_taskpack(args.db, args.out_root)
     if args.command == "demo-dreaming":
         return demo_dreaming(args.db, args.out_root)
     if args.command == "context":

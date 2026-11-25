@@ -23,7 +23,7 @@ def make_engine(tmp_path):
 def parked_with_notice(tmp_path):
     engine = make_engine(tmp_path)
     project = tmp_path / "project"
-    req = agentd.ingest_letter(engine, agentd.NK2R_LETTER)
+    req = agentd.ingest_letter(engine, agentd.DEMO_PACK_LETTER)
     wi = req["work_item_id"]
     engine.approve(wi, req["nonce"], agentd.operator())
     engine.job_service.submit("run_loop_1")

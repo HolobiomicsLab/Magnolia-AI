@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "id": "demo-taskpack-v0.1",
+  "kind": "demo",
+  "status": "active",
+  "protocol_file": "protocols/demo-taskpack-v0.1.json",
+  "adapter": "router_runner.taskpacks:DemoTaskPack",
+  "entry": null,
+  "scope": "one demo run",
+  "budget": {"local_seconds": 60}
+}

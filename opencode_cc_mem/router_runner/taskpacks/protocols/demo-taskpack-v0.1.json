@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "demo-taskpack-v0.1",
+  "kind": "demo",
+  "stages": ["run"],
+  "acceptance": {"demo_completed": true},
+  "notes": "Generic demo task pack for control-plane and recovery tests. No project, no external jobs."
+}
