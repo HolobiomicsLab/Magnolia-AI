@@ -1,6 +1,6 @@
 # Magnolia Agent Behavior — Memory & Learning
 
-This file is loaded by opencode at session start. It defines when to call memory
+This file is loaded by the agent client at session start. It defines when to call memory
 tools so the project actually learns from each session.
 
 ## First response: memory setup gate
@@ -105,7 +105,7 @@ information.
 If any memory tool returns a JSON payload with `"status": "project_switch_blocked"`,
 the user is trying to record work for a different project than this session is
 pinned to. Do not retry. Relay the payload's `message` to the user plainly — they
-need to start a new opencode session for the other project. One session works on
+need to start a new agent session for the other project. One session works on
 one project.
 
 **Exception (2026-11-10):** when the user explicitly confirms the target project
@@ -129,9 +129,13 @@ old tail-of-result notices are suppressed — do not treat silence as "handled".
 
 ## Shell commands
 
-Use `compchem-tools_run_shell(cmd=...)` for any shell command. Opencode's bash tool is
+Use `compchem-tools_run_shell(cmd=...)` for any shell command. The client's built-in shell is
 disabled. `compchem-tools_run_shell` invokes `magnolia-run`, which writes the session JSONL
 and fires auto-assessment for recognized scientific tools.
+
+## Tool names in other clients
+
+These rules spell tools the OpenCode way (compchem-tools_run_shell). In Claude Code the same tool is mcp__compchem-tools__run_shell; in Codex it is mcp__compchem_tools__run_shell; in Mistral Vibe it is mcp_compchem-tools.run_shell. Skills are loaded with the skill tool in OpenCode and are listed as skills in the other clients.
 
 ## Periodically
 

@@ -94,7 +94,7 @@ When in doubt, under-claim and name the missing analysis.
 
 ## Shell commands
 
-Opencode's bash tool is disabled. **Use `compchem-tools_run_shell` for every shell command**;
+The client's built-in shell is disabled. **Use `compchem-tools_run_shell` for every shell command**;
 it invokes `magnolia-run`, which logs the command, exit code, and working
 directory to `.magnolia/sessions/` and fires auto-assessment for recognized
 scientific tools.

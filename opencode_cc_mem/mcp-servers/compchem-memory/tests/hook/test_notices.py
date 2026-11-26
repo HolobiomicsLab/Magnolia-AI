@@ -46,10 +46,10 @@ def test_notices_drain_ten_after_delivery(tmp_path):
     first = _deliver(paths)
     second = _deliver(paths)
     assert len(first.splitlines()) == 12
-    assert first.splitlines()[0].startswith("✅ tool-0 finished (completed) — run …")
+    assert first.splitlines()[0].startswith("✅ tool-0 finished (completed) — run run-")
     assert first.splitlines()[-2:] == ["critic one", "critic two"]
-    expected_tail = f"run-{'x' * 24}-10"[-24:]
-    assert second == f"✅ tool-10 finished (completed) — run …{expected_tail}"
+    expected_run = f"run-{'x' * 24}-10"
+    assert second == f"✅ tool-10 finished (completed) — run {expected_run}"
     assert _deliver(paths) is None
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == []
@@ -65,10 +65,30 @@ def test_peek_consumes_nothing(tmp_path):
     second = peek_notices(paths, state)
 
     assert first is not None and second is not None and first.text == second.text
-    assert first.text.splitlines() == ["✅ dock finished (done) — run …r1", "critic warning"]
+    assert first.text.splitlines() == ["✅ dock finished (done) — run r1", "critic warning"]
     assert state.data == {"unshown_notices": ["critic warning"]}
     assert (paths.store / ".job-notices.jsonl").exists()
     release_notices(second)
+
+
+def test_job_notice_keeps_run_ids_through_64_chars_and_shortens_longer_ids(tmp_path):
+    paths = _paths(tmp_path)
+    exact = "r" * 64
+    long = "start-" + "x" * 70 + "-end"
+    push_job_notice(
+        str(paths.project_dir), run_id=exact, tool="dock", state="done", category="success",
+    )
+    push_job_notice(
+        str(paths.project_dir), run_id=long, tool="dock", state="done", category="success",
+    )
+
+    lines = _deliver(paths).splitlines()
+
+    assert lines[0].endswith(f"run {exact}")
+    shown = lines[1].split(" — run ", 1)[1]
+    assert shown.startswith("start-") and shown.endswith("-end")
+    assert shown.count("…") == 1 and len(shown) == 64
+    assert all(len(line) <= 160 for line in lines)
 
 
 def test_commit_keeps_notices_added_after_peek(tmp_path):
@@ -92,7 +112,7 @@ def test_commit_keeps_notices_added_after_peek(tmp_path):
     writer.join(timeout=1)
 
     assert not writer.is_alive()
-    assert _deliver(paths).splitlines() == ["✅ later finished (done) — run …r2", "critic later"]
+    assert _deliver(paths).splitlines() == ["✅ later finished (done) — run r2", "critic later"]
 
 
 def test_second_consumer_cannot_peek_same_notice(tmp_path):
@@ -128,7 +148,7 @@ def test_notices_malformed_rows_and_switch(tmp_path, monkeypatch):
         assert state.data["unshown_notices"] == []
 
     monkeypatch.delenv("MAGNOLIA_JOB_NOTIFY")
-    assert _deliver(paths) == "❌ dock finished (failed) — run …abcdef"
+    assert _deliver(paths) == "❌ dock finished (failed) — run abcdef"
     assert not queue.exists()
 
 
@@ -140,7 +160,7 @@ def test_notices_are_defensive_and_cap_lines(tmp_path):
     )
     state = SimpleNamespace(data={"unshown_notices": "not-a-list"})
     notices = peek_notices(paths, state)
-    assert len(notices.text) == 160
+    assert len(notices.text) <= 160
     assert notices.text.startswith("⚠️ ")
     assert notices.critic == []
     release_notices(notices)

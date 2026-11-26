@@ -63,9 +63,21 @@ Two triggers lead here — the flow below is the same for both:
    key, network) before retrying. Do not bypass it by editing files.
 5. **Confirm activation**:
    - `magnolia memory status` must show `memory enabled = True | model = <model>`.
-   - Tell the user: **"Restart opencode to activate."** The running memory
+   - Tell the user: **"Restart the agent client to activate."** The running memory
      server keeps its launch-time settings until restarted — this is the one
      manual step that cannot be skipped.
+
+### OpenRouter routing controls
+
+OpenRouter calls use a role-specific, project-private sticky session id by default and apply a quality
+floor of fp8, bf16, fp16, fp32 or unknown quantization. Two optional environment variables control this:
+
+- `MAGNOLIA_OPENROUTER_PROVIDER` — a JSON provider object that replaces the quality floor entirely, for
+  example a manual provider order. Invalid JSON is ignored with one stderr warning.
+- `MAGNOLIA_OPENROUTER_STICKY=0` — omit the sticky session id (`false`, `no` and `off` also disable it).
+
+No project path is sent to OpenRouter: the session id contains only the LLM role and the first 16 hex
+characters of a SHA-256 digest of the resolved project directory.
 
 ## Why memory starts disabled
 

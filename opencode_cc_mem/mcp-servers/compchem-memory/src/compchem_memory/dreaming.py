@@ -226,26 +226,40 @@ def resolve_transcripts(
 ) -> dict[str, Any]:
     """Find and render the source transcripts for one entry.
 
-    Sources are looked up in a fixed order per session id: an exported opencode
-    transcript first, then the SessionManager JSONL log. Missing sources are
-    recorded as None — an entry with no transcript must not be judged.
+    Sources are resolved by the shared transcript contract. Legacy stores keep
+    their fixed order: exported OpenCode transcript, then SessionManager JSONL.
+    Hook-fed transcripts are rendered through Magnolia's neutral exporter.
     """
     store = Path(project_dir) / ".magnolia"
     selected = sessions[: config.max_sessions_per_entry]
     per_source = max(1000, config.max_transcript_chars // max(1, len(selected)))
     sources: dict[str, Any] = {}
     blocks: list[str] = []
+    from compchem_memory.opencode_ingest import reconstruct_transcript
+    from compchem_memory.transcript_source import (
+        list_sessions,
+        magnolia_exporter,
+        resolve_transcript,
+    )
+
+    refs = {ref.key: ref for ref in list_sessions(store)}
+    neutral_exporter = magnolia_exporter(store)
     for sid in selected:
-        oc = store / "opencode-transcripts" / f"{sid}.json"
-        jl = store / "sessions" / f"{sid}.jsonl"
+        path = resolve_transcript(store, sid)
         text = ""
         path_used: str | None = None
-        if oc.exists():
-            text = _render_opencode_json(oc, per_source)
-            path_used = str(oc)
-        elif jl.exists():
-            text = _render_session_jsonl(jl, per_source)
-            path_used = str(jl)
+        if path is not None and path.parent.parent.name == "transcripts":
+            ref = refs.get(sid)
+            export = neutral_exporter(ref) if ref is not None else None
+            if export is not None:
+                text = reconstruct_transcript(export)[:per_source]
+            path_used = str(path)
+        elif path is not None and path.suffix == ".json":
+            text = _render_opencode_json(path, per_source)
+            path_used = str(path)
+        elif path is not None:
+            text = _render_session_jsonl(path, per_source)
+            path_used = str(path)
         sources[sid] = {"path": path_used, "chars": len(text)}
         if text:
             blocks.append(f"## session {sid}\n{text}")

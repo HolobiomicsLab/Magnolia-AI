@@ -433,3 +433,158 @@ def test_generate_finish_reason_stop_merges_normally(store):
     assert path is not None
     assert "docked KILDQ" in (store / hv.HANDOVER_STATE_FILE).read_text()
     assert _session_cursor(store, "ses_a") == "m1"
+
+
+def test_handover_reads_hook_sessions(store):
+    _write_mapping(store, ["ses-old", "ses-active"])
+    (store / "opencode-sessions.jsonl").write_text(
+        json.dumps({"opencode_session_id": "ses-old", "ts": "2026-11-13T09:00:00Z"}) + "\n"
+        + json.dumps({"opencode_session_id": "ses-active", "ts": "2026-11-15T11:00:00Z"}) + "\n"
+    )
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-14T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+        "transcript_ref": None,
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "claude work"}) + "\n")
+    timestamp = 1_794_614_400  # 2026-11-14 UTC.
+    import os
+    os.utime(transcript, (timestamp, timestamp))
+    exports = {
+        "ses-old": {"messages": [_msg("old-1", "user", "old work")]},
+        "ses-active": {"messages": [_msg("active-1", "user", "active work")]},
+    }
+
+    hv.generate_handover(
+        str(store.parent), exporter=lambda sid: exports[sid], llm=_merge_echo,
+        session_updates=lambda: {"ses-old": 1, "ses-active": 1},
+    )
+
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    assert "claude work" in state
+    assert "claude-claude-one" in state.splitlines()[0]
+    assert "2026-11-14" in state.splitlines()[0]
+    assert _session_cursor(store, "claude-claude-one") == "claude-claude-one:0"
+    assert "sealed_at_ms" not in json.loads(
+        (store / hv.HANDOVER_CURSORS_DIR / "claude-claude-one.json").read_text()
+    )
+
+    seal = json.loads(
+        (store / hv.HANDOVER_CURSORS_DIR / "ses-old.json").read_text()
+    )["sealed_at_ms"]
+
+    class TrackingUpdates(dict):
+        def __init__(self, values):
+            super().__init__(values)
+            self.lookups = []
+
+        def get(self, key, default=None):
+            self.lookups.append(key)
+            return super().get(key, default)
+
+    updates = TrackingUpdates({"ses-old": seal, "ses-active": 1})
+    hv.generate_handover(
+        str(store.parent), exporter=lambda sid: exports[sid], llm=_merge_echo,
+        session_updates=lambda: updates,
+    )
+
+    assert "ses-old" in updates.lookups
+    assert "claude-one" not in updates.lookups
+    assert "claude-claude-one" not in updates.lookups
+
+
+def test_handover_mixed_store_keeps_active_opencode_unsealed(store):
+    _write_mapping(store, ["ses-old", "ses-active"])
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "claude work"}) + "\n")
+    exports = {
+        "ses-old": {"messages": [_msg("old-1", "user", "old work")]},
+        "ses-active": {"messages": [_msg("active-1", "user", "active work")]},
+    }
+
+    hv.generate_handover(
+        str(store.parent), exporter=lambda sid: exports[sid], llm=_merge_echo,
+    )
+
+    old = json.loads((store / _CURSORS_DIR / "ses-old.json").read_text())
+    active = json.loads((store / _CURSORS_DIR / "ses-active.json").read_text())
+    hook = json.loads((store / _CURSORS_DIR / "claude-claude-one.json").read_text())
+    assert "sealed_at_ms" in old
+    assert "sealed_at_ms" not in active
+    assert "sealed_at_ms" not in hook
+
+
+def test_handover_merges_sessions_in_activity_order(store):
+    import os
+    from datetime import datetime, timezone
+
+    (store / "opencode-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T11:00:00Z",
+        "opencode_session_id": "ses-newer",
+    }) + "\n")
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T09:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-older",
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-older.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"kind": "prompt", "text": "older Claude"}) + "\n")
+    activity = datetime(2026, 11, 15, 10, tzinfo=timezone.utc).timestamp()
+    os.utime(transcript, (activity, activity))
+    order = []
+
+    def replace_with_latest(system, user, **kwargs):
+        new = user.split(_NEW_SEP, 1)[1]
+        marker = "older Claude" if "older Claude" in new else "newer OpenCode"
+        order.append(marker)
+        return f"## Done\n- {marker}\n"
+
+    hv.generate_handover(
+        str(store.parent),
+        exporter=lambda sid: {"messages": [_msg("new-1", "user", "newer OpenCode")]},
+        llm=replace_with_latest,
+    )
+
+    assert order == ["older Claude", "newer OpenCode"]
+    state = (store / hv.HANDOVER_STATE_FILE).read_text()
+    body = state.split("\n\n", 1)[1]
+    assert "newer OpenCode" in body
+    assert "older Claude" not in body
+
+
+def test_handover_opencode_only_keeps_mapping_order(store):
+    """Without hook sessions the legacy first-seen order is unchanged."""
+    rows = [("2026-11-15T09:00:00Z", "ses-a"), ("2026-11-15T10:00:00Z", "ses-b"),
+            ("2026-11-15T11:00:00Z", "ses-a")]
+    (store / "opencode-sessions.jsonl").write_text("".join(
+        json.dumps({"ts": ts, "opencode_session_id": sid}) + "\n" for ts, sid in rows
+    ))
+    exports = {
+        "ses-a": {"messages": [_msg("a-1", "user", "work in A")]},
+        "ses-b": {"messages": [_msg("b-1", "user", "work in B")]},
+    }
+    order = []
+
+    def record(system, user, **kwargs):
+        new = user.split(_NEW_SEP, 1)[1]
+        marker = "A" if "work in A" in new else "B"
+        order.append(marker)
+        return f"## Done\n- {marker}\n"
+
+    hv.generate_handover(str(store.parent), exporter=lambda sid: exports[sid], llm=record)
+
+    assert order == ["A", "B"]
+    cursor_a = json.loads((store / _CURSORS_DIR / "ses-a.json").read_text())
+    cursor_b = json.loads((store / _CURSORS_DIR / "ses-b.json").read_text())
+    assert "sealed_at_ms" in cursor_a
+    assert "sealed_at_ms" not in cursor_b

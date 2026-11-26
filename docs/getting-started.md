@@ -247,6 +247,19 @@ edit `.magnolia/GOAL.md` to state “Verify that a reviewed learning survives a 
 For later projects, the scaffold's optional goal expansion uses ambient model settings;
 leave it blank and edit the file if you need to choose the model first.
 
+To work in Claude Code, Codex or Mistral Vibe instead of OpenCode, add `--harness`:
+
+```bash
+./opencode_cc_mem/softwares/bin/magnolia --harness claude onboarding_demo
+```
+
+The client runs on your own login and subscription. `magnolia setup --harness codex
+onboarding_demo` checks that client with one real call and makes it the default. The first
+time you open a project, the client asks whether to trust the project folder, and Codex asks
+separately whether to trust the project's hooks: answer yes once, in an interactive session.
+Magnolia never passes a flag that skips these questions. See
+[`harness-adaptation.md`](harness-adaptation.md#running-magnolia-in-claude-code-codex-or-vibe).
+
 The launcher normally requires the code checkout to be on `master`. To deliberately
 test a reviewed feature branch, use the existing override for that invocation:
 

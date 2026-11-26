@@ -111,13 +111,13 @@ Anti-goals (a failure even if it works)
 
 | Magnolia behaviour | Core entry | OpenCode | Claude Code | Codex | Vibe |
 |---|---|---|---|---|---|
-| Rules + boot context + audit report | `session-start` | context hook (v2) | SessionStart `additionalContext`; fallback `--append-system-prompt-file` | SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
+| Rules + boot context + audit report | `session-start` | context hook (v2) | static rules through `--append-system-prompt-file`; capped dynamic SessionStart `additionalContext` | rules in `.codex/config.toml` `developer_instructions`; Codex reads `AGENTS.md` natively; capped dynamic SessionStart `additionalContext` | `session_start` `additional_context` (P0: 256 KB reached the model) + `AGENTS.md` |
 | Session-start retrieval directive | `session-start` | prompt rewrite | SessionStart `additionalContext` | same | `session_start` `additional_context` |
 | Doorbell `@agent` letters | `prompt` | prompt rewrite | letter written + `additionalContext` "already sent, do not act" (no rewrite possible) | same | same, on `pre_agent` (carries the prompt) |
-| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | `post_tool` `additional_context` |
+| Action-time retrieval | `post-tool` | prepends to tool output | PostToolUse `additionalContext` | same | built-ins use `post_tool` `additional_context`; MCP notes are carried to the same agent's next built-in event, or the main agent's next prompt |
 | Tool-call capture | MCP `@captured` (unchanged) + `pre-tool`/`post-tool` ledger | yes | yes | yes | yes |
 | Session mapping + Magnolia transcript | all events | yes | yes | yes | yes; assistant text only from the client transcript (`post_agent` carries none) |
-| Claim critic | `turn-end` (async) | yes | Stop, `async: true` | Stop, `async: true` | `post_agent` |
+| Claim critic | `turn-end` | yes | synchronous Stop recovers replies and starts a detached worker | Stop hook | `post_agent` defers recovery; the next main prompt or session end starts a detached worker |
 | Critic flags and job notices shown to the person | `prompt`, `post-tool` | toast | `systemMessage` / `additionalContext` at the next event | same | `additional_context` at the next `pre_agent` or `post_tool` |
 | Sub-agent attribution | `agent` field | n/a | `agent_id`, `agent_type` | `agent_id`, `agent_type` on tool events (P0, observed in `spawn_agent`); SubagentStart/Stop not registered, unknown | child `session_id` + `parent_session_id`, `agent_name` |
 | Bash disabled, `run_shell` instead | adapter config | `tools.bash:false` | `--disallowedTools Bash` | sandbox `workspace-write` + rule (P0: a PreToolUse hook `deny` on the Codex shell held; writes outside the writable roots were stopped by the sandbox) | `--disabled-tools file_system.bash` + a `strict` `pre_tool` deny (P0: no sandbox; an out-of-project write succeeded) |
@@ -243,8 +243,9 @@ the client in the project directory.
   `magnolia-hook` in P6 if Tao agrees.
 - **Claude Code.** `claude --setting-sources project,local --settings <rendered hooks>
   --mcp-config <rendered> --strict-mcp-config --disallowedTools Bash` started in the
-  project directory. The rendered settings contain only Magnolia's hooks; the member's
-  user settings keep their login. Never `--bare`.
+  project directory. The rendered settings contain Magnolia's hooks and the MCP
+  `permissions.allow` entries they require; the member's user settings keep their login.
+  Never `--bare`.
 - **Codex.** A project layer `projects/<p>/.codex/` with `config.toml` (MCP servers,
   sandbox) and `hooks.json`; the member trusts the project and reviews the hooks once
   (`/hooks`), which `magnolia setup` explains. No separate `CODEX_HOME`, so the login in
@@ -252,8 +253,8 @@ the client in the project directory.
 - **Vibe.** Project `config.toml` and `hooks.toml` in a trusted folder; boot context and
   directives in the instructions file. Built only after P0 confirms the files.
 
-Skills: `.opencode/skills/*/SKILL.md` is linked into `.claude/skills/` (same format);
-Codex and Vibe skill locations are recorded in P0. Rules prose that names OpenCode
+Skills: `.opencode/skills/*/SKILL.md` is linked into `.claude/skills/` and the shared
+`.agents/skills/` location used by Codex and Vibe. Rules prose that names OpenCode
 (bash disabled, `compchem-tools_*`, "restart opencode") becomes client-neutral, with a
 short rendered note per client.
 
@@ -369,9 +370,20 @@ Status of P0 and P1 (branch `feat/hook-core-p0-p1`, nothing pushed, awaiting Tao
   Overlapping post-tool hooks of one session reserve their retrieval budget at selection, so
   parallel tool calls cannot exceed the per-entry and per-session caps. Cold start, median of 5
   on one Mac: 0.041 s for session-start, 0.078 s for post-tool.
-- Not done: the OpenCode plugins are untouched and still run the TypeScript path; distillation
-  and handover do not yet read the Magnolia transcripts (section 6.3, Plan 2); no client adapter
-  or launcher exists yet (P2 onward).
+- Not done in P1: the OpenCode plugins are untouched and still run the TypeScript path.
+
+Status after Plan 2 (branch `feat/harness-adapters-p2`, stacked on P0/P1, nothing pushed):
+
+- P2, P3 and the Vibe part of P5 (adapters, `magnolia --harness claude|codex|vibe`, `setup
+  --harness`, distillation and handover from every client) are built and tested: package suite
+  1473 passed, 4 skipped.
+- Live acceptance on 15 November 2026: `opencode_cc_mem/docs/harness-acceptance-2026-11.md`.
+  Boot context, action notes, session rows and the member's own hook were seen in all three
+  clients. Open: the critic judge returned no JSON object in two of three calls. Claude's Stop
+  now launches a detached worker, injected action notes are excluded from distillation, and Vibe
+  carries MCP action notes to a later deliverable event.
+- Not done: P4 (executors, governor), the Vibe executor, OpenCode itself live (not installed on
+  the test Mac).
 
 Each phase ends with Tao's review on its own branch.
 

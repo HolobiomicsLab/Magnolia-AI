@@ -10,14 +10,51 @@ correction `1eed4a7` and Bash parser correction `812b1b5` (11 September 2026). O
 targets, not tested Magnolia configurations. Begin with the manual path below, then
 add automation one responsibility at a time.
 
-A harness-neutral hook core is under development on branch `feat/hook-core-p0-p1`
-(package `compchem_memory.hook`, `python -m compchem_memory.hook`; design in
-[`harness-neutral-agents-design.md`](../opencode_cc_mem/docs/harness-neutral-agents-design.md),
-probe report in [`harness-probes-2026-11.md`](../opencode_cc_mem/docs/harness-probes-2026-11.md)).
-It is not wired to any client yet and is unreviewed. OpenCode still uses the TypeScript
-plugins described below; none changed. Distillation and handover do not yet read the new
-Magnolia transcripts (design section 6.3 waits for Plan 2). Claude Code and Codex hook
-payloads were probed; Vibe was not.
+A harness-neutral hook core and adapters for Claude Code, Codex and Mistral Vibe exist on
+branch `feat/harness-adapters-p2` (stacked on `feat/hook-core-p0-p1`; nothing pushed, awaiting
+review). Design: [`harness-neutral-agents-design.md`](../opencode_cc_mem/docs/harness-neutral-agents-design.md);
+probes: [`harness-probes-2026-11.md`](../opencode_cc_mem/docs/harness-probes-2026-11.md); live
+acceptance: [`harness-acceptance-2026-11.md`](../opencode_cc_mem/docs/harness-acceptance-2026-11.md).
+OpenCode still uses the TypeScript plugins described below; none changed.
+
+## Running Magnolia in Claude Code, Codex or Vibe
+
+`magnolia --harness claude|codex|vibe <project>` launches that client on its own login and
+subscription; Magnolia never reads or passes a client's credentials. Record a default once with
+`magnolia setup --harness H [--model M] <project>`, which makes one real call and stores
+`harness` and `models.<H>` in `.magnolia/llm-setup.json`. `MAGNOLIA_DRY_RUN=1` prints the argv,
+working directory and environment without starting anything.
+
+Each launch renders project-owned files and merges them with the member's own entries: Magnolia
+replaces only the MCP servers `compchem-tools`, `compchem-memory` and `perspicacite`, hook
+commands that run `-m compchem_memory.hook`, and Vibe hooks named `magnolia-*`. A member entry
+with one of those names is kept and reported as a conflict.
+
+| | Claude Code | Codex | Vibe |
+|---|---|---|---|
+| Files written | `.magnolia/harness/claude/` (settings, MCP, policy, system prompt) | `.codex/config.toml`, `.codex/hooks.json` | `.vibe/config.toml`, `.vibe/hooks.toml` |
+| Built-in shell | removed (`--disallowedTools Bash`) | denied by the pre-tool hook; sandbox `workspace-write` | removed (`disabled_tools`) and denied by a strict `pre_tool` hook |
+| Skills | `.claude/skills` | `.agents/skills` | `.agents/skills` |
+| Reply text for the transcript | client transcript | client rollout | Vibe session journal |
+
+Vibe and Codex list the member's own global skills next to Magnolia's project links. This is by design in
+those clients; Magnolia does not hide or replace the member's skills.
+
+Magnolia links project skill files into Claude Code, Codex and Vibe unchanged. The rule renderer adapts
+tool names in delivered `AGENTS.md` and `rules/*.md`, but it does not rewrite `SKILL.md` files; all three
+clients read those skill bodies natively. A skill that names an OpenCode-form tool such as
+`compchem-tools_run_shell` therefore keeps that spelling until the skill itself documents client-specific
+names.
+
+The hook command is `python -m compchem_memory.hook <harness> <event>`. It never breaks the
+client: a failure is logged to `.magnolia/hook-errors.jsonl` and the event passes, except that a
+configured shell policy still denies the built-in shell.
+
+Known limits, from the live acceptance: Claude Code and Codex Stop hooks are synchronous only long enough
+to recover replies and launch Magnolia's detached critic worker; the worker records its verdict at
+a later event. Earlier asynchronous Stop hooks did not finish, and the critic judge sometimes
+returns no JSON. Vibe cannot attach context to an MCP result safely, so Magnolia carries an action
+note to the same agent's next built-in post-tool event (or the main agent's next prompt).
 
 ## Choose the integration level
 

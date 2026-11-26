@@ -307,3 +307,27 @@ def test_report_lists_entries_and_acceptance(tmp_path):
     assert "20261101_000000_000001_entry.md" in report
     assert "confirmed" in report
     assert "bounded_scope: PASS" in report
+
+
+def test_hook_transcript_uses_magnolia_exporter_reconstruction(tmp_path):
+    store = make_store(tmp_path)
+    (store / "agent-sessions.jsonl").write_text(json.dumps({
+        "ts": "2026-11-15T10:00:00Z",
+        "harness": "claude",
+        "session_id": "claude-one",
+    }) + "\n")
+    transcript = store / "transcripts" / "claude" / "claude-one.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(
+        json.dumps({"kind": "prompt", "text": "HOOK_DREAM_MARKER"}) + "\n"
+        + json.dumps({"kind": "assistant", "text": "reconstructed answer"}) + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = dreaming.resolve_transcripts(
+        tmp_path, ["claude-claude-one"], DreamingConfig(),
+    )
+
+    assert "USER: HOOK_DREAM_MARKER" in resolved["text"]
+    assert "ASSISTANT: reconstructed answer" in resolved["text"]
+    assert resolved["sources"]["claude-claude-one"]["path"] == str(transcript)

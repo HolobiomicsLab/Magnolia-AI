@@ -67,15 +67,15 @@ def test_doorbell_title_replaces_newlines_and_control_characters():
     assert f"## Request\n\n{request}\n\n" in letter
 
 
-def test_doorbell_appends_colliding_letters(tmp_path, monkeypatch):
+def test_doorbell_merges_distinct_requests_for_one_target(tmp_path, monkeypatch):
     monkeypatch.delenv("MAGNOLIA_DOORBELL", raising=False)
     paths = _project(tmp_path)
     prompt = "@literature find three recent papers on A\n@literature find three recent papers on B"
 
     result = process_prompt(prompt, paths)
 
-    assert len(result.letters) == 2
-    assert result.letters[0] == result.letters[1]
+    assert len(result.letters) == 1
+    assert result.sent == ["@literature"]
     letter = result.letters[0]
     contents = letter.read_bytes()
     date_line = re.search(rb"- date: ([^\n]+)", contents)
@@ -83,9 +83,8 @@ def test_doorbell_appends_colliding_letters(tmp_path, monkeypatch):
     now = datetime.strptime(date_line.group(1).decode("ascii"), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
         tzinfo=timezone.utc
     )
-    expected = (
-        _letter("find three recent papers on A", "alpha", now)
-        + _letter("find three recent papers on B", "alpha", now)
+    expected = _letter(
+        "find three recent papers on A\n\nfind three recent papers on B", "alpha", now,
     ).encode("utf-8")
     assert contents == expected
 

@@ -12,6 +12,7 @@ import pytest
 
 from compchem_memory import llm
 from compchem_memory.hook import critic
+from compchem_memory.hook.action_retrieval import probe_application
 from compchem_memory.hook.events import AgentRef, HookEvent, ToolCall
 from compchem_memory.hook.project import ProjectPaths
 from compchem_memory.hook.state import SessionState
@@ -29,6 +30,7 @@ KEY_VARS = (
     "ZAI_BASE_URL", "MAGNOLIA_MEMORY_PROVIDER", "MAGNOLIA_MEMORY_MODEL",
     "MAGNOLIA_LLM_PROVIDER", "MAGNOLIA_LLM_MODEL", "MAGNOLIA_CRITIC_PROVIDER",
     "MAGNOLIA_CRITIC_MODEL", "MAGNOLIA_CRITIC_API_KEY", "MAGNOLIA_CRITIC_BASE_URL",
+    "MAGNOLIA_OPENROUTER_PROVIDER",
     "MAGNOLIA_CRITIC", "MAGNOLIA_PROJECT_DIR", "MAGNOLIA_PROJECT_WORKSPACE",
 )
 
@@ -110,7 +112,9 @@ def _tool(
 def test_resolve_route_critic_matches_plugin(monkeypatch, provider, key_var, key, model, url, schema):
     monkeypatch.setenv("MAGNOLIA_CRITIC_PROVIDER", provider)
     monkeypatch.setenv(key_var, key)
-    assert llm.resolve_route("critic") == Route(provider, model, url, key, schema)
+    assert llm.resolve_route("critic") == Route(
+        provider, model, url, key, schema, "critic",
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,7 +157,7 @@ def test_call_route_shapes(monkeypatch):
     replies = [
         FakeResponse({"model": "claude-resolved", "content": [{"type": "thinking"}, {"type": "text", "text": "anthropic"}], "stop_reason": "max_tokens"}),
         FakeResponse({"model": "gpt-resolved", "choices": [{"message": {"content": "openai"}, "finish_reason": "length"}]}),
-        FakeResponse({}, status=401, text="bad credential"),
+        FakeResponse({"usage": {"prompt_tokens": 7}}, status=401, text="bad credential"),
         FakeResponse({"choices": []}),
     ]
 
@@ -178,6 +182,7 @@ def test_call_route_shapes(monkeypatch):
     assert calls[1][1]["json"]["response_format"] == {"type": "json_object"}
     assert calls[1][1]["headers"]["HTTP-Referer"] == "https://magnolia.local"
     assert unauthorized.status == 401 and "401" in unauthorized.error and "bad credential" in unauthorized.error
+    assert unauthorized.usage == {"prompt_tokens": 7}
     assert empty.text is None and empty.error is None and empty.status == 200
     assert all(call[1]["timeout"] == 60 for call in calls)
 
@@ -268,6 +273,14 @@ def test_critic_request_matches_plugin(tmp_path, monkeypatch, env, reply_kind):
     node_call = _node_request(tmp_path, env, reply_kind)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
+    if env.get("MAGNOLIA_CRITIC_PROVIDER") == "openrouter":
+        node_call["body"].update({
+            "reasoning": {"enabled": False},
+            "provider": {
+                "quantizations": ["fp8", "bf16", "fp16", "fp32", "unknown"],
+            },
+            "session_id": llm._openrouter_session_id("critic"),
+        })
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
     paths = _paths(tmp_path / "python")
     report = "The binding energy is -9.3 kcal/mol and the pose ranks first. " * 5
@@ -351,9 +364,296 @@ def test_build_trace_parent_and_child_apart(tmp_path):
     parent_report, parent_trace = critic.build_trace(rows, None)
     child_report, child_trace = critic.build_trace(rows, "child-1")
     assert parent_report == "parent report"
-    assert [item["call_id"] for item in json.loads(parent_trace)] == ["parent"]
+    parent_items = json.loads(parent_trace)
+    assert [item["call_id"] for item in parent_items if item["call_id"]] == ["parent", "child"]
+    assert parent_items[-1]["tool"] == "SUB-AGENT REPORT"
+    assert parent_items[-1]["agent"] == "[child child-1]"
     assert child_report == "child report"
     assert [item["call_id"] for item in json.loads(child_trace)] == ["child"]
+
+
+def test_vibe_parent_trace_includes_time_linked_child_tool_and_reply(tmp_path):
+    store = tmp_path / ".magnolia"
+    child = AgentRef("child-1", "worker")
+    append_event(store, HookEvent(
+        "vibe", "prompt", "s1", "/project", turn_id="T1", prompt="go",
+    ))
+    append_event(store, HookEvent(
+        "vibe", "post-tool", "s1", "/project", agent=child,
+        tool=ToolCall("run_shell", "compchem-tools", "mcp_compchem-tools.run_shell",
+                      "child-call", {"cmd": "x"}, "energy -12.3"),
+    ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="child-turn", agent=child,
+        assistant_text="The child measured energy -12.3",
+    ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="T1",
+        assistant_text="The child found energy -12.3",
+    ))
+
+    report, trace_text, count = critic._trace(
+        read_turns(transcript_path(store, "vibe", "s1")), None, "T1",
+    )
+    trace = json.loads(trace_text)
+
+    assert report == "The child found energy -12.3"
+    assert count == 2
+    assert trace[0]["call_id"] == "child-call"
+    assert trace[0]["agent"] == "[child child-1]"
+    assert trace[0]["output"] == "energy -12.3"
+    assert trace[1]["tool"] == "SUB-AGENT REPORT"
+    assert trace[1]["agent"] == "[child child-1]"
+    assert trace[1]["output"] == "The child measured energy -12.3"
+
+
+def test_vibe_parent_trace_includes_child_reply_recovered_after_main_reply():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "run_shell", "call_id": "child-call", "input": {}, "output": "42"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None,
+         "text": "The child reported 42."},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "run_shell returned 42."},
+        {"kind": "session-end", "turn_id": None, "agent": None},
+    ]
+
+    report, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+    trace = json.loads(trace_text)
+
+    assert report == "The child reported 42."
+    [child_reply] = [item for item in trace if item["tool"] == "SUB-AGENT REPORT"]
+    assert child_reply["agent"] == "[child c1]"
+    assert child_reply["output"] == "run_shell returned 42."
+    assert "turn" not in child_reply
+
+
+def test_vibe_late_child_reply_matches_boundary_in_parent_window():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "first"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "old-call", "input": {}, "output": "old"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "first done"},
+        {"kind": "prompt", "turn_id": "T2", "agent": None, "text": "second"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "new-call", "input": {}, "output": "new"},
+        {"kind": "turn-boundary", "turn_id": "C2", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T2", "agent": None, "text": "second done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "OLD-REPLY-" + "x" * 700},
+        {"kind": "assistant", "turn_id": "C2", "agent": {"id": "c1"},
+         "text": "NEW-REPLY"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T2", harness="vibe")
+    replies = [item for item in json.loads(trace_text) if item["tool"] == "SUB-AGENT REPORT"]
+
+    old_reply = next(item for item in replies if item["output"].startswith("OLD-REPLY"))
+    new_reply = next(item for item in replies if item["output"] == "NEW-REPLY")
+    assert old_reply["turn"] == "earlier"
+    assert len(old_reply["output"]) == 500
+    assert "turn" not in new_reply
+
+
+def test_late_child_reply_after_next_main_prompt_is_not_in_previous_trace():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "prompt", "turn_id": "T2", "agent": None, "text": "next"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "too late"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+
+    assert "too late" not in trace_text
+
+
+def test_claude_does_not_promote_child_reply_after_parent_reply():
+    rows = [
+        {"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"},
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "async reply"},
+    ]
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="claude")
+
+    assert "async reply" not in trace_text
+
+
+def test_trace_budget_keeps_current_late_vibe_child_reply():
+    rows = [{"kind": "prompt", "turn_id": "T1", "agent": None, "text": "delegate"}]
+    rows.extend({
+        "kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+        "name": "read_file", "call_id": f"call-{index}", "input": {},
+        "output": f"output-{index}-" + "x" * 2000,
+    } for index in range(50))
+    rows.extend([
+        {"kind": "turn-boundary", "turn_id": "C1", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "T1", "agent": None, "text": "done"},
+        {"kind": "assistant", "turn_id": "C1", "agent": {"id": "c1"},
+         "text": "LATE-CHILD-REPLY"},
+    ])
+
+    _, trace_text, _ = critic._trace(rows, None, "T1", harness="vibe")
+
+    assert len(trace_text) <= critic.MAX_TRACE_CHARS
+    assert "LATE-CHILD-REPLY" in trace_text
+
+
+def test_consecutive_child_turn_windows_use_post_agent_boundaries():
+    rows = [
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "turn1-call", "input": {}, "output": "1" * 1000},
+        {"kind": "turn-boundary", "turn_id": "t1", "agent": {"id": "c1"}},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "turn2-call", "input": {}, "output": "2" * 1000},
+        {"kind": "turn-boundary", "turn_id": "t2", "agent": {"id": "c1"}},
+        {"kind": "assistant", "turn_id": "t2", "agent": {"id": "c1"}, "text": "second"},
+        {"kind": "assistant", "turn_id": "t1", "agent": {"id": "c1"}, "text": "first"},
+    ]
+
+    _, first_trace, _ = critic._trace(rows, "c1", "t1")
+    first_items = {item["call_id"]: item for item in json.loads(first_trace)}
+    assert "turn" not in first_items["turn1-call"]
+    assert "turn2-call" not in first_items
+
+    _, second_trace, _ = critic._trace(rows, "c1", "t2")
+    second_items = {item["call_id"]: item for item in json.loads(second_trace)}
+    assert second_items["turn1-call"]["turn"] == "earlier"
+    assert len(second_items["turn1-call"]["output"]) == 500
+    assert "turn" not in second_items["turn2-call"]
+
+
+def test_large_boot_injection_keeps_every_current_tool_output(tmp_path):
+    from compchem_memory.hook.transcript import append_injected
+
+    store = tmp_path / ".magnolia"
+    start = HookEvent("vibe", "session-start", "s1", "/project")
+    append_injected(
+        store, start, channel="boot", text="BOOT HEADER\n" + "A" * 60_000,
+        entry_ids=[], tool_call_id=None,
+    )
+    append_event(store, HookEvent(
+        "vibe", "prompt", "s1", "/project", turn_id="T1", prompt="go",
+    ))
+    for index in range(12):
+        append_event(store, HookEvent(
+            "vibe", "post-tool", "s1", "/project", turn_id="T1",
+            tool=ToolCall("read_file", None, "read_file", f"call-{index}",
+                          {"path": "x"}, f"output-{index}-" + "B" * 1980),
+        ))
+    append_event(store, HookEvent(
+        "vibe", "turn-end", "s1", "/project", turn_id="T1",
+        assistant_text="report " * 50,
+    ))
+
+    _, trace_text, _ = critic._trace(
+        read_turns(transcript_path(store, "vibe", "s1")), None, "T1",
+    )
+    trace = json.loads(trace_text)
+
+    boot = next(item for item in trace if item.get("channel") == "boot")
+    assert len(boot["output"]) <= 2000
+    assert boot["output"].endswith("... [boot context truncated]")
+    assert [item["call_id"] for item in trace if item.get("call_id")] == [
+        f"call-{index}" for index in range(12)
+    ]
+    for index in range(12):
+        assert f"output-{index}-" in trace_text
+
+
+def test_build_trace_includes_delivered_notes_and_denials(tmp_path):
+    from compchem_memory.hook.transcript import append_denied, append_injected
+
+    store = tmp_path / ".magnolia"
+    event = _event("post-tool", tool=_tool("shell", "denied", tool_input={"cmd": "rm x"}))
+    append_denied(store, event, "blocked")
+    append_injected(
+        store, event, channel="action_memory", text="known recovery", entry_ids=["e1"],
+        tool_call_id="note-call",
+    )
+    append_event(store, _event("turn-end", assistant_text="report"))
+
+    _, trace_text = critic.build_trace(read_turns(transcript_path(store, "claude", "s1")), None)
+    assert "DENIED: shell" in trace_text
+    assert "MAGNOLIA NOTE" in trace_text
+    assert "known recovery" in trace_text
+
+
+def test_late_stop_judges_its_own_turn(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    captured = []
+    monkeypatch.setattr(
+        critic,
+        "call_route",
+        lambda route, system, user, **kwargs: (
+            captured.append(user)
+            or CallResult('{"flag":false,"severity":"none","unsupported_claims":[],"why":"ok"}',
+                          "stop", "judge", None, 200)
+        ),
+    )
+    first = "FIRST TURN REPORT " + "a" * 200
+    second = "SECOND TURN REPORT " + "b" * 200
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text=first))
+    append_event(paths.store, _event("turn-end", turn_id="t2", assistant_text=second))
+
+    critic.run_critic(paths, "claude", "s1", None, "t1")
+
+    assert len(captured) == 1
+    assert first in captured[0]
+    assert second not in captured[0]
+
+
+def test_turn_trace_excludes_other_turn_rows_after_judged_turn(tmp_path):
+    paths = _paths(tmp_path)
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t1", tool=_tool("read", "t1-tool", output="first")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text="first report"))
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t2", tool=_tool("read", "t2-tool", output="second")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t2", assistant_text="second report"))
+
+    _, trace_text, _ = critic._trace(
+        read_turns(transcript_path(paths.store, "claude", "s1")), None, "t1",
+    )
+
+    assert [item["call_id"] for item in json.loads(trace_text)] == ["t1-tool"]
+
+
+def test_application_probe_keeps_other_turn_pending(tmp_path):
+    paths = _paths(tmp_path)
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        state.data["pending_application"] = [
+            {"callID": "c1", "tool": "read", "turn_id": "t1",
+             "titles": ["Alpha catalyst"], "paths": ["alpha.md"]},
+            {"callID": "c2", "tool": "read", "turn_id": "t2",
+             "titles": ["Beta solvent"], "paths": ["beta.md"]},
+        ]
+
+    probe_application(paths, "claude", "s1", "I used the alpha catalyst.", "t1")
+
+    rows = [json.loads(line) for line in (paths.store / "action-retrieval.jsonl").read_text().splitlines()]
+    assert [row["callID"] for row in rows if row.get("event") == "application"] == ["c1"]
+    with SessionState.open(paths.store, "claude", "s1") as state:
+        assert [item["callID"] for item in state.data["pending_application"]] == ["c2"]
 
 
 def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
@@ -362,7 +662,13 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     route = Route("deepseek", "judge", "https://judge/chat", "key", "openai")
     monkeypatch.setattr(critic, "resolve_route", lambda role: route)
     verdict = '{"flag":true,"severity":"high","unsupported_claims":["ranking"],"why":"no ranking tool output"}'
-    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(f"```json\n{verdict}\n```", "stop", "resolved", None, 200))
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(
+            f"```json\n{verdict}\n```", "stop", "resolved", None, 200, "DeepInfra",
+            {"prompt_tokens": 12, "cached_tokens": 8}, True,
+        ),
+    )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("post-tool", tool=_tool("read", "c1", output="nothing")))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
@@ -373,6 +679,9 @@ def test_run_critic_writes_verdict_and_notice(tmp_path, monkeypatch):
     assert row | {"ts": row["ts"]} == row
     assert row["sessionID"] == "s1" and row["harness"] == "claude" and row["agent"] is None
     assert row["provider"] == "deepseek" and row["model"] == "judge"
+    assert row["upstream_provider"] == "DeepInfra"
+    assert row["usage"] == {"prompt_tokens": 12, "cached_tokens": 8}
+    assert row["quality_floor_dropped"] is True
     assert row["flag"] is True and row["n_tools"] == 1 and row["report_preview"] == "x" * 200
     with SessionState.open(paths.store, "claude", "s1") as state:
         assert state.data["unshown_notices"] == ["⚠ (high) no ranking tool output"]
@@ -405,7 +714,13 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
     route = Route("mistral", "judge", "https://judge/chat", "key", "openai")
     monkeypatch.setattr(critic, "resolve_route", lambda role: route)
-    monkeypatch.setattr(critic, "call_route", lambda *args, **kwargs: CallResult(None, None, None, "HTTP 401: denied", 401))
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(
+            None, None, None, "HTTP 401: denied", 401, usage={"prompt_tokens": 9},
+            quality_floor_dropped=True,
+        ),
+    )
     append_event(paths.store, _event("prompt", prompt="rank"))
     append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
     critic.run_critic(paths, "claude", "s1", None)
@@ -413,6 +728,8 @@ def test_run_critic_logs_http_error(tmp_path, monkeypatch):
     error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
     assert error["sessionID"] == "s1" and error["provider"] == "mistral"
     assert error["status"] == 401 and error["error"] == "HTTP 401: denied"
+    assert error["usage"] == {"prompt_tokens": 9}
+    assert error["quality_floor_dropped"] is True
     assert not (paths.store / "claim-critic" / "s1.jsonl").exists()
 
 
@@ -439,3 +756,102 @@ def test_route_repr_hides_the_key():
     route = Route("deepseek", "judge", "https://judge/chat", "sk-fabricated-route-key", "openai")
     assert "sk-fabricated-route-key" not in repr(route)
     assert route.key == "sk-fabricated-route-key"
+
+
+def test_late_stop_trace_excludes_the_next_turns_tools(tmp_path):
+    """Real late order: turn 2's tools are recorded before turn 1's report."""
+    paths = _paths(tmp_path)
+    append_event(paths.store, _event("prompt", turn_id="t1", prompt="first"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t1", tool=_tool("read", "t1-tool", output="first")),
+    )
+    append_event(paths.store, _event("prompt", turn_id="t2", prompt="second"))
+    append_event(
+        paths.store,
+        _event("post-tool", turn_id="t2", tool=_tool("read", "t2-tool", output="second")),
+    )
+    append_event(paths.store, _event("turn-end", turn_id="t1", assistant_text="first report"))
+
+    report, trace_text, _ = critic._trace(
+        read_turns(transcript_path(paths.store, "claude", "s1")), None, "t1",
+    )
+
+    assert report == "first report"
+    assert [item["call_id"] for item in json.loads(trace_text)] == ["t1-tool"]
+
+
+def test_run_critic_malformed_verdict_logs_finish_reason_and_length(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setenv("MAGNOLIA_CRITIC", "1")
+    route = Route("openrouter", "judge", "https://judge/chat", "key", "openai")
+    monkeypatch.setattr(critic, "resolve_route", lambda role: route)
+    truncated = '{"flag": true, "unsupported_claims": ["one", "two'
+    monkeypatch.setattr(
+        critic, "call_route",
+        lambda *args, **kwargs: CallResult(
+            truncated, "length", "judge", None, 200, "DeepInfra",
+        ),
+    )
+    append_event(paths.store, _event("prompt", prompt="rank"))
+    append_event(paths.store, _event("turn-end", assistant_text="x" * 200))
+    critic.run_critic(paths, "claude", "s1", None)
+
+    error = json.loads((paths.store / "claim-critic" / "errors.jsonl").read_text().strip())
+    assert error["error"] == "judge reply has no JSON object"
+    assert error["finish_reason"] == "length" and error["reply_chars"] == len(truncated)
+    assert error["upstream_provider"] == "DeepInfra"
+
+
+def _naive_fit_trace(items):
+    """The previous quadratic implementation, kept as the reference result."""
+    kept = list(items)
+    text = json.dumps(kept, ensure_ascii=False, indent=1)
+    while len(text) > critic.MAX_TRACE_CHARS and len(kept) > 1:
+        kept.pop(0)
+        text = json.dumps(kept, ensure_ascii=False, indent=1)
+    if len(text) > critic.MAX_TRACE_CHARS and kept:
+        kept[0] = {**kept[0], "output": (
+            "... [trace item truncated]\n" + str(kept[0].get("output", ""))[-40_000:]
+        )}
+        text = json.dumps(kept, ensure_ascii=False, indent=1)
+    return text
+
+
+def test_fit_trace_matches_the_reference_on_varied_inputs():
+    import random
+
+    rng = random.Random(7)
+    for size in (0, 1, 2, 5, 40, 200):
+        items = [{"tool": f"t{i}", "input": {"q": "é" * rng.randint(0, 300)},
+                  "output": "x\n" * rng.randint(0, 3000)} for i in range(size)]
+        assert critic._fit_trace(items) == _naive_fit_trace(items)
+    huge = [{"tool": "big", "output": "y" * 200_000}]
+    assert len(critic._fit_trace(huge)) <= critic.MAX_TRACE_CHARS
+
+
+def test_vibe_child_tool_rows_in_its_turn_window_are_current():
+    rows = [
+        {"kind": "assistant", "turn_id": "old", "agent": {"id": "c1"}, "text": "old"},
+        {"kind": "tool", "phase": "post", "turn_id": None, "agent": {"id": "c1"},
+         "name": "read_file", "call_id": "current", "input": {}, "output": "x" * 1000},
+        {"kind": "assistant", "turn_id": "new", "agent": {"id": "c1"}, "text": "new"},
+    ]
+
+    report, trace_text, _ = critic._trace(rows, "c1", "new")
+
+    assert report == "new"
+    [item] = json.loads(trace_text)
+    assert item["call_id"] == "current"
+    assert "turn" not in item
+    assert len(item["output"]) == 1000
+
+
+def test_fit_trace_is_linear_on_thousands_of_items():
+    import time
+
+    items = [{"tool": "Read", "input": {"path": "x" * 50}, "output": "B" * 2000}
+             for _ in range(4000)]
+    started = time.monotonic()
+    critic._fit_trace(items)
+    assert time.monotonic() - started < 2.0
