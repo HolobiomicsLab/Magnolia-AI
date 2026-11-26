@@ -45,6 +45,14 @@ _STOPWORDS = frozenset({
 })
 
 _DECIMAL_RE = re.compile(r"\d+\.\d+")
+
+
+def _norm_decimal(value: str) -> str:
+    """Canonical form for comparison only; 0.10 and 0.1 are one number."""
+    try:
+        return format(float(value), ".12g")
+    except ValueError:
+        return value
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
 
@@ -131,13 +139,15 @@ def find_conflict_candidates(
     entries: list[dict[str, Any]],
     max_pairs: int = 20,
     involving: str | None = None,
+    involving_tier: str | None = None,
 ) -> list[dict[str, Any]]:
     """Pairwise conflict-candidate scan over loaded entries.
 
     Returns candidate pairs (highest discriminative overlap first), capped at
     ``max_pairs``. With ``involving=<filename>`` only pairs containing that
     entry are kept (filter applied BEFORE the cap, so crowd-out cannot hide
-    the requested side). Each pair dict carries both entries'
+    the requested side); ``involving_tier`` disambiguates a filename that
+    exists in both tiers. Each pair dict carries both entries'
     filename/tier/id/title, the shared discriminating tokens, and the decimal
     numbers unique to each side — the evidence a reviewer needs to judge the
     pair.
@@ -182,12 +192,12 @@ def find_conflict_candidates(
             nums_i, nums_j = numbers[i], numbers[j]
             if not nums_i or not nums_j or nums_i == nums_j:
                 continue
-            # Parameter-context test: for a shared parameter term, the
-            # decimals appearing NEAR it must differ between the two entries.
-            # Second live-sweep lesson (production store): entries that merely cite
-            # the same weight vector with different example scores shared
-            # w_air/w_vdw/... too; only the value IN CONTEXT distinguishes a
-            # contradiction (w_air: {0.01, 0.1} vs {0.1}) from agreement.
+            # Parameter-context test: for a shared parameter term, the decimals
+            # that BELONG to it must differ between the two entries. Values are
+            # bound by syntax first (w_air = 0.1, 0.1*w_air); otherwise the
+            # token's own clause supplies the candidates. Same parameter with
+            # different values, not the same values with different example
+            # scores (second live-sweep lesson).
             conflicts = _param_conflicts(texts[i], texts[j], signal)
             if not conflicts:
                 continue
@@ -205,36 +215,100 @@ def find_conflict_candidates(
                        -p["overlap"], p["a"]["filename"])
     )
     if involving is not None:
-        pairs = [
-            p for p in pairs
-            if involving in (p["a"]["filename"], p["b"]["filename"])
-        ]
+        def _matches(side: dict[str, Any]) -> bool:
+            return (side["filename"] == involving
+                    and (involving_tier is None or side["tier"] == involving_tier))
+        pairs = [p for p in pairs if _matches(p["a"]) or _matches(p["b"])]
     return pairs[:max_pairs]
 
 
-_CONTEXT_WINDOW = 60
+_CLAUSE_RE = re.compile(r"\.(?!\d)\s|\n|[|;]")
 
 
-def _param_context_numbers(text: str, token: str) -> set[str]:
-    """Decimals appearing within +-60 chars of any occurrence of ``token``."""
+def _clauses(text: str) -> list[str]:
+    """Sentence- and table-cell-sized chunks.
+
+    A period followed by a digit is a decimal point, not a sentence end, so
+    "0.1. Next sentence" splits while "0.1" does not."""
+    return _CLAUSE_RE.split(text)
+
+
+def _is_filename_only(text: str, token: str) -> bool:
+    """True when every occurrence of ``token`` is a path or filename component.
+
+    ``weights_params`` inside "weights_params.json" names a file, not a
+    parameter; comparing the decimals near it invents conflicts out of
+    unrelated scores. One bare prose occurrence is enough to keep the token."""
+    hits = list(re.finditer(re.escape(token), text))
+    if not hits:
+        return False
+    for m in hits:
+        if re.match(r"\.[a-zA-Z0-9]+", text[m.end():]):
+            continue  # token.ext
+        if m.start() > 0 and text[m.start() - 1] == "/":
+            continue  # path component
+        return False
+    return True
+
+
+def _bound_values(text: str, token: str) -> set[str]:
+    """Decimals attached to the token by syntax: ``name = 0.1``, ``name: 0.1``,
+    ``0.1 * name``. Only here does a value provably belong to the parameter;
+    anything else is a guess about what a nearby number refers to."""
+    tok = re.escape(token)
     vals: set[str] = set()
-    for m in re.finditer(re.escape(token), text):
-        lo, hi = max(0, m.start() - _CONTEXT_WINDOW), m.end() + _CONTEXT_WINDOW
-        vals.update(_DECIMAL_RE.findall(text[lo:hi]))
+    for m in re.finditer(rf"(?<![\w]){tok}\s*(?:=|:|≈)\s*(\d+\.\d+)", text):
+        vals.add(m.group(1))
+    for m in re.finditer(rf"(\d+\.\d+)\s*[*×]\s*{tok}(?![\w])", text):
+        vals.add(m.group(1))
     return vals
+
+
+def _clause_values(text: str, token: str) -> set[str]:
+    """Fallback when the token is never bound: decimals in the first clause
+    that contains the token and at least one decimal.
+
+    Clause-scoped, not character-windowed: a table row on the previous line
+    cannot leak into a parameter mentioned in the next sentence. (The old
+    +-60-character window did exactly that, which is how a cluster score and
+    an iRMSD were once reported as two conflicting values of w_air.)"""
+    for cl in _clauses(text):
+        if not re.search(rf"(?<![\w]){re.escape(token)}(?![\w])", cl):
+            continue
+        vals = _DECIMAL_RE.findall(cl)
+        if vals:
+            return set(vals)
+    return set()
 
 
 def _param_conflicts(text_a: str, text_b: str, signal: set[str]) -> list[dict[str, Any]]:
     out = []
     for t in sorted(signal):
-        a_vals = _param_context_numbers(text_a, t)
-        b_vals = _param_context_numbers(text_b, t)
-        if a_vals and b_vals and a_vals != b_vals:
-            out.append({
-                "param": t,
-                "a_values": sorted(a_vals)[:6],
-                "b_values": sorted(b_vals)[:6],
-            })
+        if _is_filename_only(text_a, t) and _is_filename_only(text_b, t):
+            continue  # identifier, not a parameter
+        ba = _bound_values(text_a, t)
+        bb = _bound_values(text_b, t)
+        a_vals = ba or _clause_values(text_a, t)
+        b_vals = bb or _clause_values(text_b, t)
+        if not a_vals or not b_vals:
+            continue
+        # Compare numerically: 0.10 and 0.1 are the same value. The raw
+        # strings stay in a_values/b_values for the reviewer.
+        na = {_norm_decimal(v) for v in a_vals}
+        nb = {_norm_decimal(v) for v in b_vals}
+        if na == nb:
+            continue
+        out.append({
+            "param": t,
+            "a_values": sorted(a_vals)[:6],
+            "b_values": sorted(b_vals)[:6],
+            # "explicit": both sides bind a number to the name by syntax AND the
+            # value sets are disjoint. That disagreement is provable without any
+            # model, so an adjudicator must never clear it. When the sets share
+            # a value the disagreement is not proven (one entry may be listing
+            # per-stage values) and it stays adjudicable as "proximity".
+            "binding": "explicit" if (ba and bb and not (na & nb)) else "proximity",
+        })
     return out
 
 
@@ -249,8 +323,9 @@ def candidates_against_entry(
     entry would join it. No cap — the gate shows everything it found.
     """
     return find_conflict_candidates(
-        [source, *targets], max_pairs=len(targets), involving=source.get("filename", "")
-    )
+        [source, *targets], max_pairs=len(targets),
+        involving=source.get("filename", ""),
+        involving_tier=source.get("tier", ""))
 
 
 def _side(entry: dict[str, Any]) -> dict[str, Any]:

@@ -366,7 +366,15 @@ class ProjectManager:
         return str(dest)
 
     def _conflict_candidates(self, project_dir: str, source: Path, entries_dir: Path) -> list[dict[str, Any]]:
-        """Conflict-candidate pairs between one staging entry and the project tier."""
+        """Conflict-candidate pairs between one staging entry and the project tier.
+
+        Deterministic by default. With ``MAGNOLIA_CONFLICT_LLM=1`` an
+        adjudicator may drop pairs it labels agreement / scope_difference /
+        extraction_artifact. Pairs it cannot judge — including every
+        syntax-proven disagreement — stay blocking (fail closed). See
+        ``compchem_memory.adjudicate``.
+        """
+        from compchem_memory.adjudicate import filter_blocking
         from compchem_memory.contradictions import (
             candidates_against_entry,
             load_entries,
@@ -376,7 +384,12 @@ class ProjectManager:
         if src is None:
             return []
         targets = load_entries(entries_dir)
-        return candidates_against_entry(src, targets)
+        pairs = candidates_against_entry(src, targets)
+        if not pairs:
+            return []
+        texts = {(src.get("tier", ""), src["filename"]): src["text"]}
+        texts.update({(t.get("tier", ""), t["filename"]): t["text"] for t in targets})
+        return filter_blocking(pairs, texts, self._project_store(project_dir))
 
     @staticmethod
     def _hold_message(entry_name: str, candidates: list[dict[str, Any]]) -> str:
