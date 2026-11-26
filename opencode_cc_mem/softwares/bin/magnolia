@@ -491,6 +491,50 @@ render_active_project() {
     render_config "$active" >/dev/null
 }
 
+# Project-root launch normally relies on ancestor discovery of
+# opencode_cc_mem/.opencode and AGENTS.md. When a project store lives outside
+# that tree (a symlinked external store), Node resolves the cwd to the
+# physical target and ancestor discovery misses both. Materialize
+# compatibility links in the project root so internal and external projects
+# behave the same.
+ensure_workspace_links() {
+    local ws="$1" opencode_dir="$2"
+    local ws_real root_real link target
+    ws_real="$(cd "$ws" 2>/dev/null && pwd -P)" || return 0
+    root_real="$(cd "$opencode_dir" 2>/dev/null && pwd -P)" || return 0
+    case "$ws_real/" in
+        "$root_real"/*) return 0 ;;   # inside the tree: ancestor discovery works
+    esac
+
+    link="$ws/.opencode"
+    if [ -L "$link" ]; then
+        target="$(readlink "$link")"
+        if [ "$target" != "$opencode_dir/.opencode" ]; then
+            echo "warning: $link points to $target (expected $opencode_dir/.opencode)" >&2
+        fi
+    elif [ -e "$link" ]; then
+        echo "warning: $link is a real directory; Magnolia plugins may not load" >&2
+    else
+        ln -s "$opencode_dir/.opencode" "$link" 2>/dev/null \
+            || echo "warning: could not link $link" >&2
+    fi
+
+    # AGENTS.md is discovered by the same ancestor walk. Link it only when the
+    # project has no instructions of its own.
+    link="$ws/AGENTS.md"
+    if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+        ln -s "$opencode_dir/AGENTS.md" "$link" 2>/dev/null \
+            || echo "warning: could not link $link" >&2
+    fi
+
+    # AGENTS.md refers to rules/... relative to the project root.
+    link="$ws/rules"
+    if [ ! -e "$link" ] && [ ! -L "$link" ] && [ -d "$opencode_dir/rules" ]; then
+        ln -s "$opencode_dir/rules" "$link" 2>/dev/null \
+            || echo "warning: could not link $link" >&2
+    fi
+}
+
 cmd_memory_set() {
     local model="" provider=""
     while [ $# -gt 0 ]; do
@@ -683,11 +727,13 @@ if [ ! -d "$PROJECTS_DIR/$PROJECT" ]; then
 fi
 
 # Project-root launch: opencode runs with cwd = projects/<name>, so the
-# location, memory server, tools daemon, and config are per project. The
-# ancestor opencode_cc_mem/.opencode and AGENTS.md are still discovered.
+# location, memory server, tools daemon, and config are per project. For
+# projects inside opencode_cc_mem/ the ancestor .opencode and AGENTS.md are
+# discovered; external stores get explicit compatibility links.
 export MAGNOLIA_PROJECT_WORKSPACE=1
 PROJECT_WORKSPACE="$PROJECTS_DIR/$PROJECT"
 CONFIG="$PROJECT_WORKSPACE/opencode.json"
+ensure_workspace_links "$PROJECT_WORKSPACE" "$OPENCODE_DIR"
 
 if [ ! -f "$TEMPLATE" ]; then
     echo "error: template missing at $TEMPLATE" >&2
