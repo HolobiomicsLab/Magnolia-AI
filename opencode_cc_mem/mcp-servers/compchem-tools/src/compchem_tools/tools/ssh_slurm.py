@@ -244,6 +244,7 @@ def _write_sbatch_script(
     account: str,
     qos: str,
     partition: str,
+    gres: str,
     time_limit: str,
     ncores: int,
     memory: str,
@@ -263,6 +264,7 @@ def _write_sbatch_script(
     qos_line = f"#SBATCH --qos={qos}\n" if qos else ""
     account_line = f"#SBATCH --account={account}\n" if account else ""
     partition_line = f"#SBATCH --partition={partition}\n" if partition else ""
+    gres_line = f"#SBATCH --gres={gres}\n" if gres else ""
     module_lines = "".join(
         line + "\n" for line in (
             f"module use {modulefiles_use}" if modulefiles_use else "",
@@ -275,6 +277,7 @@ def _write_sbatch_script(
 {account_line}\
 {qos_line}\
 {partition_line}\
+{gres_line}\
 #SBATCH --time={time_limit}
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -319,6 +322,7 @@ def submit(
     cluster: str | None = None,
     account: str | None = None,
     qos: str | None = None,
+    gres: str | None = None,
     partition: str | None = None,
     job_name: str = "compchem",
     ncores: int = 4,
@@ -381,6 +385,7 @@ def submit(
         job_name=job_name,
         account=account,
         qos=qos,
+        gres=gres or "",
         partition=partition,
         time_limit=time_limit,
         ncores=ncores,

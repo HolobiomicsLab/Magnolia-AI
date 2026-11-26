@@ -590,6 +590,7 @@ def submit_job(
     cluster: str | None = None,
     account: str | None = None,
     qos: str | None = None,
+    gres: str | None = None,
     tool: str | None = None,
     # restart/resume an existing run in its remote dir (ssh-slurm only)
     restart_of: str | None = None,
@@ -618,7 +619,7 @@ def submit_job(
       used to recall the most similar past run before launch."""
     result = _submit_job(
         command, working_dir, scheduler, job_name, ncores, memory, time_limit, partition,
-        project_dir=project_dir, cluster=cluster, account=account, qos=qos, tool=tool,
+        project_dir=project_dir, cluster=cluster, account=account, qos=qos, gres=gres, tool=tool,
         restart_of=restart_of, remote_precommand=remote_precommand, acknowledge=acknowledge,
         system_tags=system_tags,
     )
