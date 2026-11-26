@@ -224,6 +224,7 @@ every launch.
 - `MAGNOLIA_RETIREMENT` — moves never-proved staging entries to `.magnolia/retired/` (exposure rule, velocity-capped, receipted).
 - `MAGNOLIA_CONSOLIDATION_SEED` / `MAGNOLIA_CONSOLIDATION_SIBLING` — judge-prompt additions: rejected-pair seeding / same-session sibling grouping.
 - `MAGNOLIA_PROSE_NUMBERS` — detector treats titles differing in their numbers as different claims (stops wrong bumps).
+- `MAGNOLIA_CONFLICT_LLM` — optional LLM adjudication of conflict-candidate pairs; default OFF; fail-closed on an LLM error or an unverified quote; syntax-proven disagreements are never cleared.
 - `MAGNOLIA_CONSOLIDATION_FLOOR` (default 0.65, live) — generation floor: sub-floor clusters go to `suppressed-proposals.jsonl`, not the human queue.
 
 ### Consolidation review format (mandatory)
